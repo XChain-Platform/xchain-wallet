@@ -39,7 +39,7 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /import \{ coinToFiat, fiatToCoin \} from '\.\.\/\.\.\/flows\/priceLookup\.js'/,
+    /import \{ coinToFiatExact, fiatToCoin \} from '\.\.\/\.\.\/flows\/priceLookup\.js'/,
     'imports priceLookup helpers',
 );
 
@@ -91,7 +91,7 @@ assert.match(
 
 // --- fiat preview hint ------------------------------------------------
 
-assert.match(sendSrc, /coinToFiat\(.*fiatRate\)/, 'fiat preview via coinToFiat');
+assert.match(sendSrc, /coinToFiatExact\(.*fiatRate\)/, 'fiat preview via exact conversion');
 
 // --- Max button -------------------------------------------------------
 

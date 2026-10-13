@@ -17,7 +17,7 @@
 
 import { Input, Icon } from '@xchain-wallet/core/ui';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
 
@@ -71,10 +71,10 @@ export function AmountField({
             ? `≈ ${formatWithThousands(amount)} ${otherUnit}`.trim()
             : `≈ 0 ${otherUnit}`.trim();
     } else if (fiatRate) {
-        const fiatN = amount ? coinToFiat(amount, fiatRate) : null;
-        derivedText = fiatN != null
-            ? `≈ ${formatFiat(fiatN, fiatCcy)} ${otherUnit}`
-            : `≈ ${formatFiat(0, fiatCcy)} ${otherUnit}`;
+        const fiatValue = amount ? coinToFiatExact(amount, fiatRate) : null;
+        derivedText = fiatValue != null
+            ? `≈ ${formatFiat(fiatValue, fiatCcy)} ${otherUnit}`
+            : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}`;
     }
 
     return (

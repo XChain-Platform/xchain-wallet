@@ -15,11 +15,13 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -756,22 +758,27 @@ function safeBigInt(v) {
     return 0n;
 }
 
+/**
+ * Atomic quantity at its divisibility, grouped for the selected language.
+ * numberFormat: 'full' keeps every place, 'trim' drops trailing zeros, and
+ * 'plain' skips grouping and locale entirely.
+ */
 export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
-    const q = String(quantityStr || '0');
-    const group = numberFormat === 'plain' ? (value) => String(value) : groupThousands;
-    if (!divisibility || divisibility <= 0) return group(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    let frac = padded.slice(padded.length - divisibility);
-    if (numberFormat === 'trim') frac = frac.replace(/0+$/, '');
-    const out = frac ? `${group(whole)}.${frac}` : group(whole);
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (numberFormat === 'plain') {
+        const q = String(quantityStr || '0');
+        if (!divisibility || divisibility <= 0) return q;
+        const negative = q.startsWith('-');
+        const abs = negative ? q.slice(1) : q;
+        const padded = abs.padStart(divisibility + 1, '0');
+        const whole = padded.slice(0, padded.length - divisibility);
+        const frac = padded.slice(padded.length - divisibility);
+        const out = frac ? `${whole}.${frac}` : whole;
+        return negative ? `-${out}` : out;
+    }
+    if (numberFormat !== 'trim') return formatAtomicAmount(quantityStr, divisibility);
+    const plain = formatAmount(quantityStr, divisibility, 'plain');
+    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/.$/, '') : plain;
+    return formatDecimalAmount(trimmed);
 }
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -810,24 +817,7 @@ export function sumFiatValue(rows) {
  * @param {string} [currency]   ISO code; defaults to USD
  */
 export function formatFiat(value, currency = 'USD') {
-    if (value === null || value === undefined) return '';
-    let fmt;
-    try {
-        fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: String(currency || 'USD').toUpperCase(),
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    } catch {
-        // An unknown code (a custom currency) still renders, just without a symbol.
-        return `${value} ${currency}`;
-    }
-    if (compareDecimalStrings(value, '0') === 0) return fmt.format(0);
-    if (compareDecimalStrings(value, '0') === 1 && compareDecimalStrings(value, '0.01') === -1) {
-        return `<${fmt.format(0.01)}`;
-    }
-    return fmt.format(String(value));
+    return formatFiatAmount(value, currency);
 }
 
 // Every chip carries white text, so each swatch is dark enough for 4.5:1

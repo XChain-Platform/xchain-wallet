@@ -36,7 +36,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { formatFiat } from '../components/BalanceList.jsx';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
@@ -65,6 +65,8 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { formatLocalDateTime, formatRelativeDateTime } from '../utils/dateTimeFormat.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -1664,7 +1666,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         fiatCurrency: fiatCurrency || 'USD',
     });
     const nativeFiatValue = nativeAmount != null && fiatRate
-        ? coinToFiat(nativeAmount, fiatRate)
+        ? coinToFiatExact(nativeAmount, fiatRate)
         : null;
 
     // ───── More-menu / Save-as-contact state ─────
@@ -2420,7 +2422,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     // Hero stays minimal: Action, Status, Network, Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
-    if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
     return rows;
 }
 
@@ -2527,7 +2529,7 @@ function fullDetailRows(entry, balancesHidden = false) {
     if (entry.actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
-                display={Number(entry.actionIndex).toLocaleString('en-US')}
+                display={formatDecimalAmount(entry.actionIndex)}
                 fullValue={String(entry.actionIndex)}
                 ariaLabel="Copy action number"
             />
@@ -2540,7 +2542,7 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (coin) rows.push(['Chain', capitalize(coin)]);
         rows.push(['Network', capitalize(network)]);
     }
-    if (entry.blockIndex) rows.push(['Block', Number(entry.blockIndex).toLocaleString('en-US')]);
+    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
     else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
         rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
@@ -2641,15 +2643,7 @@ function isOraclePricedGetAmount(entry, raw, key, value) {
 // well as JS numbers. Uses BigInt for pure-integer strings so values
 // past Number.MAX_SAFE_INTEGER still round-trip correctly.
 function formatNumberWithCommas(value) {
-    if (value === null || value === undefined) return '';
-    const s = String(value).trim();
-    if (!s) return '';
-    if (/^-?\d+$/.test(s)) {
-        try { return BigInt(s).toLocaleString('en-US'); } catch { /* fall through */ }
-    }
-    const n = Number(s);
-    if (Number.isFinite(n)) return n.toLocaleString('en-US');
-    return s;
+    return formatDecimalAmount(value);
 }
 
 /**
@@ -3062,7 +3056,7 @@ function coinOfChainId(chainId) {
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
 
 /**
- * Resolve a numeric native-coin amount for `entry`, or `null` when the
+ * Resolve an exact native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
  *
  * IMPORTANT (old-numbering): a SEND action carries a
@@ -3075,7 +3069,7 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
  * replicate it here.
  *
  * @param {import('./History.jsx').HistoryEntry | null | undefined} entry
- * @returns {number | null}
+ * @returns {string | null}
  */
 function nativeAmountFieldOf(entry) {
     if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
@@ -3087,8 +3081,8 @@ function nativeAmountFieldOf(entry) {
     if (tick && String(tick).toUpperCase() !== nativeTicker) return null; // token movement
     const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     if (amt == null) return null;
-    const n = typeof amt === 'number' ? amt : parseFloat(amt);
-    return Number.isFinite(n) ? n : null;
+    const amount = String(amt).trim();
+    return /^-?\d+(\.\d+)?$/.test(amount) ? amount : null;
 }
 
 /**
@@ -3244,7 +3238,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>
-                            <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
+                            <span>Block {formatDecimalAmount(entry.blockIndex)}</span>
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
                                     {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
@@ -3258,7 +3252,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span className={styles.rowRelativeTime}>
+                        <span
+                            className={styles.rowRelativeTime}
+                            title={formatTimestamp(entry.timestamp)}
+                        >
                             {formatRelativeTime(entry.timestamp)}
                         </span>
                     ) : null}
@@ -3340,7 +3337,11 @@ function GroupCard({ item, expanded, onToggle }) {
             </span>
             <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
-                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '-'}
+                {newest?.timestamp ? (
+                    <span title={formatTimestamp(newest.timestamp)}>
+                        Latest {formatRelativeTime(newest.timestamp)}
+                    </span>
+                ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />
                 </span>
@@ -3482,30 +3483,12 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    if (!ts) return '-';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return '-';
-    return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
+    return formatLocalDateTime(ts);
 }
 
 // Human-readable "X ago" from a unix timestamp (seconds or ms).
 function formatRelativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
+    return formatRelativeDateTime(ts);
 }
 
 /**

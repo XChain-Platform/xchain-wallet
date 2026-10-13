@@ -23,6 +23,39 @@ function provider(messaging, child) {
 afterEach(() => cleanup());
 
 describe('History usability', () => {
+    it('shows an exact History timestamp in local time', () => {
+        const timestamp = Date.parse('2024-01-15T20:30:00Z') / 1000;
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+        };
+        const entry = {
+            action: 'SEND',
+            actionIndex: '12',
+            blockIndex: 100,
+            chainId: CHAIN,
+            timestamp,
+            raw: {},
+        };
+        const expected = new Intl.DateTimeFormat('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        }).format(new Date(timestamp * 1000));
+
+        render(provider(
+            messaging,
+            <DetailCard
+                entry={entry}
+                peerCache={{}}
+                walletId="wallet-a"
+                showFiatInHistory={false}
+                fiatCurrency="USD"
+            />,
+        ));
+
+        expect(screen.getByText(expected)).toBeInTheDocument();
+        expect(screen.queryByText(/ UTC$/)).toBeNull();
+    });
+
     it('opens the selected row', () => {
         const onClick = vi.fn();
         render(provider(

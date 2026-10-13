@@ -33,9 +33,12 @@ import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import styles from './TokenDetail.module.css';
@@ -863,8 +866,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
             const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
             if (marketCap !== null) {
-                const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
-                    .format(marketCap);
+                const formatted = formatDecimalAmount(marketCap, undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 4,
+                });
                 marketCapCell = `${formatted} ${nativeTick}`;
             }
         }
@@ -2214,23 +2219,7 @@ function safeBigInt(v) {
 }
 
 function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    // Always render to full divisibility; trailing zeros are kept so
-    // 0.04210000 BTC reads as 0.04210000 (not 0.0421). Matches the Home
-    // BalanceList convention and what users coming from BTC-native
-    // accounting expect.
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return formatAtomicAmount(quantityStr, divisibility);
 }
 
 function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -2248,21 +2237,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
 // if the code is unknown to Intl.
 function formatFiatNumber(value, currency) {
     if (value === null || value === undefined) return 'N/A';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const formatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = formatter.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) {
-            return `<${formatter.format(minorUnit)}`;
-        }
-        return formatter.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
+    return formatFiatAmount(String(value), currency);
 }
 
 // Fits its children on a single line by measuring overflow with a

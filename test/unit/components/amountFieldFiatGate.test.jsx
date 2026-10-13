@@ -47,6 +47,15 @@ describe('AmountField fiat gate', () => {
         expect(u.container.textContent).not.toContain('$');
     });
 
+    it('keeps a fiat preview above the safe integer boundary exact', () => {
+        const u = mount({
+            amount: '9007199254740993.01',
+            fiatRate: { rate: 1, fiatCurrency: 'USD' },
+        });
+        expect(u.container.textContent)
+            .toContain('≈ $9,007,199,254,740,993.01 USD');
+    });
+
     // What a token amount must look like: no number, no toggle, nothing to
     // misread as a valuation.
     it('renders no fiat preview and no toggle when the rate is null', () => {

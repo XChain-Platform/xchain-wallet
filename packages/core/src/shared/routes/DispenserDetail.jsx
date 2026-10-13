@@ -33,10 +33,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { formatFiat } from '../components/BalanceList.jsx';
 import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
@@ -292,9 +292,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
-        const v = coinToFiat(coinAmount, feeFiatRate);
-        if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return formatFiat(v, feeFiatRate?.fiatCurrency || fiatCurrency);
+        const value = coinToFiatExact(coinAmount, feeFiatRate);
+        if (value == null || !(Number(value) > 0)) return null;
+        return formatFiatAmount(value, feeFiatRate?.fiatCurrency || fiatCurrency);
     }, [feeFiatRate, fiatCurrency]);
     const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     const feeCoinTicker = descriptor?.coin
