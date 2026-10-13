@@ -102,7 +102,7 @@
 
 .rowActive {
     background: var(--xc-accent-primary);
-    color: var(--xc-text-inverted);
+    color: var(--xc-on-accent);
 }
 
 .rowIcon {
@@ -111,7 +111,7 @@
     color: var(--xc-text-muted);
 }
 
-.rowActive .rowIcon { color: var(--xc-text-inverted); }
+.rowActive .rowIcon { color: var(--xc-on-accent); }
 
 .rowIcon svg { width: 18px; height: 18px; }
 
@@ -137,11 +137,51 @@
     text-overflow: ellipsis;
 }
 
-.rowActive .rowSubtitle { color: var(--xc-text-inverted); opacity: 0.85; }
+/* Full-strength text: fading it 15% dropped the subtitle under 4.5:1 on the accent. */
+.rowActive .rowSubtitle { color: var(--xc-on-accent); }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+/* Compact containers present the palette as a thumb-reachable bottom sheet.
+   The viewport fallback covers the extension popup, which has no shared
+   layout wrapper to publish data-xc-tier. */
+:global([data-xc-tier='compact']) .overlay {
+    align-items: flex-end;
+    padding: 0;
+}
+
+:global([data-xc-tier='compact']) .panel {
+    max-width: none;
+    max-height: min(85%, var(--xc-viewport-h, 100vh));
+    border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+:global([data-xc-tier='compact']) .escHint {
+    display: none;
+}
+
+@media (max-width: 639px) {
+    .overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .panel {
+        max-width: none;
+        max-height: min(85%, var(--xc-viewport-h, 100vh));
+        border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+        border-bottom: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .escHint {
+        display: none;
+    }
 }

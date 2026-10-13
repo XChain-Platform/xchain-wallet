@@ -31,7 +31,10 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
-import { divideDecimalStrings } from '../shared/utils/amountFormat.js';
+import {
+    divideDecimalStrings,
+    multiplyDecimalStrings,
+} from '../shared/utils/amountFormat.js';
 
 // Oracle rounds finalize every ~10 minutes (ORACLE_ROUND_INTERVAL
 // 600s on the hub). A snapshot older than three missed rounds means
@@ -585,10 +588,14 @@ export function _resetPriceLookupForTests() {
  * @returns {number | null}            null when conversion fails
  */
 export function coinToFiat(coinAmount, rate) {
-    if (!rate || typeof rate.rate !== 'number') return null;
-    const n = typeof coinAmount === 'number' ? coinAmount : parseFloat(coinAmount);
-    if (!Number.isFinite(n)) return null;
-    return n * rate.rate;
+    const exact = coinToFiatExact(coinAmount, rate);
+    return exact === null ? null : Number(exact);
+}
+
+/** Convert a coin amount to an exact decimal string for display and form state. */
+export function coinToFiatExact(coinAmount, rate) {
+    if (!rate || typeof rate.rate !== 'number' || !Number.isFinite(rate.rate)) return null;
+    return multiplyDecimalStrings(String(coinAmount), String(rate.rate));
 }
 
 /**

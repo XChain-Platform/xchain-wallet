@@ -195,6 +195,10 @@ export function LanguageRegionSection() {
                     {selectorValue === CUSTOM_CURRENCY_VALUE ? (
                         <input
                             type="text"
+                            enterKeyHint="done"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
                             defaultValue={knownCurrency ? '' : settings.fiatCurrency}
                             onBlur={(e) => onCustomCurrencyCommit(e.target.value)}
                             onKeyDown={(e) => {
@@ -221,10 +225,10 @@ function Status({ text, tone }) {
             padding: 'var(--xc-space-3) var(--xc-space-4)',
             background: 'var(--xc-surface-raised)',
             border: tone === 'error'
-                ? '1px solid var(--xc-error, #c33)'
+                ? '1px solid var(--xc-danger-fg)'
                 : '1px dashed var(--xc-border)',
             borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-error, #c33)' : 'var(--xc-text-muted)',
+            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
             fontSize: 'var(--xc-text-sm)',
         }}>
             {text}

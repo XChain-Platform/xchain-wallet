@@ -6,7 +6,7 @@ The live catalog is the style guide page, served by the web dev server at `/styl
 
 ## Page templates
 
-**Every routed screen is built from exactly one page template.** A screen is a `<Screen>` with a `<PageHeader>`, and its body is one `<FormPage>` or one `<ListPage>`. All of them come from `@xchain-wallet/core/ui`.
+**Every routed screen should be built from exactly one page template.** A screen is a `<Screen>` with a `<PageHeader>`, and its body is one `<FormPage>` or one `<ListPage>`. All of them come from `@xchain-wallet/core/ui`. The migration checklist at the end tracks routes that do not meet this rule yet.
 
 ```jsx
 import { Screen, PageHeader, FormPage, FormSection, ListPage, EmptyState, SectionHeader } from '@xchain-wallet/core/ui';
@@ -39,11 +39,11 @@ The breakpoint is a viewport media query, not a container query (the Android Web
 
 | component | props |
 |---|---|
-| `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default true), `className`, `ref` (the form) |
-| `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className` |
-| `ListPage` | `toolbar`, `intro`, `className`, any root attribute (`aria-label`) |
-| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `titleAs` (`h2` default), `role` (`status` default) |
-| `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing` |
+| `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default `true`), `className`, `ref` (the form), `children`, and other form attributes |
+| `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className`, `children` |
+| `ListPage` | `toolbar`, `intro`, `className`, `children`, and other root attributes such as `aria-label` |
+| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className` |
+| `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing`, `className` |
 
 ```jsx
 // A form screen
@@ -94,6 +94,7 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | prop | meaning |
 |---|---|
 | `onBack` | when set, renders a back chevron; omit to render a leading spacer |
+| `backLabel` | accessible label for the back button (`Back` default) |
 | `title` | centered title text |
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
@@ -103,94 +104,78 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes: `md` (36px, default) and `sm` (28px). `block` makes it full width, `loading` shows a spinner and disables it, and `type` defaults to `button` so it never submits by accident. A variant name outside this list renders unstyled. The style guide's Buttons section shows every combination.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes: `md` (36px minimum height, default) and `sm` (28px minimum height). `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
 
-For dialogs use the shared `NoticeModal` (one OK) and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/`, never `alert()` or `confirm()`.
+For dialogs use the shared `NoticeModal` (one OK) from `@xchain-wallet/core/shared/components/NoticeModal.jsx` and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/ConfirmModal.jsx`, never `alert()` or `confirm()`.
 
 For icon-only buttons inside layouts (e.g. an action overlaid in an input box), a plain `<button>` is fine, but make it transparent (no background, no border) so it reads as an icon affordance, not a tappable rectangle. The hover state should change icon color only, not paint a fill.
 
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `md` (36px minimum height, default) or `lg` (48px minimum height with a larger, weightier label). `Select`, `Textarea`, `AmountField`, and `AddressCombobox` use the same `md` / `lg` contract.
 
-**Primary entry inputs** (the To / Amount fields on Send) get the "big field" treatment:
+**Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 
 ```jsx
-style={{
-    fontSize: 'var(--xc-text-lg)',
-    padding: 'var(--xc-space-3) var(--xc-space-4)',
-    minHeight: '48px',
-}}
+<Input label="Amount" size="lg" />
 ```
 
-Don't use inline styles for normal inputs; keep the bump reserved for the few fields the user is most likely to interact with on a page.
+Use `md` for normal inputs. Do not duplicate the `lg` font, padding, or height with inline styles.
 
 ## Amount field (with USD / coin swap)
 
-The Send screen's amount input is the standard layout for any field that takes a transferable value. Three behaviors to reproduce when adding one elsewhere:
+Use `<AmountField>` from `@xchain-wallet/core/shared/components/AmountField.jsx` for a transferable coin or token amount. It composes the shared `Input`, live thousand-separator formatting, an optional inline Max button, the coin / fiat swap footer, and optional balance text. It defaults to `size="md"`; Send and other hero screens pass `size="lg"`.
 
-1. **Big-field styling** (the `style={…}` block above).
-2. **Inline Max button** absolutely-positioned over the right padding of the input, never as a sibling that takes its own row.
-3. **Live thousand-separator formatting**, with the canonical comma-free value stored in state. Use the `formatWithThousands` helper + the `countNonCommaBefore` / `indexAfterNonCommaCount` pair from `Send.jsx` so the cursor doesn't fling around as commas appear/disappear.
-4. **Unit-swap footer**: a small button in the footer's left slot showing the derived value in the *other* unit ("≈ 12,345.67 USD" while typing coin, "≈ 0.001 BTC" while typing fiat). Tap to swap which unit is the input. Use `Icon.SwapIcon` for the affordance. Disabled / hidden when no `fiatRate` is available.
-5. **Footer right** carries contextual hint ("X TICK available", "Loading…", "Balance unavailable"). Optional, but if present, keep it on the right so the swap button stays anchored on the left.
+The parent owns the values and conversion. `amount` is the canonical coin-scale string. In fiat mode, preserve the user's exact text in `fiatAmount` and derive `amount` with `fiatToCoin` on every keystroke. `onAmountFieldChange` receives the raw displayed value and cursor position. The reusable cursor helpers live in `packages/core/src/shared/utils/amountFormat.js`: `formatWithThousands`, `countNonCommaBefore`, and `indexAfterNonCommaCount`.
+
+`fiatRate` enables the unit-swap footer, which shows the derived value in the other unit. Without a rate, the swap control is hidden. `balanceText` fills the footer's right side with context such as "X TICK available", "Loading…", or "Balance unavailable". Omit `onMax` when Max is not meaningful; use `maxDisabled` and `maxBusy` while it cannot run.
 
 ```jsx
-<div className={`${styles.amountBlock} ${styles.bigField}`}>
-    <div className={styles.amountFieldWrap}>
-        <Input
-            ref={amountInputRef}
-            label={`Amount (${activeUnit})`}
-            inputMode="decimal"
-            value={formatWithThousands(inputValue)}
-            onChange={(e) => onAmountFieldChange(e.target.value, e.target.selectionStart)}
-            style={{ /* big-field bump */ }}
-        />
-        <button type="button" className={styles.amountMaxInline} onClick={onMax}>
-            Max
-        </button>
-    </div>
-    <div className={styles.amountFooter}>
-        <button type="button" className={styles.amountUnitSwap} onClick={toggleAmountInputMode}>
-            <Icon.SwapIcon /><span>{derivedText}</span>
-        </button>
-        <span className={styles.amountFooterRight}>{availableText}</span>
-    </div>
-</div>
+import { AmountField } from '@xchain-wallet/core/shared/components/AmountField.jsx';
+
+<AmountField
+    size="lg"
+    amount={amount}
+    fiatAmount={fiatAmount}
+    tick={tick}
+    fiatRate={fiatRate}
+    fiatCurrency={fiatCurrency}
+    amountInputMode={amountInputMode}
+    onAmountFieldChange={onAmountFieldChange}
+    toggleAmountInputMode={toggleAmountInputMode}
+    inputRef={amountInputRef}
+    onMax={onMax}
+    maxDisabled={!spendableBalance}
+    maxBusy={maxBusy}
+    balanceText={availableText}
+/>
 ```
 
-**Canonical state rule:** whatever the user is typing in (fiat or coin), the value submitted to the network is always coin-scale. Keep a `fiatAmount` string for fidelity-of-display when the user is in fiat mode, and derive the canonical `amount` via `fiatToCoin` on every keystroke. Don't round-trip the user's typed string through the converter for re-display; that loses trailing zeros and disturbs the cursor.
+Do not round-trip the user's typed fiat string through the converter for display. That loses trailing zeros and disturbs the cursor.
 
 ## "To" field (recipient address)
 
-Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete dropdown for contacts and recent recipients. Wrap it in the same `.bigField` treatment as Amount, and overlay any single quick action (address-book opener, QR scanner) as an absolutely-positioned button in the input's right padding, the same pattern Max uses on Amount.
+Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete dropdown for contacts and recent recipients. It accepts the shared `size` prop and owns one optional trailing action through `icon`, `onIconClick`, and `iconLabel`. Use `icon="contacts"` for the address-book action or `icon="addresses"` for an own-address picker.
 
 ```jsx
-<div className={`${styles.toFieldWrap} ${styles.bigField}`}>
-    <AddressCombobox
-        label="To"
-        value={toAddress}
-        onChange={(e) => setToAddress(e.target.value)}
-        onPaste={onAddressPaste}
-        suggestions={suggestions}
-        placeholder="Enter or paste an address or name…"
-        style={{ /* big-field bump, paddingRight ~52px */ }}
-    />
-    <button
-        type="button"
-        className={styles.inlineContactsButton}
-        onClick={openAddressBook}
-        aria-label="Open address book"
-    >
-        <Icon.BookIcon />
-    </button>
-</div>
+<AddressCombobox
+    size="lg"
+    icon="contacts"
+    iconLabel="Open address book"
+    onIconClick={openAddressBook}
+    label="To"
+    value={toAddress}
+    onChange={(e) => setToAddress(e.target.value)}
+    onPaste={onAddressPaste}
+    suggestions={suggestions}
+    placeholder="Enter or paste an address or name…"
+/>
 ```
 
 **Rules:**
 - Always pass `suggestions`; it's what makes the combobox useful. Source them from contacts + recent send history scoped to the active chain.
 - Treat paste as a special event (`onPaste`) so you can run paste-time validation (chain match, novelty check) before the value lands in state.
-- Reserve right-padding (~52px per action) for inline buttons; do NOT stack icon buttons as siblings outside the input; they break the input's hit target.
+- Let `AddressCombobox` reserve the right padding and position its icon action. Do not wrap it in another absolutely-positioned button.
 - One inline action max (the most-used: typically Address Book). If you have multiple secondary actions (scan, paste-from-clipboard, etc.), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
 
 ## Fee selector
@@ -246,12 +231,12 @@ The icon set lives in `packages/core/src/ui/icons/`. Most action icons are lucid
 | Concept | Icon | Lucide source |
 |---|---|---|
 | Send | `SendIcon` | `Send` (paper airplane) |
-| Receive | `ReceiveIcon` | hand-rolled (down arrow into tray) |
+| Receive | `ReceiveIcon` | `ArrowDownToLine` |
 | Scan a QR | `CameraIcon` | hand-rolled (camera body + lens) |
 | Address book / contacts | `BookIcon` | `BookOpen` |
 | Filter | `FilterIcon` | `Filter` (funnel) |
 | Search | `SearchIcon` | hand-rolled |
-| More / menu | `MoreIcon` | hand-rolled (horizontal dots) |
+| More / menu | `MoreIcon` | `MoreHorizontal` |
 | Settings | `GearIcon` | hand-rolled |
 | Lock / Unlock | `LockIcon` / `UnlockIcon` | hand-rolled |
 
@@ -259,20 +244,23 @@ The icon set lives in `packages/core/src/ui/icons/`. Most action icons are lucid
 
 ## Spacing + typography tokens
 
-Defined in `packages/core/src/ui/tokens.css`. Always use the token, never raw px values, so dark-mode / theme overrides apply uniformly.
+Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating its raw value in component styles, so theme and accessibility overrides apply uniformly.
 
-| Token | Approx value | Use for |
+| Token | Value | Use for |
 |---|---|---|
 | `--xc-space-1` | 4px | gap inside compact controls |
 | `--xc-space-2` | 8px | gap between sibling controls |
-| `--xc-space-3` | 12px | section padding, default field margin |
-| `--xc-space-4` | 16px | input padding (big-field) |
-| `--xc-space-6` | 32px | card outer padding |
-| `--xc-text-xs` | 0.75rem | metadata, hint text |
-| `--xc-text-sm` | 0.875rem | labels, default body |
-| `--xc-text-md` | 1rem | body text |
-| `--xc-text-lg` | 1.125rem | big-field input text, section titles |
-| `--xc-text-xl` | 1.25rem | hero token name, page H1 |
+| `--xc-space-3` | 12px | default field margin, compact card padding |
+| `--xc-space-4` | 16px | large-input horizontal padding |
+| `--xc-space-5` | 20px | loose cluster spacing |
+| `--xc-space-6` | 24px | card outer padding |
+| `--xc-space-8` | 32px | section breaks and page-level rhythm |
+| `--xc-text-xs` | 11px | metadata, hint text |
+| `--xc-text-sm` | 13px | labels, secondary body text |
+| `--xc-text-md` | 14px | default body text and button labels |
+| `--xc-text-lg` | 16px | large-input text, section titles, page title |
+| `--xc-text-xl` | 20px | asset hero name, panel headings |
+| `--xc-text-2xl` | 24px | hero figures and prominent asset tickers |
 
 ## Colors
 
@@ -288,34 +276,24 @@ Same source: `tokens.css`. Highlights:
 | `--xc-border` / `--xc-border-strong` | hairlines |
 | `--xc-danger` / `--xc-warning` | error / warning states |
 
-Never hard-code hex. Use `color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%)` for hover tints; that pattern is in the existing `.back:hover` rule and survives theme swaps.
+Do not hard-code interface colors in components. Use tokens, or `color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%)` for a derived hover tint; that pattern is in the existing `.back:hover` rule and survives theme swaps. Token definitions, encoded image data, and data-driven semantic palettes are the places where literal color values belong.
 
-## Asset selector (tap to repick)
+## Asset selectors (tap to repick)
 
-Whenever a screen has a currently-selected coin/token that the user may want to change, the affordance routes back to the picker (`ReceivePicker` / `SendPicker`). Two layout variants exist; pick the one that fits the screen, **and the click target follows from the layout**:
-
-**Horizontal "asset card"**, used on Receive. Gray card row with the icon on the left, primary name + secondary tick or network kind on the right, a `›` chevron pinned right. **Whole card is the button**: the icon, the name area, the chevron, the empty padding all navigate. Discoverable as "this row is a picker", consistent with picker rows elsewhere (BalanceList).
+Use `<TokenField>` from `@xchain-wallet/core/shared/components/TokenField.jsx` for the normal in-form asset selector. It is a field-shaped button that displays the selected `{ chainId, tick }`, `TickerIcon`, chain name, and a trailing token-list icon. The entire field opens the host-owned `TokenPicker`. It accepts `label` (`Token` default), `size` (`md` default or `lg`), `value`, `onOpenPicker`, `placeholder`, `disabled`, `error`, and `id`.
 
 ```jsx
-<button
-    type="button"
-    className={styles.assetCard}
-    onClick={onChangeAsset}
-    aria-label={`Change asset (currently ${assetName})`}
->
-    <span className={styles.assetIconWrap}>
-        <img className={styles.assetIcon} src={assetImageUrl} alt="" />
-        {/* token rows also overlay a small chain pip, see Receive.jsx */}
-    </span>
-    <span className={styles.assetText}>
-        <span className={styles.assetName}>{assetName}</span>
-        {isToken ? <span className={styles.assetSub}>{tick}</span> : null}
-    </span>
-    <span className={styles.assetChevron} aria-hidden="true">›</span>
-</button>
+<TokenField
+    label="Token"
+    size="lg"
+    value={{ chainId, tick }}
+    onOpenPicker={openTokenPicker}
+/>
 ```
 
-**Vertical "asset hero"**, used on Send. Large icon centered above a bold name. **Only the icon is tappable**: the name and surrounding whitespace stay inert. A hero element fills the row and would otherwise turn the entire top of the form into a navigation trap; scoping the hit target to the circular icon keeps the safe zone large.
+`TokenField` resolves the token art, chain pip, and letter fallback through the shared `TickerIcon`, so routes should not duplicate that chain. Creating a new ticker remains a free-text `Input`; a token fixed by route context should use the read-only `LockedTokenContext` instead.
+
+**Vertical asset hero**, used on Send, is the deliberate exception. A large icon is centered above a bold name, and only the icon is tappable. The name and surrounding whitespace stay inert. A hero element fills the row and would otherwise turn the entire top of the form into a navigation trap; scoping the hit target to the circular icon keeps the safe zone large.
 
 ```jsx
 <div className={styles.heroWrap}>
@@ -331,18 +309,14 @@ Whenever a screen has a currently-selected coin/token that the user may want to 
 </div>
 ```
 
-**Rule of thumb for new screens:**
-- A bounded card with content packed edge-to-edge and a visible chevron: make the whole card the button (horizontal variant).
-- A standalone hero centered on its own row with airy whitespace: make only the icon the button (vertical variant).
-
-**Rules for both variants:**
+**Hero rules:**
 
 - The icon image renders with `object-fit: contain` and **no `border-radius`** on the image itself, so the published art keeps its shape (round / square / odd). Any focus ring goes on the wrapper, not the image.
-- Native rows: image source is `branding.chainIconLargeUrl(descriptor.id)`. Non-native token rows: image source is the token's `imageUrl`, with `branding.chainIconSmallUrl(descriptor.id)` overlaid bottom-right as a small "pip" so the chain is still visible.
+- Native assets use `branding.chainIconLargeUrl(descriptor.id)`. Non-native tokens use the token's `imageUrl`, with `branding.chainIconSmallUrl(descriptor.id)` overlaid bottom-right as a small "pip" so the chain is still visible.
 - If no image is available, fall back to a colored letter chip tinted via `tickerColor(tick)` (exported from `BalanceList.jsx`).
-- The handler should always navigate to the picker (clear prefill, push `'<route>-picker'`). This stays true regardless of how the user arrived at the screen; a discoverable single-purpose action.
+- The host owns picker navigation and writes the selected `{ chainId, tick }` back into route state. Preserve the rest of the form state across that round trip.
 
-If a route needs an asset selector and you find yourself re-rolling the icon-resolution + chain-pip + fallback chain, lift it into a shared component before writing it a third time.
+If a route needs an asset selector, use `TokenField` or the existing Send hero rather than reimplementing icon resolution, the chain pip, and fallback behavior.
 
 ## When you can't reach for a primitive
 
@@ -354,7 +328,7 @@ If you genuinely need a one-off layout that doesn't fit any existing pattern, **
 - ⬜ All existing routes use `<PageHeader />`.  
 - ✅ Page templates (`FormPage`, `FormSection`, `ListPage`, `EmptyState`, `SectionHeader`) exist, are exported from `@xchain-wallet/core/ui`, and have style guide sections.  
 - ✅ Proof conversions: Verify signature (`FormPage`), Payments due (`ListPage` + `EmptyState` + `SectionHeader`), Agent accounts (`ListPage` + `EmptyState`).  
-- ⬜ Every other routed screen is built from one template. Converting a screen means: drop the `isFull ? styles.card` / `listCard` / `wrapFull` wrapper, put the body in the template, move errors into `status` and buttons into `actions`, and replace any per-route empty block or `EmptyStateNudge` with `EmptyState`.  
-- ⬜ `EmptyStateNudge` is retired once its last caller (BalanceList, CollectiblesView, AddressList, History, MarketsList, TokenPicker) uses `EmptyState`.  
+- ⬜ Every remaining routed screen is built from one template. Converting a screen means: drop the `isFull ? styles.card` / `listCard` / `wrapFull` wrapper, put the body in the template, move errors into `status` and buttons into `actions`, and replace any per-route empty block with `EmptyState`.
+- ✅ Application callers use `EmptyState`; `EmptyStateNudge` remains only as an unused downstream-compatibility export.
 
 When you touch a route that still rolls its own header, card or empty state, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.

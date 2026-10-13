@@ -63,6 +63,13 @@
     --xc-accent-primary: #1A7BAC;
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
+    /* Accent and danger as TEXT or glyph colour on a page surface. In the
+     * light palette they are the fill colours themselves; the dark palette
+     * lifts them, because the fill shades (3.4:1 and 3.6:1 on a dark card)
+     * fail AA as text while white labels still need the darker fills. Use
+     * these for `color:`, the plain tokens for backgrounds and borders. */
+    --xc-accent-text: var(--xc-accent-primary);
+    --xc-danger-fg: var(--xc-danger);
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;
@@ -88,6 +95,7 @@
     /* Darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
     --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
+    --xc-success-bg: rgba(20, 111, 52, 0.10);
     --xc-warning-text: #6E520A;
     /* Darkened from #16A34A (2.81:1 on its own badge bg) to clear AA.
      * #157A3A measured 4.44:1 against a real composited badge bg
@@ -158,6 +166,11 @@
         --xc-danger-text: #FCA5A5;
         --xc-warning-bg: rgba(252, 211, 77, 0.14);
         --xc-warning-text: #FCD34D;
+        --xc-success-bg: rgba(74, 222, 128, 0.14);
+        --xc-accent-text: #4AA8D8;
+        --xc-danger-fg: #F87171;
+        --xc-warning: #F59E0B;
+        --xc-success: #4ADE80;
         --xc-focus-ring: rgba(30, 144, 199, 0.6);
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -178,6 +191,11 @@
     --xc-danger-text: #FCA5A5;
     --xc-warning-bg: rgba(252, 211, 77, 0.14);
     --xc-warning-text: #FCD34D;
+    --xc-success-bg: rgba(74, 222, 128, 0.14);
+    --xc-accent-text: #4AA8D8;
+    --xc-danger-fg: #F87171;
+    --xc-warning: #F59E0B;
+    --xc-success: #4ADE80;
     --xc-focus-ring: rgba(30, 144, 199, 0.6);
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -186,6 +204,12 @@
 /* Tell the browser which palette its own widgets (scrollbars, native
  * selects, form controls) should paint in, so an explicit Light choice on a
  * dark OS does not leave black scrollbars framing a white app. */
+/* The OS-dark trigger needs the same hint: without it a dark OS with no
+ * explicit choice left native widgets (range sliders, unstyled buttons) in
+ * their light paint inside the dark app. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-xc-theme="light"]) { color-scheme: dark; }
+}
 :root[data-xc-theme="light"] { color-scheme: light; }
 :root[data-xc-theme="dark"] { color-scheme: dark; }
 
@@ -259,6 +283,8 @@
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
             --xc-accent-primary: #93C5FD;
+            --xc-accent-text: #93C5FD;
+            --xc-danger-fg: #FCA5A5;
             --xc-accent-primary-hover: #BFDBFE;
             --xc-focus-ring: rgba(255, 255, 255, 0.85);
         }
@@ -280,6 +306,8 @@
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
         --xc-accent-primary: #93C5FD;
+        --xc-accent-text: #93C5FD;
+        --xc-danger-fg: #FCA5A5;
         --xc-accent-primary-hover: #BFDBFE;
         --xc-focus-ring: rgba(255, 255, 255, 0.85);
     }
@@ -303,6 +331,8 @@
         --xc-accent-primary-hover: VisitedText;
         --xc-on-accent: Canvas;
         --xc-danger: Mark;
+        --xc-accent-text: LinkText;
+        --xc-danger-fg: Mark;
         --xc-on-danger: MarkText;
         --xc-focus-ring: Highlight;
     }
@@ -340,7 +370,8 @@ body {
      * themselves by `env(safe-area-inset-bottom)`, and they are pinned to the
      * viewport rather than to body flow, so adding it here as well would open
      * a second gap under the tab bar on exactly the devices this is meant to
-     * fix. The bottom stays owned by the two components that render there. */
+     * fix. The bottom stays owned by what renders there: those two, or the
+     * Screen itself when neither does (Screen.module.css). */
     padding-top: env(safe-area-inset-top, 0);
     padding-left: env(safe-area-inset-left, 0);
     padding-right: env(safe-area-inset-right, 0);

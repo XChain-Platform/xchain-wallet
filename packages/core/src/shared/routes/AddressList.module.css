@@ -235,6 +235,44 @@
     white-space: nowrap;
 }
 
+.addrBadges {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.addrHidden {
+    flex: 0 0 auto;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--xc-text-muted);
+    background: var(--xc-bg-muted);
+    text-transform: uppercase;
+}
+
+.hiddenToggle {
+    appearance: none;
+    width: 100%;
+    margin-top: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.hiddenToggle:hover {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
 /* Line 1: network icon + address. Line 2: native amount (left), fiat (right). */
 .addrLine1 {
     display: flex;
@@ -385,7 +423,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -444,7 +482,7 @@
 /* Four-up action row under the detail card, mirroring the contacts detail. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-2);
 }
@@ -488,7 +526,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;

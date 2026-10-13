@@ -131,9 +131,19 @@ const home = read('packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 assert.match(home, /ResumeConfirmCard/, 'Home must render the resume card');
 assert.match(home, /listConfirmSessions/, 'Home must load the stored confirms');
 
-const popup = read('packages', 'extension', 'src', 'popup', 'App.jsx');
-assert.match(popup, /ResumeConfirm/, 'the popup must route to the resume screen');
-assert.match(popup, /onResumeConfirm=/, 'Home must be given the resume navigation');
+for (const [shell, path] of [
+    ['extension', ['packages', 'extension', 'src', 'popup', 'App.jsx']],
+    ['web', ['packages', 'web', 'src', 'App.jsx']],
+    ['desktop', ['packages', 'desktop', 'renderer', 'App.jsx']],
+]) {
+    const source = read(...path);
+    assert.match(source, /unlockedView === 'resume-confirm'/,
+        `${shell} must route to the resume screen`);
+    assert.match(source, /<ResumeConfirm\b/,
+        `${shell} must mount the resume screen`);
+    assert.match(source, /onResumeConfirm=/,
+        `${shell} Home must be given the resume navigation`);
+}
 
 const resume = read('packages', 'core', 'src', 'shared', 'routes', 'ResumeConfirm.jsx');
 assert.match(resume, /alwaysCheckInputs: true/,
@@ -173,6 +183,6 @@ console.log(
     + 'cannot invite a re-approve of an already-broadcast tx; reservations and sessions share one storage.session '
     + 'adapter; the dispatch descriptor crosses the boundary as an allow-listable name, not a closure; the CLIENT '
     + 'half is wired on all three shells, the hook persists on open and clears in teardown, the §4.6 liveness gate '
-    + 'is forced on resume, Home + the popup route reach the screen, and two forms opt in - one of them carrying '
+    + 'is forced on resume, Home + every shell route reach the screen, and two forms opt in - one of them carrying '
     + 'its own post-broadcast bookkeeping)',
 );
