@@ -683,7 +683,7 @@ function AppInner() {
 
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
-    // popup locks via messaging.lockWallet (Home owns the visible Lock button).
+    // popup locks via messaging.lockWallet, the same call as Home's lock button.
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
@@ -2566,6 +2566,9 @@ function AppInner() {
                         // reach Settings from the nav rail, and a second entry
                         // in the hero would be duplicate chrome.
                         onOpenSettings={() => openSettingsSection(null)}
+                        // No header here either, so Home shows the lock
+                        // button that web and desktop keep in their header.
+                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
                     />
                 </>
             );
