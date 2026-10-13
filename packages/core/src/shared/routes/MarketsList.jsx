@@ -20,6 +20,7 @@ import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
@@ -461,7 +462,10 @@ export function MarketsList({
                             </ul>
                             {displayMarkets.length > visibleMarketCount ? (
                                 <div className={marketsStyles.pagination} aria-live="polite">
-                                    <span className={marketsStyles.paginationCount}>
+                                    <span
+                                        className={marketsStyles.paginationCount}
+                                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                                    >
                                         {visibleMarketCount.toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
                                     </span>
                                     <Button
@@ -543,6 +547,9 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
             <ListRow
                 type="button"
                 className={marketsStyles.marketButton}
+                style={{
+                    fontVariantNumeric: 'tabular-nums',
+                }}
                 onClick={onOpen}
                 disabled={openDisabled}
                 aria-label={`Open ${otherName || otherTick} market`}
@@ -564,13 +571,18 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                         <DispenserBadge chainId={chainId} tick={otherTick} />
                     </span>
                 )}
-                subtitle={lastPrice ? <span>last {lastPrice}</span> : null}
+                subtitle={lastPrice ? (
+                    <span>
+                        last {formatDecimalAmount(lastPrice)} {tick2}
+                    </span>
+                ) : null}
                 trailing={(
                     <span style={{
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'flex-end',
                         gap: '2px',
+                        fontVariantNumeric: 'tabular-nums',
                     }}>
                         {change24h ? (
                             <span

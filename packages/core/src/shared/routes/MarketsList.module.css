@@ -57,6 +57,7 @@
     gap: var(--xc-space-2);
     flex: 1;
     min-width: 0;
+    min-height: var(--xc-tap-min);
     padding: 0;
     border: 0;
     background: none;
