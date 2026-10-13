@@ -50,6 +50,8 @@ export const en = {
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
+    'send.empty.title': 'This wallet has no coins to send yet.',
+    'send.empty.body': 'Receive funds on this chain before creating a send.',
     'send.review': 'Review & Send',
     'send.backToEdit': 'Back to edit',
     'send.memoForbiddenChars': "Memo can't contain | or ; characters.",

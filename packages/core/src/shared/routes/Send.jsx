@@ -1245,7 +1245,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         ({ chainId: null, status: 'loading' }),
     );
     useEffect(() => {
-        if (!chainId || !addressesByChain || isWatcherMode || isSignerMode) {
+        // Until the address map and chain are known the status stays at its
+        // loading default, so the form never flashes before the check runs.
+        if (!chainId || !addressesByChain) return undefined;
+        if (isWatcherMode || isSignerMode) {
             setChainBalanceState({ chainId, status: 'unknown' });
             return undefined;
         }
@@ -2321,8 +2324,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
         return wrap(
             <EmptyState
-                title="This wallet has no coins to send yet."
-                body="Receive funds on this chain before creating a send."
+                title={t('send.empty.title')}
+                body={t('send.empty.body')}
                 icon={<Icon.ReceiveIcon />}
                 actionLabel={onReceive ? t('home.receive') : undefined}
                 onAction={onReceive}
