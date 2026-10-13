@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import styles from './BackupReminderCard.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * §19.7 / G034 + G062: progressive backup reminder card on Home.
@@ -61,7 +62,7 @@ export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
                     disabled={!onAction}
                     icon={<Icon.CheckIcon />}
                 >
-                    Back up now
+                    {t('backupReminder.backupNow')}
                 </Button>
                 {state.dismissable ? (
                     <button
@@ -72,7 +73,7 @@ export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
                             setState({ kind: 'hidden' });
                         }}
                     >
-                        Remind me tomorrow
+                        {t('backupReminder.remindTomorrow')}
                     </button>
                 ) : null}
             </div>

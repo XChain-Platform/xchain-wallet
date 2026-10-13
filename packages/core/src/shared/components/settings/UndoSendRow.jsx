@@ -29,12 +29,7 @@ import {
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { INPUT, ROW, ROW_LABEL, ToggleRow } from './_settingsPrimitives.jsx';
-
-const HINT_UNAVAILABLE =
-    'This build cannot hold sends. The preference is saved for a build that supports it.';
-const HINT_AVAILABLE =
-    'When enabled, holds each signed send for the duration below so you can cancel it before '
-    + 'broadcast. A duration of 0 does not hold sends.';
+import { t } from '../../../i18n/index.js';
 
 export function UndoSendRow() {
     const { settings, update } = useSettings();
@@ -49,8 +44,10 @@ export function UndoSendRow() {
     return (
         <>
             <ToggleRow
-                label="Hold signed sends before broadcast"
-                hint={held ? HINT_AVAILABLE : HINT_UNAVAILABLE}
+                label={t('settings.undoSend.label')}
+                hint={held
+                    ? t('settings.undoSend.hintAvailable')
+                    : t('settings.undoSend.hintUnavailable')}
                 checked={enabled}
                 onChange={(v) => {
                     update({ grace: { undoSendEnabled: v } }).catch((err) => {
@@ -60,7 +57,7 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_LABEL}>Hold duration in seconds (0 disables)</span>
+                <span style={ROW_LABEL}>{t('settings.undoSend.durationLabel')}</span>
                 <input
                     key={seconds}
                     type="number"
@@ -81,7 +78,7 @@ export function UndoSendRow() {
                         });
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    aria-label="Send hold duration in seconds"
+                    aria-label={t('settings.undoSend.durationAriaLabel')}
                     style={{ ...INPUT, width: 100, textAlign: 'right' }}
                 />
             </div>

@@ -14,6 +14,7 @@ import styles from './AlertsOverlay.module.css';
 import { alertSeverityPresentation } from './alertSeverity.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Full-overlay alerts panel. Surfaces wallet-level notifications that
@@ -50,14 +51,14 @@ export function AlertsOverlay({ alerts, onClose }) {
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Wallet alerts"
+            aria-label={t('alerts.dialogLabel')}
             onClick={onClose}
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <header className={styles.header}>
                     <span className={styles.title}>
-                        Alerts
+                        {t('alerts.title')}
                         {alerts.length > 0 ? (
                             <span className={styles.count}>{alerts.length}</span>
                         ) : null}
@@ -66,14 +67,14 @@ export function AlertsOverlay({ alerts, onClose }) {
                         type="button"
                         className={styles.close}
                         onClick={onClose}
-                        aria-label="Close alerts"
+                        aria-label={t('alerts.close')}
                     >
                         <Icon.XIcon />
                     </button>
                 </header>
                 <div className={styles.body}>
                     {alerts.length === 0 ? (
-                        <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
+                        <p className={styles.empty}>{t('alerts.empty')}</p>
                     ) : (
                         /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={styles.list} role="list">

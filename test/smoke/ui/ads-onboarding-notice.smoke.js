@@ -27,6 +27,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -42,7 +43,8 @@ const imp = read('routes', 'ImportWallet.jsx');
 const buttons = notice.match(/<Button\b/g) || [];
 assert.equal(buttons.length, 1, 'the notice renders exactly one button');
 assert.match(notice, /onClick=\{onContinue\}/, 'Continue calls onContinue');
-assert.match(notice, />\s*Continue\s*</, 'the button reads Continue');
+assert.match(notice, /t\('adsNotice\.continue'\)/, 'the button reads localized Continue copy');
+assert.equal(en['adsNotice.continue'], 'Continue', 'the English button copy stays Continue');
 
 // No way to decline here, and no choice handler left behind.
 for (const [name, src] of [['notice', notice], ['create', create], ['import', imp]]) {
@@ -58,15 +60,19 @@ for (const [name, src] of [['notice', notice], ['create', create], ['import', im
 
 // It is a notice: names the system, says it is on by default, says
 // donating is not required, and points at Settings for every preference.
-assert.match(notice, /Automatic Donation System/, 'names the system');
-assert.match(notice, /on by default/, 'says ADS is on by default');
-assert.match(notice, /do not need to donate/, 'says donating is not required');
-assert.match(notice, /Settings &rarr; Automatic Donation System/, 'points at the settings section');
-assert.match(notice, /turned off entirely/, 'says where it can be turned off');
+assert.equal(en['adsNotice.title'], 'Automatic Donation System', 'names the system');
+assert.match(en['adsNotice.defaultBehavior'], /on by default/, 'says ADS is on by default');
+assert.match(en['adsNotice.optional'], /do not need to donate/, 'says donating is not required');
+assert.match(en['adsNotice.settings'], /Settings → Automatic Donation System/, 'points at the settings section');
+assert.match(en['adsNotice.settings'], /turned off entirely/, 'says where it can be turned off');
 
 // No amounts on this screen: release defaults are shown and tuned in
 // Settings (§36.6), so a retune never leaves stale numbers here.
-assert.doesNotMatch(notice, /\bsats\b|\bLTC\b|\bDOGE\b|[0-9],[0-9]{3}/, 'no per-chain amounts on the notice');
+const noticeCopy = Object.entries(en)
+    .filter(([key]) => key.startsWith('adsNotice.'))
+    .map(([, value]) => value)
+    .join(' ');
+assert.doesNotMatch(noticeCopy, /\bsats\b|\bLTC\b|\bDOGE\b|[0-9],[0-9]{3}/, 'no per-chain amounts on the notice');
 
 // --- Create: persist advances to the notice, not to onCreated --------
 

@@ -13,6 +13,7 @@ import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -36,8 +37,8 @@ import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 export function ConfirmModal({
     title,
     message,
-    confirmLabel = 'Confirm',
-    cancelLabel = 'Cancel',
+    confirmLabel = t('common.confirm'),
+    cancelLabel = t('common.cancel'),
     danger = false,
     busy = false,
     error = null,
