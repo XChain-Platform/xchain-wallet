@@ -15,10 +15,10 @@ const css = readFileSync(
 describe('Locked compact-height layout', () => {
     it('removes decorative height and tightens secondary content on landscape phones', () => {
         expect(css).toMatch(
-            /@media \(max-width: 599px\) and \(max-height: 480px\) \{[\s\S]*?\.hero\s*\{\s*display: none;[\s\S]*?\.lockoutBanner\s*\{[\s\S]*?padding: var\(--xc-space-2\);[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
+            /@media \(max-height: 480px\) \{[\s\S]*?@media not all and \(min-width: 600px\) \{[\s\S]*?\.hero\s*\{\s*display: none;[\s\S]*?\.lockoutBanner\s*\{[\s\S]*?padding: var\(--xc-space-2\);[\s\S]*?\.forgotBlock\s*\{[\s\S]*?margin-top: var\(--xc-space-2\);[\s\S]*?\n\}/,
         );
         expect(css).not.toMatch(
-            /@media \(max-width: 599px\) and \(max-height: 480px\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
+            /@media \(max-height: 480px\) \{[\s\S]*?@media not all and \(min-width: 600px\) \{[\s\S]*?\.unlockingNote\s*\{[\s\S]*?display: none;/,
         );
     });
 

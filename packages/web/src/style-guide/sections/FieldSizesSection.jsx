@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Input, Select } from '@xchain-wallet/core/ui';
+import { Input, Select, Textarea } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 // This section documents the sizing CONTRACT, not a component. It replaces the
@@ -39,6 +39,7 @@ export function FieldSizesSection() {
 {`<Input label="Amount" size="lg" />   // 48px hero field
 <Input label="Memo" />               // 36px default (md)
 <Select label="Network" size="lg">…</Select>
+<Textarea label="Message" size="lg" rows={3} />
 <AmountField size="lg" … />          // composed fields take the same prop`}
             </Markup>
 
@@ -58,6 +59,22 @@ export function FieldSizesSection() {
                     <option value="ltc">Litecoin</option>
                     <option value="doge">Dogecoin</option>
                 </Select>
+            </LiveExample>
+
+            <LiveExample label="Same contract on Textarea">
+                <Textarea
+                    label="Message (md, default)"
+                    rows={2}
+                    placeholder="Optional message"
+                    defaultValue=""
+                />
+                <Textarea
+                    label="Message (lg, hero)"
+                    size="lg"
+                    rows={2}
+                    placeholder="Optional message"
+                    defaultValue=""
+                />
             </LiveExample>
         </Section>
     );

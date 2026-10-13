@@ -10,7 +10,7 @@
 
 import { ConfirmModal } from './ConfirmModal.jsx';
 
-export const DEMO_EXIT_MESSAGE = 'This permanently deletes the demo wallet and its sample accounts, addresses, and history from this device. If it is the only wallet, the app also clears its local wallet data and returns you to wallet setup. This cannot be undone.';
+export const DEMO_EXIT_MESSAGE = 'This permanently deletes the demo wallet and all of its sample accounts, addresses, balances, and history from this device. Real wallets and their data are not affected. If another wallet is available, the app opens it. Otherwise, the app clears the local demo wallet data and returns you to wallet setup. This cannot be undone.';
 
 /**
  * Shared destructive confirmation for every user-triggered demo exit.

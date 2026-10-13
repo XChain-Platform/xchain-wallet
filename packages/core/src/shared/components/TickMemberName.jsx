@@ -13,6 +13,16 @@ import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { chainIdForCoin, splitTickCoinItem } from '../utils/listTickCoin.js';
 
 const ID_REST = /^\^([1-9]\d*)$/;
+const NAME_STYLE = {
+    display: 'inline-block',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    verticalAlign: 'bottom',
+    color: 'var(--xc-text)',
+    fontSize: 'var(--xc-text-sm)',
+};
 
 /**
  * A tick-list member: the item as written, or for a coin-qualified id item
@@ -48,12 +58,20 @@ export function TickMemberName({ item, messaging, chainId }) {
         return () => { cancelled = true; };
     }, [chainId, coin, id, lookupKey, messaging]);
 
-    if (!split) return <code>{item}</code>;
+    if (!split) {
+        return <code aria-label={item} title={item} style={NAME_STYLE}>{item}</code>;
+    }
     const current = resolved.key === lookupKey ? resolved : null;
     const rest = id === null ? split.rest : (current?.canonicalTick || `id ${id}`);
+    const displayName = `${split.coin} ${rest}`;
 
     return (
-        <code aria-busy={current?.loading || undefined}>
+        <code
+            aria-busy={current?.loading || undefined}
+            aria-label={displayName}
+            title={displayName}
+            style={NAME_STYLE}
+        >
             <span data-testid="tick-member-coin">{split.coin}</span>
             {' '}
             {rest}

@@ -142,12 +142,10 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
 });
 
 describe('QueuedBroadcastBanner actions and announcements', () => {
-    it('uses plain labels and announces the queue count without wrapping controls in a status', async () => {
+    it('keeps the static queue count out of a competing live region', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
-        const status = screen.getByRole('status');
-        expect(status).toHaveTextContent('Waiting to send (1)');
-        expect(status).toHaveAttribute('aria-live', 'polite');
-        expect(status).toHaveAttribute('aria-atomic', 'true');
+        expect(screen.getByText('Waiting to send (1)')).not.toHaveAttribute('aria-live');
+        expect(screen.queryByRole('status')).toBeNull();
         expect(screen.getByRole('button', { name: 'Send now: Send 1 XCP' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Remove from queue: Send 1 XCP' })).toBeEnabled();
     });
@@ -160,7 +158,6 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
         await waitFor(() => {
             for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
         });
-        expect(screen.getByText('Sending Send 1 XCP.')).toHaveAttribute('aria-live', 'polite');
         expect(screen.getByRole('button', { name: 'Sending: Send 1 XCP' })).toBeDisabled();
         finish();
         await waitFor(() => expect(toasts.some((toast) => toast.message === 'Transaction sent.')).toBe(true));

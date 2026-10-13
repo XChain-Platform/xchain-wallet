@@ -98,6 +98,7 @@ export function MenuRoute({
             <ListPage className={menuStyles.page}>
                 <div className={menuStyles.scroll}>
                     {primary.length > 0 || typeof onSettings === 'function' ? (
+                        /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={menuStyles.list} role="list">
                             {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                                 <li key={id}>
@@ -152,6 +153,21 @@ export function MenuRoute({
                             ) : null}
                         </ul>
                     ) : null}
+                </div>
+                <LayoutModeToggle />
+                {typeof onLock === 'function' ? (
+                    <div className={menuStyles.lockBlock}>
+                        <button
+                            type="button"
+                            className={menuStyles.lockBtn}
+                            onClick={onLock}
+                            disabled={locking}
+                        >
+                            <span className={menuStyles.rowIcon} aria-hidden="true">
+                                <Icon.LockIcon />
+                            </span>
+                            <span className={menuStyles.rowLabel}>Lock wallet</span>
+                        </button>
                 </div>
                 <LayoutModeToggle />
                 {typeof onLock === 'function' ? (

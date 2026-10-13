@@ -101,6 +101,7 @@ export function createHoldBeforeBroadcast({
   holdId,
   undoSeconds,
   maxSeconds = SEND_HOLD_SECONDS_MAX,
+  now = Date.now,
 }) {
   if (holdId === undefined || holdId === null) return undefined
   if (typeof holdId !== 'string' || holdId.length === 0) {
@@ -111,7 +112,11 @@ export function createHoldBeforeBroadcast({
   }
   if (undoSeconds === 0) return undefined
   const seconds = Math.min(undoSeconds, maxSeconds)
+  // The UI starts its countdown when the host accepts the send request, so
+  // signing time consumes the same window instead of creating a hidden hold.
+  const startedAt = now()
   return function holdBeforeBroadcast() {
-    return sendHold.hold(holdId, seconds)
+    const elapsedSeconds = Math.max(0, (now() - startedAt) / 1000)
+    return sendHold.hold(holdId, Math.max(0, seconds - elapsedSeconds))
   }
 }

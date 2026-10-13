@@ -151,7 +151,12 @@ describe('ContractFundsForm owner withdraw', () => {
 
     it('warns on a DEPOSIT into a contract whose deployer can withdraw', async () => {
         const utils = await mount(ContractFundsForm, messagingFor(true), { mode: 'deposit' });
-        expect(utils.getByTestId('owner-withdraw-warning')).toHaveTextContent(OWNER_WITHDRAW_WARNING);
+        const warning = utils.getByTestId('owner-withdraw-warning');
+        const confirm = buttonNamed(utils, 'Deposit');
+        expect(warning).toHaveTextContent(OWNER_WITHDRAW_WARNING);
+        expect(confirm).not.toBeNull();
+        expect(warning.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
     });
 
     it('does not warn on a DEPOSIT into a contract that refuses owner withdrawals', async () => {
@@ -164,7 +169,12 @@ describe('ContractFundsForm owner withdraw', () => {
 describe('ExecuteContractForm owner withdraw', () => {
     it('warns before a call into a contract whose deployer can withdraw', async () => {
         const utils = await mount(ExecuteContractForm, messagingFor(true), {});
-        expect(utils.getByTestId('owner-withdraw-warning')).toHaveTextContent(OWNER_WITHDRAW_WARNING);
+        const warning = utils.getByTestId('owner-withdraw-warning');
+        const confirm = buttonNamed(utils, 'Execute');
+        expect(warning).toHaveTextContent(OWNER_WITHDRAW_WARNING);
+        expect(confirm).not.toBeNull();
+        expect(warning.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
     });
 
     it('shows no warning when owner withdraw is refused or unknown', async () => {
