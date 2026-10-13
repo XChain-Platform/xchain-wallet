@@ -303,20 +303,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     }
 
     if (stage === 'persisting') {
-        const persistingBody = (
-            <div className={styles.persisting} role="status" aria-live="polite">
-                <Button loading icon={<Icon.CheckIcon />}>Create wallet</Button>
-                <p className={subtitleClass}>
-                    XChain Platform is encrypting your wallet with your password.
-                    This can take a minute on some devices. Keep the app open.
-                </p>
-            </div>
-        );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage ref={stageFormRef} label="Wallet creation status">
-                    {persistingBody}
-                </FormPage>
+                <FormPage
+                    ref={stageFormRef}
+                    label="Wallet creation status"
+                    description="XChain Platform is encrypting your wallet with your password. This can take a minute on some devices. Keep the app open."
+                    progress={<span aria-current="step">Step 3 of 3</span>}
+                    aria-live="polite"
+                    actions={<Button loading icon={<Icon.CheckIcon />}>Create wallet</Button>}
+                />
             </Screen>
         );
     }
@@ -327,6 +323,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 ref={stageFormRef}
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
+                description={isFull
+                    ? 'Enter the requested words from the recovery phrase you wrote down.'
+                    : 'Enter the requested words to confirm your recovery phrase.'}
+                progress={<span aria-current="step">Step 3 of 3</span>}
                 status={<FormErrorSummary
                     errors={[
                         ...(quizError ? [{
@@ -360,13 +360,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </>
                 )}
             >
-                <div className={headClass}>
-                    <p className={subtitleClass}>
-                        {isFull
-                            ? 'Enter the requested words from the recovery phrase you wrote down.'
-                            : 'Enter the requested words to confirm your recovery phrase.'}
-                    </p>
-                </div>
                 {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
                 <ol className={styles.quizList}>
                     {/* Native list items preserve the quiz order within the form. */}
@@ -407,6 +400,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             <FormPage
                 ref={stageFormRef}
                 label="Recovery phrase"
+                description={isFull
+                    ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
+                    : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
+                progress={<span aria-current="step">Step 2 of 3</span>}
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
                 ) : null}
@@ -421,13 +418,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </Button>
                 )}
             >
-                <div className={headClass}>
-                    <p className={subtitleClass}>
-                        {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
-                            : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
-                    </p>
-                </div>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
                 {/* SSC-4 /, decided 2026-08-01: the recovery phrase
                     is NOT copyable, on any shell. A clipboard is readable by
@@ -475,6 +465,18 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             ref={stageFormRef}
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
+            description={isFull
+                ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
+                : 'Your password encrypts this wallet on this device.'}
+            visual={isFull ? (
+                <img
+                    src={branding.logoUrl()}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.logo}
+                />
+            ) : null}
+            progress={<span aria-current="step">Step 1 of 3</span>}
             status={passwordError ? (
                 <FormErrorSummary errors={passwordErrors} focusKey={validationAttempt} />
             ) : passwordStepDisabledReason ? (
@@ -494,21 +496,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 </Button>
             )}
         >
-            <div className={headClass}>
-                {isFull ? (
-                    <img
-                        src={branding.logoUrl()}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.logo}
-                    />
-                ) : null}
-                <p className={subtitleClass}>
-                    {isFull
-                        ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
-                        : 'Your password encrypts this wallet on this device.'}
-                </p>
-            </div>
             <Input
                 label="Wallet name"
                 value={name}

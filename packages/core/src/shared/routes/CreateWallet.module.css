@@ -172,18 +172,6 @@
     line-height: 1.4;
 }
 
-/* Shown while the wallet is encrypted. The spinner animates only
-   transform, which the compositor keeps running even while the key
-   stretching holds the UI thread. */
-.persisting {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-6) var(--xc-space-3);
-}
-
 /* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
     .headPopup,

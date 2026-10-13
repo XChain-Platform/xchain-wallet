@@ -865,33 +865,26 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? handleWifSubmit
                     : handleSubmit}
+            description={isFreeWallet
+                ? (isFull
+                    ? t('importWallet.freeWallet.fullSubtitle')
+                    : t('importWallet.freeWallet.subtitle'))
+                : lane === 'backup'
+                    ? (isFull
+                        ? (mode === 'add'
+                            ? t('importWallet.backup.addFullSubtitle')
+                            : t('importWallet.backup.replaceFullSubtitle'))
+                        : (mode === 'add'
+                            ? t('importWallet.backup.addSubtitle')
+                            : t('importWallet.backup.replaceSubtitle')))
+                    : lane === 'wif'
+                        ? t('importWallet.wif.subtitle')
+                        : (isFull
+                            ? t('importWallet.phrase.fullSubtitle')
+                            : t('importWallet.phrase.subtitle'))}
             status={formStatus}
             actions={formActions}
         >
-            <div className={headClass}>
-                <p className={subtitleClass}>
-                    {isFreeWallet
-                        ? (isFull
-                            ? t('importWallet.freeWallet.fullSubtitle')
-                            : t('importWallet.freeWallet.subtitle'))
-                        : lane === 'backup'
-                            ? (isFull
-                                ? (mode === 'add'
-                                    ? t('importWallet.backup.addFullSubtitle')
-                                    // It used to say "the password",
-                                    // singular, one line above three password
-                                    // boxes.
-                                    : t('importWallet.backup.replaceFullSubtitle'))
-                                : (mode === 'add'
-                                    ? t('importWallet.backup.addSubtitle')
-                                    : t('importWallet.backup.replaceSubtitle')))
-                            : lane === 'wif'
-                                ? t('importWallet.wif.subtitle')
-                            : (isFull
-                                ? t('importWallet.phrase.fullSubtitle')
-                                : t('importWallet.phrase.subtitle'))}
-                </p>
-            </div>
             {laneSwitcher}
             {lane === 'backup' ? (
                 <>
