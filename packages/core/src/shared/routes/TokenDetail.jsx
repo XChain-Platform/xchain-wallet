@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -94,7 +94,6 @@ export function TokenDetail({
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
@@ -340,7 +339,7 @@ export function TokenDetail({
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
+            <ListPage>
                 {/* Token balance hero: gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
                     a swap button for flipping tick ↔ fiat as primary,
@@ -620,7 +619,7 @@ export function TokenDetail({
                             ) : null}
                         </div>
 
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -813,7 +812,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         <Sparkline series={sparkline} height={40} />
                     </div>
                 ) : !hint ? (
-                    <p className={styles.muted} role="status">{NO_PRICE_HISTORY}</p>
+                    <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
                 ) : null}
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
@@ -894,7 +893,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                     <Sparkline series={sparkline} height={40} />
                 </div>
             ) : !hint ? (
-                <p className={styles.muted} role="status">{NO_PRICE_HISTORY}</p>
+                <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
             ) : null}
             {hint ? <p className={styles.muted}>{hint}</p> : null}
         </>
@@ -1042,11 +1041,10 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
         || hasPgpsig;
     if (!hasAbout) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    No additional information published for this token yet.
-                </p>
-            </div>
+            <EmptyState
+                title="No additional information published for this token yet."
+                titleAs="p"
+            />
         );
     }
     return (
@@ -1153,11 +1151,10 @@ function MediaPanel({ isNative, assetInfo }) {
     }
     if (subtabs.length === 0) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    No images, audio, video, or files published for this token yet.
-                </p>
-            </div>
+            <EmptyState
+                title="No images, audio, video, or files published for this token yet."
+                titleAs="p"
+            />
         );
     }
     // Single media type. No need for a subtab strip; render directly.
@@ -1585,13 +1582,11 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (!groups || groups.length === 0) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.muted}>
-                    No token-gated content published for {tick}. Holders unlock
-                    creator drops, packs, and sealed bundles here when the issuer
-                    publishes locked content for this token.
-                </p>
-            </div>
+            <EmptyState
+                title={`No token-gated content published for ${tick}.`}
+                body="Holders unlock creator drops, packs, and sealed bundles here when the issuer publishes locked content for this token."
+                titleAs="p"
+            />
         );
     }
     return (

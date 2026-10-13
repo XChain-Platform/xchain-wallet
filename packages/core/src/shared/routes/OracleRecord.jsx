@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -99,7 +99,11 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     }, [chainId, address, messaging]);
 
     const header = <PageHeader onBack={onBack} title="Oracle record" />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
 
     if (error) {
         return wrap(
@@ -130,7 +134,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
         <>
             <p className={styles.hint} style={{ wordBreak: 'break-all' }}>{address}</p>
 
-            <div className={styles.card}>
+            <div className={styles.listCard}>
                 {line('Markets opened', total)}
                 {line('Still running', active)}
                 {line('Settled with a result', settled)}
@@ -141,11 +145,14 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                 {line('Left to expire with no result', expired, '(everyone refunded)')}
             </div>
 
-            <h4>Fees earned</h4>
+            <SectionHeader title="Fees earned" />
             {fees.length === 0 ? (
-                <p className={styles.hint}>This address has never been paid a fee for settling a market.</p>
+                <EmptyState
+                    title="This address has never been paid a fee for settling a market."
+                    titleAs="p"
+                />
             ) : (
-                <div className={styles.card}>
+                <div className={styles.listCard}>
                     {fees.map((f, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', overflowWrap: 'anywhere' }}>
                             <span>{f.tick || 'unknown token'}</span>
@@ -160,7 +167,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             )}
 
             {/* Required by the spec's trust model, not optional decoration. */}
-            <div role="note" className={styles.card}>
+            <div role="note" className={styles.listCard}>
                 <strong>This record is not a guarantee.</strong>
                 <p className={styles.hint}>
                     Nothing is staked behind a betting market. This history belongs to one address, and
@@ -171,10 +178,10 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                 </p>
             </div>
 
-            <h4>Their markets</h4>
+            <SectionHeader title="Their markets" />
             {!markets ? <p className={styles.hint}>Loading markets…</p> : null}
             {markets && markets.length === 0 ? (
-                <p className={styles.hint}>No markets from this address on this chain.</p>
+                <EmptyState title="No markets from this address on this chain." titleAs="p" />
             ) : null}
             {markets && markets.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -192,13 +199,13 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                                 key={String(m.action_index)}
                                 type="button"
                                 onClick={() => onOpenMarket(chainId, m.action_index)}
-                                className={styles.card}
+                                className={styles.listCard}
                                 style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                             >
                                 {body}
                             </button>
                         ) : (
-                            <div key={String(m.action_index)} className={styles.card}>{body}</div>
+                            <div key={String(m.action_index)} className={styles.listCard}>{body}</div>
                         );
                     })}
                 </div>

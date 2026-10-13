@@ -13,8 +13,11 @@ import {
     Screen,
     PageHeader,
     Button,
+    FormPage,
     Input,
- Icon, StatusMessage,} from '@xchain-wallet/core/ui';
+    Icon,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import {
     signers as signersLib,
 } from '@xchain-wallet/core';
@@ -66,7 +69,6 @@ export function PairSignerForm({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
         /** @type {'vendor' | 'pairing' | 'confirm' | 'saving' | 'done' | 'error'} */ ('vendor'),
@@ -143,7 +145,7 @@ export function PairSignerForm({
         }
     }
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             title="Pair hardware signer"
@@ -151,13 +153,27 @@ export function PairSignerForm({
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (stage === 'vendor' || stage === 'error') {
         return wrap(
-            <>
+            <FormPage
+                label="Choose hardware signer"
+                status={error ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            vendor && !/WebHID|not supported|not available/i.test(error)
+                                ? { label: 'Try again', onAction: () => handlePickVendor(vendor) }
+                                : undefined
+                        }
+                    >
+                        {error}
+                    </StatusMessage>
+                ) : null}
+            >
                 <p className={styles.stageHint}>Which kind of device are you pairing?</p>
                 <ul className={styles.vendorGrid}>
                     <li>
@@ -195,27 +211,13 @@ export function PairSignerForm({
                         </button>
                     </li>
                 </ul>
-                {error ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            vendor && !/WebHID|not supported|not available/i.test(error)
-                                ? { label: 'Try again', onAction: () => handlePickVendor(vendor) }
-                                : undefined
-                        }
-                    >
-                        {error}
-                    </StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'pairing') {
         return wrap(
-            <>
+            <FormPage label="Pair hardware signer">
                 <p className={styles.summary}>
                     Waiting for {labelFor(vendor)}…
                 </p>
@@ -224,13 +226,16 @@ export function PairSignerForm({
                         ? 'Authorize the connection in the Trezor Connect popup that just opened.'
                         : 'Plug in your Ledger, enter the PIN, and open the Bitcoin app. Grant the WebHID permission if your browser asks.'}
                 </p>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'done' && savedRecord) {
         return wrap(
-            <>
+            <FormPage
+                label="Paired hardware signer"
+                actions={<Button variant="primary" onClick={onPaired || onBack}>Done</Button>}
+            >
                 <h2 className={styles.successTitle}>{savedRecord.label} paired</h2>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Model</dt>
@@ -242,10 +247,7 @@ export function PairSignerForm({
                         <code className={styles.code}>{savedRecord.id}</code>
                     </dd>
                 </dl>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onPaired || onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
@@ -259,7 +261,23 @@ export function PairSignerForm({
         : null;
 
     return wrap(
-        <form onSubmit={handleSave} noValidate>
+        <FormPage
+            label="Confirm hardware signer"
+            onSubmit={handleSave}
+            status={error ? (
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={stage === 'saving'}
+                    disabled={verdict?.status === 'unsupported'}
+                >
+                    {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Save'}
+                </Button>
+            )}
+        >
             <p className={styles.stageHint}>
                 Confirm the device you just paired.
             </p>
@@ -288,20 +306,7 @@ export function PairSignerForm({
                 autoComplete="off"
                 maxLength={40}
             />
-            {error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={stage === 'saving'}
-                    disabled={verdict?.status === 'unsupported'}
-                >
-                    {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Save'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
