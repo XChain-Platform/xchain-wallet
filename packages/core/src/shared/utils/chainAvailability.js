@@ -35,4 +35,4 @@ export function hasAvailableChain(settingsState, chainRegistry) {
 }
 
 export const NO_CHAINS_TITLE = 'No networks available';
-export const NO_CHAINS_BODY = 'No blockchain networks are enabled, or the chain registry could not be loaded. Open Network settings to choose a network or refresh the registry.';
+export const NO_CHAINS_BODY = 'Enable a network in Network settings to see balances, addresses, and activity here; if the chain registry could not be loaded, refresh it first.';

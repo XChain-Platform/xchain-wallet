@@ -136,18 +136,15 @@ assert.ok(
     'ContractsList says in plain words that fund-neutral calls are not listed yet',
 );
 assert.ok(
-    /No contracts published from this chain/.test(listSrc),
+    /Published contracts appear here after you publish one from an address on this chain/.test(listSrc),
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(
-    // The copy is now built from the shared display map (it still RENDERS as
-    // "No deposit or withdraw actions recorded..."), so the phrase no longer
-    // exists as one literal in source. Pin the construction.
-    /actionDisplayLabel\('DEPOSIT'\)[\s\S]{0,60}?actionDisplayLabel\('WITHDRAW'\)[\s\S]{0,40}?actions recorded/.test(listSrc),
+    /actionDisplayLabel\('DEPOSIT'\)[\s\S]{0,60}?actionDisplayLabel\('WITHDRAW'\)[\s\S]{0,60}?actions appear here/.test(listSrc),
     'ContractsList surfaces the empty "My interactions" state per chain',
 );
 assert.ok(
-    /Contracts indexed on this chain appear here/.test(listSrc),
+    /Indexed contracts appear here after this chain's contract data loads/.test(listSrc),
     'ContractsList surfaces the empty "Browse all" state per chain',
 );
 assert.ok(
