@@ -66,6 +66,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { transactionReceiptText } from '../utils/transactionReceipt.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -1917,30 +1918,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             onClick: () => runRbf('cancel'),
         });
     }
-    // Universal option: every entry can have a sharable link copied,
-    // so the menu is never empty (DeFi rows, in particular, hit this
-    // path since they don't have a peer or replaceable state).
-    const shareUrl = explorerPageUrl({
-        chainId: entry?.chainId,
-        kind: 'action',
-        value: entry?.actionIndex,
-        settings,
+    // Receipt sharing is deliberately narrower than the detail payload. The
+    // user opts into these six public transaction facts, never addresses,
+    // memos, contact data, wallet identifiers, or arbitrary raw fields.
+    const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'copy-receipt',
+        label: 'Copy receipt',
+        icon: <Icon.CopyIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const { ok } = await copyText(receipt);
+            showToast({
+                message: ok ? 'Transaction receipt copied.' : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'default' : 'error',
+            });
+        },
     });
-    if (shareUrl) {
-        moreOptions.push({
-            id: 'copy-link',
-            label: 'Copy action link',
-            icon: <Icon.CopyIcon />,
-            onClick: async () => {
-                setMoreOpen(false);
-                const { ok } = await copyText(shareUrl);
-                showToast({
-                    message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'default' : 'error',
-                });
-            },
-        });
-    }
 
     async function handleSaveContact(event) {
         event.preventDefault();
