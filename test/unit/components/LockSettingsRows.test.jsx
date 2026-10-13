@@ -95,6 +95,19 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('BiometricRow', () => {
+    it('uses style-guide controls without changing accessible names', async () => {
+        render(<BiometricRow />);
+
+        const enable = await screen.findByRole('button', { name: 'Enable' });
+        expect(enable.className).toMatch(/ghost/);
+        expect(enable.style.border).toBe('');
+        fireEvent.click(enable);
+
+        const password = screen.getByLabelText('Wallet password');
+        expect(password.className).toMatch(/input/);
+        expect(password).toHaveAttribute('type', 'password');
+    });
+
     it('verifies the wallet password before enrolling', async () => {
         messaging.unlockWallet.mockRejectedValueOnce(invalidPassword());
         render(<BiometricRow />);
@@ -147,6 +160,21 @@ describe('DuressPassphraseRow', () => {
         fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: confirm } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     }
+
+    it('uses style-guide controls without changing accessible names', () => {
+        render(<DuressPassphraseRow />);
+
+        const set = screen.getByRole('button', { name: 'Set' });
+        expect(set.className).toMatch(/ghost/);
+        expect(set.style.border).toBe('');
+        fireEvent.click(set);
+
+        for (const name of ['Current wallet password', 'Duress passphrase', 'Confirm duress passphrase']) {
+            const input = screen.getByLabelText(name);
+            expect(input.className).toMatch(/input/);
+            expect(input).toHaveAttribute('type', 'password');
+        }
+    });
 
     it('rejects a duress passphrase that equals the wallet password', async () => {
         render(<DuressPassphraseRow />);

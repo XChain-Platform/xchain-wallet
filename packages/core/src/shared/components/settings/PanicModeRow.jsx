@@ -26,6 +26,7 @@
 // it explicitly.
 
 import { useEffect, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import {
     activatePanicMode,
     deactivatePanicMode,
@@ -70,22 +71,6 @@ export function PanicModeRow() {
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
-    const buttonStyle = {
-        background: 'var(--xc-surface-raised)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border-strong)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-3)',
-        fontSize: 'var(--xc-text-sm)',
-        cursor: 'pointer',
-    };
-    const dangerButtonStyle = {
-        ...buttonStyle,
-        border: '1px solid var(--xc-danger)',
-        color: 'var(--xc-danger-fg)',
-        fontWeight: 600,
-    };
-
     if (isActive) {
         return (
             <div style={ROW}>
@@ -99,9 +84,9 @@ export function PanicModeRow() {
                         remaining.
                     </span>
                 </div>
-                <button type="button" onClick={handleDeactivate} style={buttonStyle}>
+                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDeactivate}>
                     Deactivate
-                </button>
+                </Button>
             </div>
         );
     }
@@ -117,12 +102,12 @@ export function PanicModeRow() {
                     </span>
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <button type="button" onClick={() => setConfirming(false)} style={buttonStyle}>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setConfirming(false)}>
                         Cancel
-                    </button>
-                    <button type="button" onClick={handleActivate} style={dangerButtonStyle}>
+                    </Button>
+                    <Button type="button" size="sm" variant="danger" icon={null} onClick={handleActivate}>
                         Confirm 24-hour freeze
-                    </button>
+                    </Button>
                 </div>
             </div>
         );
@@ -138,9 +123,9 @@ export function PanicModeRow() {
                     expires or you deactivate.
                 </span>
             </div>
-            <button type="button" onClick={() => setConfirming(true)} style={dangerButtonStyle}>
+            <Button type="button" size="sm" variant="danger" icon={null} onClick={() => setConfirming(true)}>
                 Activate
-            </button>
+            </Button>
         </div>
     );
 }

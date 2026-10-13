@@ -90,7 +90,7 @@ describe('the notification-sounds master toggle', () => {
         expect(master.checked).toBe(false);
         // Not merely hidden: nothing to tab into, nothing to read out.
         for (const family of SOUND_FAMILIES) {
-            expect(screen.queryByLabelText(`${family.label} sound`)).toBeNull();
+            expect(screen.queryByRole('combobox', { name: `${family.label} sound` })).toBeNull();
         }
         expect(screen.queryByText('Preview')).toBeNull();
     });
@@ -120,17 +120,17 @@ describe('the per-family pickers', () => {
         render(<NotificationsSection />);
         expect(SOUND_FAMILIES).toHaveLength(10);
         for (const family of SOUND_FAMILIES) {
-            const select = screen.getByLabelText(`${family.label} sound`);
+            const select = screen.getByRole('combobox', { name: `${family.label} sound` });
             expect(select.value).toBe(family.defaultSound);
         }
         // The named case from the spec, spelled out rather than derived.
-        expect(screen.getByLabelText('Incoming pending payments sound').value).toBe('pluck');
+        expect(screen.getByRole('combobox', { name: 'Incoming pending payments sound' }).value).toBe('pluck');
     });
 
     it('offers the whole palette plus a No sound option', () => {
         soundsOn();
         render(<NotificationsSection />);
-        const select = screen.getByLabelText('Incoming pending payments sound');
+        const select = screen.getByRole('combobox', { name: 'Incoming pending payments sound' });
         const values = [...select.options].map((o) => o.value);
         expect(values).toEqual([...SOUND_PALETTE.map((s) => s.id), SOUND_NONE]);
         const noSound = [...select.options].find((o) => o.value === SOUND_NONE);
@@ -140,21 +140,21 @@ describe('the per-family pickers', () => {
     it('shows a stored pick rather than the family default', () => {
         soundsOn({ incomingPending: 'bong' });
         render(<NotificationsSection />);
-        expect(screen.getByLabelText('Incoming pending payments sound').value).toBe('bong');
+        expect(screen.getByRole('combobox', { name: 'Incoming pending payments sound' }).value).toBe('bong');
         // A sibling family is untouched by that pick.
-        expect(screen.getByLabelText('Price alerts sound').value).toBe('bell');
+        expect(screen.getByRole('combobox', { name: 'Price alerts sound' }).value).toBe('bell');
     });
 
     it('falls back to the family default for an id the palette no longer knows', () => {
         soundsOn({ incomingPending: 'retired-in-v9' });
         render(<NotificationsSection />);
-        expect(screen.getByLabelText('Incoming pending payments sound').value).toBe('pluck');
+        expect(screen.getByRole('combobox', { name: 'Incoming pending payments sound' }).value).toBe('pluck');
     });
 
     it('writes ONE family key on change, never the whole map', () => {
         soundsOn();
         render(<NotificationsSection />);
-        fireEvent.change(screen.getByLabelText('Incoming pending payments sound'), {
+        fireEvent.change(screen.getByRole('combobox', { name: 'Incoming pending payments sound' }), {
             target: { value: 'bong' },
         });
         expect(update).toHaveBeenCalledTimes(1);
@@ -164,7 +164,7 @@ describe('the per-family pickers', () => {
     it('writes the none sentinel when a family is muted', () => {
         soundsOn();
         render(<NotificationsSection />);
-        fireEvent.change(screen.getByLabelText('Price alerts sound'), {
+        fireEvent.change(screen.getByRole('combobox', { name: 'Price alerts sound' }), {
             target: { value: SOUND_NONE },
         });
         expect(update).toHaveBeenCalledWith({ sounds: { perKind: { priceAlerts: SOUND_NONE } } });
@@ -175,7 +175,7 @@ describe('the Preview button', () => {
     it('dispatches the preview event carrying the picked sound for that family', () => {
         soundsOn({ priceAlerts: 'drop' });
         render(<NotificationsSection />);
-        fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview Incoming pending payments sound' }));
         // The pending family's default, not the re-picked price-alert one.
         expect(previews).toEqual(['pluck']);
     });
@@ -183,19 +183,19 @@ describe('the Preview button', () => {
     it('previews a re-picked sound rather than the default', () => {
         soundsOn({ incomingPending: 'bong' });
         render(<NotificationsSection />);
-        fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview Incoming pending payments sound' }));
         expect(previews).toEqual(['bong']);
     });
 
     it('is disabled where the family is muted', () => {
         soundsOn({ incomingPending: SOUND_NONE });
         render(<NotificationsSection />);
-        const btn = screen.getByLabelText('Preview Incoming pending payments sound');
+        const btn = screen.getByRole('button', { name: 'Preview Incoming pending payments sound' });
         expect(btn.disabled).toBe(true);
         fireEvent.click(btn);
         expect(previews).toEqual([]);
         // Only the muted row is dead; the rest still preview.
-        expect(screen.getByLabelText('Preview Price alerts sound').disabled).toBe(false);
+        expect(screen.getByRole('button', { name: 'Preview Price alerts sound' }).disabled).toBe(false);
     });
 
     it('is ABSENT on the shells without the delivery seam', () => {
@@ -203,10 +203,10 @@ describe('the Preview button', () => {
             shell = other;
             soundsOn();
             render(<NotificationsSection />);
-            expect(screen.queryByLabelText('Preview Incoming pending payments sound'), other).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Preview Incoming pending payments sound' }), other).toBeNull();
             expect(screen.queryByText('Preview'), other).toBeNull();
             // The pickers still work there; only the button is gone.
-            expect(screen.getByLabelText('Incoming pending payments sound')).toBeTruthy();
+            expect(screen.getByRole('combobox', { name: 'Incoming pending payments sound' })).toBeTruthy();
             cleanup();
         }
     });
@@ -217,7 +217,7 @@ describe('the Preview button', () => {
         window.addEventListener('xchain:notification', onNotify);
         soundsOn();
         render(<NotificationsSection />);
-        fireEvent.click(screen.getByLabelText('Preview Incoming pending payments sound'));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview Incoming pending payments sound' }));
         window.removeEventListener('xchain:notification', onNotify);
         expect(previews).toEqual(['pluck']);
         expect(seen).toEqual([]);
@@ -234,7 +234,8 @@ describe('notification permission feedback', () => {
         try {
             render(<NotificationsSection />);
             const button = screen.getByRole('button', { name: 'Request permission' });
-            expect(button.style.color).toBe('var(--xc-on-accent)');
+            expect(button.className).toMatch(/primary/);
+            expect(button.style.color).toBe('');
             fireEvent.click(button);
             expect(await screen.findByText(/Could not request notification permission/)).toBeTruthy();
         } finally {

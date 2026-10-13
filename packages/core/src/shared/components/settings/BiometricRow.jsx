@@ -36,7 +36,7 @@
 // sync without a refresh.
 
 import { useEffect, useRef, useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     describeBiometric,
@@ -125,16 +125,6 @@ export function BiometricRow() {
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
-    const buttonStyle = {
-        background: 'var(--xc-surface-raised)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border-strong)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-3)',
-        fontSize: 'var(--xc-text-sm)',
-        cursor: 'pointer',
-    };
-
     if (description === null) {
         return (
             <div style={ROW}>
@@ -178,12 +168,12 @@ export function BiometricRow() {
                     ) : null}
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <button type="button" onClick={() => { setEnrolAction('reenrol'); setError(null); }} style={buttonStyle}>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => { setEnrolAction('reenrol'); setError(null); }}>
                         Re-enrol
-                    </button>
-                    <button type="button" onClick={handleDisable} style={buttonStyle} disabled={busy}>
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleDisable} disabled={busy}>
                         {busy ? 'Disabling…' : 'Disable'}
-                    </button>
+                    </Button>
                 </div>
             </div>
         );
@@ -199,7 +189,7 @@ export function BiometricRow() {
                         Confirm your current wallet password. {description.wrapNote}
                     </span>
                 </div>
-                <input
+                <Input
                     type="password"
                     enterKeyHint="go"
                     value={password}
@@ -207,14 +197,6 @@ export function BiometricRow() {
                     placeholder="Wallet password"
                     autoComplete="current-password"
                     aria-label="Wallet password"
-                    style={{
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}
                 />
                 {error ? (
                     <StatusMessage
@@ -225,21 +207,24 @@ export function BiometricRow() {
                     </StatusMessage>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <button
+                    <Button
                         type="button"
+                        size="sm"
+                        variant="ghost"
+                        icon={null}
                         onClick={() => { setEnrolAction(null); setPassword(''); setError(null); }}
-                        style={buttonStyle}
                         disabled={busy}
                     >
                         Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="submit"
-                        style={{ ...buttonStyle, fontWeight: 600 }}
+                        size="sm"
+                        icon={null}
                         disabled={busy || password.length === 0}
                     >
                         {busy ? 'Pairing…' : (isReenrol ? 'Re-enrol' : 'Enable')}
-                    </button>
+                    </Button>
                 </div>
             </form>
         );
@@ -253,13 +238,15 @@ export function BiometricRow() {
                     Use {description.mechanism} to unlock without typing your password.
                 </span>
             </div>
-            <button
+            <Button
                 type="button"
+                size="sm"
+                variant="ghost"
+                icon={null}
                 onClick={() => setEnrolAction('enable')}
-                style={buttonStyle}
             >
                 Enable
-            </button>
+            </Button>
         </div>
     );
 }

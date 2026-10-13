@@ -33,7 +33,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useEffect, useState } from 'react';
-import { Input } from '../../../ui/Input.jsx';
+import { Button, EmptyState, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -47,19 +47,7 @@ import {
     SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
-import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
-
-const PERMISSION_BUTTON = {
-    background: 'var(--xc-accent, #3a7afe)',
-    color: 'var(--xc-on-accent)',
-    border: 'none',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-};
+import { ROW, ROW_HINT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and
@@ -136,18 +124,18 @@ function PermissionRow() {
             : 'Allowed. Use the categories below to choose which notifications you receive.';
         if (extensionSupported) {
             action = (
-                <button type="button" onClick={revoke} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
+                <Button type="button" size="sm" icon={null} onClick={revoke} disabled={requesting} aria-busy={requesting}>
                     {requesting ? 'Revoking…' : 'Revoke permission'}
-                </button>
+                </Button>
             );
         }
     } else if (permission === 'denied') {
         hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
     } else if (permission !== 'checking') {
         action = (
-            <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
+            <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>
                 {requesting ? 'Requesting…' : (extensionSupported ? 'Allow notifications' : 'Request permission')}
-            </button>
+            </Button>
         );
     }
 
@@ -363,27 +351,29 @@ function SoundsBlock({ settings, update }) {
                                 <div style={ALERT_ROW}>
                                     <span>{family.label}</span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                                        <select
-                                            style={SELECT}
+                                        <Select
                                             aria-label={`${family.label} sound`}
                                             value={picked}
                                             onChange={(e) => onPick(family.key, e.target.value)}
                                         >
+                                            {/* Native options are the children required by the style-guide Select. */}
                                             {SOUND_PALETTE.map((s) => (
                                                 <option key={s.id} value={s.id}>{s.label}</option>
                                             ))}
                                             <option value={SOUND_NONE}>No sound</option>
-                                        </select>
+                                        </Select>
                                         {canPreview ? (
-                                            <button
+                                            <Button
                                                 type="button"
-                                                style={LINK_BTN}
+                                                size="sm"
+                                                variant="ghost"
+                                                icon={null}
                                                 aria-label={`Preview ${family.label} sound`}
                                                 disabled={picked === SOUND_NONE}
                                                 onClick={() => onPreview(picked)}
                                             >
                                                 Preview
-                                            </button>
+                                            </Button>
                                         ) : null}
                                     </span>
                                 </div>
@@ -491,16 +481,6 @@ const ALERT_ROW = {
     gap: 'var(--xc-space-2)',
     fontSize: 'var(--xc-text-sm)',
 };
-const LINK_BTN = {
-    background: 'transparent',
-    border: 'none',
-    color: 'var(--xc-accent, #3a7afe)',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    fontSize: 'var(--xc-text-xs)',
-    padding: 0,
-};
-
 /**
  * Price-alert manager rendered under the priceAlerts toggle: the saved
  * alerts + an inline add form. Surfaces the two dependencies that keep an
@@ -534,9 +514,10 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
     if (!walletId || !supported) {
         return (
             <div style={MANAGER}>
-                <span style={ROW_HINT}>
-                    {!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
-                </span>
+                <EmptyState
+                    title={!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
+                    titleAs="p"
+                />
             </div>
         );
     }
@@ -557,10 +538,10 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
             ) : error ? (
                 <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
                     Could not load price alerts.{' '}
-                    <button type="button" style={LINK_BTN} onClick={reload}>Try again</button>
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>Try again</Button>
                 </span>
             ) : alerts.length === 0 ? (
-                <span role="status" style={ROW_HINT}>No price alerts yet. Add one below.</span>
+                <EmptyState title="No price alerts yet. Add one below." titleAs="p" />
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
@@ -581,27 +562,33 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                         </span>
                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                             {a.status === 'triggered' ? (
-                                <button
+                                <Button
                                     type="button"
-                                    style={LINK_BTN}
+                                    size="sm"
+                                    variant="ghost"
+                                    icon={null}
                                     disabled={busyId !== null}
                                     onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
                                 >
                                     Re-arm
-                                </button>
+                                </Button>
                             ) : null}
-                            <button
+                            <Button
                                 type="button"
-                                style={LINK_BTN}
+                                size="sm"
+                                variant="ghost"
+                                icon={null}
                                 disabled={busyId !== null}
                                 aria-label={`Edit ${coinLabelForChain(a.chainId)} price alert`}
                                 onClick={() => { setEditingId(a.id); setActionError(null); }}
                             >
                                 Edit
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 type="button"
-                                style={LINK_BTN}
+                                size="sm"
+                                variant="danger"
+                                icon={null}
                                 disabled={busyId !== null}
                                 aria-label={`Delete ${coinLabelForChain(a.chainId)} price alert`}
                                 onClick={() => runAlertAction(a.id, async () => {
@@ -610,7 +597,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 }, setBusyId, setActionError)}
                             >
                                 Delete
-                            </button>
+                            </Button>
                         </span>
                     </div>
                 ))
