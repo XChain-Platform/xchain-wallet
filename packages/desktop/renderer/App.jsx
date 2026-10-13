@@ -144,7 +144,6 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -2611,11 +2610,6 @@ function AppInner() {
                     }
                     header={
                         <>
-                            {/* row 142: outside the activeWalletId branch on
-                                purpose. An update offer must reach a user who has
-                                no wallet open yet, and the banner renders nothing
-                                until main says an update exists. */}
-                            <DesktopUpdateBanner />
                             {activeWalletId ? (
                                 <>
                                     {/* Cluster J FOLLOWUP 2: DemoBanner persists across every

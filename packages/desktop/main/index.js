@@ -82,6 +82,12 @@ import {
     windowBoundsPathFor,
 } from './windowBounds.js';
 import {
+    DESKTOP_ABOUT_PANEL_OPTIONS,
+    DESKTOP_PRODUCT_NAME,
+    DESKTOP_WINDOW_TITLE,
+    createUpdateCheckMenuItem,
+} from './desktopPresentation.js';
+import {
     createRuntime,
     enforceIdleAutoLock,
     enforceLaunchAutoLock,
@@ -412,6 +418,7 @@ function createWindow(opts = {}) {
         ? cascadeWindowBounds(rememberedWindowBounds, displays)
         : restoreWindowBounds(rememberedWindowBounds, displays);
     const win = new BrowserWindow({
+        title: DESKTOP_WINDOW_TITLE,
         ...DEFAULT_WINDOW_BOUNDS,
         ...savedBounds,
         minWidth: 360,
@@ -503,6 +510,21 @@ function buildLoadOptions(opts) {
 const WINDOWLESS_IDLE_CHECK_MS = 30 * 1000;
 let windowlessIdleTimer = /** @type {ReturnType<typeof setInterval> | null} */ (null);
 let reopenInFlight = /** @type {Promise<void> | null} */ (null);
+let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
+let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
+let updateCheckVisible = false;
+
+function requestUpdateCheck({ visible = false } = {}) {
+    if (!runUpdaterCheck) return Promise.resolve();
+    if (visible) updateCheckVisible = true;
+    if (updaterCheckInFlight) return updaterCheckInFlight;
+    updaterCheckInFlight = Promise.resolve(runUpdaterCheck())
+        .finally(() => {
+            updaterCheckInFlight = null;
+            updateCheckVisible = false;
+        });
+    return updaterCheckInFlight;
+}
 
 /**
  * Enforce the configured auto-lock while the app runs with no window. Only
@@ -561,9 +583,9 @@ function openWindowAfterIdleCheck() {
 }
 
 /**
- * Wire the macOS-style application menu. The custom slot we care about
- * is `File → New Window` (Cmd+N / Ctrl+N) which calls `createWindow()`
- * through `openWindowAfterIdleCheck()`.
+ * Wire the application menu. File > New Window runs the idle-lock gate;
+ * direct-download builds also expose a visible update check, and every
+ * platform can open the version-pinned native About panel.
  * The rest of the menu uses Electron's `role: ...` defaults so standard
  * editing / window-management behaviors stay native to each platform.
  *
@@ -571,12 +593,16 @@ function openWindowAfterIdleCheck() {
  */
 function buildApplicationMenu() {
     const isMac = process.platform === 'darwin';
+    const updateItem = runUpdaterCheck
+        ? createUpdateCheckMenuItem(() => { void requestUpdateCheck({ visible: true }); })
+        : null;
     /** @type {Electron.MenuItemConstructorOptions[]} */
     const template = [
         ...(isMac ? [{
-            label: app.name,
+            label: DESKTOP_PRODUCT_NAME,
             submenu: [
                 { role: 'about' },
+                ...(updateItem ? [updateItem] : []),
                 { type: 'separator' },
                 { role: 'services' },
                 { type: 'separator' },
@@ -638,6 +664,16 @@ function buildApplicationMenu() {
                 ]),
             ],
         },
+        ...(!isMac ? [{
+            label: '&Help',
+            submenu: [
+                ...(updateItem ? [updateItem, { type: 'separator' }] : []),
+                {
+                    label: `About ${DESKTOP_PRODUCT_NAME}`,
+                    click: () => app.showAboutPanel(),
+                },
+            ],
+        }] : []),
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -666,6 +702,7 @@ app.whenReady().then(async () => {
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
     rememberedWindowBounds = await windowBoundsStore.load();
     runtime = buildRuntime();
+    app.setAboutPanelOptions(DESKTOP_ABOUT_PANEL_OPTIONS);
 
     // Best-effort auto-unlock. Failure here is logged but doesn't block
     // startup; the renderer will see `state: 'locked'` and prompt for
@@ -714,34 +751,21 @@ app.whenReady().then(async () => {
     // user's primary BTC wallet.
     registerProtocolClients(app, { optedInSchemes: [] });
 
-    // electron-updater: only active in packaged builds (isUpdaterActive
-    // returns false in dev). Events relay to every open renderer via
-    // IPC so any window can surface the "update available" toast.
-    // THE BROADCAST IS FIRE-ONCE AND THE ONLY LISTENER MOUNTS LATER, WHICH
-    // MADE THE WHOLE OFFER UNREACHABLE (row 148, measured 2026-08-11).
-    //
-    // `checkForUpdates()` below runs at whenReady and resolves within a
-    // second or two. `DesktopUpdateBanner` subscribes when it mounts, and it
-    // is rendered only in the `unlocked` branch of the renderer's state
-    // machine - so on any install with a vault the user is still at the
-    // Locked screen when `available` fires, and on a fresh install they are
-    // in onboarding. By the time a component exists to hear the event, the
-    // event is gone and nothing re-sends it. There is exactly one caller of
-    // `checkForUpdates` in the app and no periodic re-check, so the offer
-    // was not merely delayed, it was never reachable at all.
-    //
-    // Keeping the last event and letting a mounting renderer ASK for it
-    // turns a race nobody could win into a question with an answer. It is
-    // the state, not a replayed event: `getState` returns the same shape
-    // the broadcast carries, so the banner has one code path for both.
+    // electron-updater is active only in packaged direct-download builds.
+    // Events relay to every open renderer so every window can surface an
+    // update offer. The launch check starts before the first window exists,
+    // so the latest event is retained for a renderer that subscribes later.
+    // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
     try {
-        const { checkForUpdates, downloadAndInstall } = await attachUpdater({
+        const { checkForUpdates, downloadAndInstall, isActive } = await attachUpdater({
             onEvent: (event) => {
+                if (updateCheckVisible) event.userInitiated = true;
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
         });
+        runUpdaterCheck = isActive ? checkForUpdates : null;
 
         // Same trust boundary as the install handler: the updater state says
         // whether a version is on offer, which is not sensitive, but a
@@ -767,9 +791,9 @@ app.whenReady().then(async () => {
             return downloadAndInstall();
         });
 
-        // Kick a check on launch. User-triggered re-checks land later
-        // via a "Check for updates" menu item (future step).
-        void checkForUpdates();
+        // Kick a quiet check on launch. The menu path marks its events so
+        // the renderer can show progress and an explicit up-to-date result.
+        void requestUpdateCheck();
     } catch (err) {
         console.error('[xchain] updater wiring failed:', err);
     }
