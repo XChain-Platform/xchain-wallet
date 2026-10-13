@@ -20,7 +20,12 @@ vi.mock('qrcode', () => ({
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
-const SETTINGS = createDefaultSettings();
+// A chain with a fee entry on the active network, so the routes render their
+// forms instead of the no-networks state that empty default fees produce.
+const SETTINGS = {
+    ...createDefaultSettings(),
+    fees: { [CHAIN]: { strategy: 'normal', rbfByDefault: false } },
+};
 
 function pending() {
     return new Promise(() => {});
