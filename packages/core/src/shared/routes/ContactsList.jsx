@@ -18,7 +18,6 @@ import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
-import { useBackHandler } from '../../ui/backStack.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { ScanRoute } from './ScanRoute.jsx';
@@ -168,7 +167,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // The add-address dialog traps Tab and returns focus to its opener on close.
     const addAddrRef = useRef(null);
     useFocusTrap(addAddrRef, { active: addAddrOpen });
-    useBackHandler(addAddrOpen ? () => setAddAddrOpen(false) : undefined);
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
