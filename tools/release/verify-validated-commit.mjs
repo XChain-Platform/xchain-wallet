@@ -69,17 +69,13 @@
 //   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
 
 const REQUIRED_DEFAULT = 'ci.yml';
+const REQUIRED_STATUSES = ['license/cla'];
 const WAIT_SECONDS_DEFAULT = 1800;
 const POLL_SECONDS_DEFAULT = 20;
 
 function fail(message) {
     process.stderr.write(`\nRELEASE GATE REFUSED (§6 step 1)\n\n${message}\n\n`);
     process.exit(1);
-}
-
-function arg(name) {
-    const i = process.argv.indexOf(`--${name}`);
-    return i === -1 ? undefined : process.argv[i + 1];
 }
 
 // Answered before any validation, because every refusal this tool prints opens
@@ -89,8 +85,8 @@ function arg(name) {
 // release had been rejected. During a release that is not a cosmetic
 // difference.
 if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
-    console.log(`Release gate (§6 step 1): refuse a tag whose commit has no green
-run of every required workflow.
+    console.log(`Release gate (§6 step 1): refuse a tag whose commit lacks a green
+run of every required workflow or a successful required commit status.
 
 Usage:
   GITHUB_TOKEN=<token> node tools/release/verify-validated-commit.mjs \\
@@ -120,13 +116,38 @@ Env:
                              defaults to \`${REQUIRED_DEFAULT}\`
   XCHAIN_GATE_WAIT_SECONDS   optional, default for --wait-timeout
 
-Exit codes: 0 the commit has a green run of every required workflow; 1 refused
+Required commit statuses: ${REQUIRED_STATUSES.join(', ')}
+
+Exit codes: 0 every required workflow and commit status is green; 1 refused
 (including "cannot tell" and "ran out of time"). A refusal is not a tool fault.`);
     process.exit(0);
 }
 
-const sha = arg('sha');
-const repo = arg('repo') || process.env.GITHUB_REPOSITORY;
+const valueOptions = new Set(['sha', 'repo', 'wait-timeout', 'poll']);
+const flagOptions = new Set(['wait']);
+const options = new Map();
+for (let i = 2; i < process.argv.length; i += 1) {
+    const token = process.argv[i];
+    if (!token.startsWith('--')) fail(`unexpected argument ${JSON.stringify(token)}.`);
+    const name = token.slice(2);
+    if (!valueOptions.has(name) && !flagOptions.has(name)) {
+        fail(`unknown option ${JSON.stringify(token)}.`);
+    }
+    if (options.has(name)) fail(`option ${JSON.stringify(token)} may be given only once.`);
+    if (flagOptions.has(name)) {
+        options.set(name, true);
+        continue;
+    }
+    const value = process.argv[i + 1];
+    if (value === undefined || value.startsWith('--')) {
+        fail(`option ${JSON.stringify(token)} requires a value.`);
+    }
+    options.set(name, value);
+    i += 1;
+}
+
+const sha = options.get('sha');
+const repo = options.get('repo') || process.env.GITHUB_REPOSITORY;
 const apiUrl = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, '');
 const token = process.env.GITHUB_TOKEN;
 const required = (process.env.XCHAIN_REQUIRED_WORKFLOWS || REQUIRED_DEFAULT)
@@ -134,11 +155,11 @@ const required = (process.env.XCHAIN_REQUIRED_WORKFLOWS || REQUIRED_DEFAULT)
     .map((s) => s.trim())
     .filter(Boolean);
 
-const wait = process.argv.slice(2).includes('--wait');
-const waitSeconds = Number(arg('wait-timeout')
+const wait = options.has('wait');
+const waitSeconds = Number(options.get('wait-timeout')
     ?? process.env.XCHAIN_GATE_WAIT_SECONDS
     ?? WAIT_SECONDS_DEFAULT);
-const pollSeconds = Number(arg('poll') ?? POLL_SECONDS_DEFAULT);
+const pollSeconds = Number(options.get('poll') ?? POLL_SECONDS_DEFAULT);
 
 if (!sha || !/^[0-9a-f]{40}$/.test(sha)) {
     fail('--sha must be a full 40-character commit SHA. A short SHA is not accepted: '
@@ -151,16 +172,19 @@ if (!token) {
     fail('GITHUB_TOKEN is not set, so this gate cannot see whether the commit was '
         + 'validated. Not knowing is a refusal, never a pass.');
 }
+if (!wait && (options.has('wait-timeout') || options.has('poll'))) {
+    fail('--wait-timeout and --poll require --wait.');
+}
 // A wait bounded by a value nobody can read is not bounded. An unparseable
 // or non-positive budget refuses here rather than resolving to a default,
 // because the two plausible defaults - wait forever, or do not wait - are
 // opposite behaviours and the operator meant one of them.
 if (wait && (!Number.isFinite(waitSeconds) || waitSeconds <= 0)) {
     fail('--wait-timeout (or XCHAIN_GATE_WAIT_SECONDS) must be a positive number of '
-        + `seconds; got "${arg('wait-timeout') ?? process.env.XCHAIN_GATE_WAIT_SECONDS}".`);
+        + `seconds; got "${options.get('wait-timeout') ?? process.env.XCHAIN_GATE_WAIT_SECONDS}".`);
 }
 if (wait && (!Number.isFinite(pollSeconds) || pollSeconds <= 0)) {
-    fail(`--poll must be a positive number of seconds; got "${arg('poll')}".`);
+    fail(`--poll must be a positive number of seconds; got "${options.get('poll')}".`);
 }
 
 async function api(path) {
@@ -265,13 +289,18 @@ async function diagnose(runId) {
 // non-success never becomes success by waiting; it becomes a different run,
 // which is a new question and a fresh invocation of this gate.
 async function evaluate() {
-    const runs = await api(`/repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`);
+    const [runs, combinedStatus] = await Promise.all([
+        api(`/repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`),
+        api(`/repos/${repo}/commits/${sha}/status?per_page=100`),
+    ]);
     const all = runs.workflow_runs || [];
+    const statuses = combinedStatus.statuses || [];
 
     const problems = [];
     const evidence = [];
     const pending = [];
     const failedRuns = [];
+    const failedStatuses = [];
 
     for (const wanted of required) {
         // Match on the workflow's FILE PATH, not its display name: the name is
@@ -307,7 +336,29 @@ async function evaluate() {
         }
     }
 
-    return { problems, evidence, pending, failedRuns };
+    for (const wanted of REQUIRED_STATUSES) {
+        const matching = statuses.filter((status) => status.context === wanted);
+        matching.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        const newest = matching[0];
+
+        if (!newest) {
+            problems.push(`required status \`${wanted}\` does not exist for this commit`);
+            pending.push(`${wanted}: no status yet`);
+            continue;
+        }
+
+        evidence.push(`${wanted}: state=${newest.state}`
+            + (newest.target_url ? ` (${newest.target_url})` : ''));
+        if (newest.state === 'pending') {
+            problems.push(`required status \`${wanted}\` is still \`pending\``);
+            pending.push(`${wanted}: pending`);
+        } else if (newest.state !== 'success') {
+            problems.push(`required status \`${wanted}\` is \`${newest.state}\`, not \`success\``);
+            failedStatuses.push(wanted);
+        }
+    }
+
+    return { problems, evidence, pending, failedRuns, failedStatuses };
 }
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -319,11 +370,13 @@ let timedOut = false;
 // failure to report) and never sits through a failure: a run that concluded
 // anything but success is answered now, because the operator's next act is
 // to fix CI, not to keep watching it.
-if (wait && state.pending.length > 0 && state.failedRuns.length === 0) {
+if (wait && state.pending.length > 0
+    && state.failedRuns.length === 0 && state.failedStatuses.length === 0) {
     const deadline = Date.now() + waitSeconds * 1000;
     process.stdout.write(`Waiting up to ${waitSeconds}s for CI to conclude on ${sha}\n`
         + `  (${state.pending.join('; ')})\n`);
-    while (state.pending.length > 0 && state.failedRuns.length === 0) {
+    while (state.pending.length > 0
+        && state.failedRuns.length === 0 && state.failedStatuses.length === 0) {
         const remaining = deadline - Date.now();
         if (remaining <= 0) {
             timedOut = true;
@@ -340,7 +393,8 @@ if (wait && state.pending.length > 0 && state.failedRuns.length === 0) {
 
 const { problems, evidence } = state;
 
-process.stdout.write(`Commit ${sha}\nRepo   ${repo}\nRequired workflows: ${required.join(', ')}\n\n`);
+process.stdout.write(`Commit ${sha}\nRepo   ${repo}\nRequired workflows: ${required.join(', ')}\n`
+    + `Required statuses: ${REQUIRED_STATUSES.join(', ')}\n\n`);
 for (const line of evidence) process.stdout.write(`  ${line}\n`);
 process.stdout.write('\n');
 
@@ -377,4 +431,5 @@ if (problems.length > 0) {
         + 'needs changing, it needs a new tag, because the tag names the bytes.');
 }
 
-process.stdout.write('Step 1 gate: the tag commit has a green run of every required workflow.\n');
+process.stdout.write('Step 1 gate: the tag commit has a green run of every required workflow '
+    + 'and every required status is successful.\n');
