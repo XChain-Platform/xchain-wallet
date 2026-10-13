@@ -61,6 +61,17 @@ const ROUTING_CASES = [
         outcome: { kind: 'send', address: BTC.toUpperCase(), chainId: 'bitcoin-mainnet' },
     },
     {
+        name: 'uppercase BIP21 QR with standard fields and an unknown optional parameter',
+        input: `BITCOIN:${BTC.toUpperCase()}?AMOUNT=0.25&LABEL=Coffee%20shop&MESSAGE=Order%2042&EXTRA=kept`,
+        outcome: {
+            kind: 'send',
+            address: BTC.toUpperCase(),
+            amount: '0.25',
+            memo: 'Order 42',
+            chainId: 'bitcoin-mainnet',
+        },
+    },
+    {
         name: 'legacy xchain send URI',
         input: `xchain://bitcoin-mainnet/BTC?amount=2&to=${BTC}`,
         outcome: {
@@ -126,6 +137,16 @@ const EXPLANATION_CASES = [
         name: 'unsupported required BIP21 parameter',
         input: `bitcoin:${BTC}?req-something=1`,
         message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+    },
+    {
+        name: 'uppercase unsupported required BIP21 parameter',
+        input: `BITCOIN:${BTC.toUpperCase()}?REQ-SOMETHING=1`,
+        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
+    },
+    {
+        name: 'scientific-notation BIP21 amount',
+        input: `BITCOIN:${BTC.toUpperCase()}?AMOUNT=1E-8`,
+        message: /contains text the wallet doesn't know how to use.*scan a supported.*paste it below instead/i,
     },
     {
         name: 'address-shaped garbage',
