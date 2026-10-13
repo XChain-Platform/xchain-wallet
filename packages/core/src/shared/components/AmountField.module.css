@@ -15,11 +15,18 @@
     margin-bottom: 0;
 }
 
-/* The shared Input owns field sizing through its `size` prop. AmountField
-   forwards that value and reserves the right gutter for the Max button. */
+/* The shared controls own their dimensions through the same `size` prop. */
 
 .amountFieldWrap {
-    position: relative;
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.amountFieldWrap > div:first-child {
+    flex: 1 1 12rem;
+    min-width: 0;
 }
 
 .amountFooter {

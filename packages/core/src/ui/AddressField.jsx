@@ -10,6 +10,7 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
+import { Button } from './Button.jsx';
 import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
@@ -71,7 +72,7 @@ export const AddressField = forwardRef(function AddressField(
     const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
@@ -118,16 +119,18 @@ export const AddressField = forwardRef(function AddressField(
                 </span>
             ) : null}
             {IconComponent ? (
-                <button
-                    type="button"
-                    className={styles.iconButton}
-                    onClick={onIconClick}
-                    disabled={disabled}
-                    aria-label={iconLabel || defaultLabel}
-                    title={iconLabel || defaultLabel}
-                >
-                    <IconComponent />
-                </button>
+                <span className={styles.iconButton}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size={size}
+                        icon={<IconComponent />}
+                        onClick={onIconClick}
+                        disabled={disabled}
+                        aria-label={iconLabel || defaultLabel}
+                        title={iconLabel || defaultLabel}
+                    />
+                </span>
             ) : null}
         </div>
     );

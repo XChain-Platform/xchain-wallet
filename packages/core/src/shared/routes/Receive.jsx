@@ -979,6 +979,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {descriptor?.addressTypes?.length > 1 ? (
                 <Select
+                    size="md"
                     label="Address type"
                     value={addressType}
                     onChange={(event) => changeAddressType(event.target.value)}
@@ -1024,6 +1025,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {address ? (
                 <AddressField
+                    size="md"
                     label={address.label || 'Address'}
                     aria-label="Copy payment link for receive address"
                     icon="addresses"
@@ -1051,6 +1053,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address?.id ? (
                 <div className={styles.labelEditor}>
                     <Input
+                        size="md"
                         label="Address label"
                         value={labelDraftValue}
                         onChange={(event) => setLabelDraft({
@@ -1063,8 +1066,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         error={labelError || undefined}
                     />
                     <Button
+                        size="md"
                         type="button"
                         variant="secondary"
+                        style={{ marginBottom: 'var(--xc-space-3)' }}
                         loading={labelSaving}
                         disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
                         onClick={saveAddressLabel}
@@ -1096,6 +1101,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <>
                     <AmountField
+                        size="md"
                         amount={reqAmount}
                         fiatAmount={fiatAmount}
                         tick={reqTick.trim() || nativeTicker || ''}

@@ -6,9 +6,8 @@
 
 /* AddressField: Input + one trailing icon action inside the field.
  * The icon button is anchored over the input box only, never the
- * hint/error lines below it, using the pinned label metrics (20px
- * label line + space-1 gap) and the Input size contract (36px md /
- * 48px lg). Adapted from Send's .inlineContactsButton, which this
+ * hint/error lines below it, using the pinned label metrics and the
+ * shared Button/Input size contract. Adapted from Send's .inlineContactsButton, which this
  * component supersedes. */
 
 .wrap {
@@ -22,23 +21,17 @@
 .iconButton {
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
-    inset-inline-end: 4px;
+    inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    padding: 0;
-    border: none;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
 }
 
-.lg .iconButton {
-    height: 48px;
+.iconButton > button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-text-muted);
 }
 
 .noLabel .iconButton {
@@ -54,7 +47,7 @@
     inset-inline-start: var(--xc-space-3);
     inset-inline-end: 52px;
     top: calc(20px + var(--xc-space-1));
-    min-height: 36px;
+    min-height: var(--xc-control-h-md);
     display: flex;
     align-items: center;
     overflow: hidden;
@@ -91,8 +84,12 @@
 
 .lg .readOnlyValue {
     inset-inline-start: var(--xc-space-4);
-    min-height: 48px;
+    min-height: var(--xc-control-h-lg);
     font-size: var(--xc-text-lg);
+}
+
+.sm .readOnlyValue {
+    min-height: var(--xc-control-h-sm);
 }
 
 .noLabel .readOnlyValue {
@@ -107,11 +104,14 @@
     visibility: hidden;
 }
 
-.iconButton:hover:not(:disabled) {
+.iconButton > button:hover:not(:disabled),
+.iconButton > button:focus-visible {
+    background: transparent;
+    border-color: transparent;
     color: var(--xc-text);
 }
 
-.iconButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.iconButton > button:disabled {
+    background: transparent;
+    border-color: transparent;
 }

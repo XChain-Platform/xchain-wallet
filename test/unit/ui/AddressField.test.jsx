@@ -7,6 +7,9 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
+import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 function ControlledField(props) {
     const { value: initialValue = '', ...rest } = props;
@@ -22,6 +25,40 @@ function ControlledField(props) {
 }
 
 describe('<AddressField>', () => {
+    it.each(['md', 'lg'])('gives the input and inline actions the same %s size class', (size) => {
+        const { unmount } = render(
+            <AddressField
+                label="From"
+                size={size}
+                icon="addresses"
+                value="bc1qsource"
+                readOnly
+                onChange={() => {}}
+            />,
+        );
+
+        const input = screen.getByLabelText('From');
+        expect(input.parentElement.parentElement).toHaveClass(inputStyles[size]);
+        expect(screen.getByRole('button', { name: 'Choose address' }))
+            .toHaveClass(buttonStyles[size]);
+        unmount();
+
+        render(
+            <AmountField
+                size={size}
+                amount="1"
+                tick="BTC"
+                onAmountFieldChange={() => {}}
+                onMax={() => {}}
+            />,
+        );
+
+        const amountInput = screen.getByRole('textbox', { name: 'Amount (BTC)' });
+        expect(amountInput.parentElement.parentElement).toHaveClass(inputStyles[size]);
+        expect(screen.getByRole('button', { name: 'Use max available amount' }))
+            .toHaveClass(buttonStyles[size]);
+    });
+
     it('trims surrounding whitespace from a plain pasted address', () => {
         render(<ControlledField />);
 
