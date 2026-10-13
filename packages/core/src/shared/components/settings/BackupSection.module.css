@@ -19,10 +19,14 @@
 }
 
 .mnemonicInput {
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono);
 }
 
 .gapLimitInput {
+    direction: ltr;
+    unicode-bidi: isolate;
     width: 7rem;
 }
 

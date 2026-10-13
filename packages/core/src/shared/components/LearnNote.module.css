@@ -58,3 +58,11 @@
 .body a {
     color: var(--xc-accent-primary);
 }
+
+.body a span[aria-hidden='true'] {
+    display: inline-block;
+}
+
+:global([dir='rtl']) .body a span[aria-hidden='true'] {
+    transform: scaleX(-1);
+}

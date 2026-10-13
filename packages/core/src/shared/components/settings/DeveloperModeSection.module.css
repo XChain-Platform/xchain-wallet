@@ -53,6 +53,8 @@
 }
 
 .descriptor {
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
 }

@@ -103,6 +103,7 @@ export function WatcherResultPanel({
                         aria-label="Unsigned transaction hex"
                         value={psbtHex}
                         rows={6}
+                        className={styles.machineText}
                         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                     />
                     <div className={styles.successTxidRow}>
@@ -158,6 +159,7 @@ export function WatcherResultPanel({
                                 aria-label={`Unsigned transaction ${formatLabel}`}
                                 value={exportFrames.join('\n')}
                                 rows={6}
+                                className={styles.machineText}
                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                             />
                         </details>

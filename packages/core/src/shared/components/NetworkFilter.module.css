@@ -217,6 +217,8 @@
 
 .itemTicker {
     flex: 0 0 auto;
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
