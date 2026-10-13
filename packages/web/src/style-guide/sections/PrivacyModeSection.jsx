@@ -21,14 +21,14 @@ const PRIVACY_MASK = '•••••';
 function HeroDemo({ hidden, onToggle }) {
     return (
         <div style={{
-            background: 'linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%)',
-            color: '#fff',
+            background: 'linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%)',
+            color: 'var(--xc-on-accent)',
             borderRadius: 'var(--xc-radius-md)',
             padding: 'var(--xc-space-2) var(--xc-space-3)',
-            boxShadow: '0 6px 18px rgba(30,144,199,0.25)',
+            boxShadow: '0 6px 18px color-mix(in srgb, var(--xc-accent-primary) 25%, transparent)',
         }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.85)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--xc-on-accent) 85%, transparent)' }}>
                     Total balance
                 </span>
                 <button
@@ -36,9 +36,9 @@ function HeroDemo({ hidden, onToggle }) {
                     onClick={onToggle}
                     aria-label={hidden ? 'Show balances' : 'Hide balances'}
                     style={{
-                        background: 'rgba(255,255,255,0.15)',
+                        background: 'color-mix(in srgb, var(--xc-on-accent) 15%, transparent)',
                         border: 'none',
-                        color: '#fff',
+                        color: 'var(--xc-on-accent)',
                         width: 28,
                         height: 28,
                         borderRadius: '50%',
@@ -54,7 +54,7 @@ function HeroDemo({ hidden, onToggle }) {
             <div style={{ fontSize: 28, fontWeight: 800, marginTop: 4 }}>
                 {hidden ? PRIVACY_MASK : '$12,345.67'}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'color-mix(in srgb, var(--xc-on-accent) 85%, transparent)' }}>
                 {hidden ? PRIVACY_MASK : '+$182.40 (1.5%) ▲'}
             </div>
         </div>
