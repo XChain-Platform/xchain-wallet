@@ -305,7 +305,9 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-form-gap` | `var(--xc-space-4)` | gap between form fields |
 | `--xc-label-gap` | `var(--xc-space-1)` | gap from a field label to its control |
 | `--xc-help-gap` | `var(--xc-space-1)` | gap from a control to help or error text |
-| `--xc-section-gap` | `var(--xc-space-6)` | gap between form sections |
+| `--xc-section-gap` | `var(--xc-space-4)` | gap between form sections and list page blocks |
+| `--xc-section-header-gap` | `var(--xc-space-2)` | gap from a section header to its content |
+| `--xc-list-row-padding` | `var(--xc-space-3)` | inset inside a list row |
 | `--xc-page-gutter` | 12px compact, 16px rail, 24px full | the sole inline page inset, applied by `Screen.body` |
 | `--xc-page-top` | 12px compact, 16px rail/full, 8px short landscape | the sole page-content top inset, applied by `Screen.body` |
 | `--xc-text-xs` | 0.6875rem | metadata, hint text |

@@ -21,7 +21,9 @@ const SPACING = [
     { token: '--xc-form-gap', value: '16px', role: 'Between form fields' },
     { token: '--xc-label-gap', value: '4px', role: 'From a field label to its control' },
     { token: '--xc-help-gap', value: '4px', role: 'From a control to help or error text' },
-    { token: '--xc-section-gap', value: '24px', role: 'Between form sections' },
+    { token: '--xc-section-gap', value: '16px', role: 'Between form sections and list page blocks' },
+    { token: '--xc-section-header-gap', value: '8px', role: 'From a section header to its content' },
+    { token: '--xc-list-row-padding', value: '12px', role: 'Inset inside a list row' },
 ];
 
 const RADII = [
