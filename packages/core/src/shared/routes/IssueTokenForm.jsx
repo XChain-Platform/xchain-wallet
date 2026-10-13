@@ -43,6 +43,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -53,6 +54,21 @@ import {
 } from '../utils/amountFormat.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
+
+function isNonNegativeDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') !== -1;
+}
+
+function isValidIssueAddress(value, descriptor) {
+    return !!descriptor?.coin && !!descriptor?.networkKind
+        && isValidAddressForChain(String(value).trim(), descriptor.coin, descriptor.networkKind);
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -350,7 +366,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
-        if (!supply.trim() || Number(supply) <= 0) {
+        if (!isPositiveDecimal(supply)) {
             setFormError('Supply must be a positive number.');
             return;
         }
@@ -359,8 +375,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         // it is caught here rather than at broadcast.
         const mintText = initialMint.trim();
         if (mintText) {
-            const mintNum = Number(mintText);
-            if (!Number.isFinite(mintNum) || mintNum < 0) {
+            if (!isNonNegativeDecimal(mintText)) {
                 setFormError('Initial mint must be zero or a positive number.');
                 return;
             }
@@ -370,7 +385,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             }
             // Minting nothing on a token that can never mint leaves a token
             // with no supply and no way to ever create any.
-            if (mintNum === 0 && lockSupply) {
+            if (compareDecimalStrings(mintText, '0') === 0 && lockSupply) {
                 setFormError(
                     'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
                 );
@@ -379,11 +394,18 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         const maxMintText = maxMint.trim();
         if (maxMintText) {
-            const maxMintNum = Number(maxMintText);
-            if (!Number.isFinite(maxMintNum) || maxMintNum <= 0) {
+            if (!isPositiveDecimal(maxMintText)) {
                 setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
                 return;
             }
+        }
+        if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
+            setFormError(`Transfer ownership address is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            return;
+        }
+        if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
+            setFormError(`Initial mint destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
+            return;
         }
         // A supply destination with no initial mint would be silently dropped
         // by the chain; say so instead of composing a transaction that does

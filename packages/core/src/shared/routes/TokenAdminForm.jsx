@@ -56,6 +56,11 @@ import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
+
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
     litecoin: 'LTC',
@@ -664,6 +669,26 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Enter at least one field to update.');
                 return;
             }
+            if (maxMint && !isPositiveDecimal(maxMint)) {
+                setFormError('Max mint per transaction must be a positive number.');
+                return;
+            }
+            if (mintAddressMax && !isPositiveDecimal(mintAddressMax)) {
+                setFormError('Max mint per address must be a positive number.');
+                return;
+            }
+            if (mintSupply && !isPositiveDecimal(mintSupply)) {
+                setFormError('Mint supply must be a positive number.');
+                return;
+            }
+            if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
+                setFormError('Minting start must be a whole block number.');
+                return;
+            }
+            if (mintStopBlock && !/^\d+$/.test(mintStopBlock.trim())) {
+                setFormError('Minting close must be a whole block number.');
+                return;
+            }
             if (mintAddressMax && maxMint
                 && compareDecimalStrings(mintAddressMax, maxMint) === -1) {
                 setFormError('Max mint per address must be at least the max mint per transaction.');
@@ -671,6 +696,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+            if (transferSupply && !mintSupply) {
+                setFormError('Sending new supply needs a mint supply amount.');
+                return;
+            }
+            if (transferSupply && !isValidAddressForChain(
+                transferSupply.trim(), descriptor.coin, descriptor.networkKind,
+            )) {
+                setFormError(`New supply destination is not valid for ${descriptor.displayName || chainId}.`);
                 return;
             }
         }

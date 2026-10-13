@@ -92,6 +92,33 @@ afterEach(() => cleanup());
 beforeEach(() => { composeForConfirm = undefined; });
 
 describe('IssueTokenForm initial mint', () => {
+    it.each([
+        ['Supply', '1,000', 'Supply must be a positive number.'],
+        ['Initial mint (optional)', 'Infinity', 'Initial mint must be zero or a positive number.'],
+        ['Max mint per transaction (optional)', 'five', 'Max mint per transaction must be a positive number'],
+    ])('refuses malformed numeric text in %s before composing', async (label, value, message) => {
+        mountForm();
+        await fill({ supply: '5000' });
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+        await submit();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        'Transfer ownership to (optional)',
+        'Send the initial mint to (optional)',
+    ])('refuses an invalid %s address before composing', async (label) => {
+        mountForm();
+        await fill({ supply: '5000' });
+        fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
+        await submit();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('leaves mint headroom when the initial mint is below the supply', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '1000' });
