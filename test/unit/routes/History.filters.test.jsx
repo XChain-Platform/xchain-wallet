@@ -297,8 +297,9 @@ describe('History filters', () => {
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
 
             const narrow = mediaBlock(historyCss, '(max-width: 399px)');
-            expect(ruleBody(narrow, '.dateRow')).toMatch(/flex-wrap:\s*wrap/);
-            expect(ruleBody(narrow, '.dateInput')).toMatch(/box-sizing:\s*border-box/);
+            // The two date fields stack into one full-width column on phones.
+            expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
+            expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);
             expect(ruleBody(narrow, '.filterFooter > .filterDisclosure'))
                 .toMatch(/flex:\s*1 1 100%[\s\S]*box-sizing:\s*border-box/);
             expect(ruleBody(narrow, '.rowMeta')).toMatch(/flex-wrap:\s*wrap/);

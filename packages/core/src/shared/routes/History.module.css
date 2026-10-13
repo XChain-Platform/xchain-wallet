@@ -1319,14 +1319,7 @@
     }
 
     .dateRow {
-        flex-wrap: wrap;
-    }
-
-    .dateInput {
-        flex: 1 1 100%;
-        width: 100%;
-        max-width: 100%;
-        box-sizing: border-box;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .dateSep {
