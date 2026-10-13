@@ -9,7 +9,11 @@
 // contact legal@dankest.llc.
 
 import { describe, expect, it, vi } from 'vitest';
-import { createUndoSendRequest } from '../../../packages/core/src/flows/undoSend.js';
+import {
+    createUndoSendController,
+    createUndoSendRequest,
+    isUndoSendCancellation,
+} from '../../../packages/core/src/flows/undoSend.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 describe('createUndoSendRequest', () => {
@@ -36,5 +40,66 @@ describe('createUndoSendRequest', () => {
         settings.grace.undoSendSeconds = 600;
 
         expect(createUndoSendRequest(settings, () => 'id-1').undoSeconds).toBe(30);
+    });
+});
+
+describe('createUndoSendController', () => {
+    it('counts down and elapses without calling the cancel route', () => {
+        let now = 10_000;
+        let tick;
+        const onTick = vi.fn();
+        const onElapsed = vi.fn();
+        const holdCancel = vi.fn();
+        const controller = createUndoSendController({
+            now: () => now,
+            setTick: (fn) => {
+                tick = fn;
+                return 7;
+            },
+            clearTick: vi.fn(),
+            onTick,
+            onElapsed,
+            onCancel: holdCancel,
+        });
+
+        controller.start(2);
+        expect(onTick).toHaveBeenLastCalledWith(2);
+        now += 1_000;
+        tick();
+        expect(onTick).toHaveBeenLastCalledWith(1);
+        now += 1_000;
+        tick();
+        expect(controller.state()).toBe('elapsed');
+        expect(onElapsed).toHaveBeenCalledOnce();
+        expect(holdCancel).not.toHaveBeenCalled();
+    });
+
+    it('Cancel calls holdCancel once and prevents the held send from elapsing', () => {
+        const holdCancel = vi.fn();
+        const onElapsed = vi.fn();
+        const clearTick = vi.fn();
+        const controller = createUndoSendController({
+            now: () => 10_000,
+            setTick: vi.fn(() => 7),
+            clearTick,
+            onElapsed,
+            onCancel: holdCancel,
+        });
+
+        controller.start(5);
+        expect(controller.cancel()).toBe(true);
+        expect(controller.cancel()).toBe(false);
+        expect(controller.state()).toBe('cancelled');
+        expect(holdCancel).toHaveBeenCalledOnce();
+        expect(onElapsed).not.toHaveBeenCalled();
+        expect(clearTick).toHaveBeenCalledWith(7);
+    });
+});
+
+describe('isUndoSendCancellation', () => {
+    it('recognizes only the host cancellation error', () => {
+        expect(isUndoSendCancellation({ name: 'SendHoldCancelledError' })).toBe(true);
+        expect(isUndoSendCancellation(new Error('send hold cancelled'))).toBe(false);
+        expect(isUndoSendCancellation(null)).toBe(false);
     });
 });
