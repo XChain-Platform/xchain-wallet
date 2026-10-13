@@ -82,7 +82,7 @@ describe('PlaceOrderPanel validation', () => {
 
         const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
         const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
-        expect(buy.parentElement.style.flexWrap).toBe('wrap');
+        expect(buy.parentElement.className).toMatch(/sideToggle/);
         expect(buy.style.background).toBe('var(--xc-success)');
         expect(sell.style.background).toBe('var(--xc-danger)');
         expect(buy.style.color).toBe('var(--xc-on-accent)');

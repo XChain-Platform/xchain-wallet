@@ -209,7 +209,7 @@
     min-width: 0;
 }
 
-@media (max-width: 380px) {
+@media not all and (min-width: 400px) {
     .qrActions {
         flex-direction: column;
     }

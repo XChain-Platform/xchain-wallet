@@ -144,7 +144,7 @@ describe('ListPickerScreen description detail', () => {
         );
         await waitFor(() => expect(screen.getByText('2 members')).toBeInTheDocument());
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).toHaveBeenCalledOnce();
         expect(onSelect).not.toHaveBeenCalled();
 

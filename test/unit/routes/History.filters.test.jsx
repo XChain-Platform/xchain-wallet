@@ -327,7 +327,7 @@ describe('History filters', () => {
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
 
-            const narrow = mediaBlock(historyCss, '(max-width: 399px)');
+            const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
             expect(ruleBody(narrow, '.dateRow')).toMatch(/flex-wrap:\s*wrap/);
             expect(ruleBody(narrow, '.dateInput')).toMatch(/box-sizing:\s*border-box/);
             expect(ruleBody(narrow, '.filterFooter > .filterDisclosure'))

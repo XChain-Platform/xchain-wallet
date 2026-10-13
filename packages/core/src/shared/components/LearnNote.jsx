@@ -85,7 +85,7 @@ export function LearnNote({ variant = 'action', chainLabel, title = 'Good to kno
             <p className={styles.body}>
                 {body}{' '}
                 <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
-                    {LEARN_MORE_TEXT}
+                    {LEARN_MORE_TEXT} <span aria-hidden="true">↗</span>
                 </a>
             </p>
         </div>

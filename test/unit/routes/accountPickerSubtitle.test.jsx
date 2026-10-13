@@ -98,7 +98,7 @@ describe('AccountPicker row subtitle', () => {
         });
 
         expect(rowFor(container, account.name)).toHaveAttribute('aria-current', 'true');
-        const add = screen.getByRole('button', { name: 'Add Account' });
+        const add = screen.getByRole('button', { name: 'Add account' });
         const manage = screen.getByRole('button', { name: 'Manage account' });
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();

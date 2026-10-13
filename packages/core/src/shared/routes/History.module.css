@@ -1388,7 +1388,7 @@
 /* Compact history layouts wrap controls and row metadata, while detail keys
    stack above their values. This keeps each piece of content in its own track
    when the available width reaches the 320px phone viewport. */
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .filterCard {
         min-width: 0;
     }

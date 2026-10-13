@@ -106,7 +106,8 @@ describe('diagnostic dump privacy boundary', () => {
         for (const secret of [address, '1.25 BTC', 'hunter2', wif, phrase, legacyPhrase]) {
             expect(report).not.toContain(secret);
         }
-        expect(report.match(/\[REDACTED\]/g)?.length).toBeGreaterThanOrEqual(8);
+        expect(dump.recent_errors[0].message).toMatch(/^redacted:sha256:[0-9a-f]{8}$/);
+        expect(dump.recent_logs[0].message).toMatch(/^redacted:sha256:[0-9a-f]{8}$/);
     });
 
     it('redacts sensitive fields from a serialized report returned by an older host', () => {

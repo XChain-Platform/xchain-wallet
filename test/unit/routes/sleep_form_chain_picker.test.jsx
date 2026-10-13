@@ -120,7 +120,7 @@ describe('SleepForm address lock chain selection', () => {
         fireEvent.change(duration, { target: { value: '1' } });
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');

@@ -79,7 +79,7 @@ describe('WalletPicker row layout', () => {
         });
 
         expect(document.querySelector('button[aria-current="true"]')).toHaveTextContent('Primary');
-        const add = screen.getByRole('button', { name: 'Add Wallet' });
+        const add = screen.getByRole('button', { name: 'Add wallet' });
         const manage = screen.getByRole('button', { name: 'Manage wallet' });
         expect(add.closest('footer')).toBeTruthy();
         expect(manage.closest('footer')).toBeTruthy();

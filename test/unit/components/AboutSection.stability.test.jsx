@@ -123,7 +123,11 @@ describe('AboutSection diagnostics', () => {
             await waitFor(() => expect(location.replace).toHaveBeenCalledOnce());
             const reportUrl = new URL(location.replace.mock.calls[0][0]);
             expect(reportUrl.origin + reportUrl.pathname).toBe('https://github.com/XChain-Platform/xchain-wallet/issues/new');
-            expect(reportUrl.searchParams.get('body')).toContain(JSON.stringify(diagnostics, null, 2));
+            expect(reportUrl.searchParams.get('body')).toContain(JSON.stringify({
+                ...diagnostics,
+                wallet: { ...diagnostics.wallet, platform: 'web' },
+                build: null,
+            }, null, 2));
             expect(reportUrl.searchParams.get('body')).toContain('redacted:sha256:1234abcd');
             expect(open).toHaveBeenCalledWith('about:blank', '_blank');
             expect(reportWindow.opener).toBeNull();

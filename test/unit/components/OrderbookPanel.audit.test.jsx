@@ -65,7 +65,7 @@ describe('OrderbookPanel market display', () => {
         const columns = screen.getByText('Order book').nextElementSibling;
         expect(columns.className).toMatch(/orderBookGrid/);
 
-        const bidScroller = screen.getByRole('region', { name: 'Bids order book levels' });
+        const bidScroller = screen.getByRole('region', { name: 'Buy bids order book levels' });
         expect(bidScroller.className).toMatch(/levelsScroller/);
         expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 

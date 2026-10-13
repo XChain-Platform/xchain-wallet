@@ -116,6 +116,7 @@ describe('CreateWallet security options', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
         const main = container.querySelector('main');
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
         const phrase = await screen.findByRole('list', { name: 'Recovery phrase' });
         const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
         expect(main).toContainElement(phrase);

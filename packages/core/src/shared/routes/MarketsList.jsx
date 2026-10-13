@@ -422,13 +422,17 @@ export function MarketsList({
                         </StatusMessage>
                     ) : displayMarkets.length === 0 ? (
                         <EmptyState
-                            title={debouncedSearch.trim()
+                            title={filtersHideAllMarkets
+                                ? 'No results for these filters'
+                                : debouncedSearch.trim()
                                 ? 'No matches'
                                 : tab === 'watchlist'
                                     ? 'Empty watchlist'
                                     : `No markets for ${selectedAsset.tick}`}
                             body={debouncedSearch.trim()
                                 ? `No markets match "${debouncedSearch.trim()}".`
+                                : filtersHideAllMarkets
+                                ? 'Reset the filters to see all markets.'
                                 : tab === 'watchlist'
                                     ? `Starred markets for ${selectedAsset.tick} appear here.`
                                     : 'No pairs found involving this asset on its chain.'}
@@ -489,7 +493,6 @@ export function MarketsList({
  * @param {() => void} props.onToggleStar
  */
 function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
-    const descriptor = chainRegistry.get(chainId);
     const selUpper = String(selectedTick || '').toUpperCase();
     // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.
