@@ -45,14 +45,17 @@ describe('BatchComposerForm rows', () => {
     it('adds and removes stable action rows without allowing the last row to disappear', async () => {
         mount();
         const add = await screen.findByRole('button', { name: /Add action/ });
+        expect(screen.getByTestId('batch-action-total')).toHaveTextContent('Batch total: 1 action');
         fireEvent.click(add);
 
         expect(screen.getAllByRole('group')).toHaveLength(2);
+        expect(screen.getByTestId('batch-action-total')).toHaveTextContent('Batch total: 2 actions');
         const remove = screen.getAllByRole('button', { name: 'Remove' });
         expect(remove[0]).not.toBeDisabled();
         expect(remove[1]).not.toBeDisabled();
         fireEvent.click(remove[1]);
         expect(screen.getAllByRole('group')).toHaveLength(1);
+        expect(screen.getByTestId('batch-action-total')).toHaveTextContent('Batch total: 1 action');
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
@@ -86,6 +89,7 @@ describe('BatchComposerForm rows', () => {
         await waitFor(() => expect(messaging.buildBatchCommand).toHaveBeenCalledTimes(1));
         expect(await screen.findByText('SEND|0|PEPE|1|alice')).toBeInTheDocument();
         expect(screen.getByText('BROADCAST|0|1|hello')).toBeInTheDocument();
+        expect(screen.getByTestId('batch-review-action-total')).toHaveTextContent('2 actions');
         expect(screen.getAllByText('Network fee')).toHaveLength(1);
     });
 });

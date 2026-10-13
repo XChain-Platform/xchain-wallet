@@ -136,6 +136,7 @@ function useSourceIdentity(address, chainId, walletId) {
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
+ * @param {string} [props.totalText]             form-derived aggregate when the action decoder exposes only a per-unit amount
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -165,6 +166,7 @@ export function ActionConfirmScreen({
     outcomeLabels = null,
     formatNativeFee,
     formatProtocolFee,
+    totalText,
 }) {
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
@@ -273,7 +275,7 @@ export function ActionConfirmScreen({
             signingWallet={sourceIdentity.wallet}
             chainLabel={chainLabel}
             feeText={displayedFee}
-            totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
+            totalText={totalText || (nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined)}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}

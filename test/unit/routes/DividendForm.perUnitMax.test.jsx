@@ -185,6 +185,52 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(document.body.textContent).not.toMatch(/2,499,500/);
     });
 
+    it('keeps the live total token cost identical on watcher review', async () => {
+        mountDividend({
+            walletMode: 'watcher',
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/Total token cost ~501 XCHAIN/);
+
+        fireEvent.change(amountField(), { target: { value: '2' } });
+        await expectText(/Total token cost ~1,001 XCHAIN/);
+        fireEvent.click(submitButton());
+
+        const reviewTotal = screen.getByTestId('dividend-review-total-cost');
+        expect(reviewTotal).toHaveTextContent('~1,001 XCHAIN');
+        expect(screen.getByRole('form', { name: 'Review dividend' }))
+            .not.toHaveTextContent('~501 XCHAIN');
+    });
+
+    it('carries the latest live total token cost into the full signing review', async () => {
+        mountDividend({
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await expectText(/Total token cost ~501 XCHAIN/);
+
+        fireEvent.change(amountField(), { target: { value: '2' } });
+        await expectText(/Total token cost ~1,001 XCHAIN/);
+        fireEvent.click(submitButton());
+        await flushTimers();
+
+        expect(screen.getByTestId('confirm-total'))
+            .toHaveTextContent('Total token cost: ~1,001 XCHAIN');
+    });
+
     it('names the per-unit ceiling next to the available balance', async () => {
         mountDividend();
         await pickDividendToken();
