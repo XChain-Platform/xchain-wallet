@@ -46,6 +46,13 @@
     padding: 2px var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
     border: 1px solid var(--xc-border);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.value > span {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .instruction {

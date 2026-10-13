@@ -46,10 +46,14 @@
 .numeric {
     text-align: end;
     font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .mono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .cellButton {

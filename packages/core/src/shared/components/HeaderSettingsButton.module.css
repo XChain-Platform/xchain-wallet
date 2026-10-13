@@ -204,3 +204,7 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
+
+:global(html[dir='rtl']) .summaryChevron {
+    transform: scaleX(-1);
+}

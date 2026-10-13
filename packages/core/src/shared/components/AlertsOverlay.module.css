@@ -12,6 +12,7 @@
 }
 
 .panel {
+    --xc-slide-in-offset: 20px;
     box-sizing: border-box;
     width: 100%;
     max-width: min(380px, 100%);
@@ -26,8 +27,12 @@
 }
 
 @keyframes slideIn {
-    from { transform: translateX(20px); opacity: 0.4; }
+    from { transform: translateX(var(--xc-slide-in-offset)); opacity: 0.4; }
     to   { transform: translateX(0); opacity: 1; }
+}
+
+:global(html[dir='rtl']) .panel {
+    --xc-slide-in-offset: -20px;
 }
 
 @media (prefers-reduced-motion: reduce) {

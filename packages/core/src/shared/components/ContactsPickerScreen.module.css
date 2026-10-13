@@ -74,6 +74,8 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-family: var(--xc-font-mono);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .abEmpty {

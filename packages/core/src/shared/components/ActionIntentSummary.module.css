@@ -43,6 +43,8 @@
     margin: 0;
     min-width: 0;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
     font-weight: 600;
 }
@@ -88,6 +90,8 @@
     font-family: var(--xc-font-mono);
     min-width: 0;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
     font-weight: 700;
 }
