@@ -144,6 +144,19 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
     });
 
+    it('moves slides with left and right arrows from regular carousel controls', () => {
+        stubMatchMedia(false);
+        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
+
+        const skip = screen.getByRole('button', { name: 'Skip' });
+        skip.focus();
+        fireEvent.keyDown(skip, { key: 'ArrowRight' });
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
+
+        fireEvent.keyDown(skip, { key: 'ArrowLeft' });
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
+    });
+
     it('Skip dismisses early with completed = false', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();
@@ -180,26 +193,40 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
 });
 
 describe('OnboardingCarousel: reduced motion', () => {
-    it('stacks every frame with a single Get started and no stepping controls', () => {
+    it('stacks every frame without starting auto-advance', () => {
+        vi.useFakeTimers();
         stubMatchMedia(true);
+        const intervalSpy = vi.spyOn(globalThis, 'setInterval');
         const onDone = vi.fn();
-        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
+        try {
+            render(React.createElement(OnboardingCarousel, {
+                frames: FRAMES,
+                onDone,
+                autoAdvance: true,
+                autoAdvanceMs: 2000,
+            }));
 
-        // All frames rendered at once.
-        expect(screen.getByText('Frame A title')).toBeInTheDocument();
-        expect(screen.getByText('Frame B title')).toBeInTheDocument();
-        expect(screen.getByText('Frame C title')).toBeInTheDocument();
+            // All frames rendered at once.
+            expect(screen.getByText('Frame A title')).toBeInTheDocument();
+            expect(screen.getByText('Frame B title')).toBeInTheDocument();
+            expect(screen.getByText('Frame C title')).toBeInTheDocument();
 
-        // No stepping affordances.
-        expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+            // No stepping affordances or timer, but dismissal remains available.
+            expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+            expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+            expect(intervalSpy).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
-        expect(onDone).toHaveBeenCalledWith(true);
+            fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
+            expect(onDone).toHaveBeenCalledWith(true);
 
-        const root = screen.getByTestId('onboarding-carousel');
-        expect(root).toHaveAttribute('data-reduced-motion', 'true');
+            const root = screen.getByTestId('onboarding-carousel');
+            expect(root).toHaveAttribute('data-reduced-motion', 'true');
+        } finally {
+            intervalSpy.mockRestore();
+            vi.useRealTimers();
+        }
     });
 });
 
@@ -236,6 +263,21 @@ describe('Onboarding: explainer gating', () => {
         // Now the welcome screen with the create/import fork.
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+    });
+
+    it('persists Skip so a remount goes directly to create or import', () => {
+        stubMatchMedia(false);
+        acceptLicense();
+        const firstMount = mountOnboarding();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+        expect(globalThis.localStorage.getItem('xc:onboardingExplainerSeenAt')).toBeTruthy();
+        firstMount.unmount();
+
+        mountOnboarding();
+        expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
     });
 
     it('skips the carousel for the unlocked-vault Add-Wallet lane (onBack)', () => {
