@@ -62,13 +62,22 @@ export function inclusionOf(res) {
  * @returns {Promise<Map<string, TxInclusion>>}  keyed by lowercased txid; a
  *          hash with no positive answer is simply absent
  */
-export async function probeTxInclusion({ sdk, txids }) {
+export async function probeTxInclusion({ sdk, txids } = {}) {
     /** @type {Map<string, TxInclusion>} */
     const found = new Map();
+    // Require a concrete hash collection so caller mistakes do not become network lookups.
+    if (txids == null || typeof txids[Symbol.iterator] !== 'function') {
+        throw new TypeError('probeTxInclusion: txids must be an iterable of transaction hashes');
+    }
+    const normalized = [...txids].map(lower);
+    // Reject malformed hashes before either service receives a lookup.
+    if (normalized.some((txid) => !/^[0-9a-f]{64}$/.test(txid))) {
+        throw new TypeError('probeTxInclusion: txids must contain 32-byte hexadecimal transaction hashes');
+    }
     const getTxBlock = sdk?.encoder?.getTxBlock;
     const getTransaction = sdk?.getTransaction;
     if (typeof getTxBlock !== 'function' && typeof getTransaction !== 'function') return found;
-    const queue = [...new Set([...txids].map(lower).filter(Boolean))];
+    const queue = [...new Set(normalized)];
     const worker = async () => {
         for (let txid = queue.shift(); txid !== undefined; txid = queue.shift()) {
             let hit = null;
