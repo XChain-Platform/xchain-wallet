@@ -17,13 +17,25 @@ import { getFormatLocale } from '../../i18n/index.js';
 
 function localeNumberSeparators(locale) {
     try {
-        const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(12345.6);
+        const formatter = new Intl.NumberFormat(getFormatLocale(locale));
+        const parts = formatter.formatToParts(12345.6);
+        const integerParts = formatter.formatToParts(123456789012345n)
+            .filter((part) => part.type === 'integer')
+            .map((part) => part.value.length);
+        const primaryGroupSize = integerParts.at(-1) || 3;
         return {
             decimal: parts.find((part) => part.type === 'decimal')?.value || '.',
             group: parts.find((part) => part.type === 'group')?.value || ',',
+            primaryGroupSize,
+            secondaryGroupSize: integerParts.at(-2) || primaryGroupSize,
         };
     } catch {
-        return { decimal: '.', group: ',' };
+        return {
+            decimal: '.',
+            group: ',',
+            primaryGroupSize: 3,
+            secondaryGroupSize: 3,
+        };
     }
 }
 
@@ -32,7 +44,13 @@ function validGroupedInteger(value, separators) {
     if (active.length === 0) return /^\d+$/.test(value);
     const escaped = active.map((separator) => separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const pieces = value.split(new RegExp(`[${escaped.join('')}]`));
-    return /^\d{1,3}$/.test(pieces[0]) && pieces.slice(1).every((piece) => /^\d{3}$/.test(piece));
+    const western = /^\d{1,3}$/.test(pieces[0])
+        && pieces.slice(1).every((piece) => /^\d{3}$/.test(piece));
+    const indian = pieces.length > 2
+        && /^\d{1,2}$/.test(pieces[0])
+        && pieces.slice(1, -1).every((piece) => /^\d{2}$/.test(piece))
+        && /^\d{3}$/.test(pieces.at(-1));
+    return western || indian;
 }
 
 function removeGrouping(value, separators) {
@@ -159,8 +177,22 @@ export function formatWithThousands(value, locale) {
     const intPart = dotIdx === -1 ? abs : abs.slice(0, dotIdx);
     const fracPart = dotIdx === -1 ? '' : abs.slice(dotIdx);
     if (!/^\d+$/.test(intPart) && !(intPart === '' && dotIdx === 0)) return str;
-    const { decimal, group } = localeNumberSeparators(locale);
-    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+    const {
+        decimal,
+        group,
+        primaryGroupSize,
+        secondaryGroupSize,
+    } = localeNumberSeparators(locale);
+    const groupedParts = [];
+    let groupEnd = intPart.length;
+    let groupSize = primaryGroupSize;
+    while (groupEnd > groupSize) {
+        groupedParts.unshift(intPart.slice(groupEnd - groupSize, groupEnd));
+        groupEnd -= groupSize;
+        groupSize = secondaryGroupSize;
+    }
+    groupedParts.unshift(intPart.slice(0, groupEnd));
+    const grouped = groupedParts.join(group);
     const localizedFraction = fracPart ? `${decimal}${fracPart.slice(1)}` : '';
     return `${negative ? '-' : ''}${grouped}${localizedFraction}`;
 }

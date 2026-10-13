@@ -3,19 +3,30 @@
 //
 // ConfirmActionModal render + interaction contract (§5.1-5.2).
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
+import {
+    registerLocale,
+    setLocale,
+} from '../../../packages/core/src/i18n/index.js';
 
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
-afterEach(() => {
+beforeAll(() => {
+    registerLocale('de-DE', {});
+    registerLocale('fr-FR', {});
+    registerLocale('hi-IN', {});
+});
+
+afterEach(async () => {
     cleanup();
     vi.useRealTimers();
     if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+    await setLocale('en');
 });
 
 const DECODED = {
@@ -163,6 +174,33 @@ describe('ConfirmActionModal', () => {
         expect(amount.textContent).toBe(expected);
         expect(screen.getByTestId('action-intent').querySelector('p').textContent)
             .toBe(`Send ${expected} JDOG to bc1qxyz`);
+        expect(screen.getByTestId('confirm-approve').textContent)
+            .toBe(`Send ${expected} JDOG`);
+    });
+
+    it.each([
+        ['de-DE', '1.234.567,89'],
+        ['fr-FR', '1\u202f234\u202f567,89'],
+        ['hi-IN', '12,34,567.89'],
+    ])('shows the reviewed amount with the same %s separators as entry', async (
+        locale,
+        expected,
+    ) => {
+        await setLocale(locale);
+        render(<ConfirmActionModal {...base({
+            decoded: {
+                ...DECODED,
+                summary: 'Send 1234567.89 JDOG to bc1qxyz',
+                details: DECODED.details.map((detail) => (
+                    detail.label === 'Amount' ? { ...detail, value: '1234567.89' } : detail
+                )),
+            },
+        })} />);
+
+        const intent = screen.getByTestId('action-intent');
+        expect(intent.querySelector('p').textContent).toContain(`Send ${expected} JDOG`);
+        expect(screen.getByText('Amount').closest('div').querySelector('dd').textContent)
+            .toBe(expected);
         expect(screen.getByTestId('confirm-approve').textContent)
             .toBe(`Send ${expected} JDOG`);
     });

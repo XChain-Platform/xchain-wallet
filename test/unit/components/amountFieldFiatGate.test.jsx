@@ -29,6 +29,7 @@ const RATE = { rate: 67000, fiatCurrency: 'USD' };
 beforeAll(() => {
     registerLocale('de-DE', {});
     registerLocale('fr-FR', {});
+    registerLocale('hi-IN', {});
 });
 
 afterEach(async () => {
@@ -165,23 +166,27 @@ describe('AmountField input contract', () => {
     });
 
     it.each([
-        ['de-DE', '1,234.56', '1.234,56'],
-        ['fr-FR', '1,234.56', '1\u202f234,56'],
-    ])('uses %s separators for display while accepting either common paste style', async (
+        ['de-DE', '12,34,567.89', '1.234.567,89'],
+        ['fr-FR', '1.234.567,89', '1\u202f234\u202f567,89'],
+        ['hi-IN', '1\u202f234\u202f567,89', '12,34,567.89'],
+    ])('uses %s separators for display while accepting another locale\'s paste style', async (
         locale,
         pasted,
         displayed,
     ) => {
         await setLocale(locale);
         const onAmountFieldChange = vi.fn();
-        const u = mount({ amount: '1234.56', onAmountFieldChange });
+        const u = mount({ amount: '1234567.89', onAmountFieldChange });
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
 
         expect(input).toHaveValue(displayed);
         fireEvent.change(input, {
             target: { value: pasted, selectionStart: pasted.length },
         });
-        expect(onAmountFieldChange).toHaveBeenCalledWith('1234.56', null);
+        expect(onAmountFieldChange).toHaveBeenCalledWith(
+            '1234567.89',
+            locale === 'hi-IN' ? '1234567.89'.length : null,
+        );
     });
 
     it('shows a plain error for malformed mixed separators', () => {
