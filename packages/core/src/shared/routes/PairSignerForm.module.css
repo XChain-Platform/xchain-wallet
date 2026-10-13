@@ -48,7 +48,7 @@
 
 .vendorCard:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .vendorCardContent {
@@ -110,7 +110,7 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
     background: var(--xc-surface);
-    padding: 2px var(--xc-space-1);
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
     border: 1px solid var(--xc-border);
 }
@@ -217,9 +217,9 @@
 .pairedBadge {
     background: color-mix(in srgb, var(--xc-success) 14%, transparent);
     border: 1px solid color-mix(in srgb, var(--xc-success) 35%, transparent);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     color: var(--xc-success);
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    padding: 2px var(--xc-space-2);
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
 }
