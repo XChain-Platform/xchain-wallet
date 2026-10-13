@@ -30,7 +30,7 @@ export const Textarea = forwardRef(function Textarea(
 ) {
     const autoId = useId();
     const textareaId = id || autoId;
-    const hintId = hint ? `${textareaId}-hint` : undefined;
+    const hintId = hint && !error ? `${textareaId}-hint` : undefined;
     const errorId = error ? `${textareaId}-error` : undefined;
     const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
     const textareaClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();

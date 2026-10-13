@@ -39,6 +39,9 @@ describe('<Input>', () => {
         expect(screen.getByRole('alert')).toHaveTextContent('Required');
         // Hint hidden when error is present (intentional; avoids dual messages).
         expect(screen.queryByText('Use work email')).toBeNull();
+        const describedIds = input.getAttribute('aria-describedby').split(' ');
+        expect(describedIds).toHaveLength(1);
+        expect(document.getElementById(describedIds[0])).toHaveTextContent('Required');
     });
 
     it('omits aria-invalid when there is no error', () => {
@@ -84,4 +87,3 @@ describe('<Input>', () => {
         expect(screen.queryByText(/local time zone/)).toBeNull();
     });
 });
-
