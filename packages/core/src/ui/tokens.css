@@ -120,8 +120,14 @@
     --xc-z-modal: 1000;
     --xc-z-toast: 9999;
 
-    /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
-    --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+    /* Motion - §5.4 transitions stay at or below 200ms and avoid springs. */
+    --xc-motion-duration-fast: 120ms;
+    --xc-motion-duration-standard: 160ms;
+    --xc-motion-duration-ambient: 1400ms;
+    --xc-motion-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+    --xc-motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --xc-motion-ease-ambient: ease-in-out;
+    --xc-transition: var(--xc-motion-duration-standard) var(--xc-motion-ease-standard);
 
     /* Expensive paint effects stay tokenized so accessibility preferences and
      * low-power shells can replace them without changing desktop styling. */
@@ -350,6 +356,9 @@
  * back out of an OS preference the user does not want honoured here. */
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-xc-reduced-motion="no-preference"]) {
+        --xc-motion-duration-fast: 0.01ms;
+        --xc-motion-duration-standard: 0.01ms;
+        --xc-motion-duration-ambient: 0.01ms;
         --xc-transition: 0ms;
         --xc-backdrop-filter: none;
         --xc-list-shadow: none;
@@ -369,6 +378,9 @@
 }
 
 :root[data-xc-reduced-motion="reduce"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
     --xc-transition: 0ms;
     --xc-backdrop-filter: none;
     --xc-list-shadow: none;
@@ -379,6 +391,9 @@
 /* Native shells set this attribute when sustained GPU effects are too costly.
  * It reduces the same paint and motion work without changing user settings. */
 :root[data-xc-low-power="true"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
     --xc-transition: 0ms;
     --xc-backdrop-filter: none;
     --xc-list-shadow: none;

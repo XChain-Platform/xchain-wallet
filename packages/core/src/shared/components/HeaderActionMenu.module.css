@@ -13,7 +13,7 @@
     color: var(--xc-text);
     display: flex;
     flex-direction: column;
-    animation: slideIn 160ms ease-out;
+    animation: slideIn var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
 }
 
 @keyframes slideIn {
@@ -22,8 +22,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .panel { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .panel { animation: none; }
 }
+
+:global(:root[data-xc-reduced-motion='reduce']) .panel { animation: none; }
 
 .header {
     display: flex;

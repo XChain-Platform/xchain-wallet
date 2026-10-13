@@ -31,7 +31,7 @@
     box-shadow: var(--xc-shadow-modal);
     padding: var(--xc-card-pad);
     text-align: center;
-    animation: pop 140ms ease-out;
+    animation: pop var(--xc-motion-duration-fast) var(--xc-motion-ease-enter);
 }
 
 .content {
@@ -53,8 +53,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .panel { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .panel { animation: none; }
 }
+
+:global(:root[data-xc-reduced-motion='reduce']) .panel { animation: none; }
 
 @media (orientation: landscape) and (max-height: 480px) {
     .panel {

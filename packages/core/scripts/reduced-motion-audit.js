@@ -56,6 +56,33 @@ function motionDeclarations(source) {
     return declarations;
 }
 
+function hasPositiveRawDuration(value) {
+    const durations = value.matchAll(/(?:^|[\s,(])(\d*\.?\d+)(ms|s)\b/gi);
+    return Array.from(durations).some(([, amount]) => Number(amount) > 0);
+}
+
+/**
+ * Return transition declarations that embed a positive duration instead of a
+ * motion token. tokens.css owns the raw values and is excluded by path.
+ *
+ * @param {{file: string, source: string}[]} stylesheets
+ * @param {string} tokenFile
+ */
+export function findRawTransitionDurations(
+    stylesheets,
+    tokenFile = 'packages/core/src/ui/tokens.css',
+) {
+    const violations = [];
+    for (const { file, source } of stylesheets) {
+        if (file === tokenFile) continue;
+        for (const declaration of motionDeclarations(source)) {
+            if (declaration.kind !== 'transition' || !hasPositiveRawDuration(declaration.value)) continue;
+            violations.push({ file, value: declaration.value });
+        }
+    }
+    return violations;
+}
+
 function hasLocalOverride(source, kind) {
     const cancellation = kind === 'animation'
         ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
