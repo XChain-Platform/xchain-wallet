@@ -93,7 +93,9 @@ describe('web create-wallet flow', () => {
 
         const recoveryHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
         await waitFor(() => expect(recoveryHeading).toHaveFocus());
-        expect(within(screen.getByRole('list', { name: 'Recovery phrase' })).getAllByRole('listitem')).toHaveLength(12);
+        expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        expect(within(await screen.findByRole('list', { name: 'Recovery phrase' })).getAllByRole('listitem')).toHaveLength(12);
         const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
         expect(verifyButton).toBeDisabled();
 

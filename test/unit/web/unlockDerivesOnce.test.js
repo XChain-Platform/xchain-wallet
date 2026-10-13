@@ -60,6 +60,20 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
     };
 });
 
+// The web host imports each watcher from its own module, so each module
+// is replaced with a counting stand-in that never polls.
+const InertModuleWatcher = vi.hoisted(() => class {
+    async start() { state.watcherStarts += 1; }
+    stop() { /* nothing started */ }
+    refresh() { state.watcherRefreshes += 1; return Promise.resolve(); }
+});
+vi.mock('../../../packages/core/src/notifications/NotificationService.js', () => ({ NotificationService: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/PriceAlertWatcher.js', () => ({ PriceAlertWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/GovernancePollWatcher.js', () => ({ GovernancePollWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/CoinpayAutopayWatcher.js', () => ({ CoinpayAutopayWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/DeadlineWatcher.js', () => ({ DeadlineWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/DispenserEscrowWatcher.js', () => ({ DispenserEscrowWatcher: InertModuleWatcher }));
+
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
     class InertWatcher {
