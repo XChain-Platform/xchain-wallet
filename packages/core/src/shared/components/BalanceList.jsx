@@ -814,10 +814,12 @@ export function formatFiat(value, currency = 'USD') {
     return fmt.format(String(value));
 }
 
+// Every chip carries white text, so each swatch is dark enough for 4.5:1
+// against #FFFFFF (the brighter Tailwind 400/500 steps measured 2.0 to 3.0).
 const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
+    '#1A74A8', '#7B2C8F', '#0369A1', '#047857', '#B45309',
+    '#DC2626', '#7C3AED', '#BE185D', '#0F766E', '#C2410C',
+    '#4F46E5', '#4D7C0F', '#0E7490', '#9333EA', '#BE123C',
 ];
 export function tickerColor(tick) {
     let h = 0;

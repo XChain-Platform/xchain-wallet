@@ -165,7 +165,7 @@ export function KeyboardSection() {
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group) => (
                 <section key={group}>
-                    <h3 style={GROUP_HEADER}>{group}</h3>
+                    <h2 style={GROUP_HEADER}>{group}</h2>
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
                         return (

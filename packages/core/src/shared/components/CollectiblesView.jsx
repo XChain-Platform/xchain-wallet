@@ -12,6 +12,7 @@ import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
 import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
@@ -240,15 +241,3 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
     );
 }
 
-const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
-];
-function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
-}
