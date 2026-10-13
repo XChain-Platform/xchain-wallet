@@ -29,7 +29,7 @@
 // screen rendered or sent, not in a helper.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -89,7 +89,12 @@ function mount(Component, props, messaging) {
     return messaging;
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    __clearTokenInfoCache();
+});
 
 // LIST #2700 from the testnet repro: created SWAPTEST, MGRTEST (plus an
 // unknown tick the network left out), then edited to DOGESWAP, SWAPTEST.
@@ -486,13 +491,18 @@ describe('ListCreateForm checks token items before publishing', () => {
     it('counts valid, duplicate and malformed names, and flags a tick the network does not know', async () => {
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(tick === 'SWAPTEST' ? KNOWN : UNKNOWN));
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith({ getTokenInfo }));
-        fireEvent.change(await screen.findByLabelText(/Tokens \(one per line\)/), {
+        const input = await screen.findByLabelText(/Tokens \(one per line\)/);
+        vi.useFakeTimers();
+        fireEvent.change(input, {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
         });
-        const counts = await screen.findByText(/2 valid token names/);
+        const counts = screen.getByText(/2 valid token names/);
         expect(counts.textContent).toMatch(/1 duplicate ignored/);
         expect(counts.textContent).toMatch(/1 invalid/);
-        await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
+        await act(async () => { await vi.advanceTimersByTimeAsync(349); });
+        expect(getTokenInfo).not.toHaveBeenCalled();
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        expect(counts.textContent).toMatch(/1 found · 1 not found/);
         expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected network: NOSUCHTICKQA/);
         expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA', demo: false });
     });
