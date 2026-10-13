@@ -133,6 +133,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -442,10 +443,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             setFormError('Enter an amount to move.');
             return;
         }
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setFormError(null);
-        if (isWatcherMode) {
-            setStage('submitting');
-            try {
+        try {
+            if (isWatcherMode) {
+                setStage('submitting');
                 const r = await messaging.buildActionPsbtRequest({
                     chainId: sourceChainId,
                     from: {
@@ -463,13 +466,15 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 });
                 setResult(r);
                 setStage('done');
-            } catch (err) {
-                setSubmitError(err?.message || 'Could not build the unsigned transaction.');
-                setStage('form');
+                return;
             }
-            return;
+            await openConfirmScreen();
+        } catch (err) {
+            setSubmitError(err?.message || 'Could not build the unsigned transaction.');
+            setStage('form');
+        } finally {
+            submitInFlightRef.current = false;
         }
-        await openConfirmScreen();
     }
 
     const doneTitle = result?.queued
@@ -641,7 +646,17 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             <ChainPicker
                 label="Move from"
                 value={sourceChainId || ''}
-                onChange={setSourceChainId}
+                onChange={(cid) => {
+                    if (cid === sourceChainId) return;
+                    setSourceChainId(cid);
+                    setTick(GAS_TICK);
+                    setAmount('');
+                    setDestChainId(null);
+                    setDestAddress('');
+                    setFeeQuote(null);
+                    setFormError(null);
+                    setSubmitError(null);
+                }}
                 chainIds={sourceChainIds}
                 chainRegistry={chainRegistry}
             />
@@ -689,7 +704,14 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     <ChainPicker
                         label="Move to"
                         value={destChainId || ''}
-                        onChange={setDestChainId}
+                        onChange={(cid) => {
+                            if (cid === destChainId) return;
+                            setDestChainId(cid);
+                            setDestAddress('');
+                            setFeeQuote(null);
+                            setFormError(null);
+                            setSubmitError(null);
+                        }}
                         chainIds={offeredDestChainIds}
                         chainRegistry={chainRegistry}
                     />

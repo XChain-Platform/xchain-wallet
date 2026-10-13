@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
@@ -28,22 +28,32 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
+const LTC = 'litecoin-mainnet';
 const address = (id, value) => ({
     id, address: value, publicKey: '02ab', derivationPath: "m/44'/0'/0'/0/0", source: 'hd', signerId: 's1',
 });
 const BTC_ADDRESS = address('btc-a', 'bc1qexample');
 const DOGE_ADDRESS = address('doge-a', 'DExample');
+const LTC_ADDRESS = address('ltc-a', 'ltc1qexample');
 
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
 });
 
-function messaging({ walletMode = 'watcher', divisibility = {} } = {}) {
+function messaging({
+    walletMode = 'watcher',
+    divisibility = {},
+    byChain = { [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] },
+    getNewestAddress,
+    buildActionPsbtRequest,
+} = {}) {
     const base = {
-        getAddressesByChain: vi.fn().mockResolvedValue({ [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] }),
+        getAddressesByChain: vi.fn().mockResolvedValue(byChain),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getNewestAddress: vi.fn().mockResolvedValue(BTC_ADDRESS),
+        getNewestAddress: getNewestAddress || vi.fn().mockImplementation((_walletId, chainId) => (
+            Promise.resolve((byChain[chainId] || [])[0] || null)
+        )),
         getWalletBalances: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
@@ -53,6 +63,7 @@ function messaging({ walletMode = 'watcher', divisibility = {} } = {}) {
             tick,
             divisibility: divisibility[`${chainId}:${tick}`] ?? null,
         })),
+        ...(buildActionPsbtRequest ? { buildActionPsbtRequest } : {}),
     };
     return new Proxy(base, {
         get(target, prop) {
@@ -159,6 +170,79 @@ describe('swap review editing', () => {
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('5');
+    });
+
+    it('clears chain-scoped tokens, amounts, and the receive address when either chain changes', async () => {
+        let resolveLitecoinAddress;
+        const litecoinAddress = new Promise((resolve) => { resolveLitecoinAddress = resolve; });
+        const byChain = {
+            [DOGE]: [DOGE_ADDRESS],
+            [BTC]: [BTC_ADDRESS],
+            [LTC]: [LTC_ADDRESS],
+        };
+        const msg = messaging({
+            byChain,
+            getNewestAddress: vi.fn().mockImplementation((_walletId, chainId) => (
+                chainId === LTC ? litecoinAddress : Promise.resolve(byChain[chainId][0])
+            )),
+        });
+        render(
+            <MessagingProvider shell="desktop" messaging={msg}>
+                <CrossChainSwapForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+        setAmount('Give amount (ALPHA)', '4');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Give chain: Dogecoin' }));
+        fireEvent.click(screen.getByRole('option', { name: /Bitcoin/ }));
+        expect(screen.getByLabelText('Give amount')).toHaveValue('');
+        expect(screen.getByRole('button', { name: /Give token:/ })).toHaveTextContent('Select a token');
+
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Get amount (BETA)', '5');
+        expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Get chain: Bitcoin' }));
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        expect(screen.getByLabelText('Get amount')).toHaveValue('');
+        expect(screen.getByLabelText('Receive at')).toHaveValue('');
+        expect(screen.getByRole('button', { name: /Get token:/ })).toHaveTextContent('Select a token');
+
+        await act(async () => { resolveLitecoinAddress(LTC_ADDRESS); });
+        expect(screen.getByLabelText('Receive at')).toHaveValue(LTC_ADDRESS.address);
+    });
+
+    it('dispatches one watcher build when the review form is submitted twice in one turn', async () => {
+        let resolveBuild;
+        const build = new Promise((resolve) => { resolveBuild = resolve; });
+        const buildActionPsbtRequest = vi.fn(() => build);
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging({ buildActionPsbtRequest })}>
+                <CrossChainSwapForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '1');
+        setAmount('Get amount (BETA)', '2');
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction' });
+        const form = submit.closest('form');
+        await act(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+        expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+
+        await act(async () => { resolveBuild({ psbtHex: 'aa00' }); });
     });
 
     it('blocks incomplete cross-chain decimal amounts before review', async () => {
