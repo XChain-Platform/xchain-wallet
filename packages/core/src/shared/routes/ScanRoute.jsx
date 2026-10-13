@@ -23,18 +23,12 @@
 // drive the four supported routes.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, Icon, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, PageHeader, QrScanner, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
 
-const BODY = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-3)',
-    padding: 'var(--xc-space-3)',
-};
 const PASTE_LABEL = {
     display: 'flex',
     flexDirection: 'column',
@@ -204,7 +198,24 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
 
     return (
         <Screen variant="small" header={header}>
-            <div style={BODY} data-testid="scan-route">
+            <FormPage
+                label={t('scan.title')}
+                data-testid="scan-route"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    handlePaste();
+                }}
+                actions={(
+                    <Button
+                        type="submit"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!paste.trim() || stopped}
+                    >
+                        {t('scan.classifyPaste')}
+                    </Button>
+                )}
+            >
                 {!stopped ? (
                     <QrScanner onFrame={handleFrame} alt={t('scan.scannerAlt')} />
                 ) : (
@@ -225,15 +236,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                         autoCorrect="off"
                     />
                 </label>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handlePaste}
-                    disabled={!paste.trim() || stopped}
-                >
-                    {t('scan.classifyPaste')}
-                </Button>
-            </div>
+            </FormPage>
         </Screen>
     );
 }

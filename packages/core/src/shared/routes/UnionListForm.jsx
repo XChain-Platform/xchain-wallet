@@ -11,6 +11,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     AddressField,
     Button,
+    EmptyState,
+    FormPage,
+    FormSection,
     Input,
     NetworkField,
     PageHeader,
@@ -142,7 +145,6 @@ async function readCandidates({ messaging, chainId, addresses }) {
 export function UnionListForm({ walletId, chainId: initialChainId, activeAccountId, onBack, onDone = onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const signerReady = useSignerReady(walletId);
     const [chainId, setChainId] = useState(initialChainId || null);
     const [addressesByChain, setAddressesByChain] = useState(null);
@@ -282,7 +284,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     const header = <PageHeader onBack={onBack} title="Create union list" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -315,7 +317,31 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create union list"
+            onSubmit={handleReview}
+            sectioned
+            status={(pickState.overLimit || sdkSupported === false || formError) ? (
+                <>
+                    {pickState.overLimit ? (
+                        <StatusMessage variant="error">The estimated merged membership is over 10,000.</StatusMessage>
+                    ) : null}
+                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={lane.composing}
+                    disabled={sdkSupported !== true || !fromAddress || !pickState.canReview || lane.composing}
+                >
+                    Review
+                </Button>
+            )}
+        >
+            <FormSection title="Addresses">
             <NetworkField
                 value={chainId}
                 onChange={(value) => { setChainId(value); setFromAddressId(null); }}
@@ -328,10 +354,16 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             ) : (
                 <StatusMessage variant="error">No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
+            </FormSection>
 
-            <fieldset disabled={sdkSupported !== true}>
-                <legend>Member lists</legend>
-                {candidates.length === 0 ? <p className={styles.hint}>No local or shared lists can be used on this chain.</p> : null}
+            <FormSection title="Member lists">
+            <fieldset aria-label="Member lists" disabled={sdkSupported !== true}>
+                {candidates.length === 0 ? (
+                    <EmptyState
+                        title="No local or shared lists can be used on this chain."
+                        titleAs="p"
+                    />
+                ) : null}
                 {candidates.map((candidate) => {
                     const state = rowState.get(candidate.actionIndex);
                     const reason = state?.reason || null;
@@ -351,7 +383,9 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     );
                 })}
             </fieldset>
+            </FormSection>
 
+            <FormSection title="Union details">
             <Input
                 label="Memo (optional)"
                 hint={MEMO_HINT}
@@ -379,23 +413,8 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                 </p>
                 <p className={styles.warning}>A union cannot itself be shared in this release.</p>
             </div>
+            </FormSection>
 
-            {pickState.overLimit ? (
-                <StatusMessage variant="error">The estimated merged membership is over 10,000.</StatusMessage>
-            ) : null}
-            {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={lane.composing}
-                    disabled={sdkSupported !== true || !fromAddress || !pickState.canReview || lane.composing}
-                >
-                    Review
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

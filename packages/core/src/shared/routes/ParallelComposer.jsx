@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -80,7 +80,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -313,7 +312,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -392,7 +391,40 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         const remaining = rows.filter((r) => r.status !== 'success').length;
         const totalSucceeded = rows.length - remaining;
         return wrap(
-            <>
+            <FormPage
+                label="Sign parallel actions"
+                status={activeRow.status === 'failed' && activeRow.error ? (
+                    <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                updateRow(activeRowIndex, { status: 'skipped', error: null });
+                                const nextIdx = rows.findIndex(
+                                    (r, i) => i > activeRowIndex && r.status !== 'success',
+                                );
+                                if (nextIdx === -1) setStage('done');
+                                else setActiveRowIndex(nextIdx);
+                            }}
+                            disabled={activeRow.status === 'submitting'}
+                        >
+                            Skip
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            loading={activeLane.composing}
+                            disabled={!activeFromAddress || activeRow.status === 'submitting'}
+                            onClick={signActiveRow}
+                        >
+                            Sign
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Signing action {activeRowIndex + 1} of {rows.length}
                     {' '}({totalSucceeded} signed, {remaining} remaining)
@@ -412,43 +444,34 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     />
                 ) : null}
 
-                {activeRow.status === 'failed' && activeRow.error ? (
-                    <StatusMessage variant="error" className={styles.error}>{activeRow.error}</StatusMessage>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                            updateRow(activeRowIndex, { status: 'skipped', error: null });
-                            const nextIdx = rows.findIndex(
-                                (r, i) => i > activeRowIndex && r.status !== 'success',
-                            );
-                            if (nextIdx === -1) setStage('done');
-                            else setActiveRowIndex(nextIdx);
-                        }}
-                        disabled={activeRow.status === 'submitting'}
-                    >
-                        Skip
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        loading={activeLane.composing}
-                        disabled={!activeFromAddress || activeRow.status === 'submitting'}
-                        onClick={signActiveRow}
-                    >
-                        Sign
-                    </Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review') {
         return wrap(
-            <>
+            <FormPage
+                label="Review parallel actions"
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setStage('compose')}
+                        >
+                            Back to composer
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            disabled={!acknowledgedNoRollback}
+                            onClick={startSigning}
+                        >
+                            Sign all
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     {rows.length} action{rows.length === 1 ? '' : 's'} across{' '}
                     {new Set(rows.map((r) => r.chainId)).size} chain{new Set(rows.map((r) => r.chainId)).size === 1 ? '' : 's'}
@@ -471,72 +494,53 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     />
                     <span>I understand parallel actions are not atomic.</span>
                 </label>
-
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setStage('compose')}
-                    >
-                        Back to composer
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        disabled={!acknowledgedNoRollback}
-                        onClick={startSigning}
-                    >
-                        Sign all
-                    </Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose'
     return wrap(
-        <>
-            <p className={styles.hint} style={{ textAlign: 'left' }}>
-                Compose any number of independent actions on any combination of
-                chains. Each row is submitted as its own independent action.
-                Review the no-rollback warning before signing.
-            </p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {rows.map((row, i) => (
-                    <li key={row.id} style={{ marginBottom: 'var(--xc-space-3)' }}>
-                        <RowEditor
-                            index={i}
-                            row={row}
-                            chainIds={chainsWithAddresses}
-                            addressesByChain={addressesByChain}
-                            activeByChain={activeByChain}
-                            actionsList={actionsList}
-                            onChange={(patch) => updateRow(i, patch)}
-                            onRemove={() => removeRow(i)}
-                            canRemove={rows.length > 1}
-                        />
-                    </li>
-                ))}
-            </ul>
-            <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
-                <Button type="button" variant="secondary" onClick={addRow}>
-                    + Add action
-                </Button>
-            </div>
-            {composeError ? (
+        <FormPage
+            label="Compose parallel actions"
+            onSubmit={(event) => {
+                event.preventDefault();
+                goReview();
+            }}
+            sectioned
+            intro="Compose any number of independent actions on any combination of chains. Each row is submitted as its own independent action. Review the no-rollback warning before signing."
+            status={composeError ? (
                 <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
             ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="primary"
-                    onClick={goReview}
-                    disabled={Boolean(composeError)}
-                >
-                    Review
-                </Button>
-            </div>
-        </>,
+            actions={(
+                <>
+                    <Button type="button" variant="secondary" onClick={addRow}>
+                        + Add action
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={Boolean(composeError)}
+                    >
+                        Review
+                    </Button>
+                </>
+            )}
+        >
+            {rows.map((row, i) => (
+                <RowEditor
+                    key={row.id}
+                    index={i}
+                    row={row}
+                    chainIds={chainsWithAddresses}
+                    addressesByChain={addressesByChain}
+                    activeByChain={activeByChain}
+                    actionsList={actionsList}
+                    onChange={(patch) => updateRow(i, patch)}
+                    onRemove={() => removeRow(i)}
+                    canRemove={rows.length > 1}
+                />
+            ))}
+        </FormPage>,
     );
 }
 
@@ -545,16 +549,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
-        <fieldset style={{
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            padding: 'var(--xc-space-3)',
-            margin: 0,
-            background: 'var(--xc-bg-muted)',
-        }}>
-            <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>
-                Row {index + 1}
-            </legend>
+        <FormSection title={`Row ${index + 1}`}>
 
             <label className={styles.pickerLabel}>
                 <span>Chain</span>
@@ -637,7 +632,7 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                     <ChainBadge descriptor={descriptor} size="sm" />
                 </p>
             ) : null}
-        </fieldset>
+        </FormSection>
     );
 }
 

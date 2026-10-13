@@ -27,6 +27,7 @@
 // record replacement; that lands in a follow-up step.
 
 import { useEffect, useState } from 'react';
+import { EmptyState } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useToast } from '../ToastHost.jsx';
@@ -166,7 +167,10 @@ export function ConnectedSitesSection() {
     return (
         <div style={STACK}>
             {(!sites || sites.length === 0) ? (
-                <Status text="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here." />
+                <EmptyState
+                    title="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here."
+                    titleAs="p"
+                />
             ) : (
                 sites.map((site) => {
                     const isOpen = expanded.has(site.id);
@@ -288,7 +292,7 @@ function BlocklistAuditPanel() {
                 an unexpected change to the blocklist before it costs you.
             </span>
             {entries.length === 0 ? (
-                <span style={ROW_HINT}>No mutations yet.</span>
+                <EmptyState title="No mutations yet." titleAs="p" />
             ) : (
                 <ul
                     style={{
@@ -365,9 +369,9 @@ function SignThrottlePanel() {
     const onApply = async (e) => {
         e.preventDefault();
         setError(null);
-        const next = {};
+        const patch = {};
         if (burstInput.trim() === '') {
-            next.burst = SIGN_THROTTLE_DEFAULT_BURST;
+            patch.burst = SIGN_THROTTLE_DEFAULT_BURST;
         } else {
             const burstN = Number(burstInput);
             if (!/^\d+$/.test(burstInput.trim())
@@ -377,10 +381,10 @@ function SignThrottlePanel() {
                 setError(`Burst must be an integer between ${SIGN_THROTTLE_BURST_MIN} and ${SIGN_THROTTLE_BURST_MAX}.`);
                 return;
             }
-            next.burst = burstN;
+            patch.burst = burstN;
         }
         if (windowSecondsInput.trim() === '') {
-            next.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
+            patch.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
         } else {
             const seconds = Number(windowSecondsInput);
             const ms = seconds * 1000;
@@ -393,11 +397,11 @@ function SignThrottlePanel() {
                 setError(`Window must be an integer number of seconds between ${minS} and ${maxS}.`);
                 return;
             }
-            next.windowMs = ms;
+            patch.windowMs = ms;
         }
         try {
             setSubmitting(true);
-            await update({ signThrottle: next });
+            await update({ signThrottle: patch });
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -501,7 +505,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     too if you want to cover it).
                 </span>
                 {blocked.length === 0 ? (
-                    <span style={ROW_HINT}>No origins blocked.</span>
+                    <EmptyState title="No origins blocked." titleAs="p" />
                 ) : (
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
