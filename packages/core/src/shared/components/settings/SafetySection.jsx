@@ -14,11 +14,11 @@
 //   - Auto-lock timeout (minutes)
 //   - Test-send warning threshold (sats; 0 disables)
 //   - Undo-send: opt-in hold so a signed send can be cancelled before broadcast
-//   - Panic mode toggle: schema slot ships v2; full §26.5 duress-PIN
-//     wiring lands later, the toggle gates that behavior when present.
+//   - Panic-mode activation and duress passphrase controls
 //   - Backup reminders cadence (off / monthly / quarterly)
 //
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { INPUT, ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
@@ -44,6 +44,7 @@ const BACKUP_REMINDER_OPTIONS = /** @type {const} */ ([
 
 export function SafetySection() {
     const { settings, loading, error, update } = useSettings();
+    const [thresholdError, setThresholdError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -90,9 +91,12 @@ export function SafetySection() {
                     defaultValue={settings.grace.testSendThresholdSats}
                     onBlur={(e) => {
                         const raw = e.target.value.trim();
-                        const threshold = /^\d+$/.test(raw)
-                            ? raw.replace(/^0+(?=\d)/, '')
-                            : '0';
+                        if (!/^\d+$/.test(raw)) {
+                            setThresholdError('Enter a whole number of sats. Use 0 to turn the warning off.');
+                            return;
+                        }
+                        setThresholdError(null);
+                        const threshold = raw.replace(/^0+(?=\d)/, '');
                         update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
                             // eslint-disable-next-line no-console
                             console.error('grace.testSendThresholdSats update failed:', err);
@@ -104,21 +108,11 @@ export function SafetySection() {
                     style={{ ...INPUT, width: 140, textAlign: 'right' }}
                 />
             </div>
+            {thresholdError ? <Status text={thresholdError} tone="error" /> : null}
             <UndoSendRow />
             <BiometricRow />
             <PanicModeRow />
             <DuressPassphraseRow />
-            <ToggleRow
-                label="Auto-arm panic mode"
-                hint="Not available yet: panic mode cannot arm itself from a duress passphrase or shortcut. Your choice here is saved and will apply once it can. The Activate button above always works."
-                checked={Boolean(settings.panicMode?.enabled)}
-                onChange={(v) => {
-                    update({ panicMode: { enabled: v } }).catch((err) => {
-                        // eslint-disable-next-line no-console
-                        console.error('panicMode.enabled update failed:', err);
-                    });
-                }}
-            />
             <div style={ROW}>
                 <span style={ROW_LABEL}>Backup reminders</span>
                 <select

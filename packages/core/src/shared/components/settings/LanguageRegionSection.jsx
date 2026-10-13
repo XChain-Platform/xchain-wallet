@@ -20,6 +20,7 @@
 //
 // Both fields exist on the v1 Settings schema; no migration needed.
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { settingsLoadErrorText } from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
@@ -79,6 +80,7 @@ const STACK = {
 const CONTROLS = {
     display: 'flex',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 'var(--xc-space-2)',
 };
@@ -105,13 +107,17 @@ const INPUT = {
 
 export function LanguageRegionSection() {
     const { settings, loading, error, update } = useSettings();
+    const [customCurrencyOpen, setCustomCurrencyOpen] = useState(false);
+    const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <Status text={settingsLoadErrorText(error)} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const knownCurrency = FIAT_CURRENCIES.some((c) => c.value === settings.fiatCurrency);
-    const selectorValue = knownCurrency ? settings.fiatCurrency : CUSTOM_CURRENCY_VALUE;
+    const selectorValue = knownCurrency && !customCurrencyOpen
+        ? settings.fiatCurrency
+        : CUSTOM_CURRENCY_VALUE;
     const LANGUAGES = buildLanguageOptions();
 
     const onLanguageChange = async (next) => {
@@ -131,18 +137,29 @@ export function LanguageRegionSection() {
         }
     };
     const onCurrencyChange = async (next) => {
-        if (next === CUSTOM_CURRENCY_VALUE) return; // wait for user to type a code
+        setCurrencyError(null);
+        if (next === CUSTOM_CURRENCY_VALUE) {
+            setCustomCurrencyOpen(true);
+            return;
+        }
+        setCustomCurrencyOpen(false);
         try { await update({ fiatCurrency: next }); } catch (err) {
             // eslint-disable-next-line no-console
             console.error('fiatCurrency.update failed:', err);
+            setCurrencyError('Could not save the currency. Try again.');
         }
     };
     const onCustomCurrencyCommit = async (raw) => {
         const code = String(raw || '').toUpperCase().trim();
-        if (!code) return;
+        if (!/^[A-Z]{3}$/.test(code)) {
+            setCurrencyError('Enter a three-letter ISO currency code, such as USD.');
+            return;
+        }
+        setCurrencyError(null);
         try { await update({ fiatCurrency: code }); } catch (err) {
             // eslint-disable-next-line no-console
             console.error('fiatCurrency.update failed:', err);
+            setCurrencyError('Could not save the currency. Try again.');
         }
     };
 
@@ -193,6 +210,7 @@ export function LanguageRegionSection() {
                     ) : null}
                 </div>
             </div>
+            {currencyError ? <Status text={currencyError} tone="error" /> : null}
         </div>
     );
 }

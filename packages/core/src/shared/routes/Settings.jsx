@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { shellCapabilities } from '../shellCapabilities.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
@@ -285,8 +286,8 @@ export function Settings({
         {
             id: 'developer',
             title: 'Developer Mode',
-            description: 'Custom endpoints, regtest networks, raw PSBT inspector.',
-            keywords: 'developer mode regtest custom endpoints psbt raw learn',
+            description: 'Custom endpoints, regtest networks, and diagnostics.',
+            keywords: 'developer mode regtest custom endpoints diagnostics learn',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
             props: { onNavigateToMint },
@@ -536,9 +537,15 @@ function ComingSoon() {
 function privacySummary(settings) {
     if (!settings) return '-';
     const p = settings.privacy || {};
-    const flags = ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore'];
-    const onCount = flags.filter((k) => Boolean(p[k])).length;
-    return `${onCount} of ${flags.length} on`;
+    // Mirrors the switches PrivacySection renders. Tor routing is counted
+    // only where the shell can proxy; elsewhere its switch is inert.
+    // Switches that default on read as on until stored false.
+    const offByDefault = ['changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
+    const onByDefault = ['hapticsEnabled', 'priceDataEnabled', 'metadataFetchEnabled'];
+    if (shellCapabilities().socksProxy) offByDefault.unshift('torRouting');
+    const onCount = offByDefault.filter((k) => p[k] === true).length
+        + onByDefault.filter((k) => p[k] !== false).length;
+    return `${onCount} of ${offByDefault.length + onByDefault.length} on`;
 }
 
 function safetySummary(settings) {

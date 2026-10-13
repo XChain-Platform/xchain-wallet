@@ -20,6 +20,7 @@ import { userFacingMessage } from '../../utils/userFacingMessage.js';
 export const ROW = {
     display: 'flex',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 'var(--xc-space-2) var(--xc-space-3)',

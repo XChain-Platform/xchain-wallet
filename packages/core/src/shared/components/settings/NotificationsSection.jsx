@@ -59,7 +59,7 @@ const TIME_INPUT = {
 
 const PERMISSION_BUTTON = {
     background: 'var(--xc-accent, #3a7afe)',
-    color: '#fff',
+    color: 'var(--xc-on-accent)',
     border: 'none',
     borderRadius: 'var(--xc-radius-sm)',
     padding: 'var(--xc-space-1) var(--xc-space-3)',
@@ -76,16 +76,17 @@ const PERMISSION_BUTTON = {
 function PermissionRow() {
     const supported = typeof Notification !== 'undefined';
     const [permission, setPermission] = useState(supported ? Notification.permission : 'unsupported');
+    const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
 
     if (!supported) return null;
 
     const request = async () => {
+        setRequestError(null);
         try {
             const result = await Notification.requestPermission();
             setPermission(result);
         } catch {
-            // Some browsers throw if requestPermission() is called outside a
-            // user gesture; the click handler is a gesture, but stay defensive.
+            setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
         }
     };
 
@@ -107,7 +108,7 @@ function PermissionRow() {
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Desktop notifications</span>
-                <span style={ROW_HINT}>{hint}</span>
+                <span style={ROW_HINT}>{requestError || hint}</span>
             </div>
             {action}
         </div>
@@ -400,6 +401,7 @@ const MANAGER = {
 };
 const ALERT_ROW = {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 'var(--xc-space-2)',

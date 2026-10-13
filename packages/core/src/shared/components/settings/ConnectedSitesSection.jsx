@@ -172,7 +172,7 @@ export function ConnectedSitesSection() {
                     const isOpen = expanded.has(site.id);
                     return (
                         <div key={site.id} style={SITE_BLOCK}>
-                            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
                                         {site.appName || site.origin}
@@ -182,7 +182,7 @@ export function ConnectedSitesSection() {
                                         Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
                                     </span>
                                 </div>
-                                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                                     <button
                                         type="button"
                                         onClick={() => setExpanded((prev) => {
@@ -298,8 +298,6 @@ function BlocklistAuditPanel() {
                         display: 'flex',
                         flexDirection: 'column',
                         gap: 'var(--xc-space-1)',
-                        maxHeight: '12rem',
-                        overflowY: 'auto',
                     }}
                 >
                     {[...entries].reverse().map((entry, idx) => (
@@ -340,8 +338,8 @@ function BlocklistAuditPanel() {
 
 // Cluster S FOLLOWUP 1: Sign-request throttle limits panel.
 // Reads / edits `settings.signThrottle.{burst, windowMs}`. Empty values
-// fall back to defaults at the throttle layer (createSignThrottle), so
-// the user can clear an input to "unset" it without typing the default.
+// write the documented defaults because the settings patcher deep-merges
+// nested objects and cannot remove an existing nested key.
 function SignThrottlePanel() {
     const { settings, update } = useSettings();
     const [submitting, setSubmitting] = useState(false);
@@ -369,10 +367,11 @@ function SignThrottlePanel() {
         setError(null);
         const next = {};
         if (burstInput.trim() === '') {
-            next.burst = undefined;
+            next.burst = SIGN_THROTTLE_DEFAULT_BURST;
         } else {
-            const burstN = Math.floor(Number(burstInput));
-            if (!Number.isFinite(burstN)
+            const burstN = Number(burstInput);
+            if (!/^\d+$/.test(burstInput.trim())
+                || !Number.isFinite(burstN)
                 || burstN < SIGN_THROTTLE_BURST_MIN
                 || burstN > SIGN_THROTTLE_BURST_MAX) {
                 setError(`Burst must be an integer between ${SIGN_THROTTLE_BURST_MIN} and ${SIGN_THROTTLE_BURST_MAX}.`);
@@ -381,11 +380,12 @@ function SignThrottlePanel() {
             next.burst = burstN;
         }
         if (windowSecondsInput.trim() === '') {
-            next.windowMs = undefined;
+            next.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
         } else {
-            const seconds = Math.floor(Number(windowSecondsInput));
+            const seconds = Number(windowSecondsInput);
             const ms = seconds * 1000;
-            if (!Number.isFinite(ms)
+            if (!/^\d+$/.test(windowSecondsInput.trim())
+                || !Number.isFinite(ms)
                 || ms < SIGN_THROTTLE_WINDOW_MS_MIN
                 || ms > SIGN_THROTTLE_WINDOW_MS_MAX) {
                 const minS = SIGN_THROTTLE_WINDOW_MS_MIN / 1000;
@@ -397,13 +397,7 @@ function SignThrottlePanel() {
         }
         try {
             setSubmitting(true);
-            // Strip undefined keys so the patch doesn't overwrite a
-            // sibling field with an explicit undefined.
-            /** @type {Record<string, number>} */
-            const patch = {};
-            if (next.burst !== undefined) patch.burst = next.burst;
-            if (next.windowMs !== undefined) patch.windowMs = next.windowMs;
-            await update({ signThrottle: patch });
+            await update({ signThrottle: next });
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -523,7 +517,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         ))}
                     </ul>
                 )}
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', gap: 'var(--xc-space-2)' }}>
+                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     <input
                         type="text"
                         value={manualBlock}

@@ -120,8 +120,8 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Labels survive restore"
-                /* Spec §19.5.2: on-chain label sync via FILE-action transport; submit/fetch wiring lands separately. */
-                hint="Sync your address labels on-chain so your other devices can restore them. This feature is not active yet; your choice is saved."
+                /* Spec §19.5.2: the extension background host reads this flag to queue label batches; Backup publishes by hand in every shell. */
+                hint="In the browser extension, queue label changes so they can be published on-chain and restored on another device. In every app you can publish labels by hand from Backup."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />

@@ -22,6 +22,7 @@
 //     DOGE/kB), stored as smallest-unit per KB, visible when strategy='custom'.
 //   - RBF-by-default toggle.
 
+import { useState } from 'react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { resolveFeeConfig } from '../../../schemas/settings.js';
 import {
@@ -66,6 +67,7 @@ const FIELD_ROW = {
 
 export function FeesSection() {
     const { settings, loading, error, update } = useSettings();
+    const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -140,7 +142,21 @@ export function FeesSection() {
                                     defaultValue={settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate)}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.
-                                        const n = displayRateToSettingsCustom(unit, Number(e.target.value));
+                                        const raw = e.target.value.trim();
+                                        const displayRate = Number(raw);
+                                        if (raw === '' || !Number.isFinite(displayRate) || displayRate < 0) {
+                                            setRateErrors((current) => ({
+                                                ...current,
+                                                [chainId]: 'Enter a non-negative custom fee rate.',
+                                            }));
+                                            return;
+                                        }
+                                        setRateErrors((current) => {
+                                            const next = { ...current };
+                                            delete next[chainId];
+                                            return next;
+                                        });
+                                        const n = displayRateToSettingsCustom(unit, displayRate);
                                         onPatch(chainId, {
                                             strategy: 'custom',
                                             customSatsPerKb: n,
@@ -151,6 +167,11 @@ export function FeesSection() {
                                     aria-label={`${displayName} custom fee rate`}
                                     style={{ ...INPUT, width: 120, textAlign: 'right' }}
                                 />
+                            </div>
+                        ) : null}
+                        {rateErrors[chainId] ? (
+                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-error)' }}>
+                                {rateErrors[chainId]}
                             </div>
                         ) : null}
 

@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -50,6 +51,7 @@ const CHAIN_BLOCK = {
 const HEADER_ROW = {
     display: 'flex',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 'var(--xc-space-2)',
@@ -101,14 +103,7 @@ export function NetworkEndpointsSection() {
                     key={d.id}
                     descriptor={d}
                     override={settings.sdkEndpoints[d.id]}
-                    onSave={async (next) => {
-                        try {
-                            await update({ sdkEndpoints: { [d.id]: next } });
-                        } catch (err) {
-                            // eslint-disable-next-line no-console
-                            console.error(`sdkEndpoints.${d.id} update failed:`, err);
-                        }
-                    }}
+                    onSave={(next) => update({ sdkEndpoints: { [d.id]: next } })}
                 />
             ))}
         </div>
@@ -139,6 +134,11 @@ function ChainRegistryRefreshRow() {
             setRefreshing(true);
             const next = await messaging.refreshChainRegistry();
             setStatus(next);
+        } catch (err) {
+            setStatus({
+                ok: false,
+                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+            });
         } finally {
             setRefreshing(false);
         }
@@ -164,7 +164,7 @@ function ChainRegistryRefreshRow() {
                         {status?.ok
                             ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'} in the registry`
                             : status?.error
-                                ? `Last attempt failed: ${status.error}`
+                                ? `Last attempt failed: ${userFacingMessage(status.error, 'Could not refresh the chain registry.')}`
                                 : 'No refresh yet; the networks bundled with this wallet are active.'}
                     </span>
                 </div>
@@ -235,6 +235,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     });
     const [draft, setDraft] = useState(seeded);
     const [editing, setEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string|null} */ (null));
 
     useEffect(() => {
@@ -257,7 +258,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         || draft.hubUrl !== persisted.hubUrl
     );
 
-    const onCommit = () => {
+    const onCommit = async () => {
         // An emptied field means "use the default for this one", not
         // "send requests to nowhere".
         const next = {
@@ -286,19 +287,33 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         );
         setSaveError(null);
         setDraft(next);
-        onSave({ ...next, custom: !matchesDefault });
-        setEditing(false);
+        setSaving(true);
+        try {
+            await onSave({ ...next, custom: !matchesDefault });
+            setEditing(false);
+        } catch (err) {
+            setSaveError(userFacingMessage(err, 'Could not save these endpoints. Try again.'));
+        } finally {
+            setSaving(false);
+        }
     };
-    const onReset = () => {
+    const onReset = async () => {
         setDraft(defaults);
         setSaveError(null);
-        onSave({
-            explorerUrl: defaults.explorerUrl,
-            encoderUrl: defaults.encoderUrl,
-            hubUrl: defaults.hubUrl,
-            custom: false,
-        });
-        setEditing(false);
+        setSaving(true);
+        try {
+            await onSave({
+                explorerUrl: defaults.explorerUrl,
+                encoderUrl: defaults.encoderUrl,
+                hubUrl: defaults.hubUrl,
+                custom: false,
+            });
+            setEditing(false);
+        } catch (err) {
+            setSaveError(userFacingMessage(err, 'Could not reset these endpoints. Try again.'));
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -340,13 +355,13 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                     addresses right away.
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 {isCustom || dirty ? (
-                    <button type="button" onClick={onReset} style={ACTION_BTN}>Reset to default</button>
+                    <button type="button" onClick={onReset} style={ACTION_BTN} disabled={saving}>Reset to default</button>
                 ) : null}
                 {dirty || editing ? (
-                    <button type="button" onClick={onCommit} style={ACTION_PRIMARY} disabled={!dirty}>
-                        Save
+                    <button type="button" onClick={onCommit} style={ACTION_PRIMARY} disabled={!dirty || saving}>
+                        {saving ? 'Saving…' : 'Save'}
                     </button>
                 ) : null}
             </div>

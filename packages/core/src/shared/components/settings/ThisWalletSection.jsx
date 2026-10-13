@@ -217,7 +217,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     style={{
                         ...DESTRUCTIVE_BTN,
                         background: matches && !busy ? 'var(--xc-error, #c33)' : 'transparent',
-                        color: matches && !busy ? '#fff' : 'var(--xc-error, #c33)',
+                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-error, #c33)',
                         opacity: matches && !busy ? 1 : 0.6,
                         cursor: matches && !busy ? 'pointer' : 'not-allowed',
                     }}

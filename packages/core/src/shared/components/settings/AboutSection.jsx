@@ -93,7 +93,10 @@ export function AboutSection() {
         try {
             const text = preview ?? (await fetchDump());
             if (preview === null) setPreview(text);
-            await navigator.clipboard?.writeText?.(text);
+            if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+                throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
+            }
+            await navigator.clipboard.writeText(text);
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
@@ -202,8 +205,6 @@ export function AboutSection() {
                         color: 'var(--xc-text)',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        maxHeight: '32rem',
-                        overflow: 'auto',
                     }}
                 >
                     {LICENSE_TEXT}
@@ -272,8 +273,6 @@ export function AboutSection() {
                         color: 'var(--xc-text-muted)',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-all',
-                        maxHeight: '24rem',
-                        overflow: 'auto',
                     }}
                 >
                     {preview}

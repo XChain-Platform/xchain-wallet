@@ -33,5 +33,6 @@ describe('Settings while settings are loading', () => {
         expect(screen.getByText('Backup')).toBeTruthy();
         expect(screen.getByText('Keyboard')).toBeTruthy();
         expect(screen.getByText('Network')).toBeTruthy();
+        expect(document.body.textContent).not.toContain('raw PSBT inspector');
     });
 });

@@ -223,3 +223,22 @@ describe('the Preview button', () => {
         expect(seen).toEqual([]);
     });
 });
+
+describe('notification permission feedback', () => {
+    it('shows a request failure and uses the on-accent text token', async () => {
+        const prior = globalThis.Notification;
+        globalThis.Notification = {
+            permission: 'default',
+            requestPermission: vi.fn(async () => { throw new Error('denied by browser'); }),
+        };
+        try {
+            render(<NotificationsSection />);
+            const button = screen.getByRole('button', { name: 'Request permission' });
+            expect(button.style.color).toBe('var(--xc-on-accent)');
+            fireEvent.click(button);
+            expect(await screen.findByText(/Could not request notification permission/)).toBeTruthy();
+        } finally {
+            globalThis.Notification = prior;
+        }
+    });
+});

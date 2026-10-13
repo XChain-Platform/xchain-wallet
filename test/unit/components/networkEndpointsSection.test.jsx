@@ -16,7 +16,7 @@
 // take out the two endpoints the operator never touched.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 
 const updateSpy = vi.fn();
 let settingsRecord;
@@ -132,5 +132,18 @@ describe('NetworkEndpointsSection', () => {
         const block = ltcRegtestBlock();
         expect(within(block).getByLabelText('Explorer URL').value).toBe('http://10.0.0.9:18080');
         expect(within(block).getByLabelText('Hub URL').value).toBe(LTC_REGTEST.hub);
+    });
+
+    it('keeps the editor open and shows a rejected save', async () => {
+        updateSpy.mockRejectedValueOnce(new Error('Storage is unavailable.'));
+        render(<NetworkEndpointsSection />);
+        const block = ltcRegtestBlock();
+        fireEvent.change(within(block).getByLabelText('Explorer URL'), {
+            target: { value: 'http://10.0.0.9:18080' },
+        });
+        fireEvent.click(within(block).getByText('Save'));
+
+        expect(await within(block).findByRole('alert')).toHaveTextContent('Storage is unavailable.');
+        await waitFor(() => expect(within(block).getByRole('button', { name: 'Save' })).toBeEnabled());
     });
 });
