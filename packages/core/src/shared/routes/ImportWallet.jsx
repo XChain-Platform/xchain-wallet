@@ -486,7 +486,7 @@ export function ImportWallet({
         const wordCount = trimmed.split(' ').length;
         if (!acceptedWordCounts.includes(wordCount)) {
             const expected = acceptedWordCounts.join(', ');
-            setError(`Expected ${expected} word${acceptedWordCounts.length === 1 ? '' : 's'}, got ${wordCount}.`);
+            setError(`Expected ${expected} words, got ${wordCount}.`);
             return;
         }
         if (!phraseFormat(trimmed)) {

@@ -36,6 +36,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MigrateToBip39 } from '../../../packages/core/src/shared/routes/MigrateToBip39.jsx';
+import { getBackupVerifiedAt } from '../../../packages/core/src/flows/backupReminder.js';
 
 afterEach(() => {
     cleanup();
@@ -116,6 +117,7 @@ describe('MigrateToBip39 safety and completion', () => {
         });
         const context = renderMigration(messaging);
         await reachVerify(context);
+        expect(getBackupVerifiedAt('wallet-new')).toBeNull();
 
         answerQuiz();
         fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
@@ -133,6 +135,7 @@ describe('MigrateToBip39 safety and completion', () => {
 
         await act(async () => resolveCreate({ walletId: 'wallet-new' }));
         expect(await screen.findByText('New BIP39 wallet ready')).toBeTruthy();
+        expect(getBackupVerifiedAt('wallet-new')).not.toBeNull();
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(2));
 
         fireEvent.click(screen.getByRole('button', { name: 'Review sweep' }));
@@ -159,6 +162,7 @@ describe('MigrateToBip39 safety and completion', () => {
 
         expect(await screen.findByText(/does not match your recovery phrase/)).toBeTruthy();
         expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();
+        expect(getBackupVerifiedAt('wallet-new')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Back to phrase' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
         expect(await screen.findByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
