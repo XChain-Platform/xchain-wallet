@@ -30,12 +30,11 @@
 // (Send.jsx still passes `onSendAnother` for back-compat; the prop is
 // accepted under either name.)
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
-import { copyText } from '../clipboard.js';
+import { CopyButton, FormSection, Textarea } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
-import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useToast } from './ToastHost.jsx';
 import styles from './WatcherResultPanel.module.css';
 
@@ -56,29 +55,10 @@ export function WatcherResultPanel({
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
-    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
-    const copyGenerationRef = useRef(0);
-    const copyResetTimerRef = useRef(null);
-    const haptic = useHapticFeedback();
     const { announce } = useToast();
     useEffect(() => {
         announce(title);
     }, [announce, title]);
-    useEffect(() => {
-        copyGenerationRef.current += 1;
-        setCopyState('idle');
-        if (copyResetTimerRef.current !== null) {
-            clearTimeout(copyResetTimerRef.current);
-            copyResetTimerRef.current = null;
-        }
-        return () => {
-            copyGenerationRef.current += 1;
-            if (copyResetTimerRef.current !== null) {
-                clearTimeout(copyResetTimerRef.current);
-                copyResetTimerRef.current = null;
-            }
-        };
-    }, [psbtHex]);
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -89,35 +69,11 @@ export function WatcherResultPanel({
             return { error: e?.message || String(e) };
         }
     }, [psbtHex, qrFormat]);
-    const copyHex = useCallback(async () => {
-        if (!psbtHex) return;
-        const generation = ++copyGenerationRef.current;
-        if (copyResetTimerRef.current !== null) {
-            clearTimeout(copyResetTimerRef.current);
-            copyResetTimerRef.current = null;
-        }
-        let ok = false;
-        try {
-            ({ ok } = await copyText(psbtHex));
-        } catch {
-            // Clipboard integrations are an external boundary, so a rejection is a copy failure.
-        }
-        if (generation !== copyGenerationRef.current) return;
-        setCopyState(ok ? 'copied' : 'failed');
-        announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
-        if (ok) haptic.tap();
-        else haptic.error();
-        copyResetTimerRef.current = setTimeout(() => {
-            if (generation === copyGenerationRef.current) setCopyState('idle');
-            copyResetTimerRef.current = null;
-        }, 1500);
-    }, [announce, haptic, psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
     return (
         <>
-            <div className={styles.successCard}>
-                <h2 className={styles.successTitle}>{title}</h2>
+            <FormSection title={title}>
                 <p className={styles.successHint}>
                     Take this transaction to your Signer-mode wallet. Paste the hex,
                     or scan the animated QR. Signing authorizes this transaction
@@ -142,7 +98,7 @@ export function WatcherResultPanel({
                 ) : null}
                 <div className={styles.successTxidBlock}>
                     <p className={styles.successLabel}>Unsigned transaction (hex)</p>
-                    <textarea
+                    <Textarea
                         readOnly
                         aria-label="Unsigned transaction hex"
                         value={psbtHex}
@@ -150,24 +106,19 @@ export function WatcherResultPanel({
                         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                     />
                     <div className={styles.successTxidRow}>
-                        <button
-                            type="button"
-                            className={styles.successLink}
-                            onClick={copyHex}
-                            aria-label="Copy unsigned transaction hex"
-                        >
-                            {copyState === 'copied'
-                                ? 'Copied'
-                                : copyState === 'failed'
-                                    ? 'Copy failed: clipboard unavailable'
-                                    : 'Copy hex'}
-                        </button>
+                        <CopyButton
+                            key={psbtHex}
+                            value={psbtHex}
+                            label="Copy hex"
+                            ariaLabel="Copy unsigned transaction hex"
+                        />
                     </div>
                 </div>
                 <div className={styles.successTxidBlock}>
                     <p className={styles.successLabel}>QR format</p>
                     <div role="radiogroup" aria-label="Animated QR format">
                         <label style={{ marginRight: '1rem' }}>
+                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
                             <input
                                 type="radio"
                                 name="watcher-qr-format"
@@ -178,6 +129,7 @@ export function WatcherResultPanel({
                             XCW (this wallet)
                         </label>
                         <label>
+                            {/* Native radio preserves group arrow-key behavior because the kit has no segmented-choice primitive. */}
                             <input
                                 type="radio"
                                 name="watcher-qr-format"
@@ -201,7 +153,7 @@ export function WatcherResultPanel({
                         />
                         <details>
                             <summary className={styles.hint}>Plain-text chunks</summary>
-                            <textarea
+                            <Textarea
                                 readOnly
                                 aria-label={`Unsigned transaction ${formatLabel}`}
                                 value={exportFrames.join('\n')}
@@ -211,7 +163,7 @@ export function WatcherResultPanel({
                         </details>
                     </>
                 ) : null}
-            </div>
+            </FormSection>
             <div className={styles.actions}>
                 {buildAnother ? (
                     <Button variant="secondary" onClick={buildAnother}>

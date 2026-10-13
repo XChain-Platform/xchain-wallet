@@ -160,7 +160,7 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(source).toMatch(/\.actionBtn\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
-    it('contains the WatcherResultPanel card, payload, and action row', () => {
+    it('contains the WatcherResultPanel section, payload, and action row', () => {
         const title = 'Unsignedtransaction'.repeat(24);
         renderAt320(
             <WatcherResultPanel
@@ -175,14 +175,13 @@ describe('shared M to Z components at a 320px viewport', () => {
             />,
         );
 
-        expect(screen.getByRole('heading', { name: title })).toBeVisible();
+        expect(screen.getByRole('region', { name: title })).toBeVisible();
+        expect(screen.getByRole('heading', { name: title }).className).toMatch(/title/);
         expect(screen.getByRole('textbox', { name: 'Unsigned transaction hex' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Build another' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Done' })).toBeVisible();
 
         const source = css('WatcherResultPanel');
-        expect(source).toMatch(/\.successCard\s*\{[^}]*box-sizing:\s*border-box[^}]*width:\s*100%[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/\.successTitle\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(source).toMatch(/\.successTxidBlock textarea\s*\{[^}]*box-sizing:\s*border-box[^}]*max-width:\s*100%/s);
         expect(source).toMatch(/\.actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*min-width:\s*0/s);
     });

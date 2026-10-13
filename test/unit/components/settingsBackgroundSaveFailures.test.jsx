@@ -82,8 +82,8 @@ describe('background settings save failures', () => {
 
     it('shows an endpoint error in the edited chain and restores the persisted URL', async () => {
         renderSection(<NetworkEndpointsSection />);
-        const block = screen.getByText('Bitcoin').parentElement.parentElement;
-        const control = within(block).getByLabelText('Explorer URL');
+        const block = screen.getByRole('region', { name: 'Bitcoin' });
+        const control = within(block).getByRole('textbox', { name: 'Explorer URL' });
         const previous = control.value;
 
         fireEvent.change(control, { target: { value: 'https://private.example.com' } });

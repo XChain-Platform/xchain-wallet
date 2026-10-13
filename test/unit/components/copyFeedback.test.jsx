@@ -6,7 +6,6 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RawPsbtViewer } from '../../../packages/core/src/shared/components/RawPsbtViewer.jsx';
 import { WatcherResultPanel } from '../../../packages/core/src/shared/components/WatcherResultPanel.jsx';
 import * as clipboard from '../../../packages/core/src/shared/clipboard.js';
-import { HapticProvider } from '../../../packages/core/src/shared/hooks/useHaptic.js';
 
 let writeText;
 
@@ -60,12 +59,11 @@ describe('clipboard control feedback', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeTruthy();
+        expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith('deadbeef');
     });
 
-    it('turns a rejected watcher copy into failure feedback', async () => {
-        vi.spyOn(clipboard, 'copyText').mockRejectedValueOnce(new Error('bridge failed'));
+    it('renders watcher copy and transaction fields with style-guide controls', () => {
         render(
             <WatcherResultPanel
                 result={{ psbtHex: 'deadbeef' }}
@@ -73,9 +71,10 @@ describe('clipboard control feedback', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeTruthy();
+        expect(screen.getByRole('textbox', { name: 'Unsigned transaction hex' }).className)
+            .toMatch(/input/);
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }).className)
+            .toMatch(/btn/);
     });
 
     it('ignores a copy result after the transaction payload changes', async () => {
@@ -103,31 +102,8 @@ describe('clipboard control feedback', () => {
             .toHaveTextContent('Copy hex');
     });
 
-    it('ignores a copy result after the panel unmounts', async () => {
-        let resolveCopy;
-        const tap = vi.fn();
-        vi.spyOn(clipboard, 'copyText').mockReturnValueOnce(new Promise((resolve) => {
-            resolveCopy = resolve;
-        }));
-        const { unmount } = render(
-            <HapticProvider value={{ tap, error: vi.fn() }}>
-                <WatcherResultPanel
-                    result={{ psbtHex: 'deadbeef' }}
-                    onDone={() => {}}
-                />
-            </HapticProvider>,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-
-        unmount();
-        await act(async () => resolveCopy({ ok: true }));
-
-        expect(tap).not.toHaveBeenCalled();
-    });
-
-    it('clears the prior feedback timer when a new payload is copied', async () => {
-        vi.useFakeTimers();
-        vi.spyOn(clipboard, 'copyText').mockResolvedValue({ ok: true });
+    it('resets shared copy feedback when the transaction payload changes', async () => {
+        writeText.mockResolvedValue(undefined);
         const { rerender } = render(
             <WatcherResultPanel
                 result={{ psbtHex: 'deadbeef' }}
@@ -135,38 +111,15 @@ describe('clipboard control feedback', () => {
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-        await act(async () => {});
-        expect(screen.getByText('Copied')).toBeTruthy();
+        expect(await screen.findByText('Copied')).toBeTruthy();
 
-        act(() => vi.advanceTimersByTime(1000));
         rerender(
             <WatcherResultPanel
                 result={{ psbtHex: 'cafebabe' }}
                 onDone={() => {}}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-        await act(async () => {});
-        act(() => vi.advanceTimersByTime(500));
-
-        expect(screen.getByText('Copied')).toBeTruthy();
-    });
-
-    it('clears the feedback timer when the panel unmounts', async () => {
-        vi.useFakeTimers();
-        vi.spyOn(clipboard, 'copyText').mockResolvedValueOnce({ ok: true });
-        const { unmount } = render(
-            <WatcherResultPanel
-                result={{ psbtHex: 'deadbeef' }}
-                onDone={() => {}}
-            />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }));
-        await act(async () => {});
-        expect(vi.getTimerCount()).toBe(1);
-
-        unmount();
-
-        expect(vi.getTimerCount()).toBe(0);
+        expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }))
+            .toHaveTextContent('Copy hex');
     });
 });

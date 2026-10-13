@@ -39,6 +39,11 @@ assert.match(
 );
 assert.match(
     panelSrc,
+    /import \{ CopyButton, FormSection, Textarea \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    'panel uses the shared section, copy, and textarea primitives',
+);
+assert.match(
+    panelSrc,
     /import \{ encodeXcwChunks \} from '\.\.\/\.\.\/uri\/psbtQr\.js';/,
     'panel imports encodeXcwChunks',
 );
@@ -88,9 +93,9 @@ assert.match(panelSrc, /XCW \(this wallet\)/, 'panel labels the XCW radio choice
 
 const cssSrc = readFileSync(join(wsRoot, cssPath), 'utf8');
 for (const cls of [
-    'successCard', 'successTitle', 'successHint',
+    'successHint',
     'successSummary', 'successRow', 'successMono',
-    'successTxidBlock', 'successTxidRow', 'successLink',
+    'successTxidBlock', 'successTxidRow',
     'successLabel', 'hint', 'actions',
 ]) {
     assert.ok(

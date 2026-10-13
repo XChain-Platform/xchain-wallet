@@ -32,50 +32,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { Button, EmptyState, FormSection, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const CHAIN_BLOCK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
-const HEADER_ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--xc-space-2)',
-};
-const FIELD_LABEL = {
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text-muted)',
-    marginBottom: 2,
-};
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-};
-const ACTION_PRIMARY = {
-    ...ACTION_BTN,
-    background: 'var(--xc-accent-primary)',
-    borderColor: 'var(--xc-accent-primary)',
-    color: 'var(--xc-bg)',
-};
 
 export function NetworkEndpointsSection() {
     const { settings, loading, error, update } = useSettings();
@@ -92,7 +55,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <Status text="No chains registered." />;
+        return <EmptyState title="No chains registered." titleAs="p" />;
     }
 
     return (
@@ -150,35 +113,23 @@ function ChainRegistryRefreshRow() {
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Chain registry refresh
-                    </span>
-                    {/* "Descriptor" is the ChainDescriptor type name, and this
-                        panel is an ordinary Settings section, not a
-                        developer-gated one, so the count says "networks". It
-                        stays qualified as "in the registry" on purpose:
-                        descriptorCount is what the hub published registry-wide,
-                        while the chain list below is filtered through
-                        filterChainsForUser (regtest hidden unless developer
-                        mode), so a bare count would name a bigger number than
-                        the list under it. */}
-                    <span style={ROW_HINT}>
-                        {registryStatusText(status, manualResult)}
-                    </span>
-                </div>
-                <button
+        <FormSection
+            headingLevel="h3"
+            title="Chain registry refresh"
+            description={registryStatusText(status, manualResult)}
+        >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
                     type="button"
                     onClick={onRefresh}
                     disabled={refreshing}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="secondary"
                 >
                     {refreshing ? 'Refreshing…' : 'Refresh now'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -358,15 +309,11 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <span style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                    {descriptor.displayName}{networkSuffix}
-                </span>
-                <span style={ROW_HINT}>
-                    {isCustom ? 'Custom' : 'Default'}
-                </span>
-            </div>
+        <FormSection
+            headingLevel="h3"
+            title={`${descriptor.displayName}${networkSuffix}`}
+            description={isCustom ? 'Custom' : 'Default'}
+        >
             <UrlField
                 label="Explorer URL"
                 value={draft.explorerUrl}
@@ -404,34 +351,33 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             ) : null}
             <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 {isCustom || dirty ? (
-                    <button type="button" onClick={onReset} style={ACTION_BTN} disabled={saving}>Reset to default</button>
+                    <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                        Reset to default
+                    </Button>
                 ) : null}
                 {dirty || editing ? (
-                    <button type="button" onClick={onCommit} style={ACTION_PRIMARY} disabled={!dirty || saving}>
+                    <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
                         {saving ? 'Saving…' : 'Save'}
-                    </button>
+                    </Button>
                 ) : null}
             </div>
-        </div>
+        </FormSection>
     );
 }
 
 function UrlField({ label, value, placeholder, onChange }) {
     return (
-        <div>
-            <div style={FIELD_LABEL}>{label}</div>
-            <input
-                type="url"
-                enterKeyHint="done"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                value={value}
-                placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                aria-label={label}
-                style={{ ...INPUT, width: '100%' }}
-            />
-        </div>
+        <Input
+            type="url"
+            label={label}
+            enterKeyHint="done"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+        />
     );
 }
