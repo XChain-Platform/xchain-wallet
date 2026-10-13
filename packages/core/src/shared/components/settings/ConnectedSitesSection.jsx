@@ -47,6 +47,7 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
+import local from './ConnectedSitesSection.module.css';
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
@@ -486,16 +487,11 @@ function SignThrottlePanel() {
             <form
                 aria-label="Sign-request throttle controls"
                 onSubmit={onApply}
-                style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                }}
+                className={local.controlRow}
             >
                 <Input
                     id="sign-throttle-burst"
+                    size="md"
                     label="Burst"
                     type="number"
                     inputMode="numeric"
@@ -514,6 +510,7 @@ function SignThrottlePanel() {
                 />
                 <Input
                     id="sign-throttle-window"
+                    size="md"
                     label="Window (seconds)"
                     type="number"
                     inputMode="numeric"
@@ -533,7 +530,7 @@ function SignThrottlePanel() {
                 <Button
                     type="submit"
                     disabled={submitting}
-                    size="sm"
+                    size="md"
                     variant="primary"
                 >
                     {submitting ? 'Applying…' : 'Apply'}
@@ -590,9 +587,10 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         ))}
                     </ul>
                 )}
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
+                <form onSubmit={onSubmit} className={`${local.controlRow} ${local.blockRow}`}>
                     <Input
                         type="text"
+                        size="md"
                         enterKeyHint="go"
                         autoCapitalize="off"
                         autoCorrect="off"
@@ -604,7 +602,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     />
                     <Button
                         type="submit"
-                        size="sm"
+                        size="md"
                         variant="danger"
                         loading={pendingAction === 'block:manual'}
                         disabled={!manualBlock.trim() || pendingAction !== null}

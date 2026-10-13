@@ -14,27 +14,16 @@
 .toolbar {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
-.search {
-    flex: 1 1 0;
+.toolbar > * {
+    flex: 1 1 12rem;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
+    margin-bottom: 0;
 }
 
 /* Encrypted-session requests: counterparties who published their key to one of
