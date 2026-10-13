@@ -20,11 +20,25 @@ import styles from './templateExamples.module.css';
 
 const noop = () => {};
 
+const GUTTER_GUIDE_STYLE = {
+    position: 'fixed',
+    insetBlock: 0,
+    insetInline: 'var(--xc-page-gutter)',
+    borderInline: '1px dashed var(--xc-accent-primary)',
+    pointerEvents: 'none',
+    zIndex: 'var(--xc-z-sticky)',
+};
+
+function PageGutterGuide() {
+    return <div data-page-gutter-guide aria-hidden="true" style={GUTTER_GUIDE_STYLE} />;
+}
+
 /** A one-section form: Verify signature, as the app renders it. */
 export function ExampleFormScreen({ withError = false }) {
     const [address, setAddress] = useState('');
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Verify signature" />}>
+            <PageGutterGuide />
             <FormPage
                 label="Verify signature"
                 onSubmit={(e) => e.preventDefault()}
@@ -55,6 +69,7 @@ export function ExampleFormScreen({ withError = false }) {
 export function ExampleSectionedFormScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Issue token" />}>
+            <PageGutterGuide />
             <FormPage
                 sectioned
                 label="Issue token"
@@ -96,6 +111,7 @@ const ROWS = [
 export function ExampleListScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Payments due" />}>
+            <PageGutterGuide />
             <ListPage
                 intro="Coin payments your matched DEX orders are waiting on."
                 toolbar={(
@@ -139,6 +155,7 @@ export function ExampleListScreen() {
 export function ExampleEmptyScreen() {
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Governance" />}>
+            <PageGutterGuide />
             <ListPage>
                 <EmptyState
                     icon={<Icon.HandshakeIcon />}

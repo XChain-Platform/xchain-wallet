@@ -12,7 +12,7 @@
 // wallet's reusable component vocabulary. Add a new <Section> for each
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
-import { VIEWS, ViewContext, ViewFrame, WidthTriptych, useViewState } from './frames.jsx';
+import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import {
     DesignTokensSection,
     DOCUMENTED_TOKENS,
@@ -220,6 +220,12 @@ const PAGE_TEMPLATE_USAGE = Object.freeze({
     dontRule: <>Do not box a list into the 560px form column or choose the layout in JavaScript.</>,
 });
 
+export const TEMPLATE_VIEWS = Object.freeze([
+    { id: 'compact', label: 'Compact', width: 360, note: '12px gutter' },
+    { id: 'rail', label: 'Rail', width: 768, note: '16px gutter' },
+    { id: 'full', label: 'Full', width: 1024, note: '24px gutter' },
+]);
+
 export function Guidance({
     what,
     when = PAGE_TEMPLATE_USAGE.when,
@@ -278,8 +284,8 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
 }
 
 /**
- * A page-template example at all three widths side by side; the caller
- * renders one Screen per frame.
+ * A page-template example at compact, rail, and full widths side by side;
+ * the caller renders one Screen per frame.
  *
  * @param {object} props
  * @param {string} props.label
@@ -289,8 +295,24 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
 export function TemplateExample({ label, render, minHeight }) {
     return (
         <div className="sg-example sg-example-wide">
-            <p className="sg-example-label">{label} · 360 / 400 / 1024px side by side</p>
-            <WidthTriptych title={label} render={render} minHeight={minHeight} />
+            <p className="sg-example-label">{label} · compact / rail / full</p>
+            <div className="sg-triptych">
+                {TEMPLATE_VIEWS.map((view) => (
+                    <figure key={view.id} className="sg-triptych-cell">
+                        <figcaption className="sg-frame-label">
+                            {view.label} · {view.width}px · {view.note}
+                        </figcaption>
+                        <ViewportFrame
+                            width={view.width}
+                            minHeight={minHeight}
+                            padded={false}
+                            title={`${label}, ${view.label} ${view.width}px`}
+                        >
+                            {render(view)}
+                        </ViewportFrame>
+                    </figure>
+                ))}
+            </div>
         </div>
     );
 }

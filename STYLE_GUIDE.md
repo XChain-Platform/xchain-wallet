@@ -2,7 +2,7 @@
 
 Living doc. The rule it exists to enforce: **if you find yourself copying CSS or JSX between two routes, lift it.** When in doubt, prefer one of the shared primitives below over re-rolling from scratch.
 
-The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches every example between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view.
+The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
 
 ## Page templates
 
@@ -19,6 +19,19 @@ import { Screen, PageHeader, FormPage, FormSection, ListPage, EmptyState, Sectio
 | `<ListPage>` | shows things: a list, table, card grid, or read-only detail rows | Payments due, contacts, my tokens, polls, a dispenser's detail |
 
 Two parts go inside them: `<EmptyState>` is the one empty state (a list that loaded with nothing in it), and `<SectionHeader>` titles a group of content (it is also FormSection's heading). A detail screen with an Edit button is a ListPage; the edit screen it opens is a FormPage.
+
+### The single page gutter
+
+`Screen.body` owns the only page inset. It applies `padding-inline: var(--xc-page-gutter)` and `padding-block-start: var(--xc-page-top)`. The responsive values are:
+
+| layout | `--xc-page-gutter` | `--xc-page-top` |
+|---|---:|---:|
+| compact, below 640px | 12px | 12px |
+| rail, 640px to 899px | 16px | 16px |
+| full, 900px and up | 24px | 16px |
+| short landscape, at any width | unchanged for its width | 8px |
+
+Page templates and route content do not add another outer horizontal inset. `ListPage` stretches across the complete content box. `FormPage` is bare below 600px and becomes one centered 560px card at 600px and up. The global `AppHeader`, `Screen.header`, and `Screen.footer` are chrome, not page content, so they keep their own padding and do not consume either page token.
 
 ### The form rule: narrow is bare, wide is one card
 
@@ -42,15 +55,16 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `420px` | narrow row and toolbar stacking |
 | `480px` | compact grids, dense controls and the header network badge |
 | `600px` | the form and narrow route boundary |
-| `640px` | compact shell fallback |
+| `640px` | rail layout and sidebar begin |
+| `900px` | full layout and labelled sidebar begin |
 | `48rem` | wide collectible grids |
 | `1024px` | desktop reference frame and future desktop-only refinements |
 
-The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
 
 ### The list rule: full width to the scrollbar
 
-`<ListPage>` fills the Screen scroll body from the left page gutter to the reserved scrollbar gutter. Do not wrap it in a card or add a centered maximum width: lists, tables and card grids use all available content width. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+`<ListPage>` fills the Screen content box from `--xc-page-gutter` on the left to the page gutter and reserved scrollbar gutter on the right. Do not wrap it in a card or add a centered maximum width: lists, tables and card grids use all available content width at compact, rail, and full widths. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
 
 ### Props
 
@@ -117,7 +131,7 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
 | `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as circular 38px controls |
 
-**Why the chevron alignment is non-obvious**: AppHeader pads its bar by `space-3` while Screen.header pads by `space-4`, so the toolbar content starts 4px too far right. On top of that, the back chevron glyph sits about 10px inside its own 28px SVG (the `BackIcon` vertex is at 9/24 of the viewBox), so a box-aligned button still reads indented. `<PageHeader />` subtracts both via `margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-page-header-chevron-nudge))` so the chevron's point lands under the AppHeader logo's left edge. The trailing slot mirrors the bar-padding delta on the right, and its buttons render as circular 38px controls (the round counterpart to AppHeader's square menu buttons) so their right edges line up with the App header buttons.
+**Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. The back chevron glyph also sits about 10px inside its own 28px SVG (the `BackIcon` vertex is at 9/24 of the viewBox), so a box-aligned button still reads indented. `<PageHeader />` owns the optical correction through `--xc-page-header-chevron-nudge`. Its trailing slot mirrors the chrome alignment on the right, and its buttons render as circular 38px controls so their right edges line up with the AppHeader buttons.
 
 ## Buttons
 
@@ -288,6 +302,8 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-space-5` | 20px | loose cluster spacing |
 | `--xc-space-6` | 24px | card outer padding |
 | `--xc-space-8` | 32px | section breaks and page-level rhythm |
+| `--xc-page-gutter` | 12px compact, 16px rail, 24px full | the sole inline page inset, applied by `Screen.body` |
+| `--xc-page-top` | 12px compact, 16px rail/full, 8px short landscape | the sole page-content top inset, applied by `Screen.body` |
 | `--xc-text-xs` | 0.6875rem | metadata, hint text |
 | `--xc-text-sm` | 0.8125rem | labels, secondary body text |
 | `--xc-text-md` | 0.875rem | default body text and button labels |
