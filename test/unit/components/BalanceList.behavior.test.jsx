@@ -5,7 +5,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { BalanceList, isSmallBalanceRow } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import {
+    BalanceList,
+    buildBalanceRows,
+    isSmallBalanceRow,
+} from '../../../packages/core/src/shared/components/BalanceList.jsx';
 
 afterEach(() => cleanup());
 
@@ -150,5 +154,27 @@ describe('BalanceList ordering and visibility', () => {
 
         expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
         expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+    });
+
+    it('labels confirmed and pending amounts separately', () => {
+        const [pending] = buildBalanceRows({
+            'bitcoin-mainnet': [{
+                address: 'bc1qpending',
+                balances: {
+                    native: {
+                        tick: 'BTC', quantity: '0', pendingQuantity: '25000000', divisibility: 8,
+                    },
+                    tokens: [],
+                },
+            }],
+        }, {
+            get: () => ({ coin: 'bitcoin', displayName: 'Bitcoin', networkKind: 'mainnet' }),
+        });
+        expect(isSmallBalanceRow(pending)).toBe(false);
+        render(<BalanceList rows={[pending]} hideSmallBalances />);
+
+        expect(screen.getByRole('listitem')).toHaveTextContent('0.00000000 confirmed');
+        expect(screen.getByTestId('balance-pending')).toHaveTextContent('0.25000000 pending');
+        expect(screen.queryByTestId('small-balances-toggle')).toBeNull();
     });
 });

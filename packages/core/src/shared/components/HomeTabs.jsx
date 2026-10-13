@@ -552,10 +552,12 @@ function Placeholder({ title, body, action = null }) {
 
 function hasNonZeroQuantity(row) {
     try {
-        return BigInt(row?.quantity ?? 0) !== 0n;
+        return BigInt(row?.quantity ?? 0) !== 0n || BigInt(row?.pendingQuantity ?? 0) !== 0n;
     } catch {
         const quantity = Number(row?.quantity);
-        return Number.isFinite(quantity) && quantity !== 0;
+        const pending = Number(row?.pendingQuantity);
+        return (Number.isFinite(quantity) && quantity !== 0)
+            || (Number.isFinite(pending) && pending !== 0);
     }
 }
 

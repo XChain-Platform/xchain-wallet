@@ -266,6 +266,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
     );
+    const hasPending = safeBigInt(row.pendingQuantity) > 0n;
     const clickable = typeof onSelect === 'function';
     const actionLabel = clickable && typeof getActionLabel === 'function'
         ? getActionLabel(row)
@@ -371,8 +372,20 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             ? '•••••'
                             : row.unavailable === 'all'
                                 ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                                : <FitAmount title={quantityLabel}>{quantityLabel}</FitAmount>}
+                                : (
+                                    <FitAmount title={quantityLabel}>
+                                        {quantityLabel}
+                                        {hasPending ? <span className={styles.subtitle}> confirmed</span> : null}
+                                    </FitAmount>
+                                )}
                     </div>
+                    {hasPending ? (
+                        <div className={styles.fiat} data-testid="balance-pending">
+                            {balancesHidden
+                                ? '••• pending'
+                                : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
+                        </div>
+                    ) : null}
                     {row.escrowed ? (
                         <div className={styles.fiat} data-testid="balance-escrowed">
                             {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
@@ -521,11 +534,11 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
 /**
  * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
  *
- * Zero is always dust, which is the case the user actually hits: an empty
- * LTC / DOGE row on a Bitcoin-only wallet. Above zero, native rows compare
- * against their chain's threshold, and divisible tokens against a ten-thousandth
- * of a unit (the same magnitude the spam heuristic already calls airdrop dust).
- * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
+ * Zero confirmed quantity is dust only when no pending native funds exist.
+ * Above zero, native rows compare against their chain's threshold, and
+ * divisible tokens against a ten-thousandth of a unit (the same magnitude the
+ * spam heuristic already calls airdrop dust). An indivisible token is never
+ * dust: one unit is one whole thing, usually an NFT.
  *
  * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
  * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
@@ -533,7 +546,7 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  */
 export function isSmallBalanceRow(row, threshold = 'dust') {
     if (!row) return false;
-    if (row.escrowed || row.unavailable) return false;
+    if (row.escrowed || row.unavailable || safeBigInt(row.pendingQuantity) > 0n) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
@@ -637,6 +650,10 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     });
                 }
                 nativeAcc.quantity += safeBigInt(b.native.quantity);
+                if (b.native.pendingQuantity != null) {
+                    nativeAcc.pendingQuantity = (nativeAcc.pendingQuantity || 0n)
+                        + safeBigInt(b.native.pendingQuantity);
+                }
             }
 
             if (Array.isArray(b.tokens)) {
@@ -693,7 +710,11 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
         if (nativeAcc) out.push(nativeAcc);
         for (const acc of tokenAcc.values()) out.push(acc);
     }
-    return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
+    return out.map((r) => ({
+        ...r,
+        quantity: r.quantity.toString(),
+        ...(r.pendingQuantity == null ? {} : { pendingQuantity: r.pendingQuantity.toString() }),
+    }));
 }
 
 /**

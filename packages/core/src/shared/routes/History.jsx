@@ -517,6 +517,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setGroupingModeState(readPersistedGroupingMode(walletId));
         observedAtRef.current.clear();
         lastMempoolSeenRef.current.clear();
+        rememberedMempoolRef.current.clear();
         initialFocusFiredRef.current = false;
         let cancelled = false;
         setLoadError(null);
@@ -600,6 +601,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // is simply absent. So the last poll that did list each transaction is
     // remembered here, and travels to the entry that outlives the row.
     const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Incoming transactions have no local PendingTx record to keep them in
+    // the list after they leave the mempool. Retain the last network entry so
+    // a successful later read can show it as dropped until confirmation takes
+    // its place. A failed read keeps the last known state and proves nothing
+    // about whether the transaction remains in the mempool.
+    const rememberedMempoolRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     // One re-fetch rule for this mount, on the same interval the beat below
     // runs at: a `focus` bump only buys something once the rows are older than
@@ -721,16 +728,25 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         // confirmed history exactly as it did before.
                         typeof messaging.getAddressMempool === 'function'
                             ? messaging.getAddressMempool({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
-                            : Promise.resolve([]),
+                                .then((r) => ({ rows: extractRows(r), ok: true }))
+                                .catch(() => ({ rows: [], ok: false }))
+                            : Promise.resolve({ rows: [], ok: false }),
                         typeof messaging.getPendingTxsForAddress === 'function'
                             ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
                                 .then((r) => extractRows(r))
                                 .catch(() => [])
                             : Promise.resolve([]),
-                    ]).then(([history, links, mempool, pendingTxs]) => (
-                        { chainId: cid, address: a.address, addressLabel: a.label || '', history, links, mempool, pendingTxs }
+                    ]).then(([history, links, mempoolRead, pendingTxs]) => (
+                        {
+                            chainId: cid,
+                            address: a.address,
+                            addressLabel: a.label || '',
+                            history,
+                            links,
+                            mempool: mempoolRead.rows,
+                            mempoolReadOk: mempoolRead.ok,
+                            pendingTxs,
+                        }
                     )),
                 );
             }
@@ -811,18 +827,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             const nowMs = Date.now();
             /** @type {any[]} */
             const pendingCandidates = [];
+            const currentMempoolKeys = new Set();
+            const successfulMempoolScopes = new Set();
             for (const r of perAddrResults) {
+                const scope = `${r.chainId}:${String(r.address || '').toLowerCase()}`;
+                if (r.mempoolReadOk) successfulMempoolScopes.add(scope);
                 for (const row of (r.mempool || [])) {
                     const hash = String(row?.tx_hash ?? row?.txHash ?? '');
                     if (!hash) continue;
-                    lastMempoolSeenRef.current.set(`${r.chainId}:${hash.toLowerCase()}`, nowMs);
-                    pendingCandidates.push({ ...mempoolRowToEntry({
+                    const key = `${r.chainId}:${hash.toLowerCase()}`;
+                    currentMempoolKeys.add(key);
+                    lastMempoolSeenRef.current.set(key, nowMs);
+                    const baseEntry = mempoolRowToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         row,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
-                    }), receiveLabel: r.addressLabel });
+                    });
+                    const entry = baseEntry ? { ...baseEntry, receiveLabel: r.addressLabel } : baseEntry;
+                    pendingCandidates.push(entry);
+                    if (entry) rememberedMempoolRef.current.set(key, entry);
                 }
                 for (const record of (r.pendingTxs || [])) {
                     // A failed record may have no txid (it died before
@@ -844,6 +869,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     }), receiveLabel: r.addressLabel });
                 }
             }
+            for (const [key, entry] of rememberedMempoolRef.current) {
+                if (currentMempoolKeys.has(key)) continue;
+                const scope = `${entry.chainId}:${String(entry.address || '').toLowerCase()}`;
+                if (!successfulMempoolScopes.has(scope)) {
+                    pendingCandidates.push(entry);
+                    continue;
+                }
+                const remembered = {
+                    ...entry,
+                    pending: {
+                        ...entry.pending,
+                        origin: 'remembered',
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key)
+                            ?? entry.pending.lastMempoolSeenMs
+                            ?? entry.pending.observedAtMs,
+                    },
+                };
+                rememberedMempoolRef.current.set(key, remembered);
+                pendingCandidates.push(remembered);
+            }
             const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
             // Forget the observation times of transactions that are no longer
             // pending, so the map tracks the mempool rather than growing with
@@ -856,6 +901,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             }
             for (const key of [...lastMempoolSeenRef.current.keys()]) {
                 if (!liveKeys.has(key)) lastMempoolSeenRef.current.delete(key);
+            }
+            for (const key of [...rememberedMempoolRef.current.keys()]) {
+                if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
             }
             merged.entries.sort(compareMergedEntries);
             setEntries(merged.entries);
@@ -890,17 +938,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
-    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation
-    // counts on confirmed rows. Derived from the highest blockIndex
-    // seen across loaded history rows (lower bound for the chain tip,
-    // since the wallet has no dedicated tip endpoint yet; explorer's
-    // /network is still a placeholder, see FOLLOWUPS.md). A user with
-    // any confirmed activity sees a meaningful count; a user with one
-    // freshly-confirmed row gets "1 confirmation" (the tip is at the
-    // row itself, which is correct).
+    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation counts on confirmed rows.
+    // The polled indexer watermark advances even when this wallet has no new
+    // activity. Loaded rows remain a fallback and cover a watermark that lags
+    // the history response during ingestion.
     const chainTipByChainId = useMemo(() => {
         /** @type {Record<string, number>} */
-        const tips = {};
+        const tips = { ...indexerWatermarkByChainId };
         for (const e of entries) {
             if (!e || !e.chainId) continue;
             // A record the wallet proved into a block names that block in
@@ -911,7 +955,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
         }
         return tips;
-    }, [entries]);
+    }, [entries, indexerWatermarkByChainId]);
 
     // §28.3: fetch the indexer watermark (latest processed block)
     // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
@@ -942,7 +986,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setIndexerWatermarkByChainId(next);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId]);
+    }, [addressesByChain, messaging, walletId, refreshTick]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
