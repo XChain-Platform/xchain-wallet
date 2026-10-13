@@ -288,10 +288,10 @@ export class DispenserEscrowWatcher {
             try {
                 await this._notify({
                     kind: 'dispenser-escrow',
-                    title: empty ? 'Your dispenser is empty' : 'Your dispenser is running low',
+                    title: empty ? `${d.giveTick} dispenser is empty` : `${d.giveTick} dispenser is running low`,
                     body: empty
-                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has run out of ${d.giveTick} and is turning buyers away. Top it up to start serving again.`
-                        : `Dispenser #${d.actionIndex} on ${chainLabel} can serve ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'} before it runs out of ${d.giveTick}.`,
+                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has no ${d.giveTick} left and is turning buyers away. Top it up to resume sales.`
+                        : `Dispenser #${d.actionIndex} on ${chainLabel} has enough ${d.giveTick} for ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'}.`,
                     data: {
                         chainId,
                         actionIndex: d.actionIndex,

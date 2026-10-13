@@ -267,7 +267,7 @@ export class DeadlineWatcher {
             await this._safeNotify({
                 kind: 'deadline-summary',
                 title: `${fresh.length} deadlines approaching`,
-                body: `${fresh.length} of your open items on ${chainLabel} run out within ${describeWindow(this._windowSeconds)}. The soonest is your ${LABEL_BY_KIND[fresh[0].kind]} ${fresh[0].remainingText}.`,
+                body: `${fresh.length} items on ${chainLabel} expire or close within ${describeWindow(this._windowSeconds)}. Your ${LABEL_BY_KIND[fresh[0].kind]} is first, ${fresh[0].remainingText}.`,
                 data: { chainId, count: fresh.length, kinds: fresh.map((d) => d.kind) },
             });
             return changed;
@@ -276,7 +276,7 @@ export class DeadlineWatcher {
         for (const d of fresh) {
             await this._safeNotify({
                 kind: 'deadline',
-                title: `Your ${LABEL_BY_KIND[d.kind]} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
+                title: `${LABEL_BY_KIND[d.kind][0].toUpperCase()}${LABEL_BY_KIND[d.kind].slice(1)} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
                 body: d.body(chainLabel),
                 data: {
                     chainId,
