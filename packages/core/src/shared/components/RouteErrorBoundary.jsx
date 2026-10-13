@@ -46,6 +46,11 @@ export class RouteErrorBoundary extends Component {
         if (typeof window !== 'undefined') window.location.reload();
     };
 
+    retry = () => {
+        this.props.onRetry?.();
+        this.setState({ failed: false });
+    };
+
     render() {
         if (!this.state.failed) return this.props.children;
 
@@ -56,7 +61,10 @@ export class RouteErrorBoundary extends Component {
                         Back to Home
                     </Button>
                 ) : null}
-                <Button type="button" variant="primary" onClick={this.reload}>
+                <Button type="button" variant="primary" onClick={this.retry}>
+                    Try again
+                </Button>
+                <Button type="button" variant="secondary" onClick={this.reload}>
                     Reload
                 </Button>
             </>
@@ -68,8 +76,8 @@ export class RouteErrorBoundary extends Component {
                     <h1 className={styles.title}>This screen could not be shown</h1>
                     <p className={styles.body}>
                         {this.props.onHome
-                            ? 'Something went wrong while showing this screen. You can go back Home without locking your wallet, or reload the app.'
-                            : 'Something went wrong while showing this screen. Reload the app to try again.'}
+                            ? 'Something went wrong while showing this screen. Try again, go back Home without locking your wallet, or reload the app.'
+                            : 'Something went wrong while showing this screen. Try again or reload the app.'}
                     </p>
                 </FormPage>
             </div>

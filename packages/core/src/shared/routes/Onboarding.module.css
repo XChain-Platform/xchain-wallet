@@ -5,6 +5,8 @@
     text-align: center;
     padding: var(--xc-space-4) 0 var(--xc-space-6);
     animation: heroEnter 380ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    min-width: 0;
+    width: 100%;
 }
 
 .heroFull {
@@ -16,6 +18,8 @@
     max-width: 560px;
     margin: 0 auto;
     animation: heroEnter 460ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    min-width: 0;
+    width: 100%;
 }
 
 @keyframes heroEnter {
@@ -74,6 +78,8 @@
     flex-direction: column;
     gap: var(--xc-space-2);
     animation: actionsEnter 460ms cubic-bezier(0.2, 0.8, 0.3, 1) 140ms both;
+    min-width: 0;
+    width: 100%;
 }
 
 .actionsFull {
@@ -83,6 +89,27 @@
     max-width: 360px;
     margin: 0 auto;
     animation: actionsEnter 540ms cubic-bezier(0.2, 0.8, 0.3, 1) 180ms both;
+    min-width: 0;
+    width: 100%;
+}
+
+/* Short landscape viewports keep the first actions near the fold while the
+   Screen body remains the single scroll container for every later action. */
+@media (max-height: 520px) {
+    .heroPopup,
+    .heroFull {
+        padding: var(--xc-space-2) 0 var(--xc-space-3);
+    }
+
+    .logoPopup,
+    .logoFull {
+        width: 96px;
+        margin-bottom: var(--xc-space-1);
+    }
+
+    .taglineFull {
+        margin-bottom: var(--xc-space-2);
+    }
 }
 
 @keyframes actionsEnter {
@@ -228,4 +255,37 @@
 
 .licenseAck input[type="checkbox"] {
     margin-top: 2px;
+}
+
+/* Short landscape screens retain every onboarding action while trimming
+   decorative height around the brand and license gate. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .heroPopup,
+    .heroFull {
+        padding: 0;
+    }
+
+    .logoPopup,
+    .logoFull {
+        width: 96px;
+        margin-bottom: var(--xc-space-1);
+    }
+
+    .taglineFull {
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .actionsPopup,
+    .actionsFull {
+        gap: var(--xc-space-1);
+    }
+
+    .licenseHero {
+        margin-bottom: 0;
+    }
+
+    .licenseScroll {
+        min-height: 96px;
+        padding: var(--xc-space-2) var(--xc-space-3);
+    }
 }

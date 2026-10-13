@@ -882,6 +882,7 @@ export function ManageToken({
                         {subassetTicks.length > 0 ? (
                             <>
                                 <SectionHeader as="h3" title={`Subassets (${subassetTicks.length})`} />
+                                {/* Safari needs an explicit list role because this class removes list styling. */}
                                 <ul className={styles.subassetList} role="list">
                                     {subassetTicks.slice(0, 20).map((t) => (
                                         <li key={t} className={styles.subassetItem}>{t}</li>
@@ -923,6 +924,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
         );
     }
     return (
+        /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
             {listings.map((d, i) => {
                 // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT (0 on a
@@ -968,6 +970,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
     );
     if (orders.length === 0) return <EmptyState title="No open orders" body={`Open orders involving ${tick} appear here.`} titleAs="p" />;
     return (
+        /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
             {orders.slice(0, 50).map((o, i) => {
                 const giveTick = o.give_tick || o.give_coin || o.giveTick || o.giveCoin || '';
@@ -1005,6 +1008,7 @@ function SwapsPanel({ swaps, error, tick }) {
     );
     if (swaps.length === 0) return <EmptyState title="No recent swaps" body={`Recent swaps involving ${tick} appear here.`} titleAs="p" />;
     return (
+        /* Safari needs an explicit list role because this class removes list styling. */
         <ul className={styles.list} role="list">
             {swaps.slice(0, 50).map((s, i) => {
                 const giveTick = s.give_tick || s.give_coin || s.giveTick || s.giveCoin || '';
@@ -1105,6 +1109,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
     );
     return (
         <>
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {activity.slice(0, 20).map((a, i) => {
                     // `action` is the key the explorer's /history/<tick>/token rows

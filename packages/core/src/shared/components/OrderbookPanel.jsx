@@ -34,6 +34,7 @@ import {
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import tableStyles from './DataTable.module.css';
+import styles from './MarketTrading.module.css';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -102,11 +103,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))',
-                gap: '0.5rem',
-            }}>
+            <div className={styles.orderBookGrid}>
                 <LevelsColumn
                     title="Bids"
                     side="bid"
@@ -143,17 +140,23 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
 
 function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, tick2 }) {
     return (
-        <div style={{ minWidth: 0 }}>
-            <table className={tableStyles.table}>
-                <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
-                <thead>
-                    <tr>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price ({tick2})</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Total ({tick1})</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <div
+            className={styles.levelsScroller}
+            role="region"
+            aria-label={`${title} order book levels`}
+            tabIndex={0}
+        >
+            <div className={styles.levelsTable}>
+                <table className={tableStyles.table}>
+                    <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
+                    <thead>
+                        <tr>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price ({tick2})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Total ({tick1})</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     {levels.map((level) => (
                         <LevelRow
                             key={`${side}-${level.displayPrice}`}
@@ -163,8 +166,9 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
                             onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
                         />
                     ))}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }

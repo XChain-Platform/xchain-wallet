@@ -57,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
 });
 
@@ -66,7 +67,9 @@ describe('notification categories and permission', () => {
         globalThis.Notification = { permission: 'denied', requestPermission: vi.fn() };
         try {
             render(<NotificationsSection />);
-            expect(screen.getByText(/Blocked by your browser or system settings/)).toBeTruthy();
+            expect(screen.getByText(/Notifications are blocked/)).toHaveTextContent(
+                'Open your browser or system settings, find XChain Wallet, and allow notifications.',
+            );
             expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
         } finally {
             globalThis.Notification = prior;
@@ -139,6 +142,21 @@ describe('price alert manager', () => {
             targetFiat: 65000,
             fiatCurrency: 'usd',
         }));
+    });
+
+    it('shows when a price alert triggered with its exact local time', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-01-15T12:00:00Z'));
+        vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('Jan 15, 2026, 3:58 AM PST');
+        priceAlerts.alerts = [alertRecord({
+            status: 'triggered',
+            triggeredAt: '2026-01-15T11:58:00.000Z',
+        })];
+
+        render(<NotificationsSection walletId="wallet-1" />);
+
+        const time = screen.getByText('2 min ago');
+        expect(time).toHaveAttribute('title', 'Jan 15, 2026, 3:58 AM PST');
     });
 
     it('deletes an alert', async () => {

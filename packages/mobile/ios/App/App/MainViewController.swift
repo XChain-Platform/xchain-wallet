@@ -34,6 +34,20 @@ import WebKit
 
 class MainViewController: CAPBridgeViewController {
 
+    private var launchCover: UIView?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let cover = UIImageView(image: UIImage(named: "Splash"))
+        cover.backgroundColor = .systemBackground
+        cover.contentMode = .scaleAspectFill
+        cover.frame = view.bounds
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(cover)
+        launchCover = cover
+    }
+
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(XChainVaultPlugin())
         // SSC-4. Same silent-failure shape as the vault: without
@@ -48,9 +62,15 @@ class MainViewController: CAPBridgeViewController {
         // discarded. Nothing logs, nothing fails, and the §2.1 guideline-4.2
         // defence demos as broken.
         bridge?.registerPluginInstance(XChainLinksPlugin())
+        bridge?.registerPluginInstance(XChainSplashPlugin())
 
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
+    }
+
+    fileprivate func markShellReady() {
+        launchCover?.removeFromSuperview()
+        launchCover = nil
     }
 
     // MARK: - SSC-1, door 1: the plugin registry
@@ -176,6 +196,22 @@ class MainViewController: CAPBridgeViewController {
         // Only on a real change: setting the inset lays the view out again.
         if abs(additionalSafeAreaInsets.top - extra) > 0.5 {
             additionalSafeAreaInsets.top = extra
+        }
+    }
+}
+
+@objc(XChainSplashPlugin)
+public class XChainSplashPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "XChainSplashPlugin"
+    public let jsName = "SplashScreen"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "hide", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func hide(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            (self?.bridge?.viewController as? MainViewController)?.markShellReady()
+            call.resolve()
         }
     }
 }

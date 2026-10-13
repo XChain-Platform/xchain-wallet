@@ -8,11 +8,14 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
     DOCUMENTED_PRIMITIVES,
+    DOCUMENTED_TOKENS,
     SECTIONS,
+    TOKEN_GROUPS,
 } from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const uiIndexPath = path.join(root, 'packages/core/src/ui/index.js');
+const tokensPath = path.join(root, 'packages/core/src/ui/tokens.css');
 
 function namedComponentExports(source) {
     const named = [...source.matchAll(
@@ -30,6 +33,41 @@ describe('style guide primitive coverage', () => {
 
         expect([...DOCUMENTED_PRIMITIVES].sort()).toEqual(namedComponentExports(uiIndex));
         expect(new Set(SECTIONS.map(({ id }) => id)).size).toBe(SECTIONS.length);
+    });
+
+    it('documents every shared token and the complete new token families', () => {
+        const tokens = fs.readFileSync(tokensPath, 'utf8');
+        const definedTokens = [...new Set(
+            [...tokens.matchAll(/(--xc-[a-z0-9-]+)\s*:/g)].map((match) => match[1]),
+        )];
+        const documented = new Set(DOCUMENTED_TOKENS);
+
+        expect(DOCUMENTED_TOKENS.length).toBe(documented.size);
+        for (const name of definedTokens) {
+            expect(documented, `${name} is shown in the style guide`).toContain(name);
+        }
+
+        for (const name of [
+            '--xc-z-toast',
+            '--xc-radius-xs',
+            '--xc-radius-control',
+            '--xc-shadow-bottom-sheet',
+            '--xc-space-8',
+            '--xc-icon-xl',
+            '--xc-info-bg',
+            '--xc-success-fill',
+        ]) {
+            expect(documented, `${name} stays in the token catalog`).toContain(name);
+        }
+
+        const themeColors = TOKEN_GROUPS
+            .flatMap(({ tokens: groupTokens }) => groupTokens)
+            .filter(({ preview }) => preview === 'color');
+        expect(themeColors.length).toBeGreaterThan(20);
+        for (const { name, light, dark } of themeColors) {
+            expect(light, `${name} has a light swatch`).toBeTruthy();
+            expect(dark, `${name} has a dark swatch`).toBeTruthy();
+        }
     });
 
     it('gives every newly audited primitive guidance, JSX, and a live example', () => {

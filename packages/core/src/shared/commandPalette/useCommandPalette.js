@@ -16,10 +16,10 @@
 // `enabled` gates the listener: shells pass `false` while the wallet is
 // locked or onboarding, so Cmd/Ctrl+K is inert until there's an unlocked
 // surface to navigate. The palette itself owns Esc; this hook only handles
-// the open toggle so it can live at the app root without stealing keys from
-// focused inputs (Cmd/Ctrl+K is not something a text field wants).
+// the open toggle and leaves every focused editable field alone.
 
 import { useCallback, useEffect, useState } from 'react';
+import { isEditableTarget } from '../keyboard/shortcuts.js';
 
 /**
  * @param {object} [opts]
@@ -65,6 +65,7 @@ export function useCommandPalette(opts = {}) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
+            if (isEditableTarget(e.target)) return;
             // Cmd+key (mac) / Ctrl+key (win/linux). We accept either
             // modifier so both platforms get the same binding.
             if ((e.key || '').toLowerCase() === comboKey

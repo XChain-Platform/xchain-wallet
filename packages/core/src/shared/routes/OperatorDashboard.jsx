@@ -173,7 +173,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={(
+            <ListPage className={styles.dashboard} toolbar={(
                 <Button type="button" variant="ghost" disabled={refreshing} onClick={() => refreshRef.current()}>
                     {refreshing ? 'Refreshing metrics…' : 'Refresh metrics'}
                 </Button>

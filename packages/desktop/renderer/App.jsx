@@ -37,10 +37,11 @@ import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockP
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
-import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
@@ -56,6 +57,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -144,6 +146,7 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
@@ -327,7 +330,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -391,7 +394,7 @@ function AppInner() {
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -534,6 +537,36 @@ function AppInner() {
                 }),
             );
     }, []);
+
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
 
     useEffect(() => { refresh(); }, [refresh]);
 
@@ -2427,7 +2460,12 @@ function AppInner() {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
-                        onRenamed={() => {
+                        onRenamed={(wallet) => {
+                            if (wallet?.id) {
+                                setWalletList((list) => list.map((entry) => (
+                                    entry.id === wallet.id ? { ...entry, ...wallet } : entry
+                                )));
+                            }
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
@@ -2520,6 +2558,9 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
+            }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
                     {/* `demoBannerInHeader`: this shell mounts DemoBanner in
@@ -2600,11 +2641,7 @@ function AppInner() {
                 </Fragment>
             );
             })();
-            const handleNavLock = () => {
-                lockWallet()
-                    .then(refresh)
-                    .catch(() => refresh());
-            };
+            const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
@@ -2670,6 +2707,7 @@ function AppInner() {
             // pending-COINPAY scan.
             const unlockedTree = (
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
@@ -2698,7 +2736,12 @@ function AppInner() {
                     }
                     header={
                         <>
-                            <WatchOnlyBadge visible={isWatcherMode} />
+                            <AppHeader
+                                onCommandPalette={palette.openPalette}
+                                onLock={handleNavLock}
+                                isWatcherMode={isWatcherMode}
+                                onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                            />
                             {activeWalletId ? (
                                 <>
                                     {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
@@ -2711,14 +2754,16 @@ function AppInner() {
                         </>
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
