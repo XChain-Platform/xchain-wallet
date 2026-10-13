@@ -32,7 +32,11 @@ import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
@@ -399,9 +403,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings().then((s) => {
             if (cancelled) return;
-            const pins = Array.isArray(s?.pinnedTokens) ? s.pinnedTokens.filter((k) => typeof k === 'string') : [];
+            const pins = pinnedTokensForWallet(s, activeWalletId)
+                .filter((k) => typeof k === 'string');
             const hides = Array.isArray(s?.hiddenTokens) ? s.hiddenTokens.filter((k) => typeof k === 'string') : [];
             setPinnedTokens(pins);
             setHiddenTokens(hides);
@@ -409,7 +415,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             setShowHideAffordance(s?.showHideAffordance === true);
         }).catch(() => { /* tolerate missing settings; empty pin list is a fine default */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     const handleTogglePin = useCallback((key, nextPinned) => {
         if (typeof key !== 'string' || !key) return;
@@ -419,11 +425,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             else set.delete(key);
             const next = Array.from(set);
             if (typeof messaging?.updateSettings === 'function') {
-                messaging.updateSettings({ pinnedTokens: next }).catch(() => { /* best-effort */ });
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(activeWalletId, next),
+                ).catch(() => { /* best-effort */ });
             }
             return next;
         });
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     // §34.2 Balances context shortcuts: p / h / o act on the balance row that
     // currently has keyboard focus (rows are buttons, so Tab reaches them and

@@ -35,8 +35,11 @@ import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
+import { readActiveWallet } from '../../utils/activeWalletMemory.js';
 import { INPUT, ROW, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -90,7 +93,9 @@ export function DisplaySection() {
     const tokenSearchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const tokenListsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
-    const pinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    const walletId = readActiveWallet();
+    const legacyPinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    const pinned = walletId ? pinnedTokensForWallet(settings, walletId) : legacyPinned;
     const watched = Array.isArray(settings?.watchedTokens) ? settings.watchedTokens : [];
     const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
 
@@ -128,12 +133,13 @@ export function DisplaySection() {
 
     const writePinned = useCallback(async (next) => {
         try {
-            await update({ pinnedTokens: next });
+            if (walletId) await update(pinnedTokensPatchForWallet(walletId, next));
+            else await update({ pinnedTokens: next });
         } catch (err) {
             // eslint-disable-next-line no-console
             console.error('display.pinnedTokens update failed:', err);
         }
-    }, [update]);
+    }, [update, walletId]);
 
     const writeHidden = useCallback(async (next) => {
         try {
