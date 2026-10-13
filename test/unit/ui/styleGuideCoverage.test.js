@@ -12,6 +12,12 @@ import {
     SECTIONS,
     TOKEN_GROUPS,
 } from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
+import {
+    COMPONENT_MATRIX,
+    MATRIX_SIZES,
+    MATRIX_STATES,
+    MATRIX_THEMES,
+} from '../../../packages/web/src/style-guide/ComponentStateMatrix.jsx';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const uiIndexPath = path.join(root, 'packages/core/src/ui/index.js');
@@ -62,9 +68,23 @@ describe('style guide primitive coverage', () => {
 
     it('tracks every component exported by the core UI barrel', () => {
         const uiIndex = fs.readFileSync(uiIndexPath, 'utf8');
+        const exportedComponents = namedComponentExports(uiIndex);
+        const documentedSections = SECTIONS.flatMap(({ primitives = [] }) => primitives).sort();
 
-        expect([...DOCUMENTED_PRIMITIVES].sort()).toEqual(namedComponentExports(uiIndex));
+        expect(documentedSections, 'every UI export has a style-guide section').toEqual(exportedComponents);
+        expect([...DOCUMENTED_PRIMITIVES].sort()).toEqual(exportedComponents);
+        expect(Object.keys(COMPONENT_MATRIX).sort(), 'every UI export has a comparison matrix')
+            .toEqual(exportedComponents);
         expect(new Set(SECTIONS.map(({ id }) => id)).size).toBe(SECTIONS.length);
+
+        expect(MATRIX_SIZES).toEqual(['sm', 'md', 'lg']);
+        expect(MATRIX_STATES).toEqual(['default', 'hover', 'focus', 'disabled', 'error']);
+        expect(MATRIX_THEMES).toEqual(['light', 'dark']);
+        for (const component of exportedComponents) {
+            expect(COMPONENT_MATRIX[component].sizes, `${component} size rows`).toEqual(MATRIX_SIZES);
+            expect(COMPONENT_MATRIX[component].states, `${component} state columns`).toEqual(MATRIX_STATES);
+            expect(COMPONENT_MATRIX[component].themes, `${component} themes`).toEqual(MATRIX_THEMES);
+        }
     });
 
     it('documents every shared token and the complete new token families', () => {

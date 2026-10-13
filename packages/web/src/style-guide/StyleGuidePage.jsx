@@ -13,6 +13,7 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
+import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
     DesignTokensSection,
     DOCUMENTED_TOKENS,
@@ -205,6 +206,7 @@ export function StyleGuidePage() {
 // Sections import these so the catalog has a consistent voice.
 
 export function Section({ id, title, tag, kicker, children }) {
+    const primitives = SECTIONS.find((section) => section.id === id)?.primitives || [];
     return (
         <section id={id} className="sg-section">
             <h2>
@@ -213,6 +215,7 @@ export function Section({ id, title, tag, kicker, children }) {
             </h2>
             {kicker ? <p className="sg-kicker">{kicker}</p> : null}
             {children}
+            {primitives.map((name) => <ComponentStateMatrix key={name} name={name} />)}
         </section>
     );
 }
