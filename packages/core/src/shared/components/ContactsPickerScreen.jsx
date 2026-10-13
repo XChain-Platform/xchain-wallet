@@ -44,8 +44,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
         const out = [];
         // Name order, matching the Contacts screen, so a person's addresses
         // sit together however the vault happened to store them.
-        for (const c of [...(contacts || [])].sort(compareContactsByName)) {
-            for (const e of c?.entries || []) {
+        for (const [contactIndex, c] of [...(contacts || [])].sort(compareContactsByName).entries()) {
+            for (const [entryIndex, e] of (c?.entries || []).entries()) {
                 if (!e?.address) continue;
                 // Resolved, not read raw: an entry the old detector stored as
                 // 'unknown' (every Dogecoin testnet address) still has to
@@ -55,7 +55,7 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                     const hay = `${c?.name || ''} ${e.address} ${e.label || ''}`.toLowerCase();
                     if (!hay.includes(q)) continue;
                 }
-                out.push({ contact: c, entry: e });
+                out.push({ contact: c, entry: e, key: `${contactIndex}:${entryIndex}` });
             }
         }
         return out;
@@ -115,8 +115,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                     />
                 ) : (
                     <ul className={styles.abList}>
-                        {rows.map(({ contact, entry }) => (
-                            <li key={`${contact.id}:${entry.address}`}>
+                        {rows.map(({ contact, entry, key }) => (
+                            <li key={key}>
                                 <button
                                     type="button"
                                     className={styles.abRow}
