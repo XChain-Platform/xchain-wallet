@@ -2071,18 +2071,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
 }
 
 /**
- * Split a failed record's stored error into a sentence for the user and the
- * raw text for a collapsed disclosure. Only a recognised cause becomes prose:
- * flow prefixes, SDK strings and unclassified node text stay in the details.
+ * Split a failed record's stored error into safe prose and the raw text for a
+ * collapsed disclosure. The shared humanizer keeps flow prefixes, SDK strings
+ * and unclassified node text out of the primary explanation.
  *
  * @param {unknown} stored
  * @returns {{ reason: string | null, details: string }}
  */
 function failedReasonOf(stored) {
     const raw = stored == null ? '' : String(stored).trim();
-    if (!raw) return { reason: null, details: '' };
+    if (!raw) {
+        return {
+            reason: "Couldn't send this transaction. The wallet did not record a specific reason.",
+            details: '',
+        };
+    }
     const h = humanizeError(raw, 'send this transaction');
-    return { reason: h.cause === 'unknown' ? null : h.message, details: raw };
+    return { reason: h.message, details: raw };
 }
 
 /**
