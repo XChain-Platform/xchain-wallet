@@ -167,9 +167,9 @@ export const LANES = [
         os: 'darwin',
         arch: 'arm64',
         format: 'zip',
-        device: 'Mac Studio (release machine)',
+        device: 'MacBook Pro M3 Max (clean user profile, not the release machine)',
         deviceHost: { silicon: 'arm64', translated: false },
-        note: 'The one lane whose hardware the program already owns.',
+        note: 'Watched on a second Mac with no wallet profile: the release machine fails Gatekeeper with a Code Signing subsystem error, so it cannot stand in for a clean install.',
     },
     {
         id: 'linux-x64-appimage',
