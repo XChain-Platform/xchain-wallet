@@ -972,8 +972,8 @@ export function ImportWallet({
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallet setup"
+                title="Back to wallet setup"
                 disabled={busy}
             >
                 <Icon.BackIcon />
