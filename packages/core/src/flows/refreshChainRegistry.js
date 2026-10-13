@@ -66,7 +66,7 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * @returns {Promise<ChainRegistryRefreshResult>}
  */
 export async function refreshChainRegistry({ hubUrl, fetcher, timeoutMs }) {
-    const url = buildRefreshUrl(hubUrl);
+    let url = buildRefreshUrl(hubUrl);
     if (!url) {
         return errorResult(hubUrl ?? '', 'invalid hubUrl');
     }
@@ -75,16 +75,17 @@ export async function refreshChainRegistry({ hubUrl, fetcher, timeoutMs }) {
     if (!fn) {
         return errorResult(url, 'no fetch implementation available');
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    let response;
-    try {
-        response = await fn(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
-    } catch (err) {
-        clearTimeout(timer);
-        return errorResult(url, err?.name === 'AbortError' ? 'request timed out' : (err?.message ?? String(err)));
+    let { response, error } = await fetchOnce(fn, url, timeoutMs);
+    // The chain descriptors default to a per-chain hub URL such as
+    // https://hub.xchain.io/BTC, but the registry is served once at the
+    // hub's root, so the prefixed path is a 404 there. A hub hosted under
+    // a path of its own still answers on the first try.
+    const rootUrl = registryUrlAtRoot(hubUrl);
+    if (response && response.status === 404 && rootUrl && rootUrl !== url) {
+        url = rootUrl;
+        ({ response, error } = await fetchOnce(fn, url, timeoutMs));
     }
-    clearTimeout(timer);
+    if (error) return errorResult(url, error);
     if (!response || !response.ok) {
         return errorResult(url, `hub returned HTTP ${response?.status ?? '?'}`);
     }
@@ -125,6 +126,27 @@ export function createChainRegistryStatus() {
         update(result) { last = result; return last; },
         clear() { last = null; },
     };
+}
+
+async function fetchOnce(fn, url, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+        const response = await fn(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+        return { response, error: null };
+    } catch (err) {
+        return { response: null, error: err?.name === 'AbortError' ? 'request timed out' : (err?.message ?? String(err)) };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function registryUrlAtRoot(hubUrl) {
+    try {
+        return new URL(hubUrl).origin + DEFAULT_HUB_PATH;
+    } catch {
+        return null;
+    }
 }
 
 function buildRefreshUrl(hubUrl) {
