@@ -14,23 +14,32 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
+const BALANCES = {
+    'bitcoin-mainnet': [{
+        address: 'bc1qtest',
+        balances: {
+            native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+            tokens: [],
+        },
+    }],
+};
 
 function makeMessaging() {
     return {
         listWallets: vi.fn().mockResolvedValue([WALLET]),
         listAccounts: vi.fn().mockResolvedValue([]),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue(BALANCES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({}),
         getAddressesByChain: vi.fn().mockResolvedValue({}),
     };
 }
 
-function mount(props) {
+function mount(props, shell = 'web') {
     render(
         React.createElement(
             MessagingProvider,
-            { shell: 'web', messaging: makeMessaging() },
+            { shell, messaging: makeMessaging() },
             React.createElement(Home, { activeWalletId: WALLET.id, ...props }),
         ),
     );
@@ -47,5 +56,19 @@ describe('Home overflow quick action', () => {
         expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
         fireEvent.click(swap);
         expect(onSwap).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Home desktop actions', () => {
+    it('renders Send and Receive once while preserving supplementary actions', async () => {
+        mount({
+            onSend: vi.fn(),
+            onReceive: vi.fn(),
+            onCreateToken: vi.fn(),
+        }, 'desktop');
+
+        expect(await screen.findAllByRole('button', { name: 'Send' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Receive' })).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Create token' })).toBeTruthy();
     });
 });
