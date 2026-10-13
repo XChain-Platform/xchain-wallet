@@ -14,7 +14,6 @@ export function ChevronIcon({ open }) {
     return (
         <ChevronDownIcon
             style={{
-                '--xc-icon-size': 'var(--xc-icon-xs)',
                 transform: open ? 'rotate(180deg)' : 'none',
                 transition: 'transform 120ms ease',
             }}

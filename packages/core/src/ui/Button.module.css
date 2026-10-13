@@ -62,7 +62,7 @@
 
 .lg {
     --xc-button-height: var(--xc-control-h-lg);
-    --xc-icon-size: var(--xc-icon-lg);
+    --xc-icon-size: var(--xc-icon-md);
     min-height: var(--xc-control-h-lg, 48px);
 }
 

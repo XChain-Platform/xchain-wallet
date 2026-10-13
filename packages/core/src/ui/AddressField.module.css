@@ -20,6 +20,7 @@
 }
 
 .iconButton {
+    --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     inset-inline-end: 4px;
     top: calc(20px + var(--xc-space-1));

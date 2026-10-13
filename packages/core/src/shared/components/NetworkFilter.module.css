@@ -7,17 +7,20 @@
 
 .sm {
     --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
-    --network-filter-icon-size: var(--xc-icon-sm);
+    --xc-icon-size: var(--xc-icon-sm);
+    --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .md {
     --network-filter-control-height: var(--xc-control-h-md, 36px);
-    --network-filter-icon-size: var(--xc-icon-md);
+    --xc-icon-size: var(--xc-icon-md);
+    --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .lg {
     --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
-    --network-filter-icon-size: var(--xc-icon-lg);
+    --xc-icon-size: var(--xc-icon-md);
+    --network-filter-icon-size: var(--xc-icon-size);
 }
 
 .trigger {
@@ -98,7 +101,6 @@
 .triggerCaret {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-    font-size: 12px;
     height: 100%;
     display: inline-flex;
     align-items: center;
@@ -187,9 +189,10 @@
 }
 
 .itemIcon {
+    --xc-icon-size: var(--xc-icon-md);
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -200,8 +203,8 @@
 }
 
 .itemIcon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 
