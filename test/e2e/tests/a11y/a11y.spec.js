@@ -30,6 +30,7 @@ import {
     gotoSection,
     lockWallet,
     readRecoveryPhrase,
+    revealRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
@@ -72,7 +73,11 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
         await page.getByLabel('Confirm password').fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
-        await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
+        // The stage opens concealed; scan it as the user first sees it, then
+        // with the words showing.
+        await expect(page.getByRole('button', { name: 'Reveal recovery phrase' })).toBeVisible();
+        await scan(page, 'CreateWallet mnemonic stage (concealed)');
+        await revealRecoveryPhrase(page);
         await scan(page, 'CreateWallet mnemonic stage');
     });
 

@@ -1681,7 +1681,7 @@ export async function switchToRegtest(page, password) {
     // because it has no nav surface.
     await openSettings(page);
 
-    await page.getByRole('button', { name: /^Developer Mode/ }).click();
+    await page.getByRole('button', { name: /^Developer mode/ }).click();
     const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {

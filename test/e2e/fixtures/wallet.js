@@ -137,7 +137,7 @@ export async function openSettings(page) {
         await palette.getByRole('combobox').fill('settings');
         await palette.getByRole('option', { name: /^Settings/ }).first().click();
     }
-    await expect(page.getByRole('button', { name: /^Developer Mode/ }))
+    await expect(page.getByRole('button', { name: /^Developer mode/ }))
         .toBeVisible({ timeout: 15_000 });
 }
 
@@ -220,14 +220,33 @@ export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
 }
 
-/** Reads the 12/24 recovery words off the mnemonic display stage, in order. */
+/**
+ * Reveals the recovery phrase on the mnemonic display stage.
+ *
+ * The phrase is concealed until the user asks for it (MnemonicGrid, §19.2):
+ * the stage opens on a "Reveal recovery phrase" button and no word list at
+ * all. Asserting that before the click keeps the concealment covered by
+ * every spec that walks onboarding, not only by the unit test.
+ */
+export async function revealRecoveryPhrase(page) {
+    const list = page.getByRole('list', { name: 'Recovery phrase' });
+    const reveal = page.getByRole('button', { name: 'Reveal recovery phrase' });
+    await expect(reveal, 'the mnemonic stage should open with the phrase concealed').toBeVisible();
+    await expect(list).toHaveCount(0);
+    await reveal.click();
+    await expect(list).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toBeVisible();
+    return list;
+}
+
+/** Reveals, then reads the 12/24 recovery words off the mnemonic display stage, in order. */
 export async function readRecoveryPhrase(page) {
-    const items = await page
-        .getByRole('list', { name: 'Recovery phrase' })
-        .getByRole('listitem')
-        .allInnerTexts();
-    // Each item renders as "<position>\n<word>"; the word is the last token.
-    return items.map((text) => text.trim().split(/\s+/).pop());
+    const list = await revealRecoveryPhrase(page);
+    const items = await list.getByRole('listitem').allInnerTexts();
+    // Each item renders as "<position>. <word>"; the word is the last token.
+    const words = items.map((text) => text.trim().split(/\s+/).pop());
+    expect([12, 24], `read ${words.length} recovery words`).toContain(words.length);
+    return words;
 }
 
 /**
@@ -442,7 +461,7 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
 export async function turnOffDonations(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic Donation System/ }).click();
+    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
     const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
     await expect(toggle).toBeVisible();
     if (await toggle.isChecked()) {
