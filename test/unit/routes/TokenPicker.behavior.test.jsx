@@ -87,7 +87,7 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         expect(await screen.findByText('Zero Bitcoin token')).toBeInTheDocument();
         expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Open Dogecoin details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Select Dogecoin\b/ })).toBeInTheDocument();
     });
 
     it('filters by display name and reports an empty search result', async () => {
@@ -97,11 +97,11 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         fireEvent.change(search, { target: { value: 'wrp123' } });
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Open Bitcoin details' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
         fireEvent.change(search, { target: { value: 'wrap cleanly' } });
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Open Bitcoin details' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
         expect(screen.getByText('No matching balances')).toBeInTheDocument();
@@ -121,20 +121,20 @@ describe('TokenPicker asset visibility and filtering', () => {
             { tick: chainId.startsWith('litecoin') ? 'LTC.PEPE' : 'BTC.PEPE' },
         ]));
         mount({ purpose: 'receive', messaging: makeMessaging({ searchTokens }) });
-        await screen.findByRole('button', { name: 'Open Bitcoin details' });
+        await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
 
         fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
         fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
 
-        expect(screen.getByRole('button', { name: 'Open Litecoin details' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Open Bitcoin details' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Select Litecoin\b/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search coins or tokens' }), {
             target: { value: 'PEPE' },
         });
         await waitFor(() => expect(searchTokens).toHaveBeenCalledOnce());
         expect(searchTokens).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', query: 'PEPE' });
-        expect(await screen.findByRole('button', { name: 'Open LTC.PEPE details' }))
+        expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
             .toBeInTheDocument();
     });
 });
@@ -144,7 +144,7 @@ describe('TokenPicker keyboard and return behavior', () => {
         const onSelect = vi.fn();
         const onBack = vi.fn();
         mount({ onSelect, onBack, backLabel: 'Back to send' });
-        const row = await screen.findByRole('button', { name: `Open ${LONG_NAME} details` });
+        const row = await screen.findByRole('button', { name: new RegExp('^Select ' + LONG_NAME) });
 
         row.focus();
         expect(document.activeElement).toBe(row);
