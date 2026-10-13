@@ -103,6 +103,10 @@ describe('Receive QR copy and share toasts', () => {
         });
         renderReceive();
 
+        expect(await screen.findByRole('textbox', {
+            name: 'Copy payment request for receive address',
+        })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy payment request' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
         fireEvent.change(amount, { target: { value: '0.00000001' } });
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
@@ -130,7 +134,7 @@ describe('Receive QR copy and share toasts', () => {
         });
         renderReceive();
 
-        await clickWhenEnabled(/Copy QR/);
+        await clickWhenEnabled('Copy QR code');
 
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);

@@ -17,6 +17,7 @@
 import { useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
+import { copyText } from '../../clipboard.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -99,10 +100,10 @@ export function AboutSection() {
         try {
             const text = preview ?? (await fetchDump());
             if (preview === null) setPreview(text);
-            if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+            const { ok } = await copyText(text);
+            if (!ok) {
                 throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
             }
-            await navigator.clipboard.writeText(text);
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;

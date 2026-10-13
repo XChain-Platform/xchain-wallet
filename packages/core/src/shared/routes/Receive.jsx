@@ -756,6 +756,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <AddressField
                     label={address.label || 'Address'}
+                    aria-label="Copy payment request for receive address"
                     icon="addresses"
                     value={address.address}
                     readOnly
@@ -821,7 +822,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             disabled={!qrDataUrl}
                             icon={<Icon.CopyIcon />}
                         >
-                            Copy QR
+                            {canCopyImages ? 'Copy QR code' : 'Copy payment request'}
                         </Button>
                         {canShareFiles ? (
                             <Button
@@ -843,7 +844,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         >
                             <div className={styles.addressBox}>
                                 <AddressText address={address.address} truncate={false} size="sm" />
-                                <CopyButton value={address.address} />
+                                <CopyButton value={address.address} label="Copy receive address" />
                             </div>
                             {hwVerify.status === 'confirmed' ? (
                                 <p className={styles.hint} role="status">
@@ -914,7 +915,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     )}
                     <div className={styles.addressBox}>
                         <AddressText address={multisig.address} truncate={false} size="sm" />
-                        <CopyButton value={multisig.address} />
+                        <CopyButton value={multisig.address} label="Copy multisig receive address" />
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>

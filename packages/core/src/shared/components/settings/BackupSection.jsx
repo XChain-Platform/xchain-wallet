@@ -55,6 +55,7 @@ import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConf
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
+import { copyText } from '../../clipboard.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -1284,16 +1285,12 @@ function PublishLabelsReport({ result, onDone }) {
     const copyTxid = async () => {
         setCopyStatus(null);
         setCopyError(null);
-        if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
-            setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        const { ok } = await copyText(txid);
+        if (ok) {
+            setCopyStatus('Transaction ID copied.');
             return;
         }
-        try {
-            await navigator.clipboard.writeText(txid);
-            setCopyStatus('Transaction ID copied.');
-        } catch {
-            setCopyError('Could not copy the transaction ID. Select it and copy it manually.');
-        }
+        setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
     };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.
