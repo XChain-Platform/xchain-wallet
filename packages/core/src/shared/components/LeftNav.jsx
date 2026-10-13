@@ -201,6 +201,7 @@ export function LeftNav({
                     <span className={styles.label}>Search</span>
                 </button>
             ) : null}
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
                     const active = activeItem === item.id;
@@ -228,6 +229,7 @@ export function LeftNav({
                 })}
             </ul>
             <hr className={styles.divider} />
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {secondary.map((item) => {
                     const active = activeItem === item.id;
