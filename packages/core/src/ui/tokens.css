@@ -79,6 +79,14 @@
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
+    /* Text controls share one visual scale across native and custom fields. */
+    --xc-control-h-sm: 32px;
+    --xc-control-h-md: 40px;
+    --xc-control-h-lg: 48px;
+    --xc-control-radius: var(--xc-radius-md);
+    --xc-control-font: var(--xc-text-md);
+    --xc-control-pad-x: var(--xc-space-3);
+
     /* Shared stacking contexts stay ordered across every shell. */
     --xc-z-base: 1;
     --xc-z-sticky: 20;
@@ -637,7 +645,7 @@ fieldset {
     background-color: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-    min-height: 36px;
+    min-height: var(--xc-control-h-md);
     max-width: 100%;
 }
 

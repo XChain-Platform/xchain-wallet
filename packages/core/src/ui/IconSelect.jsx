@@ -26,8 +26,17 @@ import styles from './IconSelect.module.css';
  * @param {Array<{ value: string, label: string, sub?: string, icon?: import('react').ReactNode }>} props.options
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function IconSelect({ label, value, onChange, options = [], placeholder = 'Select…', disabled }) {
+export function IconSelect({
+    label,
+    value,
+    onChange,
+    options = [],
+    placeholder = 'Select…',
+    disabled,
+    size = 'md',
+}) {
     const [open, setOpen] = useState(false);
     const listboxId = useId();
     const triggerRef = useRef(null);
@@ -104,7 +113,7 @@ export function IconSelect({ label, value, onChange, options = [], placeholder =
         : undefined;
 
     return (
-        <div className={styles.wrap}>
+        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             {label ? <span className={styles.label}>{label}</span> : null}
             <button
                 type="button"
