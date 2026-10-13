@@ -114,7 +114,7 @@ export function PortfolioChart({ rows, walletId }) {
         [rows, priceMap, seedId, range, isDemo],
     );
 
-    const hasData = Array.isArray(series) && series.length >= 2;
+    const hasData = Array.isArray(series) && series.length > 0;
 
     const { delta, pct } = useMemo(() => {
         if (!hasData) return { delta: null, pct: null };
@@ -182,7 +182,7 @@ function buildPortfolioSeries(rows, priceMap, seedId, range, synthesize) {
     let anyContrib = false;
     for (const row of rows) {
         const current = fiatValueOf(row);
-        if (current === null || current === 0) continue;
+        if (current === null || !Number.isFinite(current) || current <= 0) continue;
         const rowSeries = seriesForRow(row, current, priceMap, seedId, range, synthesize);
         if (!rowSeries) continue;
         anyContrib = true;
@@ -198,10 +198,12 @@ function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     if (range.realCapable && row.kind === 'native' && row.chainId) {
         const entry = priceMap?.[row.chainId];
         const spark = entry?.sparkline;
-        if (Array.isArray(spark) && spark.length >= 2) {
+        if (Array.isArray(spark) && spark.length > 0) {
+            const finiteSpark = spark.filter((point) => Number.isFinite(point) && point > 0);
             const src = range.id === '24h'
-                ? spark.slice(-Math.min(range.points, spark.length))
-                : spark;
+                ? finiteSpark.slice(-Math.min(range.points, finiteSpark.length))
+                : finiteSpark;
+            if (src.length === 0) return null;
             const resampled = resampleTo(src, range.points);
             const last = resampled[resampled.length - 1];
             if (last > 0) {
@@ -226,6 +228,7 @@ function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
 // real sparkline doesn't already have exactly the count we need (the
 // 24h slice off a 168-pt series is 24, but the helper is generic).
 export function resampleTo(src, n) {
+    if (!Array.isArray(src) || src.length === 0 || n < 1) return [];
     if (src.length === n) return src.slice();
     if (n <= 1) return [src[src.length - 1]];
     const out = new Array(n);
