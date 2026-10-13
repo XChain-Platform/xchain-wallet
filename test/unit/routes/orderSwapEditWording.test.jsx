@@ -187,3 +187,21 @@ describe.each(VIEWS)('$noun action wording', (view) => {
         expectExplorerLink(`tx-${view.noun}-cancel`);
     });
 });
+
+describe('My orders cancel refresh', () => {
+    it('keeps a broadcast cancel out of Open while the explorer feed catches up', async () => {
+        const view = VIEWS[0];
+        mount(view);
+        await openAction(view, 'Cancel');
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        await approve();
+
+        await screen.findByText('Cancel broadcast');
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+        const closed = await screen.findByRole('list', { name: 'Closed orders' });
+        expect(within(closed).getByText('Cancelling')).toBeTruthy();
+        expect(within(closed).queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Open orders' })).toBeNull();
+    });
+});
