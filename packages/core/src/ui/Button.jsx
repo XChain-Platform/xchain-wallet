@@ -11,6 +11,31 @@
 import styles from './Button.module.css';
 import { iconForLabel } from './icons/index.jsx';
 
+/**
+ * Loading indicator sized from the shared icon scale.
+ *
+ * @param {object} props
+ * @param {'sm' | 'md' | 'lg'} [props.size]
+ * @param {string} [props.label]
+ * @param {string} [props.className]
+ */
+export function Spinner({ size = 'md', label, className, ...rest }) {
+    return (
+        <span
+            className={[styles.spinnerStatus, className].filter(Boolean).join(' ')}
+            role={label ? 'status' : undefined}
+            aria-label={label || undefined}
+            {...rest}
+        >
+            <span
+                className={[styles.spinner, styles[`spinner_${size}`]].filter(Boolean).join(' ')}
+                aria-hidden="true"
+            />
+            {label ? <span>{label}</span> : null}
+        </span>
+    );
+}
+
 // Auto-icon: if the caller didn't pass an explicit `icon` prop AND
 // children is a static string, look the label up via the shared
 // `iconForLabel` resolver (in icons/index.jsx). Caller can pass
@@ -66,7 +91,7 @@ export function Button({
             aria-busy={loading ? 'true' : 'false'}
             {...rest}
         >
-            {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
+            {loading ? <Spinner size={size} /> : null}
             {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
             <span className={styles.label}>{children}</span>
         </button>

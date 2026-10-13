@@ -216,25 +216,6 @@
     padding: var(--xc-space-6) var(--xc-space-3);
 }
 
-.persistingSpinner {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 3px solid var(--xc-border-strong);
-    border-top-color: var(--xc-accent-primary);
-    animation: persisting-spin 0.9s linear infinite;
-}
-
-@keyframes persisting-spin {
-    to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .persistingSpinner {
-        animation: none;
-    }
-}
-
 @media (max-height: 520px) {
     .headPopup,
     .headFull {

@@ -19,6 +19,7 @@
 // preview surface can reuse it (§5.5).
 
 import styles from './PreflightPanel.module.css';
+import { Spinner } from '@xchain-wallet/core/ui';
 // Zero-dependency helper, deliberately not the useConfirmAction module: the
 // override identity must be ONE definition shared with the Approve gate, and
 // this component is rendered by the extension approval root, so it pulls in
@@ -242,7 +243,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <span className={styles.spinner}>Checking…</span>
+                <Spinner size="sm" label="Checking…" className={styles.spinner} />
             </div>
         );
     }
