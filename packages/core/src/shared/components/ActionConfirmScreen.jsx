@@ -42,16 +42,28 @@ function nativeTickerFor(chainId) {
 
 function useSourceIdentity(address, chainId, walletId) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const [identity, setIdentity] = useState({ label: '', walletName: '' });
+    const [identity, setIdentity] = useState({ label: '', walletName: '', wallet: null });
 
     useEffect(() => {
         let cancelled = false;
-        setIdentity({ label: '', walletName: '' });
-        if (!address || typeof messaging?.listWallets !== 'function'
-            || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+        setIdentity({ label: '', walletName: '', wallet: null });
+        if (typeof messaging?.listWallets !== 'function') return undefined;
 
         Promise.resolve().then(() => messaging.listWallets()).then(async (walletsValue) => {
             const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            const signingWallet = walletId
+                ? wallets.find((wallet) => wallet.id === walletId)
+                : null;
+            if (!address || typeof messaging?.getAddressesByChain !== 'function') {
+                if (!cancelled) {
+                    setIdentity({
+                        label: '',
+                        walletName: '',
+                        wallet: signingWallet || (wallets.length === 1 ? wallets[0] : null),
+                    });
+                }
+                return;
+            }
             const matches = await Promise.all(wallets.map(async (wallet) => {
                 try {
                     const byChain = await messaging.getAddressesByChain(wallet.id);
@@ -77,6 +89,7 @@ function useSourceIdentity(address, chainId, walletId) {
             setIdentity({
                 label: match?.record?.label || '',
                 walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
+                wallet: signingWallet || match?.wallet || (wallets.length === 1 ? wallets[0] : null),
             });
         }).catch(() => {});
 
@@ -257,6 +270,7 @@ export function ActionConfirmScreen({
             error={confirmAction.error}
             sourceAddress={sourceAddress}
             sourceName={sourceName}
+            signingWallet={sourceIdentity.wallet}
             chainLabel={chainLabel}
             feeText={displayedFee}
             totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
