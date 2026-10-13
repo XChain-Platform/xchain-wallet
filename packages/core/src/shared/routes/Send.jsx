@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -518,6 +518,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewPageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const reviewHeadingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
 
     // §37 / G125: form-draft persistence. Persists only the user-visible
     // composition fields; password / mnemonic / passphrase NEVER touch
@@ -1227,10 +1229,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
     }, [stage, confirmBusy, chainId, addressesByChain, activeByChain, pickedSourceChain]);
 
-    useEffect(() => {
-        if (stage === 'review') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+    useLayoutEffect(() => {
+        if (stage !== 'review') return;
+        const scroller = reviewPageRef.current?.querySelector('main');
+        if (scroller) scroller.scrollTop = 0;
+        reviewHeadingRef.current?.focus({ preventScroll: true });
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -2429,11 +2432,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
             title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
             titleIcon={<Icon.SendIcon />}
+            titleRef={stage === 'review' ? reviewHeadingRef : undefined}
         />
     );
 
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            rootRef={reviewPageRef}
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review' && stage !== 'submitting'}
+        >
             {children}
             {footer}
             {leaveGuard.confirmation}
