@@ -169,6 +169,7 @@ export function BottomTabBar({
                     );
                 })}
                 <button
+                    id="xc-bottom-sheet-title"
                     ref={moreTriggerRef}
                     type="button"
                     className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
@@ -201,7 +202,7 @@ export function BottomTabBar({
                         id="xc-bottom-sheet"
                         role="dialog"
                         aria-modal="true"
-                        aria-label="More navigation"
+                        aria-labelledby="xc-bottom-sheet-title"
                         className={styles.sheet}
                     >
                         <div className={styles.handle} aria-hidden="true" />

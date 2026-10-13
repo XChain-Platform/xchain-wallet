@@ -198,13 +198,14 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={`Unlocked file: ${name || 'gated file'}`}
+            aria-labelledby="xc-gated-file-title"
+            aria-describedby="xc-gated-file-meta"
             onClick={onClose}
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{name || 'Unlocked file'}</p>
-                <p className={styles.meta}>
+                <p id="xc-gated-file-title" className={styles.title}>{name || 'Unlocked file'}</p>
+                <p id="xc-gated-file-meta" className={styles.meta}>
                     {bytes ? `${bytes.length.toLocaleString()} bytes · ` : ''}
                     detected: {kindLabel(sniffed.kind, sniffed.mime)}
                     {declared ? ` · published as: ${declared}` : ''}

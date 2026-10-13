@@ -34,7 +34,7 @@ function mount() {
 
 function openForgotDialog() {
     fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-    return screen.getByRole('dialog', { name: 'Wipe wallet data' });
+    return screen.getByRole('alertdialog', { name: 'Wipe wallet data' });
 }
 
 beforeEach(() => {
@@ -59,6 +59,13 @@ describe('Locked forgot-password wipe', () => {
     it('names the local data being destroyed and requires the typed confirmation', () => {
         mount();
         const dialog = openForgotDialog();
+        const title = screen.getByText('Wipe wallet data', { selector: 'strong' });
+        const warning = dialog.querySelector('#locked-wipe-warning');
+        const note = dialog.querySelector('#locked-wipe-note');
+        expect(dialog).toHaveAttribute('aria-modal', 'false');
+        expect(dialog).toHaveAttribute('aria-labelledby', title.id);
+        expect(dialog).toHaveAttribute('aria-describedby', `${warning.id} ${note.id}`);
+        expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
         expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
         expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
 
@@ -76,7 +83,7 @@ describe('Locked forgot-password wipe', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         expect(wipeWalletStorage).not.toHaveBeenCalled();
-        expect(screen.queryByRole('dialog', { name: 'Wipe wallet data' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('alertdialog', { name: 'Wipe wallet data' })).not.toBeInTheDocument();
         openForgotDialog();
         expect(screen.getByLabelText('Type WIPE to confirm')).toHaveValue('');
     });

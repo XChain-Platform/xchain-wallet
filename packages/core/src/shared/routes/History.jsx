@@ -4085,9 +4085,9 @@ function ExportModal({
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"
-                aria-label={t('history.export.title')}
+                aria-labelledby="xc-history-export-title"
             >
-                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
+                <h2 id="xc-history-export-title" style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
 
                 <fieldset style={MODAL_FIELDSET}>
                     <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>

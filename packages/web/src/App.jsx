@@ -2943,7 +2943,7 @@ function AppInner() {
                         <div
                             role="dialog"
                             aria-modal="true"
-                            aria-label="Scan a QR code"
+                            aria-labelledby="xc-global-scanner-title"
                             style={{
                                 position: 'absolute',
                                 inset: 0,
@@ -2955,6 +2955,7 @@ function AppInner() {
                         >
                             <ScanRoute
                                 embedded
+                                titleId="xc-global-scanner-title"
                                 onBack={() => setGlobalScannerOpen(false)}
                                 onClassified={(outcome) => {
                                     setGlobalScannerOpen(false);
