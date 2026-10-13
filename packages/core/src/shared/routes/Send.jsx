@@ -20,7 +20,6 @@ import {
     AddressText,
     FeeSelector,
     FormPage,
-    ChainPicker,
     Icon,
     InfoTip,
     StatusMessage,
@@ -31,7 +30,7 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { coinFromChainId, formatFiat, tickerColor } from '../components/BalanceList.jsx';
+import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -861,10 +860,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         }
     }, [amountFiatRate, amountInputMode]);
 
-    const onCoinInputChange = useCallback((value) => {
-        setAmount(value);
-    }, []);
-
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Amount-block input handler that branches on `amountInputMode`.
@@ -1062,8 +1057,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         : 'Automatic input selection';
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
-
-    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -1901,7 +1894,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
-            const rawMsg = err?.message || '';
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
             const h = humanizeError(err, 'send');
             setFormError(h.message);

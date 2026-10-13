@@ -405,7 +405,6 @@ export function MarketsList({
  * @param {() => void} props.onToggleStar
  */
 function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
-    const descriptor = chainRegistry.get(chainId);
     const selUpper = String(selectedTick || '').toUpperCase();
     // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.

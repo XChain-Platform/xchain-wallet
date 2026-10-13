@@ -312,11 +312,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         setMode('edit');
     }
 
-    function launchScanFromEdit() {
-        setScanFromEdit(true);
-        setMode('scan');
-    }
-
     function handleScanned(outcome) {
         // ScanRoute fires { kind: 'send', address, chainId? } for plain
         // addresses, BIP21, and xchain: send URIs.

@@ -684,8 +684,3 @@ function splitRewards(rows, claimRows) {
         hasRejectedClaim: totals.hasRejectedClaim,
     };
 }
-
-function shortPubkey(pk) {
-    if (!pk || typeof pk !== 'string') return '(none)';
-    return pk.length > 16 ? `${pk.slice(0, 8)}…${pk.slice(-4)}` : pk;
-}

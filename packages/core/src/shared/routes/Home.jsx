@@ -11,7 +11,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
@@ -191,7 +190,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
-    const setActiveWalletId = setActiveWalletIdLocal;
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -201,7 +199,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeAccountId = activeAccountIdProp ?? activeAccountIdLocal;
-    const setActiveAccountId = onSwitchAccount ?? setActiveAccountIdLocal;
     // Unread-message count for the active wallet + account, surfaced as a Home
     // alert and a dot on the Messaging button (see useMessagingUnread).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -891,14 +888,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
     const activeAccount = accountList.find((a) => a.id === activeAccountId) || null;
-    const walletList = Array.isArray(wallets) ? wallets : [];
-    const walletNonDefault = walletList.length > 1 && walletList[0] && activeWalletId !== walletList[0].id;
-    const accountNonDefault = accountList.length > 1
-        && accountList[0]
-        && activeAccountId
-        && activeAccountId !== accountList[0].id;
-
-
     if (settingsOpen) {
         return (
             <Settings
