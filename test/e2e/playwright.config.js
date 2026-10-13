@@ -77,7 +77,20 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
+            grepInvert: /@lg-k51/,
             use: { ...devices['Desktop Chrome'] },
+        },
+        {
+            name: 'android-lg-k51',
+            grep: /@lg-k51/,
+            use: {
+                browserName: 'chromium',
+                viewport: { width: 412, height: 869 },
+                userAgent: 'Mozilla/5.0 (Linux; Android 12; LM-K500) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36',
+                isMobile: true,
+                hasTouch: true,
+                permissions: ['clipboard-read', 'clipboard-write'],
+            },
         },
     ],
     webServer: {
