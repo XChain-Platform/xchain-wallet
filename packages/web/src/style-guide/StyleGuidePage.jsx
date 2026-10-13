@@ -58,6 +58,7 @@ import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { ChipSection } from './sections/ChipSection.jsx';
+import { SwitchSection } from './sections/SwitchSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
 import {
     AddressComboboxSection,
@@ -96,6 +97,7 @@ export const SECTIONS = [
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
     { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
+    { id: 'switch',                label: 'Switch',                 Component: SwitchSection, primitives: ['Switch'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
