@@ -70,7 +70,7 @@ export function useResponsivePlaceholder(placeholder, compactPlaceholder) {
  * @property {string} [id]
  * @property {string} [compactPlaceholder] concise phone-width placeholder; long placeholders default to the field's accessible name.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
- * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
+ * @property {'sm' | 'md' | 'lg'} [size] field size; defaults to 'md'.
  */
 export const Input = forwardRef(function Input(
     {
@@ -224,33 +224,35 @@ export const Input = forwardRef(function Input(
                     {requirement.label}
                 </label>
             ) : null}
-            <input
-                ref={ref}
-                id={inputId}
-                type={type}
-                autoCapitalize={autoCapitalize}
-                autoCorrect={autoCorrect}
-                spellCheck={spellCheck}
-                inputMode={resolvedInputMode}
-                enterKeyHint={resolvedEnterKeyHint}
-                className={inputClass}
-                aria-invalid={visibleError ? 'true' : externalInvalid}
-                aria-label={externalLabel}
-                aria-describedby={describedBy}
-                aria-required={requirement.ariaRequired}
-                required={required}
-                value={value}
-                defaultValue={defaultValue}
-                maxLength={maxLength}
-                placeholder={visiblePlaceholder}
-                onChange={handleChange}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyUp}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                onInvalid={handleInvalid}
-                {...rest}
-            />
+            <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
+                <input
+                    ref={ref}
+                    id={inputId}
+                    type={type}
+                    autoCapitalize={autoCapitalize}
+                    autoCorrect={autoCorrect}
+                    spellCheck={spellCheck}
+                    inputMode={resolvedInputMode}
+                    enterKeyHint={resolvedEnterKeyHint}
+                    className={inputClass}
+                    aria-invalid={visibleError ? 'true' : externalInvalid}
+                    aria-label={externalLabel}
+                    aria-describedby={describedBy}
+                    aria-required={requirement.ariaRequired}
+                    required={required}
+                    value={value}
+                    defaultValue={defaultValue}
+                    maxLength={maxLength}
+                    placeholder={visiblePlaceholder}
+                    onChange={handleChange}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    onInvalid={handleInvalid}
+                    {...rest}
+                />
+            </div>
             {placeholderDescriptionId ? (
                 <span id={placeholderDescriptionId} className="sr-only">{fullPlaceholder}</span>
             ) : null}
@@ -281,6 +283,14 @@ export const Input = forwardRef(function Input(
         </div>
     );
 });
+
+function activateControlHitArea(event) {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    const control = event.currentTarget.firstElementChild;
+    control?.focus();
+    control?.click();
+}
 
 function dateValidationMessage(input) {
     const { validity, type } = input;

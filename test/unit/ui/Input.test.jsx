@@ -13,6 +13,7 @@ import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { useRef, useEffect } from 'react';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
+import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
 
@@ -23,6 +24,46 @@ afterEach(() => {
 });
 
 describe('<Input>', () => {
+    it.each(['sm', 'md', 'lg'])('shares the %s height and radius tokens across text controls', (size) => {
+        render(
+            <>
+                <Input label="Name" size={size} />
+                <Select label="Network" size={size} defaultValue="mainnet">
+                    <option value="mainnet">Mainnet</option>
+                </Select>
+                <IconSelect
+                    label="Mode"
+                    size={size}
+                    value="private"
+                    options={[{ value: 'private', label: 'Private' }]}
+                    onChange={() => {}}
+                />
+            </>,
+        );
+
+        const input = screen.getByLabelText('Name');
+        const select = screen.getByLabelText('Network');
+        const iconSelect = screen.getByRole('button', { name: 'Mode: Private' });
+        expect(input.parentElement.parentElement.className).toContain(size);
+        expect(select.parentElement.parentElement.className).toContain(size);
+        expect(iconSelect.parentElement.className).toContain(size);
+
+        const inputCss = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const iconSelectCss = readFileSync('packages/core/src/ui/IconSelect.module.css', 'utf8');
+        const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+        const heightRule = new RegExp(
+            `\\.${size}\\s*\\{[^}]*--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            's',
+        );
+        const heights = { sm: '32px', md: '40px', lg: '48px' };
+        expect(inputCss).toMatch(heightRule);
+        expect(iconSelectCss).toMatch(heightRule);
+        expect(tokensCss).toMatch(new RegExp(`--xc-control-h-${size}:\\s*${heights[size]}`));
+        expect(tokensCss).toMatch(/--xc-control-radius:\s*var\(--xc-radius-md\)/);
+        expect(inputCss).toMatch(/\.input\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+        expect(iconSelectCss).toMatch(/\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+    });
+
     it('associates label via htmlFor / id', () => {
         render(<Input label="Email" />);
         const input = screen.getByLabelText('Email');
