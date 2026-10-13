@@ -56,6 +56,6 @@ for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeh
 // --- Send adopts it (with a bare-input fallback when no picker) ---------
 
 assert.match(sendJs, /import \{ TokenField \} from '\.\.\/components\/TokenField\.jsx'/, 'Send imports TokenField');
-assert.match(sendJs, /<TokenField[\s\S]{0,160}onOpenPicker=\{\(\) => onChangeAsset\(/, 'Send wires TokenField to the asset picker');
+assert.match(sendJs, /<TokenField[\s\S]{0,240}onOpenPicker=\{\(\) => onChangeAsset\(/, 'Send wires TokenField to the asset picker');
 
 console.log('token-field smoke OK');

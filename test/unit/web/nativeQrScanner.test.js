@@ -107,12 +107,40 @@ describe('startNativeQrScan', () => {
         const plugin = fakePlugin();
         __setNativeVaultForTests(plugin);
         const onValue = vi.fn();
-        await startNativeQrScan(onValue, () => {});
+        const stop = await startNativeQrScan(onValue, () => {});
         plugin.emit('qrFrame', {});
         plugin.emit('qrFrame', { value: '' });
         plugin.emit('qrFrame', { value: 42 });
         plugin.emit('qrFrame', null);
         expect(onValue).not.toHaveBeenCalled();
+        stop();
+        await settle();
+    });
+
+    it('rejects a second start without disturbing the running scan', async () => {
+        const plugin = fakePlugin();
+        __setNativeVaultForTests(plugin);
+        const firstValue = vi.fn();
+        const secondValue = vi.fn();
+        const stop = await startNativeQrScan(firstValue, () => {});
+
+        await expect(startNativeQrScan(secondValue, () => {}))
+            .rejects.toMatchObject({ reason: 'busy' });
+        expect(plugin.qrScanStart).toHaveBeenCalledTimes(1);
+        expect(plugin.addListener).toHaveBeenCalledTimes(2);
+
+        plugin.emit('qrFrame', { value: 'first scan' });
+        expect(firstValue).toHaveBeenCalledWith('first scan');
+        expect(secondValue).not.toHaveBeenCalled();
+
+        stop();
+        await settle();
+        expect(plugin.qrScanStop).toHaveBeenCalledTimes(1);
+
+        const stopNext = await startNativeQrScan(() => {}, () => {});
+        expect(plugin.qrScanStart).toHaveBeenCalledTimes(2);
+        stopNext();
+        await settle();
     });
 
     it('also removes listeners whose handles come back synchronously', async () => {

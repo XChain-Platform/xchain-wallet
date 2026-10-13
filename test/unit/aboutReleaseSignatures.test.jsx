@@ -57,7 +57,8 @@ describe('About: release signatures, with publication armed', () => {
         expect(row.textContent).not.toMatch(/not yet published/i);
         const link = row.querySelector('a');
         expect(link, 'the armed row is an anchor a user can follow').toBeTruthy();
-        expect(link.textContent).toBe('GPG fingerprint');
+        expect(link).toHaveAccessibleName('GPG fingerprint');
+        expect(link).toHaveTextContent('GPG fingerprint ↗');
     });
 
     it('points at an absolute URL a browser can open', () => {

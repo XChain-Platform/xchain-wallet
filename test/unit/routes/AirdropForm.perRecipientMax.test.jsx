@@ -188,6 +188,15 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await waitFor(async () => expect((await amountField()).value).toBe('3'));
     });
 
+    it('discloses the balance left by per-recipient rounding', async () => {
+        mountAirdrop({ balance: '10', divisibility: 0 });
+        await pasteRecipients([...RECIPIENTS, 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3']);
+        await maxReady();
+        fireEvent.click(maxButton());
+
+        await expectText(/Rounding remainder: 1 XCHAIN stays at the source address/);
+    });
+
     it('offers no Max before there is anyone to divide by', async () => {
         mountAirdrop();
         // Balance is known, recipients are not: the old Max was live here
@@ -242,6 +251,20 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         fireEvent.change(await amountField(), { target: { value: '2499.5' } });
         fireEvent.click(submitButton());
         await expectText(/Review address list/);
+    });
+
+    it('shows distribution and both transaction fees before the first confirm', async () => {
+        mountAirdrop();
+        await pasteRecipients();
+        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.click(submitButton());
+
+        await screen.findByRole('form', { name: 'Review recipient list' });
+        expect(screen.getByText('Total distribution')).toBeTruthy();
+        expect(document.body.textContent).toMatch(/~20 XCHAIN/);
+        expect(screen.getByText('Estimated network fees (2 transactions)')).toBeTruthy();
+        expect(screen.getByText('Airdrop protocol fee')).toBeTruthy();
+        expect(screen.getByText(/final recipient count when the airdrop executes/)).toBeTruthy();
     });
 
     it('stays ungated when the balance cannot be read', async () => {

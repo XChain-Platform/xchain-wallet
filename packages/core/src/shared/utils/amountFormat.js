@@ -15,10 +15,79 @@
 
 import { getFormatLocale } from '../../i18n/index.js';
 
-// "12345.678" → "12,345.678". Preserves whatever fractional precision
-// the caller passed; the amount input uses this on both render and
-// onChange so commas appear live as the user types.
-export function formatWithThousands(value) {
+function localeNumberSeparators(locale) {
+    try {
+        const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(12345.6);
+        return {
+            decimal: parts.find((part) => part.type === 'decimal')?.value || '.',
+            group: parts.find((part) => part.type === 'group')?.value || ',',
+        };
+    } catch {
+        return { decimal: '.', group: ',' };
+    }
+}
+
+function validGroupedInteger(value, separator) {
+    if (!value.includes(separator)) return /^\d+$/.test(value);
+    const escaped = separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^\\d{1,3}(?:${escaped}\\d{3})+$`).test(value);
+}
+
+/**
+ * Convert a localized, non-negative decimal to the dot-decimal wire form.
+ * Mixed dot/comma input uses the last punctuation mark as the decimal mark,
+ * while a single ambiguous mark follows the active locale.
+ */
+export function normalizeLocalizedDecimal(value, locale) {
+    if (value === null || value === undefined) return null;
+    let raw = String(value).trim();
+    if (raw === '') return '';
+    if (!/^[\d.,\s\u00a0\u202f]+$/.test(raw)) return null;
+    const { decimal: localeDecimal, group: localeGroup } = localeNumberSeparators(locale);
+    raw = raw.replace(/[\s\u00a0\u202f]+/g, localeGroup);
+    if (raw === '') return null;
+
+    const dotCount = (raw.match(/\./g) || []).length;
+    const commaCount = (raw.match(/,/g) || []).length;
+    let decimal = null;
+    let group = null;
+
+    if (dotCount && commaCount) {
+        decimal = raw.lastIndexOf('.') > raw.lastIndexOf(',') ? '.' : ',';
+        group = decimal === '.' ? ',' : '.';
+    } else {
+        const separator = dotCount ? '.' : commaCount ? ',' : null;
+        if (!separator) return /^\d+$/.test(raw) ? raw : null;
+        const count = separator === '.' ? dotCount : commaCount;
+        if (count > 1) {
+            return validGroupedInteger(raw, separator) ? raw.split(separator).join('') : null;
+        }
+        if (separator === localeGroup && separator !== localeDecimal
+            && validGroupedInteger(raw, separator)) {
+            return raw.split(separator).join('');
+        }
+        decimal = separator;
+    }
+
+    const pieces = raw.split(decimal);
+    if (pieces.length !== 2) return null;
+    const [integerRaw, fraction] = pieces;
+    if (!/^\d*$/.test(fraction)) return null;
+    let integer = integerRaw;
+    const integerGroup = group || (integerRaw.includes(localeGroup) ? localeGroup : null);
+    if (integerGroup) {
+        if (!validGroupedInteger(integerRaw, integerGroup)) return null;
+        integer = integerRaw.split(integerGroup).join('');
+    } else if (!/^\d*$/.test(integer)) {
+        return null;
+    }
+    if (integer === '' && fraction === '') return '.';
+    return `${integer}.${fraction}`;
+}
+
+// Group a canonical dot-decimal value with the active locale's separators.
+// Fractional precision and an in-progress trailing decimal mark stay intact.
+export function formatWithThousands(value, locale) {
     if (value == null || value === '') return '';
     const str = String(value);
     const negative = str.startsWith('-');
@@ -26,9 +95,11 @@ export function formatWithThousands(value) {
     const dotIdx = abs.indexOf('.');
     const intPart = dotIdx === -1 ? abs : abs.slice(0, dotIdx);
     const fracPart = dotIdx === -1 ? '' : abs.slice(dotIdx);
-    if (!/^\d+$/.test(intPart)) return str;
-    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return `${negative ? '-' : ''}${grouped}${fracPart}`;
+    if (!/^\d+$/.test(intPart) && !(intPart === '' && dotIdx === 0)) return str;
+    const { decimal, group } = localeNumberSeparators(locale);
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+    const localizedFraction = fracPart ? `${decimal}${fracPart.slice(1)}` : '';
+    return `${negative ? '-' : ''}${grouped}${localizedFraction}`;
 }
 
 // (a): strip the zero tail a DECIMAL sum leaves behind
@@ -72,6 +143,42 @@ export function formatDecimalAmount(value, locale, options = {}) {
         const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         return `${sign}${grouped}${match[3] === undefined ? '' : `.${match[3]}`}`;
     }
+}
+
+const MIN_DISPLAY_AMOUNT = '0.00000001';
+
+/**
+ * Format a user-facing amount with one policy across summary surfaces.
+ * Significant digits stay exact, insignificant trailing zeros are removed,
+ * and non-zero magnitudes below one base unit remain visible as a threshold.
+ */
+export function formatDisplayAmount(value, locale) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+    if (!match) return raw;
+
+    const sign = match[1];
+    const fraction = (match[3] || '').replace(/0+$/, '');
+    const unsigned = `${match[2]}${fraction ? `.${fraction}` : ''}`;
+    const nonZero = /[1-9]/.test(`${match[2]}${fraction}`);
+    if (nonZero && compareDecimalStrings(unsigned, MIN_DISPLAY_AMOUNT) === -1) {
+        if (sign === '-') return `> -${formatDecimalAmount(MIN_DISPLAY_AMOUNT, locale)}`;
+        return `< ${sign}${formatDecimalAmount(MIN_DISPLAY_AMOUNT, locale)}`;
+    }
+
+    const formatted = formatDecimalAmount(unsigned, locale);
+    return nonZero ? `${sign}${formatted}` : formatted;
+}
+
+/** Add a History direction sign without changing the stored amount. */
+export function formatHistoryAmount(value, direction, locale) {
+    const raw = String(value ?? '').trim();
+    const formatted = formatDisplayAmount(raw, locale);
+    if (!formatted || /^[+-]/.test(raw) || !/[1-9]/.test(raw)) return formatted;
+    if (direction === 'in') return `+${formatted}`;
+    if (direction === 'out') return `-${formatted}`;
+    return formatted;
 }
 
 /** Render an atomic integer at its divisibility using exact string arithmetic. */

@@ -30,6 +30,7 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
@@ -39,6 +40,7 @@ import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js
 import { useWalletFilters } from '@xchain-wallet/core/shared/hooks/useWalletFilters.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
@@ -51,6 +53,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -528,7 +531,7 @@ function AppInner() {
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -666,6 +669,39 @@ function AppInner() {
                 }),
             );
     }, []);
+
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setContactScanPrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+        setGlobalScannerOpen(false);
+        pendingUriView.current = null;
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
 
     useEffect(() => { refresh(); }, [refresh]);
 
@@ -855,7 +891,7 @@ function AppInner() {
     // can name the active one. The per-wallet effect above owns SELECTION;
     // this owns the label, and keeping them separate stops the header from
     // reaching into that effect's control flow.
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
 
     // Build the pancake menu's Alerts panel from the shared list in core
     // (walletAlerts.js); the menu lives at the App level here, not in Home.
@@ -985,7 +1021,7 @@ function AppInner() {
                         onStaking={hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onMultisig={hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSwitchWallet={() => openWalletPicker()}
-                        onLock={() => { lockWallet().then(refresh).catch(() => refresh()); }}
+                        onLock={handleLock}
                         onSettings={() => setUnlockedView('settings')}
                     />
                 );
@@ -2560,7 +2596,12 @@ function AppInner() {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
-                        onRenamed={() => {
+                        onRenamed={(wallet) => {
+                            if (wallet?.id) {
+                                setWalletList((list) => list.map((entry) => (
+                                    entry.id === wallet.id ? { ...entry, ...wallet } : entry
+                                )));
+                            }
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
@@ -2653,6 +2694,9 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
+            }
             // §49 / Cluster G FOLLOWUP 4: QueuedBroadcastBanner is now
             // mounted in FullLayoutWithNav.header below so it persists
             // across every unlocked view, not only Home.
@@ -2729,11 +2773,7 @@ function AppInner() {
                 </Fragment>
             );
             })();
-            const handleNavLock = () => {
-                lockWallet()
-                    .then(refresh)
-                    .catch(() => refresh());
-            };
+            const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenAccountPicker = () => {
                 setAccountPickerBackTo('home');
@@ -2830,6 +2870,7 @@ function AppInner() {
                 // that used to disagree with the CSS and leave 640-899px with
                 // no navigation at all.
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
@@ -2894,6 +2935,7 @@ function AppInner() {
                                     activeNetwork={activeNetwork}
                                     developerMode={developerMode}
                                     onActiveNetworkChange={handleActiveNetworkChange}
+                                    onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.
@@ -2910,14 +2952,16 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
@@ -2946,6 +2990,7 @@ function AppInner() {
                             }}
                         >
                             <ScanRoute
+                                embedded
                                 onBack={() => setGlobalScannerOpen(false)}
                                 onClassified={(outcome) => {
                                     setGlobalScannerOpen(false);

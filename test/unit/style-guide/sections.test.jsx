@@ -35,5 +35,14 @@ describe.each(Object.values(VIEWS))('$label style-guide sections', ({ id: view }
         const section = document.getElementById(id);
         expect(section).toBeInTheDocument();
         expect(section.querySelector(':scope > h2')).toHaveTextContent(/\S/);
+
+        const guidanceTerms = [...section.querySelectorAll(':scope > .sg-guide dt')]
+            .map((term) => term.textContent);
+        expect(guidanceTerms).toEqual(expect.arrayContaining([
+            'When',
+            'When not',
+            'Do',
+            "Don't",
+        ]));
     });
 });

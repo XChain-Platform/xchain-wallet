@@ -186,6 +186,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                 spellCheck={false}
                                 className={styles.search}
                                 placeholder="Search networks…"
+                                aria-label="Search networks"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={(event) => {

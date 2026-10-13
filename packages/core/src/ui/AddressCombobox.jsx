@@ -10,6 +10,7 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
+import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
@@ -38,6 +39,9 @@ const ICONS = {
  *                             with `{ target: { value } }` so callers
  *                             can swap from `<Input>` without changes.
  *   - suggestions           `Suggestion[]` from buildRecentDestinations.
+ *   - onSuggestionSelect    optional selection handler for callers that need
+ *                             the full suggestion metadata. When present, it
+ *                             replaces the default address-only `onChange`.
  *   - onPaste               called first for BIP21 / WIF handling; when the
  *                             host does not consume the event, surrounding
  *                             whitespace is trimmed before insertion.
@@ -53,6 +57,7 @@ const ICONS = {
  * @property {string} value
  * @property {(e: { target: { value: string } }) => void} onChange
  * @property {import('../flows/recentDestinations.js').Suggestion[]} [suggestions]
+ * @property {(suggestion: import('../flows/recentDestinations.js').Suggestion) => void} [onSuggestionSelect]
  * @property {(e: React.ClipboardEvent<HTMLInputElement>) => void} [onPaste]
  * @property {'contacts' | 'addresses'} [icon]
  * @property {() => void} [onIconClick]
@@ -63,6 +68,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         value,
         onChange,
         suggestions = [],
+        onSuggestionSelect,
         onPaste,
         icon,
         onIconClick,
@@ -81,6 +87,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -95,10 +102,11 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const select = useCallback(
         (s) => {
             if (!s) return;
-            onChange({ target: { value: s.address } });
+            if (onSuggestionSelect) onSuggestionSelect(s);
+            else onChange({ target: { value: s.address } });
             close();
         },
-        [onChange, close],
+        [onChange, onSuggestionSelect, close],
     );
 
     const onKeyDown = (e) => {
@@ -144,7 +152,11 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     return (
         <div className={wrapClass} ref={containerRef} onBlur={onBlur}>
             <Input
-                ref={ref}
+                ref={(node) => {
+                    inputRef.current = node;
+                    if (typeof ref === 'function') ref(node);
+                    else if (ref) ref.current = node;
+                }}
                 role="combobox"
                 aria-expanded={showDropdown ? 'true' : 'false'}
                 aria-controls={listboxId}
@@ -202,6 +214,26 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
+            {/* After the in-field icon button so focus follows the visual order:
+                field, its trailing icon, then the paste control below it. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                <ClipboardPasteButton
+                    disabled={disabled}
+                    onPaste={(text) => {
+                        const pasteEvent = {
+                            clipboardData: { getData: () => text },
+                            defaultPrevented: false,
+                            currentTarget: inputRef.current,
+                            target: inputRef.current,
+                            preventDefault() { this.defaultPrevented = true; },
+                        };
+                        onPaste?.(pasteEvent);
+                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: text } });
+                        setOpen(true);
+                        setActiveIndex(-1);
+                    }}
+                />
+            </div>
             {showDropdown ? (
                 <ul
                     id={listboxId}

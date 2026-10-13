@@ -175,7 +175,15 @@ describe('NetworkFilter search', () => {
 
         mount({ coinFamilies: manyFamilies });
         openList();
-        expect(screen.getByPlaceholderText('Search networks…')).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search networks' })).toBeInTheDocument();
+    });
+
+    it('gives the search field a name independent of its placeholder', () => {
+        mount({ coinFamilies: manyFamilies });
+        openList();
+
+        const search = screen.getByRole('searchbox', { name: 'Search networks' });
+        expect(search).toHaveAttribute('placeholder', 'Search networks…');
     });
 
     it('filters labels and tickers case-insensitively', () => {

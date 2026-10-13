@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
@@ -61,6 +61,7 @@ export function TickItemsEditor({
     status,
     onStatusChange,
 }) {
+    const controlId = useId();
     const memberTicks = items.valid;
     const invalidTicks = items.invalid;
     const tickKey = memberTicks.join('|');
@@ -131,6 +132,15 @@ export function TickItemsEditor({
         });
         return [...grouped.values()];
     }, [chainId, coinQualified, items.coinOf, listCoin, memberTicks, status]);
+    const hasMissing = !checking && missingTicks.length > 0;
+    const describedBy = [
+        value.trim() ? `${controlId}-summary` : null,
+        invalidTicks.length > 0 ? `${controlId}-invalid` : null,
+        hasMissing ? `${controlId}-missing` : null,
+        !checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0
+            ? `${controlId}-unchecked`
+            : null,
+    ].filter(Boolean).join(' ') || undefined;
 
     function setItemCoin(item, coin) {
         const rest = splitTickCoinItem(item)?.rest || item;
@@ -145,9 +155,9 @@ export function TickItemsEditor({
 
     return (
         <>
-            <label className={styles.pickerLabel} htmlFor="list-tokens">Tokens (one per line)</label>
+            <label className={styles.pickerLabel} htmlFor={controlId}>Tokens (one per line)</label>
             <textarea
-                id="list-tokens"
+                id={controlId}
                 className={styles.picker}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
@@ -155,6 +165,8 @@ export function TickItemsEditor({
                 spellCheck={false}
                 autoCapitalize="off"
                 placeholder="TICK1&#10;TICK2"
+                aria-invalid={invalidTicks.length > 0 || hasMissing ? 'true' : undefined}
+                aria-describedby={describedBy}
             />
             <div className={styles.fromLine}>
                 <Button type="button" variant="ghost" onClick={onOpenPicker}>
@@ -188,7 +200,7 @@ export function TickItemsEditor({
                 </ul>
             ) : null}
             {value.trim() ? (
-                <p className={styles.hint}>
+                <p id={`${controlId}-summary`} className={styles.hint}>
                     {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
                     {items.duplicates > 0 ? ` · ${items.duplicates} duplicate${items.duplicates === 1 ? '' : 's'} removed` : ''}
                     {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
@@ -199,12 +211,14 @@ export function TickItemsEditor({
                 </p>
             ) : null}
             {invalidTicks.length > 0 ? (
-                <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
+                <p id={`${controlId}-invalid`} className={styles.hint}>
+                    Not a token name: {invalidTicks.join(', ')}
+                </p>
             ) : null}
             {/* The protocol records an unknown TICK as invalid and
                 leaves it out of the list without failing the LIST. */}
             {!coinQualified && !checking && missingTicks.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
                         Not found on {chainLabel}: {missingTicks.join(', ')}.
                         The network leaves an unknown token out of the list, so {missingTicks.length === 1 ? 'it' : 'they'} will
@@ -213,7 +227,7 @@ export function TickItemsEditor({
                 </div>
             ) : null}
             {coinQualified && !checking && missingByChain.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
+                <div id={`${controlId}-missing`} role="alert" className={styles.warnings}>
                     {missingByChain.map((entry) => (
                         <p key={entry.chainId} className={styles.warning}>
                             Not found on {entry.label}: {entry.ticks.join(', ')}.
@@ -224,7 +238,9 @@ export function TickItemsEditor({
                 </div>
             ) : null}
             {!checking && uncheckedTickItems.length > 0 && (foundTicks.length + missingTicks.length) > 0 ? (
-                <p className={styles.hint}>Not checked: {uncheckedTickItems.join(', ')}.</p>
+                <p id={`${controlId}-unchecked`} className={styles.hint}>
+                    Not checked: {uncheckedTickItems.join(', ')}.
+                </p>
             ) : null}
         </>
     );
