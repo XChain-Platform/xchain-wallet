@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { EmptyState, ListPage, Screen } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { screenVariantFor, useMessaging } from '../useMessaging.js';
 
 /**
@@ -20,9 +21,9 @@ export function RouteNotFound({ onHome }) {
         <Screen variant={screenVariantFor(shell)}>
             <ListPage>
                 <EmptyState
-                    title="Page not found"
-                    body="This page does not exist or is no longer available."
-                    actionLabel="Back to Home"
+                    title={t('routeNotFound.title')}
+                    body={t('routeNotFound.body')}
+                    actionLabel={t('routeNotFound.backToHome')}
                     onAction={onHome}
                 />
             </ListPage>

@@ -41,6 +41,11 @@ const localizedRoutes = [
     'MarketView.jsx',
     'MultisigCosignerShare.jsx',
     'OnboardingCarousel.jsx',
+    'RenameAccountForm.jsx',
+    'RenameWalletForm.jsx',
+    'RouteNotFound.jsx',
+    'SignerSelectForm.jsx',
+    'StakeNew.jsx',
 ];
 
 describe('shared route localization', () => {
