@@ -76,6 +76,9 @@ import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
+// Error name for the access-list refusal raised at approval, whose message is house copy.
+const BUYER_ACCESS_REFUSED = 'BuyerAccessRefusedError';
+
 // The buy pre-flight is generated locally and has nothing overridable in it,
 // so PreflightPanel's acknowledgment set is a constant rather than state.
 const NO_ACKNOWLEDGMENTS = new Set();
@@ -1160,12 +1163,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     });
 
     // Turn a failed sign into house copy; the thrown text survives only as the fallback.
+    // A refusal this screen raised itself is already house copy, so it is shown as written.
     const submitFailureText = (err, fallback) => (err?.name === 'InvalidPasswordError'
         ? 'Incorrect password.'
-        : submitFailureMessage(err, {
-            chainId, coinTicker: feeCoinTicker, mandatory: nativeFee.mandatory,
-            fallback: err?.message || fallback,
-        }));
+        : err?.name === BUYER_ACCESS_REFUSED
+            ? err.message
+            : submitFailureMessage(err, {
+                chainId, coinTicker: feeCoinTicker, mandatory: nativeFee.mandatory,
+                fallback: err?.message || fallback,
+            }));
 
     const beginBuy = useCallback(async () => {
         if (buyStage === 'submitting' || !buyRequest) return;
@@ -1188,9 +1194,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     onApprove: async (prebuiltPsbt) => {
                         // Recheck at approval because list edits can land while Confirm is open.
                         if (await refreshBuyerEligibility()) {
-                            throw new Error(
+                            const refused = new Error(
                                 'The selected paying address or dispenser address is refused by a current access list.',
                             );
+                            refused.name = BUYER_ACCESS_REFUSED;
+                            throw refused;
                         }
                         return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
                     },
