@@ -1405,6 +1405,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             {f.type ? (
                                 <span className={styles.fileLinkType}>{f.type}</span>
                             ) : null}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     </li>
                 ))}
@@ -1470,7 +1471,9 @@ function ContactsBlock({ contacts }) {
                             display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
                         } else if (isUrl) {
                             display = (
-                                <a href={c.value} target="_blank" rel="noreferrer noopener">{c.value}</a>
+                                <a href={c.value} target="_blank" rel="noreferrer noopener">
+                                    {c.value} <span aria-hidden="true">↗</span>
+                                </a>
                             );
                         }
                         return (
@@ -1540,6 +1543,7 @@ function ImageHero({ img }) {
                 className={styles.heroImage}
                 onError={() => setFailedImageUrl(img.url)}
             />
+            <span aria-hidden="true">↗</span>
         </a>
     );
     if (img.name) {
@@ -1684,6 +1688,7 @@ function LinksAndFiles({ assetInfo }) {
                         >
                             <SocialIcon platform={s.platform} />
                             {socialLabel(s.platform)} · {s.host}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     ))}
                 </div>

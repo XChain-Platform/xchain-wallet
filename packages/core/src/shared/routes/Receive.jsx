@@ -906,7 +906,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                View address on explorer
+                                View address on explorer <span aria-hidden="true">↗</span>
                             </a>
                         ) : null}
                     </div>

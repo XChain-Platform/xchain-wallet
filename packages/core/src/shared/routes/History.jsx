@@ -2032,7 +2032,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             ) : (
                                 <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
                             )}
-                            <span>{link.label}</span>
+                            <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
