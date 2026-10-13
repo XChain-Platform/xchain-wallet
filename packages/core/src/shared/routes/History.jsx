@@ -2745,20 +2745,23 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (skipKeys.has(k)) continue;
         const v = raw[k];
         let display;
-        if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
+        if (isEmptyDetailValue(v)) {
+            display = '-';
+        } else if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
         } else if (isRemovedAccessListValue(k, v)) {
             display = 'none';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
-        } else if (v === null || v === undefined) display = '-';
-        else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
+        } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
         else if (typeof v === 'object') {
             try { display = JSON.stringify(v); } catch { display = String(v); }
-        } else {
+        } else if (typeof v === 'string') {
             display = detailValue(String(v), k);
+        } else {
+            display = String(v);
         }
         const copyLabel = copyLabelForDetailField(k);
         rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
@@ -2771,6 +2774,11 @@ function fullDetailRows(entry, balancesHidden = false) {
     }
 
     return rows;
+}
+
+function isEmptyDetailValue(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
+    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
 }
 
 function isRemovedAccessListValue(key, value) {
