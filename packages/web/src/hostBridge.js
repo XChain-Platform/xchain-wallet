@@ -641,7 +641,7 @@ class WebBroadcastClaims extends Set {
 // Signing routes hand their flow a hook that queues the signed bytes when the
 // broadcast fails, so the lease has to outlive that network call the way the
 // queue routes' own claims make it outlive theirs.
-const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$)/;
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake$)/;
 let routeClaimSeq = 0;
 
 async function runRouteHoldingLease(store, type, run) {
