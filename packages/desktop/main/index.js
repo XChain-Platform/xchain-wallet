@@ -58,6 +58,9 @@ import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
     isHttpUrl,
+    hasNoIpcArguments,
+    isValidDesktopIpcMessage,
+    normalizeOpenWindowArgs,
     shouldBlockNavigation,
     isTrustedSenderEvent,
     isTrezorConnectBridgeWindowOpen,
@@ -770,8 +773,9 @@ app.whenReady().then(async () => {
         // Same trust boundary as the install handler: the updater state says
         // whether a version is on offer, which is not sensitive, but a
         // positively-remote frame has no business reading the app's state.
-        ipcMain.handle('xchain:updater-state', async (event) => {
+        ipcMain.handle('xchain:updater-state', async (event, ...args) => {
             if (!isTrustedSender(event)) return null;
+            if (!hasNoIpcArguments(args)) return null;
             return lastUpdaterEvent;
         });
 
@@ -784,9 +788,12 @@ app.whenReady().then(async () => {
         // were all built and tested. Same sender check as the message
         // channel below: an install is a quit-and-replace, so it must not
         // be reachable from a frame that is positively remote.
-        ipcMain.handle('xchain:updater-install', async (event) => {
+        ipcMain.handle('xchain:updater-install', async (event, ...args) => {
             if (!isTrustedSender(event)) {
                 return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
+            }
+            if (!hasNoIpcArguments(args)) {
+                return { ok: false, reason: 'desktop: update install takes no arguments' };
             }
             return downloadAndInstall();
         });
@@ -798,14 +805,19 @@ app.whenReady().then(async () => {
         console.error('[xchain] updater wiring failed:', err);
     }
 
-    ipcMain.handle(IPC_CHANNEL, async (event, message) => {
-        // Sender trust boundary (belt-and-suspenders behind the navigation
-        // lockdown): reject a call whose frame is a positively-remote
-        // origin. A legitimate local renderer always passes.
+    ipcMain.handle(IPC_CHANNEL, async (event, message, ...extraArgs) => {
+        // Sender trust boundary behind the navigation lockdown: only an app
+        // frame with the documented single message envelope may dispatch.
         if (!isTrustedSender(event)) {
             return {
                 ok: false,
                 error: { name: 'ForbiddenSenderError', message: 'desktop: message rejected from untrusted frame' },
+            };
+        }
+        if (extraArgs.length > 0 || !isValidDesktopIpcMessage(message)) {
+            return {
+                ok: false,
+                error: { name: 'InvalidMessageError', message: 'desktop: invalid message envelope' },
             };
         }
         if (!runtime) {
@@ -826,17 +838,15 @@ app.whenReady().then(async () => {
     // invokes this channel; main creates a window pre-routed via
     // search-string prefill. Validates shape so a misbehaving
     // renderer can't pass non-serializable junk.
-    ipcMain.handle('xchain:open-window', async (event, args) => {
+    ipcMain.handle('xchain:open-window', async (event, args, ...extraArgs) => {
         if (!isTrustedSender(event)) {
             return { ok: false, error: 'open-window: rejected from untrusted frame' };
         }
-        const initialView = typeof args?.initialView === 'string' ? args.initialView : '';
-        const initialContext = args?.initialContext && typeof args.initialContext === 'object'
-            ? args.initialContext
-            : null;
-        if (!initialView && !initialContext) {
-            return { ok: false, error: 'open-window: initialView or initialContext required' };
+        const route = extraArgs.length === 0 ? normalizeOpenWindowArgs(args) : null;
+        if (!route) {
+            return { ok: false, error: 'open-window: invalid route arguments' };
         }
+        const { initialView, initialContext } = route;
         try {
             const win = createWindow({ initialView, initialContext });
             return { ok: true, windowId: win.id };
@@ -852,9 +862,12 @@ app.whenReady().then(async () => {
     // no-ops and the user is handed an unlock screen for the vault
     // they just destroyed. Same trusted-sender gate as every other
     // channel: a remote frame cannot nuke someone's wallet.
-    ipcMain.handle('xchain:wipe-storage', async (event) => {
+    ipcMain.handle('xchain:wipe-storage', async (event, ...args) => {
         if (!isTrustedSender(event)) {
             return { ok: false, error: 'wipe-storage: rejected from untrusted frame' };
+        }
+        if (!hasNoIpcArguments(args)) {
+            return { ok: false, error: 'wipe-storage: takes no arguments' };
         }
         if (!runtime) {
             return { ok: false, error: 'wipe-storage: runtime not initialized' };
@@ -881,9 +894,12 @@ app.whenReady().then(async () => {
     // bundled descriptors. Descriptors are already signature-verified
     // and schema-validated here in main; the renderer still re-validates
     // inside applyRemoteDescriptors.
-    ipcMain.handle('xchain:chain-registry', async (event) => {
+    ipcMain.handle('xchain:chain-registry', async (event, ...args) => {
         if (!isTrustedSender(event)) {
             return { ok: false, reason: 'chain-registry: rejected from untrusted frame' };
+        }
+        if (!hasNoIpcArguments(args)) {
+            return { ok: false, reason: 'chain-registry: takes no arguments' };
         }
         if (!chainRegistrySync) return { ok: false, reason: 'registry sync not started' };
         const r = await chainRegistrySync;
@@ -894,8 +910,9 @@ app.whenReady().then(async () => {
 
     // Hand the parked deep link to the renderer that asks, once. Same trust
     // boundary as the other handlers: a remote frame gets nothing.
-    ipcMain.handle('xchain:deep-link-take', async (event) => {
+    ipcMain.handle('xchain:deep-link-take', async (event, ...args) => {
         if (!isTrustedSender(event)) return null;
+        if (!hasNoIpcArguments(args)) return null;
         return deepLinkSlot.take();
     });
 

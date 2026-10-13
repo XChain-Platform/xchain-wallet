@@ -13,12 +13,16 @@ import { pathToFileURL } from 'node:url';
 
 import {
     TREZOR_CONNECT_BRIDGE_WINDOW_NAME,
+    hasNoIpcArguments,
     isAppUrl,
     isHttpUrl,
     isLocalFileUrl,
     isRemoteFrameUrl,
     isTrezorConnectBridgeWindowOpen,
     isTrustedSenderEvent,
+    isValidDesktopIpcMessage,
+    isValidSignerBridgeMessage,
+    normalizeOpenWindowArgs,
     senderFrameUrl,
     shouldBlockNavigation,
 } from '../../../packages/desktop/main/security.js';
@@ -63,7 +67,7 @@ describe('desktop renderer URL trust', () => {
 });
 
 describe('desktop IPC sender trust', () => {
-    it('prefers senderFrame URL and falls back to webContents', () => {
+    it('uses only the sender-frame URL', () => {
         const getURL = vi.fn(() => appIndex);
 
         expect(senderFrameUrl({
@@ -71,14 +75,63 @@ describe('desktop IPC sender trust', () => {
             sender: { getURL },
         })).toBe('https://frame.example');
         expect(getURL).not.toHaveBeenCalled();
-        expect(senderFrameUrl({ sender: { getURL } })).toBe(appIndex);
+        expect(senderFrameUrl({ sender: { getURL } })).toBe('');
+        expect(senderFrameUrl({ senderFrame: {}, sender: { getURL } })).toBe('');
+        expect(getURL).not.toHaveBeenCalled();
         expect(senderFrameUrl({})).toBe('');
     });
 
-    it('trusts the app renderer and rejects a remote child frame', () => {
+    it('trusts only a positively identified app frame', () => {
         expect(isTrustedSenderEvent({ senderFrame: { url: appIndex } }, appRoot)).toBe(true);
         expect(isTrustedSenderEvent({ senderFrame: { url: 'https://frame.example' } }, appRoot)).toBe(false);
-        expect(isTrustedSenderEvent({}, appRoot)).toBe(true);
+        expect(isTrustedSenderEvent({ sender: { getURL: () => appIndex } }, appRoot)).toBe(false);
+        expect(isTrustedSenderEvent({ senderFrame: {} }, appRoot)).toBe(false);
+        expect(isTrustedSenderEvent({}, appRoot)).toBe(false);
+    });
+});
+
+describe('desktop IPC argument validation', () => {
+    it('accepts only the documented generic message envelope', () => {
+        expect(isValidDesktopIpcMessage({ type: 'wallet.list' })).toBe(true);
+        expect(isValidDesktopIpcMessage({ type: 'wallet.list', request: {} })).toBe(true);
+        expect(isValidDesktopIpcMessage(null)).toBe(false);
+        expect(isValidDesktopIpcMessage([])).toBe(false);
+        expect(isValidDesktopIpcMessage({ type: '' })).toBe(false);
+        expect(isValidDesktopIpcMessage({ type: 'wallet.list', path: '/tmp/vault' })).toBe(false);
+        expect(hasNoIpcArguments([])).toBe(true);
+        expect(hasNoIpcArguments([{}])).toBe(false);
+    });
+
+    it('normalizes only bounded JSON detached-window routes', () => {
+        expect(normalizeOpenWindowArgs({
+            initialView: 'history',
+            initialContext: { walletId: 'wallet-1', actionIndex: 2 },
+        })).toEqual({
+            initialView: 'history',
+            initialContext: { walletId: 'wallet-1', actionIndex: 2 },
+        });
+        expect(normalizeOpenWindowArgs({ initialContext: [] })).toBeNull();
+        expect(normalizeOpenWindowArgs({ initialView: 'history', path: '/tmp/file' })).toBeNull();
+        expect(normalizeOpenWindowArgs({ initialView: '' })).toBeNull();
+        expect(normalizeOpenWindowArgs({ initialView: 'history', initialContext: { offset: 1n } })).toBeNull();
+
+        const cyclic = {};
+        cyclic.self = cyclic;
+        expect(normalizeOpenWindowArgs({ initialContext: cyclic })).toBeNull();
+    });
+
+    it('accepts only documented signer registration and response frames', () => {
+        expect(isValidSignerBridgeMessage({ kind: 'register', signerIds: ['ledger-1'] })).toBe(true);
+        expect(isValidSignerBridgeMessage({
+            kind: 'response', reqId: 1, ok: true, result: { status: 'available' },
+        })).toBe(true);
+        expect(isValidSignerBridgeMessage({
+            kind: 'response', reqId: 2, ok: false, error: { name: 'Error', message: 'denied' },
+        })).toBe(true);
+        expect(isValidSignerBridgeMessage({ kind: 'register', signerIds: ['valid', 3] })).toBe(false);
+        expect(isValidSignerBridgeMessage({ kind: 'response', reqId: 0, ok: true, result: null })).toBe(false);
+        expect(isValidSignerBridgeMessage({ kind: 'request', reqId: 1, op: 'status' })).toBe(false);
+        expect(isValidSignerBridgeMessage({ kind: 'register', signerIds: [], path: '/tmp/file' })).toBe(false);
     });
 });
 

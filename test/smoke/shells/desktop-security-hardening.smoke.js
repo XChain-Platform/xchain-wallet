@@ -115,7 +115,7 @@ assert.throws(
 );
 
 assert.equal(senderFrameUrl({ senderFrame: { url: 'file:///a' } }), 'file:///a');
-assert.equal(senderFrameUrl({ sender: { getURL: () => 'https://x' } }), 'https://x');
+assert.equal(senderFrameUrl({ sender: { getURL: () => appIndexUrl } }), '');
 assert.equal(senderFrameUrl({}), '');
 
 assert.equal(isTrustedSenderEvent({ senderFrame: { url: appIndexUrl } }, APP_ROOT), true);
@@ -126,7 +126,7 @@ assert.equal(
     false,
     'a preload-bearing frame moved to an arbitrary local file loses IPC trust',
 );
-assert.equal(isTrustedSenderEvent({}, APP_ROOT), true, 'unknown sender is not positively remote');
+assert.equal(isTrustedSenderEvent({}, APP_ROOT), false, 'unknown sender has no IPC authority');
 
 // --- 2. FileUnlockThrottleStore + runtime pre-KDF gate ----------------
 
@@ -209,12 +209,13 @@ function fakeWc(id) {
     };
 }
 const CH = 'xchain-wallet:signer-bridge';
+const trustFakeSender = () => true;
 
 // 4a. Ownership: sender B cannot re-point sender A's signerId.
 bgSignerBridge.clearAll();
 {
     const ipc = fakeIpcMain();
-    const detach = attachSignerBridgeListener({ ipcMain: ipc });
+    const detach = attachSignerBridgeListener({ ipcMain: ipc, isTrustedSender: trustFakeSender });
     const wcA = fakeWc(1);
     const wcB = fakeWc(2);
     ipc._emit(CH, { sender: wcA }, { kind: 'register', signerIds: ['sig-shared'] });
@@ -238,7 +239,7 @@ bgSignerBridge.clearAll();
 bgSignerBridge.clearAll();
 {
     const ipc = fakeIpcMain();
-    const detach = attachSignerBridgeListener({ ipcMain: ipc });
+    const detach = attachSignerBridgeListener({ ipcMain: ipc, isTrustedSender: trustFakeSender });
     const wc = fakeWc(3);
     const tooMany = Array.from({ length: MAX_SIGNER_IDS_PER_MESSAGE + 1 }, (_, i) => `flood-${i}`);
     ipc._emit(CH, { sender: wc }, { kind: 'register', signerIds: tooMany });
@@ -249,10 +250,15 @@ bgSignerBridge.clearAll();
     detach();
 }
 
-// 4c. Injected sender-trust predicate drops untrusted senders.
+// 4c. Missing or rejecting sender trust drops the message.
 bgSignerBridge.clearAll();
 {
     const ipc = fakeIpcMain();
+    const rejectByDefault = attachSignerBridgeListener({ ipcMain: ipc });
+    ipc._emit(CH, { sender: fakeWc(6) }, { kind: 'register', signerIds: ['without-trust'] });
+    assert.equal(bgSignerBridge.getTransport('without-trust'), null, 'missing sender trust fails closed');
+    rejectByDefault();
+
     const detach = attachSignerBridgeListener({
         ipcMain: ipc,
         isTrustedSender: (event) => event?.sender?.id !== 999,
@@ -270,7 +276,11 @@ bgSignerBridge.clearAll();
 bgSignerBridge.clearAll();
 {
     const ipc = fakeIpcMain();
-    const detach = attachSignerBridgeListener({ ipcMain: ipc, maxSignerIdsPerSender: 8 });
+    const detach = attachSignerBridgeListener({
+        ipcMain: ipc,
+        isTrustedSender: trustFakeSender,
+        maxSignerIdsPerSender: 8,
+    });
     const wc = fakeWc(4);
     for (let batch = 0; batch < 10; batch += 1) {
         const ids = Array.from({ length: 4 }, (_, i) => `grow-${batch}-${i}`);

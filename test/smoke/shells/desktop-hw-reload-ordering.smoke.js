@@ -52,10 +52,11 @@ function createFakeWebContents(id) {
 
 const ID = 'sig-reload-order';
 const req = { op: 'signPsbt', payload: { signerId: ID } };
+const trustFakeSender = () => true;
 
 bgSignerBridge.clearAll();
 const ipc = createFakeIpcMain();
-const detach = attachSignerBridgeListener({ ipcMain: ipc });
+const detach = attachSignerBridgeListener({ ipcMain: ipc, isTrustedSender: trustFakeSender });
 const wc = createFakeWebContents(7);
 const register = () => ipc.emit({ sender: wc }, { kind: 'register', signerIds: [ID] });
 
