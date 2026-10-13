@@ -38,6 +38,9 @@ import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
@@ -1716,6 +1719,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     const { showToast } = useToast();
     const { settings } = useSettings();
     const [balancesHidden] = useBalancesHidden();
+    const rbfConfirm = useConfirmModal();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
     // Fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
@@ -1850,6 +1854,19 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
+            const quote = await replaceFromHistoryEntry({
+                messaging, entry, strategy, walletId, descriptor: rbfDescriptor, preview: true,
+            });
+            const ticker = tickerForCoin(rbfDescriptor?.coin);
+            const confirmed = await rbfConfirm.confirm({
+                title: strategy === 'cancel' ? 'Cancel this transaction?' : 'Speed up this transaction?',
+                message: `Old fee: ${quote.originalFee} ${ticker}. `
+                    + `New fee: ${quote.replacementFee} ${ticker}. `
+                    + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
+                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast speed up',
+                danger: strategy === 'cancel',
+            });
+            if (!confirmed) return;
             const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
             // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
@@ -2254,6 +2271,13 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 >
                     Open in new window
                 </Button>
+            ) : null}
+            {rbfConfirm.request ? (
+                <ConfirmModal
+                    {...rbfConfirm.request}
+                    onConfirm={rbfConfirm.onConfirm}
+                    onCancel={rbfConfirm.onCancel}
+                />
             ) : null}
         </div>
     );

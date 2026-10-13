@@ -399,6 +399,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             localStatus: localEntry.pending.localStatus,
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
+            rbf: localEntry.pending.rbf,
             replacementTxHash: localEntry.pending.replacementTxHash,
             // A block is the one thing a mempool row cannot know about; only
             // our record can carry the proof, and it carries it across.
