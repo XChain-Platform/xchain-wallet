@@ -132,7 +132,7 @@
 
 /* Phone portrait keeps identity and essential state in one row. Search,
    settings, scan and platform links remain available from bottom navigation. */
-@media (max-width: 479px) {
+@media (max-width: 480px) {
     :global([data-xc-tier='compact']) .bar.phoneCondensed {
         align-items: center;
         flex-wrap: nowrap;
