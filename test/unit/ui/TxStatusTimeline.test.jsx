@@ -167,9 +167,9 @@ describe('<TxStatusTimeline>', () => {
         expect(routeErrorCss).toContain('padding: var(--xc-page-top) var(--xc-page-gutter);');
         expect(toastCss).toContain('transform: translateY(var(--xc-space-2));');
         expect(toastCss).not.toContain('translateY(8px)');
-        expect(tokenFieldCss).toContain('min-height: var(--xc-control-h-md);');
-        expect(tokenFieldCss).toContain('min-height: var(--xc-control-h-lg);');
-        expect(tokenFieldCss).not.toMatch(/min-height:\s*(?:36|48)px/);
+        expect(tokenFieldCss).toContain('--token-field-control-height: var(--xc-control-h-md);');
+        expect(tokenFieldCss).toContain('--token-field-control-height: var(--xc-control-h-lg);');
+        expect(tokenFieldCss).not.toMatch(/(?:min-)?height:\s*(?:36|48)px/);
         expect(heroCss).toContain('width: var(--xc-control-h-sm);');
         expect(heroCss).toContain('height: var(--xc-control-h-sm);');
         expect(heroCss).toContain('font-size: var(--xc-text-lg);');

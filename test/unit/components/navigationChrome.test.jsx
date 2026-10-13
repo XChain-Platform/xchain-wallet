@@ -95,7 +95,8 @@ describe('navigation route highlighting', () => {
                 rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
                 const activeTabs = bottomNavigation.getAllByRole('button')
                     .filter((tab) => tab.getAttribute('aria-current') === 'page');
-                const expectedTab = route === 'account-picker'
+                // Account management views open from More, so More owns them.
+                const expectedTab = ['account-picker', 'account-rename', 'add-account'].includes(route)
                     ? 'More'
                     : (tabByGroup[group] || 'More');
 

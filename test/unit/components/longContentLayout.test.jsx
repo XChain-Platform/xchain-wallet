@@ -93,10 +93,11 @@ describe('long content layout', () => {
                             action: 'SEND',
                             actionIndex: 'pending-long',
                             chainId: 'bitcoin-mainnet',
-                            source: address,
+                            source: 'bc1qsource',
                             status: 'pending',
                             pending: { direction: 'out' },
-                            raw: { destination: 'bc1qdestination', amount, tick: 'BTC' },
+                            // History rows identify a send by its counterparty, so the long address is the destination.
+                            raw: { destination: address, amount, tick: 'BTC' },
                         }}
                         selected={false}
                         showConnector={false}
