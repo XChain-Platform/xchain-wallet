@@ -63,6 +63,15 @@ export function cameraErrorText(e) {
     return 'The camera could not start. Paste the code instead.';
 }
 
+/** True inside the Capacitor iOS or Android app rather than a browser. */
+function isNativeApp() {
+    try {
+        return typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true;
+    } catch {
+        return false;
+    }
+}
+
 export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR scanner' }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const [running, setRunning] = useState(false);
@@ -170,18 +179,25 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                 </>
             );
         } else if (!hasBarcodeDetector) {
-            reason = (
+            // Inside the iPhone app there is no other browser to switch to:
+            // its WebView has no BarcodeDetector, so the advice is to paste.
+            reason = isNativeApp() ? (
                 <>
-                    Camera scanning needs the <code>BarcodeDetector</code> API. Use a
-                    Chromium-based browser (Chrome, Edge, modern Opera) or paste the
-                    payload below instead.
+                    Scanning with the camera is not available on this device yet.
+                    Paste the code below instead.
+                </>
+            ) : (
+                <>
+                    This browser cannot scan QR codes with the camera. Chrome, Edge
+                    and other Chromium browsers can; here, paste the code below
+                    instead.
                 </>
             );
         } else {
             reason = (
                 <>
-                    Camera access isn't available on this browser. Paste the QR
-                    contents below instead.
+                    Camera access is not available in this browser. Paste the code
+                    below instead.
                 </>
             );
         }

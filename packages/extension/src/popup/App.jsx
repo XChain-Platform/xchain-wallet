@@ -641,6 +641,7 @@ function AppInner() {
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
         navigate: setUnlockedView,
+        currentView: unlockedView,
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
     // entity search: token balances join contacts in the palette's

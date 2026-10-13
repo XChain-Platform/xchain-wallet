@@ -295,6 +295,28 @@ describe('restoreLabelSyncAfterImport', () => {
         expect(sdkRegistry.get).not.toHaveBeenCalled();
     });
 
+    it('reports a wallet whose phrase it generated as skipped, without reaching any explorer', async () => {
+        // A phrase created here a moment ago has published nothing, and the
+        // search would only wait out the per-chain timeout.
+        const vault = {
+            wallets: { get: async (id) => (id === 'new-1' ? { id, format: 'bip39', origin: 'created' } : null) },
+            contacts: { list: async () => [] },
+            addresses: { list: async () => [] },
+        };
+        const sdkRegistry = registryOf({ 'bitcoin-mainnet': fakeSdk({ rows: [] }) });
+
+        const r = await restoreLabelSyncAfterImport({
+            vault,
+            walletId: 'new-1',
+            password: PASSWORD,
+            chainIds: ['bitcoin-mainnet'],
+            sdkRegistry,
+        });
+
+        expect(r).toMatchObject({ restored: false, skipped: 'created', searchedChainIds: [] });
+        expect(sdkRegistry.get).not.toHaveBeenCalled();
+    });
+
     it('reports an empty chain list as skipped', async () => {
         const vault = await openVault();
         const { wallet } = await makeWallet(vault);

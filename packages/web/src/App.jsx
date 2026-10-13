@@ -446,6 +446,7 @@ function AppInner() {
         enabled: status.state === 'unlocked',
         binding: settings?.keyboard?.bindings?.['command-palette'],
         navigate: setUnlockedView,
+        currentView: unlockedView,
     });
     // Contacts feed the palette's fuzzy search (§33.2). Loaded lazily the
     // first time the palette opens so a locked/never-opened session pays
