@@ -39,7 +39,10 @@
 // paste artifacts), because a form that does not yet know its chain
 // still has to render something. Every real call site passes a chain.
 
-import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+import {
+    isValidAddressAnyNetwork,
+    isValidAddressForChain,
+} from '../shared/utils/addressValidation.js';
 import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
@@ -176,7 +179,7 @@ export function classifyRecipients(candidates, chain) {
         const candidate = String(raw ?? '').trim();
         if (!candidate) continue;
         // Bech32 is case-insensitive when the whole address uses one case.
-        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(candidate)
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i.test(candidate)
             && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
         const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
         if (seen.has(duplicateKey)) {
@@ -192,7 +195,7 @@ export function classifyRecipients(candidates, chain) {
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isPlausibleAddress(candidate)) wrongNetwork.push(candidate);
+        if (params && isValidAddressAnyNetwork(candidate)) wrongNetwork.push(candidate);
     }
     return { valid, invalid, duplicates, wrongNetwork };
 }
@@ -222,22 +225,30 @@ export function reconcileStoredList(expected, stored) {
     const want = Array.isArray(expected) ? expected.map((a) => String(a ?? '').trim()) : [];
     const got = Array.isArray(stored) ? stored : [];
     const gotExact = new Set();
-    const gotLower = new Set();
+    const gotBech32 = new Set();
     for (const row of got) {
         const s = String(
             (row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row) ?? '',
         ).trim();
         if (!s) continue;
         gotExact.add(s);
-        gotLower.add(s.toLowerCase());
+        if (isValidBech32Address(s)) gotBech32.add(s.toLowerCase());
     }
-    const missing = want.filter((a) => a && !gotExact.has(a) && !gotLower.has(a.toLowerCase()));
+    const missing = want.filter((a) => a
+        && !gotExact.has(a)
+        && !(isValidBech32Address(a) && gotBech32.has(a.toLowerCase())));
     return {
         expectedCount: want.length,
         storedCount: gotExact.size,
         missing,
         ok: missing.length === 0,
     };
+}
+
+function isValidBech32Address(address) {
+    const lower = address.toLowerCase();
+    return /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/.test(lower)
+        && isValidAddressAnyNetwork(address);
 }
 
 function stripWrappingQuotes(s) {
