@@ -56,9 +56,12 @@ test.describe('send form', () => {
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
+        // A checksum failure is presented as a typo (addressValidationError),
+        // and the form must not advance to the confirm page.
         await expect(page.getByRole('alert').first()).toContainText(
-            /not a valid Bitcoin address/i,
+            /This address has a typo/i,
         );
+        await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     });
 
     test('zero amount is rejected', async ({ page }) => {
@@ -130,9 +133,15 @@ test.describe('send form', () => {
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
-        // The approve button reads "Approve <review headline>" since the
-        // action review screens were standardized.
-        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve \S/);
+        // The chain is named by the badge beside the signing footer: the chain
+        // suffix on the button itself was retired by operator decision. The
+        // button names the decoded action and amount ("Send 0.01 BTC"), but
+        // this venue's dev-mock host has no decoder.describe(), so it shows
+        // the bare "Approve" fallback; the decoded label is covered by the
+        // ConfirmActionModal unit tests.
+        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
+        await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });
 
     // §5.1: exactly two exits. Reject returns to the form with its values
