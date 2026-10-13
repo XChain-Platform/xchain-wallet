@@ -36,6 +36,7 @@ import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockP
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
+import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -614,7 +615,7 @@ function AppInner() {
     // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
-    const { isSignerMode } = useWalletMode();
+    const { isSignerMode, isWatcherMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -2549,6 +2550,7 @@ function AppInner() {
                     }
                     header={
                         <>
+                            <WatchOnlyBadge visible={isWatcherMode} />
                             {/* row 142: outside the activeWalletId branch on
                                 purpose. An update offer must reach a user who has
                                 no wallet open yet, and the banner renders nothing

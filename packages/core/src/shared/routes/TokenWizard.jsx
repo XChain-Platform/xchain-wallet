@@ -17,7 +17,9 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -167,6 +169,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [password, setPassword] = useState('');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [watcherBuilding, setWatcherBuilding] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map and the settings read are best-effort: a host without
@@ -276,6 +279,7 @@ export function TokenWizard({ walletId, onBack }) {
     // slice flag alone decides between the shared confirm page and the
     // legacy preview + sign stages.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const { isWatcherMode } = useWalletMode();
     // An already-unlocked wallet does not re-prompt on the confirm page.
     const signerReady = useSignerReady(walletId);
     // The confirm page's password field writes `password` state; the approve
@@ -445,6 +449,29 @@ export function TokenWizard({ walletId, onBack }) {
         } : null;
         if (!from) { setFormError('No source address available.'); return; }
         setSubmitError(null);
+        if (isWatcherMode) {
+            setWatcherBuilding(true);
+            try {
+                const res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from,
+                    actionData: { action: 'ISSUE', params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                });
+                setResult(res);
+                setStage('done');
+            } catch (err) {
+                setFormError(submitFailureMessage(err, {
+                    chainId,
+                    coinTicker,
+                    mandatory: nativeFeeMandatory,
+                    fallback: err?.message || 'Could not build the unsigned transaction.',
+                }));
+            } finally {
+                setWatcherBuilding(false);
+            }
+            return;
+        }
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -681,13 +708,24 @@ export function TokenWizard({ walletId, onBack }) {
             formError,
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
-            submitLabel: 'Issue token',
-            submitLoading: actionConfirm.composing,
+            submitLabel: isWatcherMode ? 'Create unsigned transaction' : 'Issue token',
+            submitLoading: actionConfirm.composing || watcherBuilding,
         }));
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <ListPage>
+                    <WatcherResultPanel
+                        result={result}
+                        onBuildAnother={() => { setResult(null); setStage('details'); }}
+                        onDone={onBack}
+                    />
+                </ListPage>,
+            );
+        }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(

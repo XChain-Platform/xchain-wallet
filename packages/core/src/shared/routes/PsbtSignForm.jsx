@@ -64,6 +64,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import {
     exactNetworkFeeSats,
@@ -237,6 +238,7 @@ function ArtifactBlock({ label, copyLabel, value, testId }) {
 export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -732,6 +734,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const header = (
         <PageHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
     );
+
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign transactions. Move the unsigned
+                        transaction to a Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
 
     if (loadError) {
         return (

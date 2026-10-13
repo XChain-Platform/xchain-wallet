@@ -29,6 +29,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
@@ -47,6 +48,7 @@ export function SignMessageForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -239,6 +241,19 @@ export function SignMessageForm({ walletId, onBack }) {
     const header = (
         <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
     );
+
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign messages. Open the message in a
+                        Full-mode or Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
 
     if (loadError) {
         return (

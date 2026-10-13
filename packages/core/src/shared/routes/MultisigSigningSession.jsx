@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -77,6 +78,7 @@ const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
  */
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
@@ -547,6 +549,19 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     if (view === 'sign-locally') {
+        if (isWatcherMode) {
+            return wrap(
+                <>
+                    <StatusMessage variant="status">
+                        This watch-only wallet can coordinate the multisig session but cannot
+                        add a local signature. Scan the request with a signer wallet instead.
+                    </StatusMessage>
+                    <div className={styles.actions}>
+                        <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                    </div>
+                </>,
+            );
+        }
         return wrap(
             <>
                 <p className={styles.successTitle}>Sign with my key</p>

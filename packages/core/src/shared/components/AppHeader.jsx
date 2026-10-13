@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
+import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import styles from './AppHeader.module.css';
@@ -41,6 +42,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {() => void} [props.onCommandPalette]                      when provided, renders a search button that opens the §33 command palette (Cmd/Ctrl+K)
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
+ * @param {boolean} [props.isWatcherMode]                            shows the persistent watch-only wallet badge
  * @param {{ id: string, name: string } | null} [props.activeWallet]              summary row in the gear popover
  * @param {{ id: string, name?: string, index?: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                    gear popover: navigate to the wallet picker
@@ -62,6 +64,7 @@ export function AppHeader({
     onCommandPalette,
     onLock,
     locking,
+    isWatcherMode = false,
     activeWallet = null,
     activeAccount = null,
     onOpenWalletPicker,
@@ -92,6 +95,7 @@ export function AppHeader({
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
+                <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
                 {showSettings ? (

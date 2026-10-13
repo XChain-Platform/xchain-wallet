@@ -812,7 +812,7 @@ function AppInner() {
     // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
-    const { isSignerMode } = useWalletMode();
+    const { isSignerMode, isWatcherMode } = useWalletMode();
 
     // Accounts of the active wallet, purely so the AppHeader gear
     // can name the active one. The per-wallet effect above owns SELECTION;
@@ -2772,6 +2772,7 @@ function AppInner() {
                                     onManageAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
                                     onViewAddress={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                                     onLock={handleNavLock}
+                                    isWatcherMode={isWatcherMode}
                                     activeWallet={activeWalletRow}
                                     activeAccount={headerAccountRow}
                                     onOpenWalletPicker={handleOpenWalletPicker}
