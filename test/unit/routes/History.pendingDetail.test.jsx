@@ -367,10 +367,19 @@ describe('History failed-transaction detail words the stored error for a user', 
         return Array.from(panel.querySelectorAll('p')).map((p) => p.textContent || '').join(' | ');
     }
 
+    it('says when the wallet did not record a specific failure reason', async () => {
+        const panel = await openFailed(null);
+        expect(proseOf(panel)).toContain(
+            "Couldn't send this transaction. The wallet did not record a specific reason.",
+        );
+        expect(panel.querySelector('details')).toBeNull();
+    });
+
     it('keeps a function-prefixed precondition out of the prose', async () => {
         const raw = 'submitAction: params.TICK is required';
         const panel = await openFailed(raw);
         expect(proseOf(panel)).not.toMatch(/submitAction:|Reason:/);
+        expect(proseOf(panel)).toContain("Couldn't send this transaction. Something went wrong. Try again.");
         const details = panel.querySelector('details');
         expect(details, 'raw text kept behind a disclosure').toBeTruthy();
         expect(details.querySelector('summary').textContent).toBe('Technical details');
@@ -380,6 +389,7 @@ describe('History failed-transaction detail words the stored error for a user', 
     it('keeps an SDK string out of the prose', async () => {
         const panel = await openFailed('broadcast.signedTx: SDK did not return a txid');
         expect(proseOf(panel)).not.toMatch(/SDK did not return|broadcast\.signedTx|Reason:/);
+        expect(proseOf(panel)).toContain("Couldn't send this transaction. Something went wrong. Try again.");
     });
 
     it('turns a node reject code into a plain sentence and keeps the code in the details', async () => {

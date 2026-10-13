@@ -47,9 +47,45 @@
     gap: var(--xc-space-3);
 }
 
-.fee {
-    font-size: var(--xc-text-sm);
+.requestOrigin {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+}
+
+.requestOriginLabel,
+.messageLabel {
+    margin: 0;
     color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.requestOriginValue {
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.fee {
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 
 /* Keep the account name and address in one compact wrapping row. AddressText
@@ -100,9 +136,14 @@
     gap: var(--xc-space-2);
 }
 
-/* §5.5 message variant: the full signed text, verbatim. Wraps (never
-   truncates or scrolls sideways) - the user is authorizing these exact
-   bytes, so every one of them has to be readable. */
+.messageBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* §5.5 message variant: the full signed text, verbatim. It wraps and
+   long messages scroll vertically inside their own labelled box. */
 .messageText {
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -113,6 +154,9 @@
     font-size: var(--xc-text-sm);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    max-block-size: 16rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 /* §5.5 fail-closed refusal: the wallet will not sign this at all. Styled

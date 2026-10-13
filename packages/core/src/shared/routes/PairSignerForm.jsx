@@ -86,6 +86,7 @@ export function PairSignerForm({
     const [notice, setNotice] = useState(/** @type {string | null} */ (null));
     const unpairedIds = useRef(new Set());
     const locallyPairedRecords = useRef(new Map());
+    const pairingAttempt = useRef(0);
 
     const webHidSupported = isWebHidSupported();
     const browserFamily = detectBrowserFamilyForWebHidHint();
@@ -135,16 +136,40 @@ export function PairSignerForm({
         setStage('pairing');
         setError(null);
         setNotice(null);
+        const attempt = ++pairingAttempt.current;
         try {
             const { pairingInfo: info, signer } = await factory();
+            if (attempt !== pairingAttempt.current) return;
             setPairingInfo(info);
             setLiveSigner(signer);
             setLabel(`${labelFor(v)} #1`);
             setStage('confirm');
         } catch (err) {
+            if (attempt !== pairingAttempt.current) return;
+            if (isPairingCancellation(err)) {
+                setVendor(null);
+                setStage('vendor');
+                setError(null);
+                return;
+            }
+            // D-52 / D-64: the pairing factories throw function-prefixed
+            // precondition errors ("pairTrezorSigner: ..."), and Trezor
+            // Connect hands back library internals verbatim. Filter both
+            // before they reach the dialog; copy already written for a
+            // reader passes through untouched.
             setError(pairingErrorMessage(err, v));
             setStage('error');
         }
+    }
+
+    function handleCancel() {
+        pairingAttempt.current += 1;
+        setVendor(null);
+        setPairingInfo(null);
+        setLiveSigner(null);
+        setError(null);
+        setStage('vendor');
+        onBack();
     }
 
     async function handleSave(event) {
@@ -209,7 +234,8 @@ export function PairSignerForm({
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleCancel}
+            backDisabled={stage === 'saving'}
             title="Pair hardware signer"
         />
     );
@@ -223,6 +249,7 @@ export function PairSignerForm({
         return wrap(
             <FormPage
                 label="Choose hardware signer"
+                actions={<Button variant="ghost" onClick={handleCancel}>Cancel</Button>}
                 status={error ? (
                     <StatusMessage
                         variant="error"
@@ -236,6 +263,7 @@ export function PairSignerForm({
                     </StatusMessage>
                 ) : notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
             >
+                <StepIndicator current={1} />
                 <p className={styles.stageHint}>Which kind of device are you pairing?</p>
                 {pairedSigners.length > 0 ? (
                     <PairedDeviceList
@@ -286,7 +314,11 @@ export function PairSignerForm({
 
     if (stage === 'pairing') {
         return wrap(
-            <FormPage label="Pair hardware signer">
+            <FormPage
+                label="Pair hardware signer"
+                actions={<Button variant="ghost" onClick={handleCancel}>Cancel</Button>}
+            >
+                <StepIndicator current={2} />
                 <p className={styles.summary}>
                     Waiting for {labelFor(vendor)}…
                 </p>
@@ -317,6 +349,7 @@ export function PairSignerForm({
                     </div>
                 )}
             >
+                <StepIndicator current={4} />
                 <h2 className={styles.successTitle}>
                     {savedRecord.label} <span className={styles.pairedBadge}>Paired</span>
                 </h2>
@@ -351,16 +384,22 @@ export function PairSignerForm({
                 <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
             ) : null}
             actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={stage === 'saving'}
-                    disabled={verdict?.status === 'unsupported'}
-                >
-                    {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Save'}
-                </Button>
+                <>
+                    <Button variant="ghost" onClick={handleCancel} disabled={stage === 'saving'}>
+                        Cancel
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'saving'}
+                        disabled={verdict?.status === 'unsupported'}
+                    >
+                        {verdict?.status === 'unsupported' ? 'Update firmware first' : 'Save'}
+                    </Button>
+                </>
             )}
         >
+            <StepIndicator current={3} />
             <p className={styles.stageHint}>
                 Confirm the device you just paired.
             </p>
@@ -391,6 +430,21 @@ export function PairSignerForm({
             />
         </FormPage>,
     );
+}
+
+function StepIndicator({ current }) {
+    return (
+        <p aria-current="step" className={styles.stepIndicator}>
+            Step {current} of 4
+        </p>
+    );
+}
+
+function isPairingCancellation(err) {
+    if (err?.name === 'AbortError') return true;
+    const message = String(err?.message || err || '');
+    return /\bcancel(?:led|ed)?\b|\babort(?:ed)?\b|popup closed/i
+        .test(message);
 }
 
 function FirmwareBanner({ verdict, vendor }) {

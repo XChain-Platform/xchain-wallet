@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
+import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -185,7 +185,12 @@ export function ManageToken({
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
-        if (typeof messaging?.getHoldersForToken !== 'function') return undefined;
+        setHolders(null);
+        setHoldersError(null);
+        if (typeof messaging?.getHoldersForToken !== 'function') {
+            setHoldersError('Holders lookup is not available in this build.');
+            return undefined;
+        }
         let cancelled = false;
         messaging.getHoldersForToken({ chainId, tick })
             .then((resp) => { if (!cancelled) setHolders(extractHolderRows(resp)); })
@@ -593,6 +598,7 @@ export function ManageToken({
                                     <span className={styles.heroDot}>·</span>
                                     <span>Owned by</span>
                                     <span className={styles.heroOwner} title={owner}>{shortAddress(owner)}</span>
+                                    <CopyButton value={owner} ariaLabel="Copy owner address" />
                                 </>
                             ) : null}
                         </div>
@@ -817,6 +823,7 @@ export function ManageToken({
                             holders={holders}
                             error={holdersError}
                             onViewAll={onViewHolders}
+                            divisibility={divisibility}
                         />
                     ) : null}
                     {activeTab === 'activity' ? (
@@ -858,7 +865,12 @@ export function ManageToken({
                                 {genesisInfo.source ? (
                                     <>
                                         <dt>Issuer</dt>
-                                        <dd className={styles.genesisMono} title={genesisInfo.source}>{shortAddress(genesisInfo.source)}</dd>
+                                        <dd className={styles.copyableGenesis}>
+                                            <span className={styles.genesisMono} title={genesisInfo.source}>
+                                                {shortAddress(genesisInfo.source)}
+                                            </span>
+                                            <CopyButton value={genesisInfo.source} ariaLabel="Copy genesis issuer address" />
+                                        </dd>
                                     </>
                                 ) : null}
                             </dl>
@@ -1020,8 +1032,8 @@ function SwapsPanel({ swaps, error, tick }) {
     );
 }
 
-function HoldersPanel({ holders, error, onViewAll }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+function HoldersPanel({ holders, error, onViewAll, divisibility }) {
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (holders === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />
@@ -1038,11 +1050,21 @@ function HoldersPanel({ holders, error, onViewAll }) {
                 {holders.slice(0, 10).map((h, i) => (
                     <li key={`${h.address || h.holder || i}`}>
                         <div className={styles.row}>
-                            <span className={styles.rowMono}>
-                                {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                            <span className={styles.holderAddress}>
+                                <span className={styles.rowMono} title={h.address || h.holder || undefined}>
+                                    {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                                </span>
+                                {(h.address || h.holder) ? (
+                                    <CopyButton
+                                        value={h.address || h.holder}
+                                        ariaLabel={`Copy holder address ${i + 1}`}
+                                    />
+                                ) : null}
                             </span>
                             <span className={styles.rowSub}>
-                                {h.quantity != null ? formatWithThousands(h.quantity) : (h.amount != null ? formatWithThousands(h.amount) : '-')}
+                                {h.quantity != null
+                                    ? formatAmount(String(h.quantity), divisibility || 0)
+                                    : (h.amount != null ? formatWithThousands(h.amount) : '-')}
                             </span>
                         </div>
                     </li>

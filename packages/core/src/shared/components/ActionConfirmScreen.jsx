@@ -94,6 +94,7 @@ function useSourceIdentity(address, chainId, walletId) {
  * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
  *   fallback: when the composed PSBT knows its own fee (§5.2.5) that exact value wins
  * @param {string} [props.coinTicker]            ticker for the exact-fee line
+ * @param {string} [props.requestOrigin]         browser-verified requesting site
  * @param {boolean} props.signerReady            wallet already unlocked (no password needed)
  * @param {string} props.password
  * @param {(value: string) => void} props.onPasswordChange
@@ -137,6 +138,7 @@ export function ActionConfirmScreen({
     hintClassName,
     simulation = null,
     coinTicker = '',
+    requestOrigin = '',
     hwSource = null,
     onHwStatusChange,
     hwStatus,
@@ -224,6 +226,7 @@ export function ActionConfirmScreen({
             sourceName={sourceName}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
+            requestOrigin={requestOrigin}
             nativeTicker={ticker}
             credentialsReady={credsComplete}
             credentials={(

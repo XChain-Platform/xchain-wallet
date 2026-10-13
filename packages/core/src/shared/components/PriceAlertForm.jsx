@@ -21,6 +21,7 @@
 
 import { useMemo, useState } from 'react';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const FIELD = {
     background: 'var(--xc-bg)',
@@ -63,20 +64,32 @@ export function coinLabelForChain(chainId) {
  * @param {string} [props.fiatCurrency]      display currency for the threshold (default 'usd')
  * @param {string} [props.lockedChainId]     when set, hides the coin selector and pins this coin
  * @param {number|null} [props.currentPrice] current spot price, drives the "already met" hint + prefill
+ * @param {{ chainId: string, direction: 'above'|'below', targetFiat: number }} [props.initialAlert]
  * @param {() => void} [props.onCancel]
  */
-export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, currentPrice = null, onCancel }) {
+export function PriceAlertForm({
+    onCreate,
+    fiatCurrency = 'usd',
+    lockedChainId,
+    currentPrice = null,
+    initialAlert,
+    onCancel,
+}) {
     const cur = String(fiatCurrency || 'usd').toLowerCase();
-    const [chainId, setChainId] = useState(lockedChainId || MAINNET_PRICE_CHAINS[0] || '');
-    const [direction, setDirection] = useState('above');
+    const editing = Boolean(initialAlert);
+    const [chainId, setChainId] = useState(initialAlert?.chainId || lockedChainId || MAINNET_PRICE_CHAINS[0] || '');
+    const [direction, setDirection] = useState(initialAlert?.direction || 'above');
     const [targetStr, setTargetStr] = useState(
-        currentPrice != null && Number.isFinite(currentPrice) ? String(roundForInput(currentPrice)) : '',
+        initialAlert?.targetFiat != null
+            ? String(initialAlert.targetFiat)
+            : currentPrice != null && Number.isFinite(currentPrice) ? String(roundForInput(currentPrice)) : '',
     );
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState(/** @type {string|null} */ (null));
 
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
+    const invalidTarget = targetStr !== '' && !valid;
 
     const alreadyMet = useMemo(() => {
         if (currentPrice == null || !Number.isFinite(currentPrice) || !valid) return false;
@@ -89,9 +102,9 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
         setErr(null);
         try {
             await onCreate({ chainId, direction, targetFiat, fiatCurrency: cur });
-            setTargetStr('');
+            if (!editing) setTargetStr('');
         } catch (e) {
-            setErr(e?.message || 'Could not save the alert');
+            setErr(userFacingMessage(e, 'Could not save the alert. Try again.'));
         } finally {
             setBusy(false);
         }
@@ -132,13 +145,15 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                     aria-label="Target price"
                     placeholder="Price"
                     value={targetStr}
+                    aria-invalid={invalidTarget}
+                    aria-describedby={invalidTarget ? 'price-alert-target-error' : undefined}
                     onChange={(e) => setTargetStr(normalizeDecimalEntry(e.target.value, targetStr))}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                     style={{ ...FIELD, width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
                 <button type="button" onClick={submit} disabled={!valid || busy} style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}>
-                    {busy ? 'Adding…' : 'Add alert'}
+                    {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
                 </button>
                 {onCancel ? (
                     <button
@@ -150,13 +165,18 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                     </button>
                 ) : null}
             </div>
+            {invalidTarget ? (
+                <span id="price-alert-target-error" role="alert" style={{ ...HINT, color: 'var(--xc-danger)' }}>
+                    Enter a price greater than zero.
+                </span>
+            ) : null}
             {alreadyMet ? (
                 <span style={HINT}>
                     {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price.
                     This alert will fire on the next check.
                 </span>
             ) : null}
-            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger)' }}>{err}</span> : null}
+            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}
         </div>
     );
 }

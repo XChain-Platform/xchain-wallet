@@ -149,9 +149,19 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     const [summary, setSummary] = useState(/** @type {any | null} */ (null));
     const [summaryLoading, setSummaryLoading] = useState(false);
     useEffect(() => {
-        if (!chainId || !ticker || !cbTick) { setSummary(null); return undefined; }
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
-        if (typeof messaging?.tokenHolderSummary !== 'function') return undefined;
+        if (!chainId || !ticker || !cbTick) {
+            setSummary(null);
+            setSummaryLoading(false);
+            return undefined;
+        }
+        if (flowsLib.isDemoWallet(walletId)) {
+            setSummaryLoading(false);
+            return undefined;
+        }
+        if (typeof messaging?.tokenHolderSummary !== 'function') {
+            setSummaryLoading(false);
+            return undefined;
+        }
         let cancelled = false;
         setSummaryLoading(true);
         messaging.tokenHolderSummary({
@@ -441,7 +451,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review callback' : 'Execute callback'}
         />
     );
@@ -516,8 +529,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         type="submit"
                         variant={isWatcherMode ? 'primary' : 'danger'}
                         loading={stage === 'submitting'}
-                        disabled={
-                            !typedConfirmOk || (
+                        disabled={stage === 'submitting' || !typedConfirmOk || (
                                 isWatcherMode
                                     ? false
                                     : isHwSource
@@ -646,6 +658,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
+                    setFormError(null);
                 }}
                 onBack={() => setSourcePickerOpen(false)}
             />
@@ -727,7 +740,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
                 error={memoTooLong || undefined}
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 

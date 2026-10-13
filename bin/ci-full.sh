@@ -196,7 +196,7 @@ run_tier "drift: wallet<->SDK preflight schema/code parity" \
 run_tier "drift: wallet<->hub chain-registry snapshot" \
   node bin/sync-chain-registry.mjs --check
 run_tier "drift: installed SDK matches lockfile pin" \
-  node tools/dev/sdk-installed-guard.mjs
+  pnpm run sdk:check
 
 # --- job: build ------------------------------------------------------------
 # The four gates after the build can only be checked against a real dist/, so

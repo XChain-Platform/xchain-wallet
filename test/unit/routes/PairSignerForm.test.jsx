@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PairSignerForm } from '../../../packages/core/src/shared/routes/PairSignerForm.jsx';
@@ -133,5 +133,84 @@ describe('PairSignerForm paired devices', () => {
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Vault is busy.');
         expect(screen.getByText('Desk Ledger')).toBeInTheDocument();
+    });
+});
+
+const PAIRING_INFO = {
+    vendor: 'trezor',
+    model: 'test-model',
+    deviceIdentifier: 'device-1',
+    firmwareVersion: '9.9.9',
+};
+
+function mountSimple({ pairTrezor, messaging = {}, onBack = vi.fn(), onPaired } = {}) {
+    const props = { walletId: 'wallet-1', pairTrezor, pairLedger: null, onBack, onPaired };
+    return {
+        onBack,
+        ...render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PairSignerForm {...props} />
+            </MessagingProvider>,
+        ),
+    };
+}
+
+describe('PairSignerForm pairing flow', () => {
+    it('shows each step and persists the edited label', async () => {
+        const registerSigner = vi.fn(async () => ({
+            ...PAIRING_INFO,
+            id: 'signer-1',
+            label: 'Travel signer',
+        }));
+        const pairTrezor = vi.fn(async () => ({ signer: {}, pairingInfo: PAIRING_INFO }));
+        mountSimple({ pairTrezor, messaging: { registerSigner } });
+
+        expect(screen.getByText('Step 1 of 4')).toHaveAttribute('aria-current', 'step');
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
+        });
+        expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Label'), { target: { value: '  Travel signer  ' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        });
+        expect(registerSigner).toHaveBeenCalledWith(expect.objectContaining({
+            walletId: 'wallet-1',
+            label: 'Travel signer',
+        }));
+        expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
+    });
+
+    it('returns quietly to device choice when the hardware prompt is cancelled', async () => {
+        const pairTrezor = vi.fn(async () => {
+            throw new Error('Trezor pairing was cancelled or failed');
+        });
+        mountSimple({ pairTrezor });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
+        });
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByText(/Which kind of device/i)).toBeInTheDocument();
+    });
+
+    it('ignores a late hardware result after the user cancels the flow', async () => {
+        let finishPairing;
+        const pairTrezor = vi.fn(() => new Promise((resolve) => { finishPairing = resolve; }));
+        const { onBack } = mountSimple({ pairTrezor });
+
+        fireEvent.click(screen.getByRole('button', { name: /Trezor/ }));
+        expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+
+        await act(async () => {
+            finishPairing({ signer: {}, pairingInfo: PAIRING_INFO });
+        });
+        expect(screen.queryByLabelText('Label')).not.toBeInTheDocument();
+        expect(screen.getByText(/Which kind of device/i)).toBeInTheDocument();
     });
 });

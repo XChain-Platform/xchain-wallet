@@ -33,6 +33,7 @@ import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
  * @param {string} props.message                  the exact text being signed
  * @param {string} props.chainLabel
  * @param {string} [props.signingAddress]
+ * @param {string} [props.requestOrigin]         browser-verified requesting site
  * @param {boolean} props.signerReady
  * @param {string} props.password
  * @param {(value: string) => void} props.onPasswordChange
@@ -44,6 +45,7 @@ export function MessageConfirmScreen({
     message,
     chainLabel,
     signingAddress,
+    requestOrigin = '',
     signerReady,
     password,
     onPasswordChange,
@@ -67,14 +69,11 @@ export function MessageConfirmScreen({
             error={confirmAction.error}
             chainLabel={chainLabel}
             messageText={message}
+            requestOrigin={requestOrigin}
+            sourceAddress={signingAddress}
             credentialsReady={signerReady || password.length > 0}
             credentials={(
                 <>
-                    {signingAddress ? (
-                        <p className={hintClassName}>
-                            Signing as <code>{signingAddress}</code>
-                        </p>
-                    ) : null}
                     {signerReady ? (
                         // Panic mode freezes signMessageFlow too, so
                         // this note is a claim the wallet cannot honour while

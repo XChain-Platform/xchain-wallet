@@ -4,8 +4,8 @@
 // Focus trap + background-inert (§5.1).
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { useRef } from 'react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { useRef, useState } from 'react';
 import { useFocusTrap, useInertBackground } from '../../../packages/core/src/shared/utils/focusTrap.js';
 
 afterEach(() => cleanup());
@@ -72,5 +72,79 @@ describe('useInertBackground', () => {
         // After unmount the harness is gone; re-render inactive to confirm no inert.
         render(<InertHarness active={false} />);
         expect(screen.getByTestId('sibling').hasAttribute('inert')).toBe(false);
+    });
+});
+
+// A dialog opened from a control hands focus back to that control on close,
+// including the common case where the dialog's own button carries autoFocus
+// and has already taken focus before the trap's effect runs.
+function OpenerHarness({ autoFocusInside = false }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: open });
+    return (
+        <div>
+            <button data-testid="opener" onClick={() => setOpen(true)}>open</button>
+            {open ? (
+                <div ref={ref} role="dialog">
+                    {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+                    <button data-testid="inside" autoFocus={autoFocusInside} onClick={() => setOpen(false)}>close</button>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+describe('useFocusTrap opener handling', () => {
+    const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+
+    it('moves focus into the dialog and back to the opener on close', async () => {
+        render(<OpenerHarness />);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+        expect(document.activeElement).toBe(screen.getByTestId('inside'));
+        fireEvent.click(screen.getByTestId('inside'));
+        await flush();
+        expect(document.activeElement).toBe(opener);
+    });
+
+    it('still finds the opener when an autoFocus control already took focus', async () => {
+        render(<OpenerHarness autoFocusInside />);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+        expect(document.activeElement).toBe(screen.getByTestId('inside'));
+        fireEvent.click(screen.getByTestId('inside'));
+        await flush();
+        expect(document.activeElement).toBe(opener);
+    });
+
+    it('does not pull focus back when something else claimed it on close', async () => {
+        render(<div><OpenerHarness /><button data-testid="elsewhere">elsewhere</button></div>);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+        const elsewhere = screen.getByTestId('elsewhere');
+        fireEvent.click(screen.getByTestId('inside'));
+        elsewhere.focus();
+        await flush();
+        expect(document.activeElement).toBe(elsewhere);
+    });
+
+    it('with trap:false leaves Tab alone', () => {
+        function NoTrap() {
+            const ref = useRef(null);
+            useFocusTrap(ref, { active: true, trap: false });
+            return <div ref={ref}><button data-testid="a">a</button></div>;
+        }
+        render(<NoTrap />);
+        const a = screen.getByTestId('a');
+        a.focus();
+        const notPrevented = fireEvent.keyDown(a, { key: 'Tab' });
+        expect(notPrevented).toBe(true);
     });
 });
