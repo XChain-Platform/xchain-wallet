@@ -37,6 +37,7 @@ import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetail
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
+import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -228,14 +229,14 @@ export function App() {
             <ToastHost>
                 <ReachabilityBanner />
                 <RouteErrorBoundary>
-                    <AppInner canOpenInTab={canOpenInTab} />
+                    <AppInner canOpenInTab={canOpenInTab} titleEnabled={shell === 'web'} />
                 </RouteErrorBoundary>
             </ToastHost>
         </MessagingProvider>
     );
 }
 
-function AppInner({ canOpenInTab }) {
+function AppInner({ canOpenInTab, titleEnabled }) {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
@@ -263,6 +264,12 @@ function AppInner({ canOpenInTab }) {
                         : 'home'
         ),
     );
+    useDocumentTitle({
+        statusState: status.state,
+        onboardingStep,
+        unlockedView,
+        enabled: titleEnabled,
+    });
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
     );
