@@ -10,15 +10,20 @@ const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const RELATIVE_CUTOFF_MS = 7 * DAY_MS;
+const MILLISECOND_TIMESTAMP_FLOOR = 1e11;
 
 function timestampMs(timestamp) {
     const numeric = Number(timestamp);
-    if (Number.isFinite(numeric) && numeric > 0) {
-        return numeric < 1e12 ? numeric * SECOND_MS : numeric;
+    if (Number.isFinite(numeric)) {
+        if (numeric <= 0) return null;
+        const candidate = numeric < MILLISECOND_TIMESTAMP_FLOOR
+            ? numeric * SECOND_MS
+            : numeric;
+        return Number.isNaN(new Date(candidate).getTime()) ? null : candidate;
     }
     if (typeof timestamp !== 'string' || !timestamp.trim()) return null;
     const parsed = Date.parse(timestamp);
-    return Number.isNaN(parsed) ? null : parsed;
+    return Number.isNaN(new Date(parsed).getTime()) ? null : parsed;
 }
 
 /**

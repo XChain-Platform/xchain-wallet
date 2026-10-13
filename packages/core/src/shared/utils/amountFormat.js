@@ -15,24 +15,44 @@
 
 import { getFormatLocale } from '../../i18n/index.js';
 
+function isNonFiniteNumber(value) {
+    return typeof value === 'number' && !Number.isFinite(value);
+}
+
 function localeNumberSeparators(locale) {
     try {
-        const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(12345.6);
+        const parts = new Intl.NumberFormat(getFormatLocale(locale)).formatToParts(1234567890123.6);
+        const integerGroups = parts
+            .filter((part) => part.type === 'integer')
+            .map((part) => part.value.length);
+        const primary = integerGroups.at(-1) || 3;
         return {
             decimal: parts.find((part) => part.type === 'decimal')?.value || '.',
             group: parts.find((part) => part.type === 'group')?.value || ',',
+            grouping: {
+                primary,
+                secondary: integerGroups.at(-2) || primary,
+            },
         };
     } catch {
-        return { decimal: '.', group: ',' };
+        return { decimal: '.', group: ',', grouping: { primary: 3, secondary: 3 } };
     }
 }
 
-function validGroupedInteger(value, separators) {
+function validGroupedInteger(value, separators, grouping = { primary: 3, secondary: 3 }) {
     const active = separators.filter((separator) => value.includes(separator));
     if (active.length === 0) return /^\d+$/.test(value);
     const escaped = active.map((separator) => separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const pieces = value.split(new RegExp(`[${escaped.join('')}]`));
-    return /^\d{1,3}$/.test(pieces[0]) && pieces.slice(1).every((piece) => /^\d{3}$/.test(piece));
+    const { primary, secondary } = grouping;
+    return new RegExp(`^\\d{1,${secondary}}$`).test(pieces[0])
+        && pieces.slice(1, -1).every((piece) => new RegExp(`^\\d{${secondary}}$`).test(piece))
+        && new RegExp(`^\\d{${primary}}$`).test(pieces.at(-1));
+}
+
+function validLocaleGroupedInteger(value, separators, grouping) {
+    return validGroupedInteger(value, separators, grouping)
+        || validGroupedInteger(value, separators);
 }
 
 function removeGrouping(value, separators) {
@@ -49,7 +69,11 @@ export function normalizeLocalizedDecimal(value, locale) {
     let raw = String(value).trim();
     if (raw === '') return '';
     if (!/^[\d., \t\u00a0\u202f]+$/.test(raw)) return null;
-    const { decimal: localeDecimal, group: localeGroup } = localeNumberSeparators(locale);
+    const {
+        decimal: localeDecimal,
+        group: localeGroup,
+        grouping: localeGrouping,
+    } = localeNumberSeparators(locale);
     raw = raw.replace(/[ \t\u00a0\u202f]+/g, ' ');
     if (raw === '') return null;
 
@@ -64,15 +88,20 @@ export function normalizeLocalizedDecimal(value, locale) {
     } else {
         const separator = dotCount ? '.' : commaCount ? ',' : null;
         if (!separator) {
-            return validGroupedInteger(raw, [' ']) ? removeGrouping(raw, [' ']) : null;
+            return validLocaleGroupedInteger(raw, [' '], localeGrouping)
+                ? removeGrouping(raw, [' '])
+                : null;
         }
         const count = separator === '.' ? dotCount : commaCount;
         if (count > 1) {
             const groups = [separator, ' '];
-            return validGroupedInteger(raw, groups) ? removeGrouping(raw, groups) : null;
+            const valid = separator === localeGroup
+                ? validLocaleGroupedInteger(raw, groups, localeGrouping)
+                : validGroupedInteger(raw, groups);
+            return valid ? removeGrouping(raw, groups) : null;
         }
         if (separator === localeGroup && separator !== localeDecimal
-            && validGroupedInteger(raw, [separator, ' '])) {
+            && validLocaleGroupedInteger(raw, [separator, ' '], localeGrouping)) {
             return removeGrouping(raw, [separator, ' ']);
         }
         decimal = separator;
@@ -85,7 +114,10 @@ export function normalizeLocalizedDecimal(value, locale) {
     let integer = integerRaw;
     const integerGroups = [group, ' '].filter(Boolean);
     if (integerGroups.some((separator) => integerRaw.includes(separator))) {
-        if (!validGroupedInteger(integerRaw, integerGroups)) return null;
+        const valid = group === localeGroup
+            ? validLocaleGroupedInteger(integerRaw, integerGroups, localeGrouping)
+            : validGroupedInteger(integerRaw, integerGroups);
+        if (!valid) return null;
         integer = removeGrouping(integerRaw, integerGroups);
     } else if (!/^\d*$/.test(integer)) {
         return null;
@@ -151,7 +183,7 @@ export function normalizeAmountFieldInput(value, { unit = '', fiatCurrency = nul
 // Group a canonical dot-decimal value with the active locale's separators.
 // Fractional precision and an in-progress trailing decimal mark stay intact.
 export function formatWithThousands(value, locale) {
-    if (value == null || value === '') return '';
+    if (value == null || value === '' || isNonFiniteNumber(value)) return '';
     const str = String(value);
     const negative = str.startsWith('-');
     const abs = negative ? str.slice(1) : str;
@@ -180,29 +212,32 @@ export function formatWithThousands(value, locale) {
 // a plain decimal (already trimmed, exponential, non-numeric) comes back
 // unchanged rather than guessed at.
 export function trimAmountTail(value) {
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
     const s = String(value);
     if (!/^-?\d+\.\d+$/.test(s)) return s;
-    return s.replace(/0+$/, '').replace(/\.$/, '');
+    const trimmed = s.replace(/0+$/, '').replace(/\.$/, '');
+    return trimmed === '-0' ? '0' : trimmed;
 }
 
 /** Group a plain decimal string for display without converting it to a float. */
 export function formatDecimalAmount(value, locale, options = {}) {
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
     const raw = String(value).trim();
     const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
     if (!match) return raw;
     const fractionDigits = match[3]?.length || 0;
     const minimumFractionDigits = options.minimumFractionDigits ?? fractionDigits;
     const maximumFractionDigits = options.maximumFractionDigits ?? fractionDigits;
+    const isZero = !/[1-9]/.test(`${match[2]}${match[3] || ''}`);
+    const displayValue = match[1] === '-' && isZero ? raw.slice(1) : raw;
     try {
         return new Intl.NumberFormat(getFormatLocale(locale), {
             useGrouping: true,
             minimumFractionDigits,
             maximumFractionDigits,
-        }).format(raw);
+        }).format(displayValue);
     } catch {
-        const sign = match[1];
+        const sign = match[1] === '-' && isZero ? '' : match[1];
         const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         return `${sign}${grouped}${match[3] === undefined ? '' : `.${match[3]}`}`;
     }
@@ -216,7 +251,7 @@ const MIN_DISPLAY_AMOUNT = '0.00000001';
  * and non-zero magnitudes below one base unit remain visible as a threshold.
  */
 export function formatDisplayAmount(value, locale) {
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
     const raw = String(value).trim();
     const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
     if (!match) return raw;
@@ -256,7 +291,7 @@ export function formatHistoryAmountForSpeech(value, unit, direction, locale) {
 
 /** Format a token quantity already expressed in whole-token units. */
 export function formatTokenQuantity(value, divisibility = 0, locale) {
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined || isNonFiniteNumber(value)) return '';
     const raw = String(value).trim();
     if (divisibility === null || divisibility === '') {
         return formatDecimalAmount(trimAmountTail(raw), locale);
@@ -273,7 +308,8 @@ export function formatTokenQuantity(value, divisibility = 0, locale) {
 
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
 export function formatAtomicAmount(quantity, divisibility = 0, locale) {
-    const raw = String(quantity ?? '0').trim();
+    if (quantity === null || quantity === undefined || isNonFiniteNumber(quantity)) return '';
+    const raw = String(quantity).trim();
     const scale = Number(divisibility);
     if (!/^-?\d+$/.test(raw) || !Number.isInteger(scale) || scale < 0) return raw;
     const negative = raw.startsWith('-');
