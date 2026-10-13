@@ -408,6 +408,33 @@ body {
     box-sizing: border-box;
 }
 
+/* Taps activate controls immediately while pan and pinch gestures remain
+ * available to the page. ARIA roles cover tappable rows that are not native
+ * buttons, and :where() lets a component override this for a gesture surface. */
+:where(
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'],
+    a[href],
+    [role='button'],
+    [role='link'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='option'],
+    summary,
+    label
+) {
+    touch-action: manipulation;
+}
+
+/* A dialog can place its scrollport on the panel, body, list, or viewer.
+ * Applying containment through the subtree keeps every such scroll boundary
+ * from chaining into the page behind it. */
+:where([role='dialog'], [role='dialog'] *) {
+    overscroll-behavior: contain;
+}
+
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
