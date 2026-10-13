@@ -23,8 +23,8 @@
 // had nowhere at all to surface: pressing Sign did nothing visible. A user
 // cannot tell a rejected transaction from a dead button, and will press again.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import { SignCredentials } from '../../../packages/core/src/shared/components/SignCredentials.jsx';
 
 afterEach(() => cleanup());
@@ -75,5 +75,34 @@ describe('SignCredentials', () => {
 
         expect(screen.getByLabelText(/password/i)).toBeTruthy();
         expect(screen.getByText('Incorrect password.')).toBeTruthy();
+    });
+
+    it('does not restart hardware status polling when the parent rerenders', async () => {
+        const hardwareAddress = {
+            address: 'bc1qhardware',
+            source: 'ledger',
+            signerId: 'ledger-1',
+            derivationPath: "m/84'/0'/0'/0/0",
+        };
+        const getSignerStatus = vi.fn().mockResolvedValue({ status: 'available' });
+        const view = render(
+            <SignCredentials
+                fromAddress={hardwareAddress}
+                chainId="bitcoin-mainnet"
+                getSignerStatus={getSignerStatus}
+            />,
+        );
+        await act(async () => Promise.resolve());
+
+        view.rerender(
+            <SignCredentials
+                fromAddress={hardwareAddress}
+                chainId="bitcoin-mainnet"
+                getSignerStatus={getSignerStatus}
+            />,
+        );
+        await act(async () => Promise.resolve());
+
+        expect(getSignerStatus).toHaveBeenCalledTimes(1);
     });
 });

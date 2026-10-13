@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Button } from '../../ui/Button.jsx';
 import styles from './MnemonicGrid.module.css';
 
@@ -27,11 +27,12 @@ import styles from './MnemonicGrid.module.css';
  * @param {'small' | 'full'} [props.variant]
  */
 export function MnemonicGrid({ mnemonic, variant = 'full' }) {
-    const [revealedMnemonic, setRevealedMnemonic] = useState(null);
+    const mnemonicKey = useMemo(() => Symbol('mnemonic'), [mnemonic]);
+    const [revealedKey, setRevealedKey] = useState(null);
     const contentId = useId();
     const words = mnemonic.trim().split(/\s+/);
     const gridClass = variant === 'small' ? styles.gridPopup : styles.gridFull;
-    const revealed = revealedMnemonic === mnemonic;
+    const revealed = revealedKey === mnemonicKey;
 
     return (
         <div className={styles.container}>
@@ -41,7 +42,7 @@ export function MnemonicGrid({ mnemonic, variant = 'full' }) {
                     size="sm"
                     aria-controls={contentId}
                     aria-expanded={revealed}
-                    onClick={() => setRevealedMnemonic(revealed ? null : mnemonic)}
+                    onClick={() => setRevealedKey(revealed ? null : mnemonicKey)}
                 >
                     {revealed ? 'Hide recovery phrase' : 'Reveal recovery phrase'}
                 </Button>
