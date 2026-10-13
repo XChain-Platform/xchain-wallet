@@ -31,6 +31,8 @@
 // Pure function: no I/O, no side effects. Caller computes the inputs
 // (the form already has them) and passes them in.
 
+import { t } from '../i18n/index.js';
+
 const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 const ZERO_WIDTH = /[\u00AD\u034F\u180E\u200B-\u200D\u2060-\u2064\u206A-\u206F\uFEFF]/u;
 const LATIN = /\p{Script_Extensions=Latin}/u;
@@ -114,7 +116,7 @@ export function classifySignRisk(input = {}) {
     if (settings?.alwaysRequireHwExplicitConfirm === true) {
         return {
             requireExplicitConfirm: true,
-            reason: "You've set the wallet to always require explicit cross-check confirm on hardware signs.",
+            reason: t('flows.signRisk.alwaysConfirm'),
         };
     }
 
@@ -122,7 +124,7 @@ export function classifySignRisk(input = {}) {
     if (multisig === true) {
         return {
             requireExplicitConfirm: true,
-            reason: "Multisig contributions deserve an explicit cross-check. Your cosigners trust this signature.",
+            reason: t('flows.signRisk.multisig'),
         };
     }
 
@@ -130,7 +132,7 @@ export function classifySignRisk(input = {}) {
     if (recipientNovel === true) {
         return {
             requireExplicitConfirm: true,
-            reason: "First-time recipient. Confirm the address on your device matches what's shown here.",
+            reason: t('flows.signRisk.firstRecipient'),
         };
     }
 
@@ -143,7 +145,7 @@ export function classifySignRisk(input = {}) {
         if (amount !== null && amount >= threshold) {
             return {
                 requireExplicitConfirm: true,
-                reason: `Large amount (${amount.toLocaleString()} sats). Confirm both path and address on your device.`,
+                reason: t('flows.signRisk.largeAmount', { amount: amount.toLocaleString() }),
             };
         }
     }

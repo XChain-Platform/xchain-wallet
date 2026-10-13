@@ -142,7 +142,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
         await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe('Invalid signature. Signature does not match this message and address.'));
+            .toBe("Invalid signature. Signature doesn't match this message and address."));
     });
 
     it('normalizes valid base64 without accepting arbitrary text', () => {

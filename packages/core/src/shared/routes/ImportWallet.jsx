@@ -55,6 +55,7 @@ import {
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
+import { t } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -636,7 +637,7 @@ export function ImportWallet({
     }
 
     const laneSwitcher = !isFreeWallet ? (
-        <div className={styles.laneSwitcher} role="tablist" aria-label="Import lane">
+        <div className={styles.laneSwitcher} role="tablist" aria-label={t('importWallet.lane')}>
             <button
                 type="button"
                 role="tab"
@@ -645,7 +646,7 @@ export function ImportWallet({
                 onClick={() => { setLane('mnemonic'); setError(null); }}
                 disabled={busy}
             >
-                Recovery phrase
+                {t('importWallet.recoveryPhrase')}
             </button>
             {mode === 'fresh' ? (
                 <button
@@ -656,7 +657,7 @@ export function ImportWallet({
                     onClick={() => { setLane('wif'); setError(null); }}
                     disabled={busy}
                 >
-                    Private key
+                    {t('importWallet.wif.tab')}
                 </button>
             ) : null}
             <button
@@ -667,7 +668,7 @@ export function ImportWallet({
                 onClick={() => { setLane('backup'); setError(null); }}
                 disabled={busy}
             >
-                Encrypted backup
+                {t('importWallet.encryptedBackup')}
             </button>
         </div>
     ) : null;
@@ -730,7 +731,7 @@ export function ImportWallet({
                 // copy - offering Browse to a user whose file is fine
                 // sends them to fix the wrong thing.
                 lane === 'backup' && error === NO_BACKUP_CONTENT_MESSAGE
-                    ? { label: 'Browse', onAction: backupDrop.openFilePicker }
+                    ? { label: t('importWallet.browse'), onAction: backupDrop.openFilePicker }
                     : undefined
             }
         />
@@ -749,7 +750,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? 'Restoring…' : 'Restore'}
+            {busy ? t('importWallet.restoring') : t('send.draft.restore')}
         </Button>
     ) : lane === 'wif' ? (
         <Button
@@ -760,7 +761,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? 'Importing…' : 'Import'}
+            {busy ? t('importWallet.importing') : t('importWallet.import')}
         </Button>
     ) : (
         <Button
@@ -771,13 +772,13 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? 'Importing…' : 'Import'}
+            {busy ? t('importWallet.importing') : t('importWallet.import')}
         </Button>
     );
 
     const form = (
         <FormPage
-            label="Import wallet"
+            label={t('importWallet.title')}
             onSubmit={lane === 'backup'
                 ? handleBackupSubmit
                 : lane === 'wif'
@@ -789,34 +790,34 @@ export function ImportWallet({
             <header className={headClass}>
                 <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
                     {isFreeWallet
-                        ? (isFull ? 'Import from FreeWallet' : 'FreeWallet import')
+                        ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
                         : lane === 'backup'
-                            ? (isFull ? 'Restore from encrypted backup' : 'Restore backup')
+                            ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
                             : lane === 'wif'
-                                ? (isFull ? 'Import a private key' : 'Import private key')
-                            : (isFull ? 'Import an existing wallet' : 'Import wallet')}
+                                ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
+                            : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
                 </h1>
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
-                            ? 'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.'
-                            : 'Enter your 12-word FreeWallet recovery phrase.')
+                            ? t('importWallet.freeWallet.fullSubtitle')
+                            : t('importWallet.freeWallet.subtitle'))
                         : lane === 'backup'
                             ? (isFull
                                 ? (mode === 'add'
-                                    ? 'Restore an encrypted backup as a new wallet. Your existing wallets stay in place.'
+                                    ? t('importWallet.backup.addFullSubtitle')
                                     // It used to say "the password",
                                     // singular, one line above three password
                                     // boxes.
-                                    : 'Choose a `.xchain-wallet` backup. Then enter its file, wallet, and device passwords.')
+                                    : t('importWallet.backup.replaceFullSubtitle'))
                                 : (mode === 'add'
-                                    ? 'Restore as a new wallet. Your existing wallets stay in place.'
-                                    : 'Choose a backup file, then enter the three passwords below.'))
+                                    ? t('importWallet.backup.addSubtitle')
+                                    : t('importWallet.backup.replaceSubtitle')))
                             : lane === 'wif'
-                                ? 'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.'
+                                ? t('importWallet.wif.subtitle')
                             : (isFull
-                                ? 'Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.'
-                                : 'Enter a recovery phrase with 12, 15, 18, 21, or 24 words.')}
+                                ? t('importWallet.phrase.fullSubtitle')
+                                : t('importWallet.phrase.subtitle'))}
                 </p>
             </header>
             {laneSwitcher}
@@ -824,7 +825,7 @@ export function ImportWallet({
                 <>
                     <div className={styles.mnemonicHeader}>
                         <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
-                            Backup file
+                            {t('importWallet.backup.file')}
                         </label>
                         <button
                             type="button"
@@ -838,19 +839,21 @@ export function ImportWallet({
                             aria-expanded={backupScanning}
                             aria-controls="xc-backup-scanner"
                         >
-                            {backupScanning ? 'Cancel scan' : 'Scan pointer QR'}
+                            {backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
                         </button>
                     </div>
                     {backupScanning ? (
                         <div id="xc-backup-scanner" className={styles.scannerBox}>
-                            <QrScanner onFrame={handleBackupQrFrame} alt="Backup-pointer QR scanner" />
+                            <QrScanner onFrame={handleBackupQrFrame} alt={t('importWallet.backup.scannerAlt')} />
                         </div>
                     ) : null}
                     {backupPointer ? (
                         <div className={styles.backupPointerCard} role="status">
                             <p className={styles.backupHint}>
-                                Backup pointer loaded{backupPointer.name ? `: ${backupPointer.name}` : ''}.
-                                {' '}Location: {backupPointer.location}
+                                {t('importWallet.backup.pointerLoaded', {
+                                    name: backupPointer.name ? `: ${backupPointer.name}` : '',
+                                })}
+                                {' '}{t('importWallet.backup.location', { location: backupPointer.location })}
                             </p>
                             <button
                                 type="button"
@@ -858,7 +861,7 @@ export function ImportWallet({
                                 onClick={clearBackupPointer}
                                 disabled={busy}
                             >
-                                Use a file instead
+                                {t('importWallet.backup.useFile')}
                             </button>
                         </div>
                     ) : (
@@ -866,7 +869,7 @@ export function ImportWallet({
                     <input
                         {...backupDrop.pickerProps}
                         id="xc-backup-file"
-                        aria-label="Backup file"
+                        aria-label={t('importWallet.backup.file')}
                         aria-describedby="xc-backup-source-status"
                         disabled={busy}
                     />
@@ -876,13 +879,13 @@ export function ImportWallet({
                         onClick={backupDrop.openFilePicker}
                         disabled={busy}
                     >
-                        Choose backup file
+                        {t('importWallet.backup.chooseFile')}
                     </button>
                     <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
                         {backupSourceMessage}
                     </p>
                     <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
-                        Backup file contents
+                        {t('importWallet.backup.contents')}
                     </label>
                     <textarea
                         id="xc-backup-content"
@@ -894,7 +897,7 @@ export function ImportWallet({
                             if (e.target.value !== backupContent) setBackupFileName(null);
                             if (error) setError(null);
                         }}
-                        placeholder='{"version":1,"kdf":{"name":"argon2id"…'
+                        placeholder={`{${t('importWallet.backup.placeholder.version')}{${t('importWallet.backup.placeholder.kdf')}`}
                         spellCheck={false}
                         autoCapitalize="off"
                         autoCorrect="off"
@@ -961,7 +964,7 @@ export function ImportWallet({
                             onChange={(e) => setBackupOverwrite(e.target.checked)}
                             disabled={busy}
                         />
-                        <span>Overwrite if any record collides (advanced)</span>
+                        <span>{t('importWallet.backup.overwrite')}</span>
                     </label>
                 </>
             ) : null}
@@ -969,12 +972,12 @@ export function ImportWallet({
             <>
             <div className={styles.mnemonicHeader}>
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
-                    Recovery phrase
+                    {t('importWallet.recoveryPhrase')}
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <ClipboardPasteButton
                         disabled={busy}
-                        label="Paste recovery phrase from clipboard"
+                        label={t('importWallet.pastePhrase')}
                         onPaste={(text) => {
                             const normalized = normalizePhraseEntry(text);
                             setMnemonic(normalized);
@@ -992,13 +995,13 @@ export function ImportWallet({
                         disabled={busy}
                         aria-pressed={scanning}
                     >
-                        {scanning ? 'Cancel scan' : 'Scan QR'}
+                        {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
                     </button>
                 </div>
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
-                    <QrScanner onFrame={handleQrFrame} alt="Recovery phrase QR scanner" />
+                    <QrScanner onFrame={handleQrFrame} alt={t('importWallet.phrase.scannerAlt')} />
                 </div>
             ) : null}
             <div
@@ -1025,8 +1028,8 @@ export function ImportWallet({
                     onKeyUp={(e) => setMnemonicCursor(e.currentTarget.selectionStart ?? 0)}
                     placeholder={
                         isFull
-                            ? 'word word word word word word word word word word word word'
-                            : 'word word word…'
+                            ? t('importWallet.phrase.fullPlaceholder')
+                            : t('importWallet.phrase.placeholder')
                     }
                     spellCheck={false}
                     autoCapitalize="off"
@@ -1039,14 +1042,14 @@ export function ImportWallet({
                 <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>
                         {isFreeWallet
-                            ? `${mnemonicWordCount} / 12 words`
-                            : `${mnemonicWordCount} word${mnemonicWordCount === 1 ? '' : 's'} entered (use 12, 15, 18, 21, or 24)`}
+                            ? t('importWallet.phrase.freeWalletCount', { count: mnemonicWordCount })
+                            : t('importWallet.phrase.wordCount', { count: mnemonicWordCount })}
                     </span>
-                    {detectedPhraseFormat === 'bip39' ? <span>BIP39 recovery phrase detected</span> : null}
-                    {detectedPhraseFormat === 'counterwallet' ? <span>Counterwallet/FreeWallet recovery phrase detected</span> : null}
+                    {detectedPhraseFormat === 'bip39' ? <span>{t('importWallet.phrase.bip39Detected')}</span> : null}
+                    {detectedPhraseFormat === 'counterwallet' ? <span>{t('importWallet.phrase.counterwalletDetected')}</span> : null}
                 </div>
                 {wordSuggestions.length > 0 ? (
-                    <div className={styles.wordSuggestions} aria-label="BIP39 word suggestions">
+                    <div className={styles.wordSuggestions} aria-label={t('importWallet.phrase.suggestions')}>
                         {wordSuggestions.map((word) => (
                             <button
                                 key={word}
@@ -1054,7 +1057,7 @@ export function ImportWallet({
                                 className={styles.wordSuggestion}
                                 onClick={() => useWordSuggestion(word)}
                                 disabled={busy}
-                                aria-label={`Use BIP39 word "${word}"`}
+                                aria-label={t('importWallet.phrase.useWord', { word })}
                             >
                                 {word}
                             </button>
@@ -1062,11 +1065,11 @@ export function ImportWallet({
                     </div>
                 ) : null}
                 <p className={styles.dropHint}>
-                    {dragOver ? 'Release to load' : 'Drop a .txt file with your recovery phrase to load it here.'}
+                    {dragOver ? t('importWallet.phrase.releaseToLoad') : t('importWallet.phrase.dropHint')}
                 </p>
             </div>
             <Input
-                label="Wallet name"
+                label={t('renameWallet.name')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"
@@ -1075,11 +1078,11 @@ export function ImportWallet({
             <Input
                 id="import-password"
                 type="password"
-                label="Password"
+                label={t('common.password')}
                 hint={
                     isFull
-                        ? `At least ${MIN_PASSWORD_LENGTH} characters. Encrypts this wallet on this device.`
-                        : `At least ${MIN_PASSWORD_LENGTH} characters.`
+                        ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
+                        : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })
                 }
                 value={password}
                 onChange={(e) => {
@@ -1092,7 +1095,7 @@ export function ImportWallet({
             <Input
                 id="import-confirm"
                 type="password"
-                label={isFull ? 'Confirm password' : 'Confirm'}
+                label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -1113,18 +1116,18 @@ export function ImportWallet({
                             }}
                             disabled={busy}
                         />
-                        <span>This wallet uses a BIP39 passphrase</span>
+                        <span>{t('importWallet.passphrase.toggle')}</span>
                         <InfoTip
-                            aria="BIP39 passphrase help"
-                            label="This extra secret combines with your recovery phrase to recreate the same wallet. It stays behind your password here; hardware wallets request it on the device and connect through Add Account, then Hardware Signer."
+                            aria={t('importWallet.passphrase.help')}
+                            label={t('importWallet.passphrase.helpBody')}
                         />
                     </label>
                     {showPassphrase ? (
                         <Input
                             id="import-bip39-passphrase"
                             type="password"
-                            label="BIP39 passphrase"
-                            hint="Required to derive the same addresses as the original wallet."
+                            label={t('importWallet.passphrase.label')}
+                            hint={t('importWallet.passphrase.hint')}
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
@@ -1142,7 +1145,7 @@ export function ImportWallet({
                 <>
                     <Input
                         type="password"
-                        label="WIF private key"
+                        label={t('importWallet.wif.key')}
                         value={wif}
                         onChange={(e) => {
                             setWif(e.target.value);
@@ -1153,7 +1156,7 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Select
-                        label="Private key chain"
+                        label={t('importWallet.wif.chain')}
                         value={wifChainId}
                         onChange={(e) => {
                             setWifChainId(e.target.value);
@@ -1168,7 +1171,7 @@ export function ImportWallet({
                         ))}
                     </Select>
                     <Input
-                        label="Wallet name"
+                        label={t('renameWallet.name')}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         autoComplete="off"
@@ -1176,10 +1179,10 @@ export function ImportWallet({
                     />
                     <Input
                         type="password"
-                        label="Password"
+                        label={t('common.password')}
                         hint={isFull
-                            ? `At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the wallet on this device.`
-                            : `At least ${MIN_PASSWORD_LENGTH} characters.`}
+                            ? t('importWallet.password.fullHint', { count: MIN_PASSWORD_LENGTH })
+                            : t('importWallet.password.hint', { count: MIN_PASSWORD_LENGTH })}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -1190,7 +1193,7 @@ export function ImportWallet({
                     />
                     <Input
                         type="password"
-                        label={isFull ? 'Confirm password' : 'Confirm'}
+                        label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                         value={confirm}
                         onChange={(e) => {
                             setConfirm(e.target.value);
@@ -1209,7 +1212,7 @@ export function ImportWallet({
                             }}
                             disabled={busy}
                         />
-                        <span>I understand this key is not recoverable from a recovery phrase.</span>
+                        <span>{t('importWallet.wif.ack')}</span>
                     </label>
                 </>
             ) : null}
@@ -1222,8 +1225,8 @@ export function ImportWallet({
                 type="button"
                 onClick={handleBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back to wallet setup"
-                title="Back to wallet setup"
+                aria-label={t('importWallet.backToSetup')}
+                title={t('importWallet.backToSetup')}
                 disabled={busy}
             >
                 <Icon.BackIcon />
@@ -1236,7 +1239,7 @@ export function ImportWallet({
                     onClick={() => onOpenInTab({ lane })}
                     disabled={busy}
                 >
-                    Open in tab
+                    {t('importWallet.openInTab')}
                 </Button>
             ) : <span />}
         </div>

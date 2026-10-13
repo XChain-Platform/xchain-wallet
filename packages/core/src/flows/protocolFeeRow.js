@@ -43,7 +43,7 @@
 // The exact figure still arrives at the confirm screen, which quotes for real
 // (protocolFeeDisclosure / the native pre-flight).
 
-import { NATIVE_FEE_UNVERIFIED_NOTICE, nativeFeeToggleLabel } from '../sdk/nativeFeePreflight.js';
+import { t } from '../i18n/index.js';
 
 /**
  * @typedef {Object} NormalizedProtocolFee
@@ -118,8 +118,8 @@ export function protocolFeeRowCopy({
     if (f.free) {
         return {
             variant: 'statement',
-            label: 'This action has no protocol fee',
-            hint: 'Only the network fee applies, so there is nothing to pay on top of it.',
+            label: t('flows.protocolFee.freeLabel'),
+            hint: t('flows.protocolFee.freeHint'),
         };
     }
 
@@ -128,11 +128,12 @@ export function protocolFeeRowCopy({
     // nothing when the action is rejected.
     const paysInCoin = mandatory || checked;
     const forfeit = f.known
-        ? 'The fee is sent on-chain and is not refunded if the network rejects this transaction.'
-        : 'If this action charges one, it is sent on-chain and is not refunded if the network'
-          + ' rejects this transaction.';
-    const unverifiedNotice = (unverified && paysInCoin) ? ` ${NATIVE_FEE_UNVERIFIED_NOTICE}` : '';
-    const amountSentence = f.amount ? `This action's protocol fee is ${f.amount} XCHAIN. ` : '';
+        ? t('flows.protocolFee.forfeit')
+        : t('flows.protocolFee.conditionalForfeit');
+    const unverifiedNotice = (unverified && paysInCoin)
+        ? ` ${t('flows.protocolFee.unverifiedNotice')}`
+        : '';
+    const amountSentence = f.amount ? `${t('flows.protocolFee.amount', { amount: f.amount })} ` : '';
 
     if (mandatory) {
         return {
@@ -140,8 +141,10 @@ export function protocolFeeRowCopy({
             // Plural and general when unquoted: it describes how this chain
             // settles protocol fees, which is true of an action that charges
             // nothing too. Singular only once a charge is actually known.
-            label: f.known ? `Protocol fee is paid in ${coinTicker}` : `Protocol fees are paid in ${coinTicker}`,
-            hint: `${amountSentence}${coinTicker} is the only way to pay a protocol fee on this chain.`
+            label: f.known
+                ? t('flows.protocolFee.paidIn', { ticker: coinTicker })
+                : t('flows.protocolFee.paidInPlural', { ticker: coinTicker }),
+            hint: `${amountSentence}${t('flows.protocolFee.onlyWay', { ticker: coinTicker })}`
                 + ` ${forfeit}${unverifiedNotice}`,
         };
     }
@@ -151,7 +154,7 @@ export function protocolFeeRowCopy({
         // Shared with the refusal copy: nativeFeeErrorMessage tells the user to untick
         // this control BY NAME, and a second copy of the words is a second thing to
         // forget.
-        label: nativeFeeToggleLabel(coinTicker),
+        label: t('flows.protocolFee.toggleLabel', { ticker: coinTicker }),
         hint: `${amountSentence}${forfeit}${unverifiedNotice}`,
     };
 }

@@ -11,6 +11,7 @@ import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreateP
 import { DelegateVoteForm } from '../../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -55,6 +56,57 @@ function mount(Component, props, messaging = messagingWith()) {
 }
 
 describe('governance route audit', () => {
+    it('reaches the poll browser actions in order and dismisses the network picker with Escape', async () => {
+        const user = userEvent.setup();
+        const onBack = vi.fn();
+        const onCreate = vi.fn();
+        const onDelegate = vi.fn();
+        const onOpenPoll = vi.fn();
+        const messaging = messagingWith({
+            governancePolls: vi.fn().mockResolvedValue([{
+                action_index: 7,
+                tick: 'VOTE',
+                question: 'Ship keyboard navigation?',
+                poll_status: 'open',
+                end_block: 200,
+            }]),
+        });
+        mount(GovernancePolls, {
+            walletId: 'wallet-1', onOpenPoll, onCreate, onDelegate, onBack,
+        }, messaging);
+
+        await screen.findByText('Ship keyboard navigation?');
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
+        back.focus();
+        await user.keyboard('{Enter}');
+        expect(onBack).toHaveBeenCalledOnce();
+
+        await user.tab();
+        const network = screen.getByRole('button', { name: /^Network:/ });
+        expect(network).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(network).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Create poll' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onCreate).toHaveBeenCalledWith(CHAIN);
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Delegate votes' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onDelegate).toHaveBeenCalledWith(CHAIN);
+
+        await user.tab();
+        const poll = screen.getByRole('button', { name: /Ship keyboard navigation/ });
+        expect(poll).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onOpenPoll).toHaveBeenCalledWith(CHAIN, 7);
+    });
+
     it('manages poll options and validates the close block and selection count before compose', async () => {
         const messaging = messagingWith();
         mount(CreatePollForm, {

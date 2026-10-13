@@ -56,6 +56,7 @@ import {
     compareDecimalStrings,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -599,8 +600,8 @@ export function IssueTokenForm({ walletId, onBack }) {
         <PageHeader
             onBack={leaveGuard.guardedOnBack}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review issue'
-                    : `Issue token`}
+                    ? t('issue.reviewTitle')
+                    : t('issue.title')}
         />
     );
     const wrap = (children) => (
@@ -614,7 +615,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
 
     if (stage === 'done') {
@@ -631,22 +632,22 @@ export function IssueTokenForm({ walletId, onBack }) {
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={leaveGuard.guardedOnBack} what="issuance" unsaved={result.unsaved} />,
+                <QueuedResultPanel onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />,
             );
         }
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Token issued</h2>
+                <h2 className={styles.successTitle}>{t('issue.success')}</h2>
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>Transaction ID</p>
+                        <p className={styles.successLabel}>{t('send.txid')}</p>
                         <code className={styles.txid}>{txid}</code>
                     </>
                 ) : (
-                    <p className={styles.hint}>Broadcast complete.</p>
+                    <p className={styles.hint}>{t('issue.broadcastComplete')}</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -657,12 +658,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
-                label="Review token issue"
+                label={t('issue.reviewTokenIssue')}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
                     <StatusMessage
                         variant="error"
-                        recovery={{ label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }}
+                        recovery={{ label: t('common.edit'), onAction: () => { setSubmitError(null); setStage('form'); } }}
                     >
                         {submitError}
                     </StatusMessage>
@@ -681,20 +682,22 @@ export function IssueTokenForm({ walletId, onBack }) {
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? t('send.review.createUnsigned')
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                : (descriptor
+                                    ? t('send.review.signOn', { device: descriptor.displayName })
+                                    : t('send.review.sign'))}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
@@ -702,7 +705,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
-                        label="Network fee"
+                        label={t('send.networkFee')}
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
@@ -723,9 +726,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -757,9 +758,12 @@ export function IssueTokenForm({ walletId, onBack }) {
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    ? t('send.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: coinTicker,
+                    }).trim()
                         + (feeFiat ? ` (${feeFiat})` : '')
-                    : 'Network fee estimate unavailable.'}
+                    : t('common.networkFeeUnavailable')}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
@@ -781,7 +785,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => {
@@ -811,11 +815,11 @@ export function IssueTokenForm({ walletId, onBack }) {
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
             variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
-            Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.
-            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
-                Discard
+            {t('issue.draft.unfinished')}
+            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
+                {t('send.draft.discard')}
             </DraftDiscardButton>
         </StatusMessage>
     ) : null;
@@ -838,7 +842,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     return wrap(
         <FormPage
-            label="Issue token"
+            label={t('issue.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
@@ -849,7 +853,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Issue token' : 'Preview'}
+                    {singleEncode ? t('issue.title') : t('common.preview')}
                 </Button>
             )}
         >
@@ -858,23 +862,23 @@ export function IssueTokenForm({ walletId, onBack }) {
 
             {fromAddress ? (
                 <AddressField
-                    label="From"
+                    label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+                    iconLabel={t('send.source.choose')}
                 />
             ) : (
                 <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 
             <Input
                 id="issue-ticker"
-                label="Ticker"
+                label={t('issue.ticker')}
                 hint={TICKER_HINT}
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value)}
@@ -885,8 +889,8 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
             <Input
                 id="issue-supply"
-                label="Supply"
-                hint="The most that can ever exist."
+                label={t('issue.supply')}
+                hint={t('issue.supplyHint')}
                 inputMode="decimal"
                 value={supply}
                 onChange={(e) => setSupply(e.target.value)}
@@ -894,10 +898,10 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
             <Input
                 id="issue-initial-mint"
-                label="Initial mint (optional)"
+                label={t('issue.initialMintOptional')}
                 hint={mintHeadroom
-                    ? `Leaves ${mintHeadroom} to mint later.`
-                    : 'How much exists at creation. Leave blank to mint the whole supply now; a smaller number leaves the rest to mint later.'}
+                    ? t('issue.initialMintHeadroom', { amount: mintHeadroom })
+                    : t('issue.initialMintHint')}
                 inputMode="decimal"
                 value={initialMint}
                 onChange={(e) => setInitialMint(e.target.value)}
@@ -905,8 +909,8 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
             <Input
                 id="issue-max-mint"
-                label="Max mint per transaction (optional)"
-                hint="Caps how much can be minted in one transaction. Leave blank for no limit."
+                label={t('issue.maxMintOptional')}
+                hint={t('issue.maxMintHint')}
                 inputMode="decimal"
                 value={maxMint}
                 onChange={(e) => setMaxMint(e.target.value)}
@@ -918,11 +922,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                     checked={divisible}
                     onChange={(e) => setDivisible(e.target.checked)}
                 />
-                <span>Divisible (8 decimal places)</span>
+                <span>{t('issue.divisible')}</span>
             </label>
             <Input
-                label="Description (optional)"
-                hint="Up to 250 characters. Stored on-chain."
+                label={t('issue.descriptionOptional')}
+                hint={t('issue.descriptionHint')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 autoComplete="off"
@@ -934,14 +938,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                     checked={lockSupply}
                     onChange={(e) => setLockSupply(e.target.checked)}
                 />
-                <span>Lock supply + minting (irreversible)</span>
+                <span>{t('issue.lockSupply')}</span>
             </label>
             {lockSupply && mintHeadroom ? (
                 // Locking minting alongside a partial initial mint strands the
                 // remainder forever: the cap says one thing, the token can only
                 // ever hold another. Say so before the fee is spent.
                 <StatusMessage variant="status">
-                    {`Locking minting means the ${mintHeadroom} left under the cap can never be minted. Clear this box to mint it later.`}
+                    {t('issue.lockSupplyWarning', { amount: mintHeadroom })}
                 </StatusMessage>
             ) : null}
             {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
@@ -954,39 +958,33 @@ export function IssueTokenForm({ walletId, onBack }) {
                 for good in milestone 1. */}
             <div className={styles.warnings}>
                 <p className={styles.hint}>
-                    Bridging is off. After the token exists you can open it to
-                    other chains from Manage Token, set how deep a lock must be
-                    buried before validators sign it, and freeze both settings for
-                    your holders.
+                    {t('issue.bridgingHint')}
                 </p>
                 <p className={styles.hint}>
-                    One thing to decide now: a token bound to an address allow-list
-                    or block-list cannot be bridged, and a bound list can never be
-                    cleared. If you may want this token on other chains, do not bind
-                    a list to it.
+                    {t('issue.boundListHint')}
                 </p>
             </div>
             <AddressField
                 id="issue-transfer-owner"
-                label="Transfer ownership to (optional)"
+                label={t('issue.transferOwnershipOptional')}
                 icon="contacts"
-                hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
+                hint={t('issue.transferOwnershipHint')}
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
                 onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
             />
             <AddressField
                 id="issue-transfer-supply"
-                label="Send the initial mint to (optional)"
+                label={t('issue.sendInitialMintOptional')}
                 icon="contacts"
-                hint="Leave blank to keep the minted tokens at the issuing address."
+                hint={t('issue.sendInitialMintHint')}
                 value={transferSupplyTo}
                 onChange={(e) => setTransferSupplyTo(e.target.value)}
                 onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
             />
 
             <FeeSelector
-                label="Network fee"
+                label={t('send.networkFee')}
                 coinTicker={coinTicker}
                 formatFiat={formatNativeFee}
                 tiers={feeTiers}

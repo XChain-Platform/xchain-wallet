@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
@@ -92,8 +93,26 @@ export function Settings({
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
+    const sectionOpenerRefs = useRef(new Map());
+    const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
 
     const { settings } = useSettings();
+
+    const closeSubpage = useCallback(() => {
+        pendingFocusRestore.current = subpageId;
+        setSubpageId(null);
+    }, [subpageId]);
+
+    // A Settings drilldown is nested UI, so Escape and the system Back action
+    // close it before the surrounding route.
+    useBackHandler(subpageId ? closeSubpage : undefined);
+
+    useEffect(() => {
+        if (subpageId || !pendingFocusRestore.current) return;
+        const openerId = pendingFocusRestore.current;
+        pendingFocusRestore.current = null;
+        sectionOpenerRefs.current.get(openerId)?.focus();
+    }, [subpageId]);
 
     useEffect(() => {
         let alive = true;
@@ -351,7 +370,7 @@ export function Settings({
             const SectionComponent = section.Component;
             const subpageHeader = (
                 <PageHeader
-                    onBack={() => setSubpageId(null)}
+                    onBack={closeSubpage}
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel="Back to settings"
                     title={section.title}
@@ -361,7 +380,12 @@ export function Settings({
                 />
             );
             return (
-                <Screen variant={variant} header={subpageHeader}>
+                <Screen
+                    variant={variant}
+                    header={subpageHeader}
+                    scrollKey={section.id}
+                    restoreScroll={false}
+                >
                     <ListPage className={settingsStyles.page} data-settings-layout="responsive">
                         <SectionComponent
                             key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
@@ -380,7 +404,7 @@ export function Settings({
     const header = <PageHeader onBack={onBack} title="Settings" />;
 
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} scrollKey="list">
             <ListPage
                 className={settingsStyles.page}
                 data-settings-layout="responsive"
@@ -429,6 +453,10 @@ export function Settings({
                                 title={section.title}
                                 summary={section.summary}
                                 onClick={() => setSubpageId(section.id)}
+                                buttonRef={(node) => {
+                                    if (node) sectionOpenerRefs.current.set(section.id, node);
+                                    else sectionOpenerRefs.current.delete(section.id);
+                                }}
                             />
                         );
                     }
@@ -489,9 +517,10 @@ function normalizeSearchText(value) {
  * }} SectionDef
  */
 
-function DrillRow({ title, summary, onClick }) {
+function DrillRow({ title, summary, onClick, buttonRef }) {
     return (
         <button
+            ref={buttonRef}
             type="button"
             className={`${actionStyles.entry} ${settingsStyles.drillRow}`}
             style={{

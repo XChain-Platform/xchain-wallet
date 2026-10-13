@@ -30,9 +30,12 @@ assert.match(src, /update\(\{\s*fiatCurrency:\s*next\s*\}\)/, 'currency picker w
 // Language picker (Cluster R FOLLOWUP 4): dynamic from availableLocales()
 assert.match(src, /import \{ availableLocales, setLocale as setI18nLocale \} from '\.\.\/\.\.\/\.\.\/i18n\/index\.js'/,
     'imports availableLocales + setLocale from the core i18n module');
-assert.match(src, /buildLanguageOptions\(\)/, 'derives language options dynamically');
-assert.match(src, /const codes = availableLocales\(\);[\s\S]*?codes\.map/,
+assert.match(src, /buildLanguageOptions\(settings\.developerMode === true\)/,
+    'derives language options with the developer-mode gate');
+assert.match(src, /const codes = availableLocales\(\);[\s\S]*?return codes[\s\S]*?\.map/,
     'buildLanguageOptions reads availableLocales() then maps each code');
+assert.match(src, /filter\(\(code\) => developerMode \|\| code !== 'pseudo-rtl'\)/,
+    'hides pseudo-rtl unless developer mode is enabled');
 assert.match(src, /en:\s*'English'/, 'LANGUAGE_LABELS map carries the English display name');
 assert.match(src, /availableLocales\(\)\.includes\(next\)/,
     'onLanguageChange guards setLocale against unknown locale codes');

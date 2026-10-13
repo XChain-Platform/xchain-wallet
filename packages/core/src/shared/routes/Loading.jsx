@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Button, Screen } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Loading.module.css';
 
@@ -32,17 +33,11 @@ export function Loading({ error, onRetry }) {
             <div className={centerClass}>
                 {error ? (
                     <div role="alert" className={styles.errorPanel}>
-                        <h1 className={styles.title}>The wallet could not start</h1>
-                        <p className={styles.error}>
-                            Something stopped the wallet from opening. Your wallet data has
-                            not been changed.
-                        </p>
-                        <p className={styles.nextStep}>
-                            Choose Try again. If the wallet still does not open, contact support
-                            before clearing any wallet data.
-                        </p>
+                        <h1 className={styles.title}>{t('loading.error.title')}</h1>
+                        <p className={styles.error}>{t('loading.error.body')}</p>
+                        <p className={styles.nextStep}>{t('loading.error.recovery')}</p>
                         <Button type="button" variant="primary" block onClick={handleRetry}>
-                            Try again
+                            {t('common.tryAgain')}
                         </Button>
                     </div>
                 ) : (

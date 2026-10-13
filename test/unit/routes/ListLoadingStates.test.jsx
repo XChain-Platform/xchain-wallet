@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
@@ -13,7 +13,10 @@ import { DispensersList } from '../../../packages/core/src/shared/routes/Dispens
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
+import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
+import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
+import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
 import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 
@@ -22,6 +25,16 @@ const ADDRESS = 'tb1qloadingstate0000000000000000000000000';
 
 function pending() {
     return new Promise(() => {});
+}
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((onResolve, onReject) => {
+        resolve = onResolve;
+        reject = onReject;
+    });
+    return { promise, resolve, reject };
 }
 
 function mount(Component, messaging, props = {}) {
@@ -168,6 +181,67 @@ describe('list first-load states', () => {
         await waitFor(() => expect(messaging.getMarkets).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No markets for BTC')).toBeInTheDocument();
     });
+
+    it('shows a busy state and retries a plain My bets failure', async () => {
+        const firstLoad = deferred();
+        const getAddressesByChain = vi.fn()
+            .mockImplementationOnce(() => firstLoad.promise)
+            .mockResolvedValueOnce({});
+        mount(MyBets, {
+            getAddressesByChain,
+            bets: vi.fn().mockResolvedValue([]),
+        });
+
+        expect(screen.getByRole('status', { name: 'Loading bets' })).toBeInTheDocument();
+        await act(async () => firstLoad.reject(new Error('private transport detail')));
+        expect(await screen.findByText('Could not load your bets. Try again.')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('No bets yet')).toBeInTheDocument();
+    });
+
+    it('shows a busy state and retries a plain My orders failure', async () => {
+        const firstLoad = deferred();
+        const getAddressesByChain = vi.fn()
+            .mockImplementationOnce(() => firstLoad.promise)
+            .mockResolvedValueOnce({});
+        mount(MyOrdersView, {
+            getAddressesByChain,
+            getOrdersForAddress: vi.fn().mockResolvedValue([]),
+        });
+
+        expect(screen.getByRole('status', { name: 'Loading orders' })).toBeInTheDocument();
+        await act(async () => firstLoad.reject(new Error('private transport detail')));
+        expect(await screen.findByText('Could not load your orders. Try again.')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+    });
+
+    it('shows a busy state and retries a plain My swaps failure', async () => {
+        const firstLoad = deferred();
+        const getAddressesByChain = vi.fn()
+            .mockImplementationOnce(() => firstLoad.promise)
+            .mockResolvedValueOnce({});
+        mount(MySwapsView, {
+            getAddressesByChain,
+            getSwapsForAddress: vi.fn().mockResolvedValue([]),
+        });
+
+        expect(screen.getByRole('status', { name: 'Loading swaps' })).toBeInTheDocument();
+        await act(async () => firstLoad.reject(new Error('private transport detail')));
+        expect(await screen.findByText('Could not load your swaps. Try again.')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('No swaps yet')).toBeInTheDocument();
+    });
+
 });
 
 describe('filtered list empty states', () => {

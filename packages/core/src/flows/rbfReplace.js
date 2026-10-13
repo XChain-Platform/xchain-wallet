@@ -28,9 +28,11 @@
 // matches what the eventual handler will return; UI written against
 // this contract today won't change when the engine ships.
 
+import { t } from '../i18n/index.js';
+
 export class RbfNotSupportedError extends Error {
     constructor(reason) {
-        super(reason || 'RBF replacement is not supported by this build.');
+        super(reason || t('flows.rbf.unsupportedBuild'));
         this.name = 'RbfNotSupportedError';
     }
 }
@@ -97,19 +99,19 @@ export function isReplaceCallAvailable(messaging) {
  */
 export function isEntryReplaceable(entry, { descriptor } = {}) {
     if (!entry || typeof entry !== 'object') {
-        return { ok: false, reason: 'No entry to replace.' };
+        return { ok: false, reason: t('flows.rbf.noEntry') };
     }
     if (typeof entry.txHash !== 'string' || entry.txHash.length === 0) {
-        return { ok: false, reason: 'No transaction hash on this entry.' };
+        return { ok: false, reason: t('flows.rbf.noHash') };
     }
     if (Number(entry.blockIndex) !== 0) {
-        return { ok: false, reason: 'Already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     // A blockless entry in shape only: the wallet proved the block itself
     // and keeps the entry so History can show it. Replacing it would bump
     // the fee on a transaction that is already mined.
     if (entry.pending?.chainConfirmed === true) {
-        return { ok: false, reason: 'Already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     const action = String(entry.action || '').toUpperCase();
     const REPLACEABLE_ACTIONS = new Set([
@@ -117,14 +119,14 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
         'EXECUTE', 'DEPOSIT', 'WITHDRAW',
     ]);
     if (!REPLACEABLE_ACTIONS.has(action)) {
-        return { ok: false, reason: `${action} actions are not RBF-replaceable.` };
+        return { ok: false, reason: t('flows.rbf.actionUnsupported', { action }) };
     }
     if (descriptor?.feeStrategy?.rbfSupported !== true) {
         const chain = descriptor?.displayName || entry.chainId || 'this chain';
-        return { ok: false, reason: `Fee bumping is not supported on ${chain}.` };
+        return { ok: false, reason: t('send.rbf.unsupported', { chain }) };
     }
     if ((entry.pending?.rbf ?? entry.rbf) !== true) {
-        return { ok: false, reason: 'This transaction did not allow fee replacement.' };
+        return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
     return { ok: true };
 }
@@ -264,9 +266,9 @@ export function cancelUndoSnapshot({ entry, result, walletId } = {}) {
  * @returns {{ ok: boolean, reason?: string }}
  */
 export function isCancelUndoable({ snapshot, cancelBlockIndex } = {}) {
-    if (!snapshot) return { ok: false, reason: 'Nothing to undo.' };
+    if (!snapshot) return { ok: false, reason: t('flows.rbf.nothingToUndo') };
     if (Number(cancelBlockIndex) > 0) {
-        return { ok: false, reason: 'The cancellation already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.cancelConfirmed') };
     }
     return { ok: true };
 }

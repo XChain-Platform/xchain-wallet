@@ -558,6 +558,7 @@ export function TokenPicker({
                             key={opt.id}
                             type="button"
                             role="tab"
+                            tabIndex={active ? 0 : -1}
                             aria-selected={active}
                             tabIndex={active ? 0 : -1}
                             className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}

@@ -608,9 +608,10 @@ assert.deepEqual(
         'android.permission.POST_NOTIFICATIONS',
         'android.permission.USE_BIOMETRIC',
         'android.permission.USE_FINGERPRINT',
+        'android.permission.VIBRATE',
     ],
-    'exactly five permissions: internet, camera (QR), notifications, and the two'
-    + ' spellings of biometric. Every addition here is store-review surface (§5) and has to'
+    'exactly six permissions: internet, vibrate (haptics), camera (QR), notifications, and the'
+    + ' two spellings of biometric. Every addition here is store-review surface (§5) and has to'
     + ' earn its place against a shipped feature.',
 );
 assert.doesNotMatch(
@@ -1564,7 +1565,7 @@ console.log(
     + ' Class 3 only, invalidated by enrollment, CryptoObject-bound, with no device-credential'
     + ' fallback; vault writes fsync before an atomic rename and refuse to overwrite an unreadable'
     + ' vault; ciphertext unreadable while the device is locked; permissions are exactly internet,'
-    + ' camera, notifications and the two biometric spellings, the legacy one capped at API 27.'
+    + ' vibrate, camera, notifications and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
     + ' URLs to the browser, plus inbound xchain and payment schemes and no'

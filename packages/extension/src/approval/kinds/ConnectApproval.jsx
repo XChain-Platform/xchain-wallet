@@ -229,7 +229,7 @@ export function ConnectApproval({ id, payload, onReject }) {
             </fieldset>
 
             <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>{t('extension.connect.accounts')}</legend>
+                <legend className={styles.legend}>{t('accountPicker.title')}</legend>
                 {accountOptions.length > 0 ? (
                     <>
                         <p className={styles.hint}>

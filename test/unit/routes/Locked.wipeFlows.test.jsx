@@ -16,6 +16,7 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 import { FORGOT_PASSWORD_RESTORE_LANE_KEY } from '../../../packages/core/src/shared/utils/forgotPasswordRecovery.js';
 import { POST_DEMO_INTENT_KEY, takePostDemoIntent } from '../../../packages/core/src/shared/utils/demoGraduation.js';
 import {
@@ -27,12 +28,13 @@ import {
 
 let reload;
 
-function mount() {
+function mount({ messaging = { unlockWallet: vi.fn() }, onUnlocked = vi.fn() } = {}) {
     render(
-        <MessagingProvider shell="web" messaging={{ unlockWallet: vi.fn() }}>
-            <Locked onUnlocked={() => {}} />
+        <MessagingProvider shell="web" messaging={messaging}>
+            <Locked onUnlocked={onUnlocked} />
         </MessagingProvider>,
     );
+    return { messaging, onUnlocked };
 }
 
 function openForgotDialog() {
@@ -67,6 +69,33 @@ afterEach(() => {
 });
 
 describe('Locked forgot-password wipe', () => {
+    it('keeps keyboard focus in the restore dialog, closes on Escape, and continues to unlock', async () => {
+        const user = userEvent.setup();
+        const messaging = { unlockWallet: vi.fn().mockResolvedValue({}) };
+        const onUnlocked = vi.fn();
+        mount({ messaging, onUnlocked });
+
+        const password = screen.getByLabelText('Password');
+        fireEvent.change(password, { target: { value: 'secret' } });
+        password.focus();
+        await user.tab();
+        const trigger = screen.getByRole('button', { name: 'Forgot password?' });
+        expect(trigger).toHaveFocus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus());
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('alertdialog', { name: 'Restore wallet access' })).toBeNull();
+        expect(trigger).toHaveFocus();
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(messaging.unlockWallet).toHaveBeenCalledWith('secret'));
+        expect(onUnlocked).toHaveBeenCalledOnce();
+    });
+
     it('plainly explains recovery and offers both restore paths without wiping', () => {
         mount();
         const dialog = openForgotDialog();

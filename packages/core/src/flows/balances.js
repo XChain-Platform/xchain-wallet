@@ -238,27 +238,48 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
         throw balResp instanceof Error ? balResp : new Error(String(balResp));
     }
     // D-152: degrading independently is right; degrading SILENTLY is not. A
-    // failed token read used to return `tokens: []`, which is byte-identical to
+    // failed token read must not return `tokens: []`, which is byte-identical to
     // "this address holds no tokens" - so a hiccup on one endpoint presented as
     // a confident empty wallet: no rows on Home, and an asset picker that says
     // "Nothing matches" for a token the address is holding. `unavailable` names
     // which half is missing so a surface can say "could not read" instead of
     // "you have none". Nothing reads the field yet except the surfaces that
     // choose to; every existing consumer of `.native` / `.tokens` is unchanged.
+    //
+    // Issue #74: an `/address/` read can also SUCCEED and still not know the
+    // balance. The explorer answers 200 with `tracker_available: false` and
+    // null amounts when its UTXO tracker is not answering, and that body is
+    // "could not read", not "holds nothing". It is marked the same way a
+    // thrown read is, so Home says Unavailable and the Confirm preview stops
+    // projecting the coin from zero.
+    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
     const unavailable = [
         ...(balOk ? [] : ['tokens']),
-        ...(addrOk ? [] : ['native']),
+        ...(addrOk && !addrUnreadable ? [] : ['native']),
     ];
+    const reason = !balOk
+        ? balResp?.message
+        : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message);
     return {
-        native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
+        native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,
         tokens: balOk ? tokensFromBalances(balResp) : [],
         ...(unavailable.length > 0 ? {
             unavailable,
-            unavailableReason: String(
-                (balOk ? addrResp : balResp)?.message || 'balance read failed',
-            ),
+            unavailableReason: String(reason || 'balance read failed'),
         } : {}),
     };
+}
+
+/** Reason shown when `/address/` answered but carried no coin balance. */
+export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
+
+// An `/address/` body that answered without a coin balance: the explorer's own
+// "tracker not answering" flag, or a confirmed amount that is missing. A body
+// whose confirmed amount is present (including "0") is a real reading.
+function nativeAnswerUnreadable(addrResp) {
+    if (!addrResp || typeof addrResp !== 'object') return true;
+    if (addrResp.tracker_available === false) return true;
+    return addrResp.balances?.confirmed == null;
 }
 
 /**

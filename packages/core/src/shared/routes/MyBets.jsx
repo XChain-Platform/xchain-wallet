@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
@@ -128,9 +128,9 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                     : `Could not load bets for ${failures} of your addresses. The list may be incomplete.`);
             }
             setRows(all);
-        } catch (err) {
+        } catch {
             if (requestId !== loadRequestId.current) return;
-            setError(err?.message || 'Failed to load bets.');
+            setError('Could not load your bets. Try again.');
             setRows([]);
         }
     }, [walletId, accountId, messaging]);
@@ -195,12 +195,22 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
 
     if (error && (!rows || rows.length === 0)) {
         return wrap(
-            <>
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            </>,
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{ label: 'Try again', onAction: load }}
+            >
+                {error}
+            </StatusMessage>,
         );
     }
-    if (!rows) return wrap(<p>Loading bets…</p>);
+    if (!rows) {
+        return wrap(
+            <div role="status" aria-label="Loading bets">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
+    }
     if (rows.length === 0) {
         return wrap(
             <EmptyState

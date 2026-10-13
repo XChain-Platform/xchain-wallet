@@ -34,8 +34,9 @@
     border: 2px solid var(--xc-wallet-identity);
     border-radius: var(--xc-radius-pill);
     background: color-mix(in srgb, var(--xc-wallet-identity) 14%, var(--xc-surface));
-    /* The tone tokens fall under 4.5:1 as 10px text on their own tint, so the
-       ring and fill carry the tone and the initials stay on body text. */
+    /* The tone lives on the ring and tint. The initials are 10px bold text,
+       and the danger, warning and accent tones fall under 4.5:1 on their own
+       tint, so the text takes the body color in every theme. */
     color: var(--xc-text);
     font-size: 10px;
     font-weight: 800;

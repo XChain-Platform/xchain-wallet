@@ -53,6 +53,8 @@
  * @property {boolean} [isProtocolFee] true on the protocol-fee row
  * @property {boolean} [afterUnknown]  `after` is not projectable; `before` still holds. Renderers
  *                                     must say so rather than printing an empty post-state.
+ * @property {boolean} [beforeUnknown] the current balance could not be read, so neither
+ *                                     `before` nor `after` is shown (both are empty).
  * @property {boolean} [feeUnknown]    set on an isFee row whose amount could not be determined;
  *                                     the row carries no `feeAmount`.
  */
@@ -104,6 +106,7 @@ const PROTOCOL_COIN_TICKER = {
  * @property {string} tick   ticker (coin family, e.g., "BTC" for the native coin)
  * @property {string} amount string-encoded big-number balance
  * @property {boolean} [isCoin]
+ * @property {boolean} [unknown]  the coin balance could not be read (tick and amount are empty)
  */
 
 /**
@@ -143,6 +146,7 @@ export function simulateAction({
     // whatever coin row that projection produced (a coin SEND folds its own
     // principal in first), and so a new action type gets it for free.
     applyProtocolFee(result, balMap, coinTick, protocolFee);
+    if (coinTick && coinBalanceUnknown(balances)) blankUnknownCoinBalance(result, coinTick);
     // Say WHY the coin post-state is absent. Without this the row reads as a
     // rendering gap rather than as a fact about the transaction, and the token
     // rows beside it (which are still exact) lose their credibility with it.
@@ -589,6 +593,58 @@ function indexBalances(balances, coinTick) {
     }
     if (coinTick && !map.has(coinTick)) map.set(coinTick, '0');
     return map;
+}
+
+// True when the caller's balances say the coin balance could not be read
+// (the `unknown` coin marker balancesFromSdk emits for an unavailable read).
+function coinBalanceUnknown(balances) {
+    return Array.isArray(balances) && balances.some((b) => b && b.isCoin && b.unknown);
+}
+
+// Issue #74. The coin balance is unknown, so indexBalances defaulted it to '0'
+// and every coin row was projected from zero (`0 -> -0.029`). Each coin row that
+// carries a balance keeps its amounts but loses its before/after, and a single
+// balance row says the balance is unknown. Fee label rows keep their amounts,
+// since the fee itself is still known.
+function blankUnknownCoinBalance(result, coinTick) {
+    if (!result || !Array.isArray(result.deltas)) return;
+    const deltas = result.deltas;
+    let touched = false;
+    let balanceRow = null;
+    for (const d of deltas) {
+        if (d.tick !== coinTick || !d.isCoin) continue;
+        if (!d.isFee) {
+            d.before = '';
+            d.after = '';
+            d.afterUnknown = true;
+            d.beforeUnknown = true;
+            balanceRow = balanceRow || d;
+            touched = true;
+        } else if (d.before !== '' || d.after !== '') {
+            // A standalone fee row also carried the coin's before/after.
+            d.before = '';
+            d.after = '';
+            delete d.afterUnknown;
+            touched = true;
+        }
+    }
+    if (!touched) return;
+    if (!balanceRow) {
+        const at = deltas.findIndex((d) => d.tick === coinTick && d.isCoin);
+        deltas.splice(at === -1 ? deltas.length : at, 0, {
+            tick: coinTick,
+            before: '',
+            after: '',
+            isCoin: true,
+            isFee: false,
+            afterUnknown: true,
+            beforeUnknown: true,
+        });
+    }
+    if (Array.isArray(result.notes)) {
+        result.notes.push(
+            `Your ${coinTick} balance could not be read, so the current and projected ${coinTick} balance are not shown.`);
+    }
 }
 
 function balancesFromMap(balMap) {

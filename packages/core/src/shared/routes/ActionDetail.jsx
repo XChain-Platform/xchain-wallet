@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
@@ -155,10 +156,18 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     if (!entry) {
         return (
             <Screen variant={variant} header={(
-                <PageHeader onBack={onBack} backLabel="Back to history" title="Action" />
+                <PageHeader
+                    onBack={onBack}
+                    backLabel={t('actionDetail.back')}
+                    title={t('actionDetail.title')}
+                />
             )}>
                 <ListPage>
-                    <EmptyState title="No action selected" body="Action details appear here after one is selected." titleAs="p" />
+                    <EmptyState
+                        title={t('actionDetail.empty.title')}
+                        body={t('actionDetail.empty.body')}
+                        titleAs="p"
+                    />
                 </ListPage>
             </Screen>
         );
@@ -169,7 +178,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to history"
+            backLabel={t('actionDetail.back')}
             title={isPending
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
@@ -194,7 +203,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             <ListPage className={styles.body}>
                 {!browserOnline ? (
                     <StatusMessage variant="warning" id="history-offline-action-reason">
-                        You are offline. Showing saved action details. Network actions will be available when your connection returns.
+                        {t('actionDetail.offline')}
                     </StatusMessage>
                 ) : null}
                 {verdict ? (

@@ -139,6 +139,7 @@ const EXPECTED_PERMISSIONS = [
     'android.permission.POST_NOTIFICATIONS',
     'android.permission.USE_BIOMETRIC',
     'android.permission.USE_FINGERPRINT',
+    'android.permission.VIBRATE',
     'io.xchain.wallet.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
 ];
 const actualPermissions = [...new Set(

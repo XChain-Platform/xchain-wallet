@@ -31,6 +31,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 import { flows } from '../../../packages/core/src/index.js';
 
@@ -237,7 +238,7 @@ for (const [shell, appPath] of [
 
 // --- 6. Home wiring ----------------------------------------------------
 
-const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+const homeSrc = withEnglishCopy(readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8'));
 assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
 assert.ok(/>\s*Messaging\b/.test(homeSrc),
     'Home.jsx renders a "Messaging" button');

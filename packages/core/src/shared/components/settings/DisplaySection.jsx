@@ -40,7 +40,7 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { INPUT, ROW, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -324,7 +324,7 @@ export function DisplaySection() {
             />
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
                 </div>
@@ -342,7 +342,7 @@ export function DisplaySection() {
                 <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
                 </div>

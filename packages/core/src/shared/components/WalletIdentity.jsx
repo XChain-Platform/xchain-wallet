@@ -5,7 +5,7 @@
 
 import styles from './WalletIdentity.module.css';
 
-const WALLET_TONES = [
+export const WALLET_TONES = [
     'var(--xc-accent-primary)',
     'var(--xc-success)',
     'var(--xc-warning)',

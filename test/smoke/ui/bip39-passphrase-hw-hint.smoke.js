@@ -21,13 +21,14 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const createSrc = read('packages/core/src/shared/routes/CreateWallet.jsx');
-const importSrc = read('packages/core/src/shared/routes/ImportWallet.jsx');
+const importSrc = withEnglishCopy(read('packages/core/src/shared/routes/ImportWallet.jsx'));
 
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
 //    mention the HW-on-device caveat alongside the entropy /

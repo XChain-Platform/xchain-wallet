@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Button, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './ActionsMenu.module.css';
@@ -48,7 +49,7 @@ export function ActionsMenu({ entries, onBack }) {
         const groupId = entry.group || 'other';
         let group = groups.find((candidate) => candidate.id === groupId);
         if (!group) {
-            group = { id: groupId, label: entry.groupLabel || 'More actions', entries: [] };
+            group = { id: groupId, label: entry.groupLabel || t('actionsMenu.more'), entries: [] };
             groups.push(group);
         }
         group.entries.push(entry);
@@ -57,8 +58,8 @@ export function ActionsMenu({ entries, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="Token actions"
+            backLabel={t('common.backToHome')}
+            title={t('actionsMenu.title')}
             titleIcon={<Icon.TokenIcon />}
         />
     );
@@ -102,7 +103,7 @@ export function ActionsMenu({ entries, onBack }) {
                                                     ) : null}
                                                     {entry.disabledReason ? (
                                                         <span id={reasonId} className={styles.entryReason}>
-                                                            Unavailable: {entry.disabledReason}
+                                                            {t('actionsMenu.unavailable', { reason: entry.disabledReason })}
                                                         </span>
                                                     ) : null}
                                                 </span>

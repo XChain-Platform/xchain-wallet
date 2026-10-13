@@ -198,6 +198,7 @@
     flex-direction: column;
     font-size: var(--xc-text-sm);
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .pairedMeta {

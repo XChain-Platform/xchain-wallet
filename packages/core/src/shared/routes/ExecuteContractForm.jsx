@@ -48,6 +48,7 @@ import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -643,8 +644,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review contract call'
-                    : `Call contract #${contractActionIndex}`}
+                    ? t('execute.review.title')
+                    : t('uri.intent.execute', { contract: contractActionIndex })}
         />
     );
     const wrap = (children) => (
@@ -659,7 +660,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         );
     }
     if (!addressesByChain) {
-        return wrap(<p>Loading addresses…</p>);
+        return wrap(<p>{t('execute.loadingAddresses')}</p>);
     }
 
     if (stage === 'done' && result) {
@@ -681,13 +682,13 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         }
         return wrap(
             <>
-                <p className={styles.summary}>Method call broadcast.</p>
+                <p className={styles.summary}>{t('execute.success')}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Transaction ID</dt>
+                    <dt className={styles.detailsLabel}>{t('send.txid')}</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(none)')}</dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -696,7 +697,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
-                label="Review contract call"
+                label={t('execute.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -714,42 +715,50 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         )}
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? t('send.review.createUnsigned')
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Call on ${descriptor.displayName}` : 'Call contract')}
+                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                : (descriptor
+                                    ? t('execute.executeOn', { network: descriptor.displayName })
+                                    : t('execute.callContract'))}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>
-                    {hasDeposit ? `Deposit ${depositQuantity.trim()} ${depositTick.trim().toUpperCase()}, then call ` : 'Call '}{actionParams.METHOD}
-                    {paramsArray.length > 0 ? ` with ${paramsArray.length} arg${paramsArray.length === 1 ? '' : 's'}` : ''}
-                    {' '}on contract #{actionParams.CONTRACT_ACTION_INDEX}.
+                    {t(hasDeposit ? 'execute.review.summary.deposit' : 'execute.review.summary.call', {
+                        quantity: depositQuantity.trim(),
+                        tick: depositTick.trim().toUpperCase(),
+                        method: actionParams.METHOD,
+                        args: paramsArray.length > 0
+                            ? t('execute.review.args', { count: paramsArray.length })
+                            : '',
+                        contract: actionParams.CONTRACT_ACTION_INDEX,
+                    })}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Contract</dt>
+                    <dt className={styles.detailsLabel}>{t('execute.contract')}</dt>
                     <dd className={styles.detailsValue}>#{actionParams.CONTRACT_ACTION_INDEX}</dd>
                     {hasDeposit ? (
                         <>
-                            <dt className={styles.detailsLabel}>Deposit</dt>
+                            <dt className={styles.detailsLabel}>{t('execute.deposit')}</dt>
                             <dd className={styles.detailsValue}>
                                 {depositQuantity.trim()} {depositTick.trim().toUpperCase()}
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Method</dt>
+                    <dt className={styles.detailsLabel}>{t('execute.method')}</dt>
                     <dd className={styles.detailsValue}>{actionParams.METHOD}</dd>
                     {paramsArray.length > 0 ? (
                         <>
-                            <dt className={styles.detailsLabel}>Params</dt>
+                            <dt className={styles.detailsLabel}>{t('execute.params')}</dt>
                             <dd className={styles.detailsValue}>
                                 <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                     {paramsArray.map((p, i) => (
@@ -759,17 +768,17 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Network fee</dt>
+                    <dt className={styles.detailsLabel}>{t('send.networkFee')}</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                            : t('common.estimateUnavailable')}
                     </dd>
-                    <dt className={styles.detailsLabel}>Protocol fee</dt>
+                    <dt className={styles.detailsLabel}>{t('execute.protocolFee')}</dt>
                     <dd className={styles.detailsValue}>
                         {nativeFee.payFeeInNativeCoin
-                            ? `Paid in ${coinTicker || 'the native coin'}`
-                            : 'Paid from your XCHAIN balance'}
+                            ? t('execute.protocolFee.native', { coin: coinTicker || t('execute.nativeCoin') })
+                            : t('execute.protocolFee.xchain')}
                     </dd>
                     <ContractConsentPanel
                         manifest={manifest}
@@ -788,9 +797,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -823,7 +830,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    ? t('send.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: coinTicker,
+                    }).trim()
                     : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -847,7 +857,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Token to deposit"
+                title={t('execute.tokenToDeposit')}
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setDepositTick(String(sel.tick || '').toUpperCase());
@@ -863,7 +873,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
@@ -874,7 +884,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <FormPage
-            label="Call contract"
+            label={t('execute.callContract')}
             onSubmit={handleReview}
             noValidate
             status={formError ? (
@@ -887,7 +897,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !method.trim() || (abiActive && abiIncomplete) || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Call contract' : 'Preview'}
+                    {singleEncode ? t('execute.callContract') : t('common.preview')}
                 </Button>
             )}
         >
@@ -896,19 +906,19 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
-                    label="Caller"
+                    label={t('execute.caller')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+                    iconLabel={t('send.source.choose')}
                 />
             ) : null}
             {abiActive ? (
                 <>
                     <Select
-                        label="Method"
+                        label={t('execute.method')}
                         hint={abiSpec ? [abiSpec.summary, abiSpec.view ? '(declared read-only)' : null].filter(Boolean).join(' ') || undefined : undefined}
                         value={method}
                         onChange={(e) => selectAbiMethod(e.target.value)}
@@ -935,14 +945,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         </div>
                     ))}
                     <Button type="button" variant="ghost" onClick={() => setManualMode(true)}>
-                        Enter method manually
+                        {t('execute.enterMethodManually')}
                     </Button>
                 </>
             ) : (
                 <>
                     <Input
-                        label="Method"
-                        hint="Name of the contract method to call."
+                        label={t('execute.method')}
+                        hint={t('execute.methodHint')}
                         value={method}
                         onChange={(e) => { setMethod(e.target.value); setFormError(null); }}
                         autoComplete="off"
@@ -951,8 +961,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         spellCheck={false}
                     />
                     <Input
-                        label="Params (optional)"
-                        hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
+                        label={t('execute.paramsOptional')}
+                        hint={t('execute.paramsHint')}
                         value={paramsText}
                         onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
                         className={contractStyles.monospaceInput}
@@ -973,22 +983,25 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                                 selectAbiMethod(names.includes(method) ? method : names[0]);
                             }}
                         >
-                            Use declared methods
+                            {t('execute.useDeclaredMethods')}
                         </Button>
                     ) : null}
                 </>
             )}
             <TokenField
-                label="Deposit (optional)"
+                label={t('execute.depositOptional')}
                 value={depositTick && chainId ? { chainId, tick: depositTick } : null}
-                placeholder="No deposit"
+                placeholder={t('execute.noDeposit')}
                 onOpenPicker={() => setTokenPickerOpen(true)}
             />
             {depositTick ? (
                 <>
                     <AmountField
-                        label="Deposit amount"
-                        hint={`Sent into contract #${contractActionIndex} in the same transaction, before the call. Only tokens on ${descriptor?.displayName || 'this chain'} can be deposited.`}
+                        label={t('execute.depositAmount')}
+                        hint={t('execute.depositHint', {
+                            contract: contractActionIndex,
+                            chain: descriptor?.displayName || t('send.rbf.thisChain'),
+                        })}
                         amount={depositQuantity}
                         tick={depositTick}
                         onAmountFieldChange={(rawValue) => {
@@ -1002,7 +1015,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             : undefined}
                         maxDisabled={!depositBalance}
                         balanceText={depositBalance != null
-                            ? `${formatWithThousands(depositBalance)} ${depositTick.toUpperCase()} available`
+                            ? t('execute.balanceAvailable', {
+                                amount: formatWithThousands(depositBalance),
+                                tick: depositTick.toUpperCase(),
+                            })
                             : null}
                     />
                     <Button
@@ -1010,14 +1026,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         variant="ghost"
                         onClick={() => { setDepositTick(''); setDepositQuantity(''); setFormError(null); }}
                     >
-                        Remove deposit
+                        {t('execute.removeDeposit')}
                     </Button>
                 </>
             ) : null}
 
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}

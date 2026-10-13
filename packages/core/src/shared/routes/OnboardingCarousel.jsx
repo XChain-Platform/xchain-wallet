@@ -10,6 +10,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import styles from './OnboardingCarousel.module.css';
 
 /**
@@ -132,7 +133,7 @@ export function OnboardingCarousel({
             >
                 <div className={styles.skipRow}>
                     <button type="button" className={styles.skipBtn} onClick={handleSkip}>
-                        Skip
+                        {t('onboarding.carousel.skip')}
                     </button>
                 </div>
                 <div className={styles.stack}>
@@ -149,7 +150,7 @@ export function OnboardingCarousel({
                 </div>
                 <div className={styles.actions}>
                     <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                        Get started
+                        {t('onboarding.carousel.getStarted')}
                     </Button>
                 </div>
             </div>
@@ -166,7 +167,7 @@ export function OnboardingCarousel({
         >
             <div className={styles.skipRow}>
                 <button type="button" className={styles.skipBtn} onClick={handleSkip}>
-                    Skip
+                    {t('onboarding.carousel.skip')}
                 </button>
             </div>
 
@@ -197,7 +198,7 @@ export function OnboardingCarousel({
             <div
                 className={styles.dots}
                 role="tablist"
-                aria-label="Onboarding steps"
+                aria-label={t('onboarding.carousel.steps')}
             >
                 {frames.map((f, i) => (
                     <button
@@ -209,7 +210,11 @@ export function OnboardingCarousel({
                         aria-selected={i === index}
                         aria-current={i === index ? 'step' : undefined}
                         aria-controls={`${idPrefix}-panel-${i}`}
-                        aria-label={`Step ${i + 1} of ${count}: ${f.title}`}
+                        aria-label={t('onboarding.carousel.stepLabel', {
+                            current: i + 1,
+                            count,
+                            title: f.title,
+                        })}
                         tabIndex={i === index ? 0 : -1}
                         className={i === index ? styles.dotActive : styles.dot}
                         onClick={() => goTo(i)}
@@ -225,15 +230,15 @@ export function OnboardingCarousel({
                     disabled={index === 0}
                     icon={<Icon.BackIcon />}
                 >
-                    Back
+                    {t('common.back')}
                 </Button>
                 {atLast ? (
                     <Button variant="primary" onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                        Get started
+                        {t('onboarding.carousel.getStarted')}
                     </Button>
                 ) : (
                     <Button variant="primary" onClick={() => goTo(index + 1)} icon={null}>
-                        Next
+                        {t('onboarding.carousel.next')}
                     </Button>
                 )}
             </div>

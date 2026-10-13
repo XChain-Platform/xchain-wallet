@@ -26,6 +26,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -42,7 +43,6 @@ const ROUTES = [
         name: 'History',
         path: join(sharedRoutes, 'History.jsx'),
         ariaLabel: 'Loading history',
-        ariaPattern: /role="status"[\s\S]*aria-label=\{t\('history\.loading'\)\}/,
         oldText: 'Loading history…',
     },
     {
@@ -54,7 +54,7 @@ const ROUTES = [
 ];
 
 for (const r of ROUTES) {
-    const src = readFileSync(r.path, 'utf8');
+    const src = withEnglishCopy(readFileSync(r.path, 'utf8'));
     assert.ok(
         /import\s*\{[^}]*\bSkeleton\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(src),
         `${r.name}.jsx imports Skeleton from @xchain-wallet/core/ui`,

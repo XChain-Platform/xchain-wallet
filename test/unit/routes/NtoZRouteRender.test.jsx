@@ -164,7 +164,7 @@ describe('MyBets render', () => {
             }]),
         }, props);
 
-        expect(screen.getByText('Loading bets…')).toBeInTheDocument();
+        expect(screen.getByRole('status', { name: 'Loading bets' })).toBeInTheDocument();
 
         await act(async () => {
             addresses.resolve({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] });
@@ -190,7 +190,10 @@ describe('MyBets render', () => {
             bets: vi.fn(),
         }, props);
 
-        expect(await screen.findByText('Bet history unavailable.')).toBeInTheDocument();
+        // Raw load errors are replaced with plain recovery copy and a retry action.
+        expect(await screen.findByText('Could not load your bets. Try again.')).toBeInTheDocument();
+        expect(screen.queryByText('Bet history unavailable.')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     });
 });
 

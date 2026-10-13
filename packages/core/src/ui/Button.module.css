@@ -39,7 +39,7 @@
 }
 
 .btn:disabled {
-    opacity: 0.55;
+    opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
 }
 

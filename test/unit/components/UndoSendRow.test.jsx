@@ -122,14 +122,14 @@ describe('UndoSendRow', () => {
 
     it('says the build cannot hold sends without sendHoldCancel', () => {
         render(<UndoSendRow />);
-        expect(screen.getByText(/This build cannot hold sends/)).toBeTruthy();
+        expect(screen.getByText(/This build can't hold sends/)).toBeTruthy();
     });
 
     it('describes the actual pre-broadcast hold when sendHoldCancel is a function', () => {
         messaging = { sendHoldCancel: () => {} };
         render(<UndoSendRow />);
-        expect(screen.queryByText(/This build cannot hold sends/)).toBeNull();
+        expect(screen.queryByText(/This build can't hold sends/)).toBeNull();
         expect(screen.getByText(/holds each signed send/i)).toBeTruthy();
-        expect(screen.getByText(/duration of 0 does not hold sends/i)).toBeTruthy();
+        expect(screen.getByText(/duration of 0 doesn't hold sends/i)).toBeTruthy();
     });
 });

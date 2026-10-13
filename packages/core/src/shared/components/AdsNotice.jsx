@@ -10,6 +10,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 
 /**
  * §36.1 ADS notice: the one-time screen at the end of onboarding, after a
@@ -40,11 +41,8 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
     return (
         <>
             <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Automatic Donation System</h1>
-                <p className={subtitleClass}>
-                    XChain Platform includes an Automatic Donation System (ADS)
-                    that supports continued development.
-                </p>
+                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>{t('adsNotice.title')}</h1>
+                <p className={subtitleClass}>{t('adsNotice.subtitle')}</p>
             </header>
             <ul style={{
                 margin: 0,
@@ -58,15 +56,9 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
                 flexDirection: 'column',
                 gap: 'var(--xc-space-1)',
             }}>
-                <li>
-                    ADS is on by default. It sets aside a small amount when you send a
-                    transaction and sends it as one donation once it adds up.
-                </li>
-                <li>You do not need to donate to use XChain Platform.</li>
-                <li>
-                    Choose the amount and frequency under Settings &rarr; Automatic Donation System.
-                    ADS can also be turned off entirely there.
-                </li>
+                <li>{t('adsNotice.defaultBehavior')}</li>
+                <li>{t('adsNotice.optional')}</li>
+                <li>{t('adsNotice.settings')}</li>
             </ul>
             <div className={actionsClass}>
                 <Button
@@ -76,7 +68,7 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
                     size={isFull ? undefined : 'sm'}
                     icon={<Icon.CheckIcon />}
                 >
-                    Continue
+                    {t('adsNotice.continue')}
                 </Button>
             </div>
         </>

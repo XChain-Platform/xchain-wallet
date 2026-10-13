@@ -63,11 +63,11 @@ export const INPUT = {
     fontFamily: 'inherit',
 };
 
-const ROW_COPY = {
+export const ROW_COPY = {
     display: 'flex',
     flexDirection: 'column',
-    flex: 1,
-    minWidth: 0,
+    flex: '1 1 280px',
+    minWidth: 'min(100%, 280px)',
 };
 const EMBEDDED_ROW = {
     ...ROW,
@@ -140,10 +140,23 @@ export function ToggleRow({
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
                 style={{
-                    width: 36,
-                    // The shared target token keeps every settings switch at the pointer-size floor.
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    width: 40,
+                    minWidth: 40,
+                    margin: 0,
+                    border: `1px solid ${checked ? 'var(--xc-accent-primary)' : 'var(--xc-border-strong)'}`,
+                    borderRadius: 999,
+                    backgroundColor: checked ? 'var(--xc-accent-primary)' : 'var(--xc-surface)',
+                    backgroundImage: `radial-gradient(circle, ${checked ? 'var(--xc-on-accent)' : 'var(--xc-text-muted)'} 0 7px, transparent 8px)`,
+                    backgroundPosition: checked ? 'right 2px center' : 'left 2px center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: '20px 20px',
+                    // Keep the visible track and pointer target at the shared accessibility floor.
                     height: 'var(--xc-tap-min)',
+                    flexShrink: 0,
                     cursor: disabled ? 'not-allowed' : 'pointer',
+                    transition: 'background-color 120ms ease, background-position 120ms ease, border-color 120ms ease',
                 }}
             />
         </SettingsFieldRow>

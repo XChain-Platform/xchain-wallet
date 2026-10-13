@@ -24,6 +24,7 @@
  * @typedef {Object} SdkBalances
  * @property {{ tick?: string, divisibility?: number | string, quantity?: string | number } | null} [native]
  * @property {Array<{ tick?: string, divisibility?: number | string, quantity?: string | number }>} [tokens]
+ * @property {string[]} [unavailable]  halves that could not be read ('native', 'tokens')
  */
 
 /**
@@ -36,7 +37,16 @@ export function balancesFromSdk(sdkBalances) {
     if (!sdkBalances || typeof sdkBalances !== 'object') return out;
 
     const native = sdkBalances.native;
-    if (native && typeof native === 'object') {
+    const nativeUnavailable = Array.isArray(sdkBalances.unavailable)
+        && sdkBalances.unavailable.includes('native');
+    if (nativeUnavailable && !(native && typeof native === 'object')) {
+        // Issue #74: the coin balance could not be read. Leaving the row out
+        // let the simulator default the coin to '0' and preview `0 -> -fee`.
+        // This marker carries no tick or amount, so callers that look a
+        // balance up by tick never match it; the simulator reads it as
+        // "coin balance unknown".
+        out.push({ tick: '', amount: '', isCoin: true, unknown: true });
+    } else if (native && typeof native === 'object') {
         const tick = String(native.tick || '').toUpperCase();
         if (tick) {
             out.push({

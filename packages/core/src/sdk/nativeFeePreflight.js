@@ -266,8 +266,8 @@ function forfeitReason(err) {
  * would read as a guarantee the pre-flight never gave.
  */
 export const NATIVE_FEE_UNVERIFIED_NOTICE =
-    'The amount is exact, but the network does not check contract actions in advance, so it '
-    + 'cannot tell you beforehand whether this one will be accepted. If it is rejected, the fee '
+    "The amount is exact, but the network doesn't check contract actions in advance, so it "
+    + "can't tell you beforehand whether this one will be accepted. If it's rejected, the fee "
     + 'is still spent.';
 
 /**

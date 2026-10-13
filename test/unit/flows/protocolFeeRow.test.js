@@ -105,7 +105,7 @@ describe('protocolFeeRowCopy', () => {
         });
         expect(copy.label).toBe('Protocol fee is paid in LTC');
         expect(copy.hint).toContain("This action's protocol fee is 0.165 XCHAIN.");
-        expect(copy.hint).toContain('The fee is sent on-chain and is not refunded');
+        expect(copy.hint).toContain("The fee is sent on-chain and isn't refunded");
         expect(copy.hint).not.toContain('If this action charges one');
     });
 

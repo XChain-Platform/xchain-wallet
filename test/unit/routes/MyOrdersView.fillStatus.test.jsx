@@ -180,7 +180,8 @@ describe('MyOrdersView: fills', () => {
         const { messaging } = harness({ ordersError: new Error('Order explorer unavailable') });
         const utils = await open(messaging);
 
-        expect(utils.getByText('Order explorer unavailable')).toBeTruthy();
+        expect(utils.getByText('Could not load your orders. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Order explorer unavailable')).toBeNull();
         expect(utils.queryByText('No orders yet')).toBeNull();
     });
 
@@ -191,7 +192,8 @@ describe('MyOrdersView: fills', () => {
         });
         const utils = await open(messaging);
 
-        expect(utils.getByText('Cancel status unavailable')).toBeTruthy();
+        expect(utils.getByText('Could not load your orders. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Cancel status unavailable')).toBeNull();
         expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
     });
 

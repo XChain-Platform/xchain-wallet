@@ -19,7 +19,7 @@ const electron = vi.hoisted(() => {
     const isolatedSession = { partition: 'trezor-connect-isolated' };
     const state = {
         userDataDir: '/tmp/xchain-main-entry-test',
-        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+        displays: [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
         normalBounds: { x: 0, y: 0, width: 1024, height: 768 },
     };
     const ownerWindow = {};
@@ -73,8 +73,8 @@ const electron = vi.hoisted(() => {
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
         screen: {
-            getAllDisplays: vi.fn(() => [{ workArea: state.workArea }]),
-            getPrimaryDisplay: vi.fn(() => ({ workArea: state.workArea })),
+            getAllDisplays: vi.fn(() => state.displays),
+            getPrimaryDisplay: vi.fn(() => state.displays[0]),
         },
         session: {
             defaultSession: {},
@@ -192,7 +192,7 @@ beforeEach(() => {
     electron.appListeners.clear();
     electron.browserWindowOptions.length = 0;
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
-    electron.state.workArea = { x: 0, y: 0, width: 1920, height: 1080 };
+    electron.state.displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
     electron.state.normalBounds = { x: 0, y: 0, width: 1024, height: 768 };
     fsControl.failSyncWrite = false;
     electron.BrowserWindow.instances.length = 0;
@@ -282,7 +282,7 @@ describe('desktop main entry point', () => {
         const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
         tempDirs.push(userDataDir);
         electron.state.userDataDir = userDataDir;
-        electron.state.workArea = workArea;
+        electron.state.displays = [{ workArea }];
         electron.app.whenReady.mockResolvedValueOnce();
 
         await import('../../../packages/desktop/main/index.js');
@@ -301,6 +301,42 @@ describe('desktop main entry point', () => {
         const savedBounds = { x: 80, y: 60, width: 1180, height: 820 };
         writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
         electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+    });
+
+    it('restores the saved position on one ultrawide display', async () => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        const savedBounds = { x: 400, y: 200, width: 900, height: 700 };
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.state.displays = [{
+            workArea: { x: 0, y: 0, width: 5120, height: 1440 },
+            scaleFactor: 2,
+        }];
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+    });
+
+    it('keeps an origin inside either display instead of clamping to the larger overlap', async () => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        const savedBounds = { x: 1800, y: 200, width: 900, height: 700 };
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.state.displays = [
+            { workArea: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+            { workArea: { x: 1920, y: 0, width: 3200, height: 1440 }, scaleFactor: 2 },
+        ];
         electron.app.whenReady.mockResolvedValueOnce();
 
         await import('../../../packages/desktop/main/index.js');

@@ -8,20 +8,28 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
-import { NetworkFilterDropdown } from '@xchain-wallet/core/shared/components/NetworkFilterDropdown.jsx';
+import { ContactsPickerScreen } from '@xchain-wallet/core/shared/components/ContactsPickerScreen.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
-import styles from './AddressListSection.module.css';
 
-const ROWS = [
-    { name: 'Erin Calloway', address: 'bc1qd0nateja8l9am8tqpzjn9uazhf6dlp9qer2tra' },
-    { name: 'Cold storage', address: 'bc1qexamplecoldstoragevault00000000000000042' },
-    { name: 'Miner payouts', address: 'ltc1qexampleminerpayoutaddr000000000000007' },
-    { name: 'Doge tip jar', address: 'D7exampleDogeTipJarAddress00000000001' },
+const CONTACTS = [
+    {
+        id: 'contact-erin',
+        name: 'Erin Calloway',
+        entries: [
+            { chain: 'bitcoin', label: 'Savings', address: 'bc1qd0nateja8l9am8tqpzjn9uazhf6dlp9qer2tra' },
+            { chain: 'litecoin', label: 'Everyday', address: 'ltc1qg82w3d7z4h3s4q6jh8v2c5x9n0m2ka7yp6tdgw' },
+        ],
+    },
+    {
+        id: 'contact-miner',
+        name: 'Miner payouts',
+        entries: [
+            { chain: 'dogecoin', address: 'D7Y55nwG7h3bRGW6z9pKcY8yXzW4aMNc2D' },
+        ],
+    },
 ];
 
 export function AddressListSection() {
-    const [network, setNetwork] = useState('all');
     return (
         <Section
             id="address-list"
@@ -40,7 +48,9 @@ export function AddressListSection() {
             />
 
             <Markup>
-{`<ContactsPickerScreen
+{`import { ContactsPickerScreen } from '@xchain-wallet/core/shared/components/ContactsPickerScreen.jsx';
+
+<ContactsPickerScreen
     contacts={contacts}
     variant={variant}
     onPick={(entry) => fillAddress(entry.address)}
@@ -48,27 +58,22 @@ export function AddressListSection() {
 />`}
             </Markup>
 
-            <LiveExample label="Search + network dropdown above the contact card (dropdown is live)">
-                <div className={styles.abToolbar}>
-                    <input type="text" className={styles.abSearch} placeholder="Search name or address" autoComplete="off" readOnly />
-                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
-                </div>
-                <ul className={styles.abList}>
-                    {ROWS.map((r) => (
-                        <li key={r.address}>
-                            <button type="button" className={styles.abRow}>
-                                <span className={styles.abName}>{r.name}</span>
-                                <span className={styles.abAddr} title={r.address}>{r.address}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
+            <LiveExample label="Search + network dropdown above the contact card (both are live)" padded={false}>
+                <ContactsPickerScreen
+                    contacts={CONTACTS}
+                    variant="full"
+                    onPick={() => {}}
+                    onBack={() => {}}
+                />
             </LiveExample>
 
-            <LiveExample label="Filtered-to-nothing state (inside the card)">
-                <ul className={styles.abList}>
-                    <li><div className={styles.abEmpty}>No addresses match your filters.</div></li>
-                </ul>
+            <LiveExample label="Empty contact book" padded={false}>
+                <ContactsPickerScreen
+                    contacts={[]}
+                    variant="full"
+                    onPick={() => {}}
+                    onBack={() => {}}
+                />
             </LiveExample>
         </Section>
     );

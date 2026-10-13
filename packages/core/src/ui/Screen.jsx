@@ -50,20 +50,38 @@ export function ScrollRestoration({ routeKey, children }) {
  * @param {'main' | 'section' | 'div'} [props.bodyAs]
  * @param {string} [props.bodyLabelledBy]
  * @param {import('react').RefObject<HTMLDivElement>} [props.rootRef]
+ * @param {string} [props.scrollKey]   independently restored view within a route
+ * @param {boolean} [props.restoreScroll]
  * @param {import('react').ReactNode} props.children
  */
-export function Screen({ header, footer, variant = 'small', bodyAs: Body = 'main', bodyLabelledBy, rootRef, children }) {
+export function Screen({
+    header,
+    footer,
+    variant = 'small',
+    bodyAs: Body = 'main',
+    bodyLabelledBy,
+    rootRef,
+    scrollKey,
+    restoreScroll = true,
+    children,
+}) {
     const mainRef = useRef(null);
     const restoration = useContext(ScrollRestorationContext);
     const routeKey = restoration?.routeKey;
     const positions = restoration?.positions;
+    const positionKey = scrollKey == null ? routeKey : JSON.stringify([routeKey, scrollKey]);
 
     useLayoutEffect(() => {
         const main = mainRef.current;
-        if (!main || routeKey == null || !positions) return undefined;
-        main.scrollTop = positions.get(routeKey) ?? 0;
-        return () => positions.set(routeKey, main.scrollTop);
-    }, [positions, routeKey]);
+        if (!main) return undefined;
+        if (!restoreScroll) {
+            main.scrollTop = 0;
+            return undefined;
+        }
+        if (positionKey == null || !positions) return undefined;
+        main.scrollTop = positions.get(positionKey) ?? 0;
+        return () => positions.set(positionKey, main.scrollTop);
+    }, [positionKey, positions, restoreScroll]);
 
     const className = `${styles.screen} ${styles[variant]}`;
     return (

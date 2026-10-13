@@ -877,11 +877,11 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
         case 'signMessage':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>{t('extension.sign.message')}</p>
+                    <p className={shared.summaryLabel}>{t('verifySignature.message')}</p>
                     <HardenedSignedText value={inner.message} warningNoun={t('extension.sign.warningNoun.message')} />
                     {inner.address ? (
                         <>
-                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.signer')}</p>
+                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('signerSelect.title')}</p>
                             <pre className={shared.summaryValue}>{inner.address}</pre>
                         </>
                     ) : null}
@@ -908,7 +908,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             if (!decoded) {
                 return (
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('extension.sign.action')}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('actionDetail.title')}</p>
                         <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                             {intentLoading
                                 ? t('extension.sign.action.reading')
@@ -920,7 +920,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             return (
                 <>
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('extension.sign.action')}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('actionDetail.title')}</p>
                         <p
                             className={shared.summaryValue}
                             style={{ whiteSpace: 'normal', fontFamily: 'var(--xc-font-sans)', fontSize: 13, lineHeight: 1.4 }}
@@ -1104,7 +1104,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
 
             {preview.decodeOk ? (
                 <>
-                    <p className={shared.summaryLabel}>{t('extension.sign.action')}</p>
+                    <p className={shared.summaryLabel}>{t('actionDetail.title')}</p>
                     <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                         {actionDisplayLabel(preview.action) || preview.action}
                         {preview.amount !== undefined ? ` ${preview.amount}` : ''}

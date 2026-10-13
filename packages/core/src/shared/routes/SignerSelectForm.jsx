@@ -35,6 +35,7 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
+import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 
@@ -110,16 +111,14 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     ];
 
     return (
-        <fieldset style={FIELDSET_STYLE} aria-label="Choose signer">
-            <legend style={LEGEND_STYLE}>Signer</legend>
+        <fieldset style={FIELDSET_STYLE} aria-label={t('signerSelect.choose')}>
+            <legend style={LEGEND_STYLE}>{t('signerSelect.title')}</legend>
             <p style={INTRO_STYLE}>
-                Choose where this operation derives its keys. This choice does not share
-                recovery words or hardware secrets.
+                {t('signerSelect.intro')}
             </p>
             {isWatcherMode ? (
                 <p role="note" style={WATCH_ONLY_STYLE}>
-                    Watch-only mode remains active. Selecting a key source here does not
-                    enable local transaction signing.
+                    {t('signerSelect.watcherNote')}
                 </p>
             ) : null}
             <ul style={LIST_STYLE}>

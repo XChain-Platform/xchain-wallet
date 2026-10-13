@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { t } from '../../i18n/index.js';
 import { WalletIdentity } from '../components/WalletIdentity.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -79,7 +80,7 @@ export function WalletPicker({
 
     const switching = switchingWalletId !== null;
 
-    const header = <PageHeader onBack={onBack} backDisabled={switching} title="Wallets" />;
+    const header = <PageHeader onBack={onBack} backDisabled={switching} title={t('walletPicker.title')} />;
     const activeWallet = wallets?.find((wallet) => wallet.id === activeWalletId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
@@ -89,7 +90,7 @@ export function WalletPicker({
                 disabled={switching}
                 icon={<Icon.PlusIcon />}
             >
-                Add wallet
+                {t('walletPicker.add')}
             </Button>
             {onShowDetails && activeWallet ? (
                 <Button
@@ -98,7 +99,7 @@ export function WalletPicker({
                     disabled={switching}
                     icon={<Icon.InfoIcon />}
                 >
-                    Manage wallet
+                    {t('walletPicker.manage')}
                 </Button>
             ) : null}
         </div>
@@ -113,9 +114,9 @@ export function WalletPicker({
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : wallets === null ? (
-                    <div className={styles.entryDescription}>Loading…</div>
+                    <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : wallets.length === 0 ? (
-                    <EmptyState title="No wallets yet" body="Wallets available to this app appear here." />
+                    <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
                     const walletName = w.name || 'Unnamed wallet';
@@ -143,15 +144,15 @@ export function WalletPicker({
                                     </span>
                                     {w.format ? (
                                         <span className={styles.entryDescription}>
-                                            {w.origin === 'demo' ? 'Demo wallet · ' : ''}
+                                            {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
                                             {w.format === 'counterwallet-legacy'
-                                                ? 'FreeWallet (legacy)'
-                                                : w.format === 'wif-only' ? 'Imported key' : 'BIP39'}
+                                                ? t('walletPicker.legacy')
+                                                : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
                                             {/* A stored passphrase (passphraseStored) unlocks on the
                                                 password alone, so it earns no badge here; only a legacy
                                                 record still owed its one-time capture does, and the badge
                                                 names the unlock screen as where that happens. */}
-                                            {w.passphraseEnabled && !w.passphraseStored ? ' · needs its passphrase at unlock' : ''}
+                                            {w.passphraseEnabled && !w.passphraseStored ? t('walletPicker.passphraseNeeded') : ''}
                                         </span>
                                     ) : null}
                                 </span>
@@ -160,8 +161,8 @@ export function WalletPicker({
                                 <button
                                     type="button"
                                     className={pickerStyles.rowMenuBtn}
-                                    aria-label={`Wallet details for ${walletName}`}
-                                    title="Wallet details"
+                                    aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
+                                    title={t('walletDetails.title')}
                                     disabled={switching}
                                     onClick={(e) => {
                                         e.stopPropagation();

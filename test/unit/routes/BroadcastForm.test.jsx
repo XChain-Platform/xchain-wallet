@@ -409,7 +409,7 @@ describe('the fee row does not promise a fee BROADCAST never pays', () => {
         // The old sentences, both gone: no definite charge, no forfeiture claim
         // about money that is never spent.
         expect(screen.queryByText(/Protocol fee is paid in LTC/)).toBeNull();
-        expect(screen.queryByText(/The fee is sent on-chain and is not refunded/)).toBeNull();
+        expect(screen.queryByText(/The fee is sent on-chain and isn't refunded/)).toBeNull();
 
         // What replaces them is true whether or not this action is priced, so
         // no per-action list has to be kept in the client for it to stay true.

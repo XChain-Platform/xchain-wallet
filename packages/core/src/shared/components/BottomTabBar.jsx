@@ -238,6 +238,7 @@ export function BottomTabBar({
                     >
                         <div className={styles.sheetHeader}>
                             <div className={styles.handle} aria-hidden="true" />
+                            <h2 className={styles.sheetTitle}>More</h2>
                             <button
                                 type="button"
                                 className={styles.sheetClose}
@@ -327,7 +328,7 @@ export function BottomTabBar({
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <Icon.LockIcon />
                                             </span>
-                                            <span>Lock</span>
+                                            <span>Lock wallet</span>
                                         </button>
                                     </li>
                                 ) : null}

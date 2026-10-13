@@ -128,7 +128,7 @@
     flex-direction: column;
     padding: var(--xc-space-2)
         env(safe-area-inset-right, 0px)
-        env(safe-area-inset-bottom, var(--xc-space-3))
+        calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3)))
         env(safe-area-inset-left, 0px);
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
@@ -181,6 +181,13 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+}
+
+.sheetTitle {
+    margin: 0;
+    padding: 0 var(--xc-space-4) var(--xc-space-2);
+    font-size: var(--xc-text-lg);
+    line-height: 1.25;
 }
 
 .sheetList {

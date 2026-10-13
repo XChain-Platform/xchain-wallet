@@ -46,10 +46,462 @@ export const en = {
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
+    'common.confirm': 'Confirm',
+    'common.settingsUnavailable': 'Settings unavailable.',
+    'common.edit': 'Edit',
+    'common.estimateUnavailable': 'Estimate unavailable',
+    'common.networkFeeUnavailable': 'Network fee estimate unavailable.',
+    'common.notAvailable': 'n/a',
+    'common.preview': 'Preview',
+    'common.review': 'Review',
+    'common.watcherBuildsUnsigned':
+        'Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then bring the signed transaction to a Full-mode wallet to broadcast.',
     'common.contactName': 'Contact name',
+
+    // --- shared components ---------------------------------------
+    'adsNotice.title': 'Automatic Donation System',
+    'adsNotice.subtitle':
+        'XChain Platform includes an Automatic Donation System (ADS) that supports continued development.',
+    'adsNotice.defaultBehavior':
+        'ADS is on by default. It sets aside a small amount when you send a transaction and sends it as one donation once it adds up.',
+    'adsNotice.optional':
+        "You don't need to donate to use XChain Platform.",
+    'adsNotice.settings':
+        'Choose the amount and frequency under Settings → Automatic Donation System. ADS can also be turned off entirely there.',
+    'adsNotice.continue': 'Continue',
+    'alerts.title': 'Alerts',
+    'alerts.close': 'Close alerts',
+    'alerts.empty': "No alerts. You're all caught up.",
+    'backupReminder.backupNow': 'Back up now',
+    'backupReminder.remindTomorrow': 'Remind me tomorrow',
+
+    // --- settings ------------------------------------------------
+    'settings.network.label': 'Network',
+    'settings.network.activeLabel': 'Active network',
+    'settings.network.switchTitle': 'Switch to {network}?',
+    'settings.network.switchMessage':
+        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged.',
+    'settings.network.switchConfirm': 'Switch network',
+    'settings.network.switchError': "Couldn't switch networks. Try again.",
+    'settings.undoSend.label': 'Hold signed sends before broadcast',
+    'settings.undoSend.hintUnavailable':
+        "This build can't hold sends. The preference is saved for a build that supports it.",
+    'settings.undoSend.hintAvailable':
+        "When enabled, holds each signed send for the duration below so you can cancel it before broadcast. A duration of 0 doesn't hold sends.",
+    'settings.undoSend.durationLabel': 'Hold duration in seconds (0 disables)',
+    'settings.undoSend.durationAriaLabel': 'Send hold duration in seconds',
+
+    // --- account picker ------------------------------------------
+    'accountPicker.title': 'Accounts',
+    'accountPicker.add': 'Add account',
+    'accountPicker.manage': 'Manage account',
+    'accountPicker.defaultName': 'Account {number}',
+    'accountPicker.renameLabel': 'Rename {label}',
+    'accountPicker.renameTitle': 'Rename account',
+    'accountPicker.empty.title': 'No accounts yet',
+    'accountPicker.empty.body': 'Accounts added to this wallet appear here.',
+    'accountPicker.error.load': "Couldn't load accounts. Try again.",
+    'accountPicker.loading': 'Loading accounts…',
+    'accountPicker.loadingLabel': 'Loading accounts',
+
+    // --- action routes -------------------------------------------
+    'actionDetail.back': 'Back to history',
+    'actionDetail.title': 'Action',
+    'actionDetail.empty.title': 'No action selected',
+    'actionDetail.empty.body': 'Action details appear here after one is selected.',
+    'actionDetail.offline':
+        'You are offline. Showing saved action details. Network actions will be available when your connection returns.',
+    'actionsMenu.more': 'More actions',
+    'actionsMenu.title': 'Token actions',
+    'actionsMenu.unavailable': 'Unavailable: {reason}',
+
+    // --- alerts --------------------------------------------------
+    'alerts.empty.title': 'No alerts',
+    'alerts.empty.body': "You're all caught up.",
+    'alerts.unreadCount': '{count} unread',
+    'alerts.markAllRead': 'Mark all read',
+    'alerts.clear': 'Clear alerts',
+    'alerts.unread': 'Unread',
+    'alerts.read': 'Read',
+    'alerts.markRead': 'Mark read',
+    'alerts.markReadLabel': 'Mark {title} read',
+
+    // --- bridged tokens ------------------------------------------
+    'bridgeOrigin.onChainName': 'On-chain token name: {tick}',
+    'bridgeOrigin.from': 'Bridged from {origin}',
+
+    'loading.error.title': "The wallet couldn't start.",
+    'loading.error.body': "Something stopped the wallet from opening. Your wallet data hasn't been changed.",
+    'loading.error.recovery':
+        "Choose Try again. If the wallet still doesn't open, contact support before clearing any wallet data.",
+
+    'onboarding.carousel.getStarted': 'Get started',
+    'onboarding.carousel.skip': 'Skip',
+    'onboarding.carousel.steps': 'Onboarding steps',
+    'onboarding.carousel.stepLabel': 'Step {current} of {count}: {title}',
+    'onboarding.carousel.next': 'Next',
+
+    'market.reversePair': 'Reverse pair to {pair}',
+    'market.reverseTitle': 'Reverse to {pair}',
+    'market.stats.high24h': '24h high',
+    'market.stats.low24h': '24h low',
+    'market.stats.volume24h': '24h vol',
+    'market.notFound.title': 'Market not found',
+    'market.notFound.body': 'It may have been closed or not indexed yet.',
+    'market.summary': 'Market summary',
+    'market.loading': 'Loading market',
+    'market.panels': 'Market panels',
+    'market.change24hLabel': '24-hour change. {change}',
+
+    'multisig.share.title': 'Share this wallet as a cosigner',
+    'multisig.share.instructions':
+        'Give these values to the person creating the multisig. In their wallet they add a cosigner with origin "External xpub" and paste each one into the field of the same name. They are public keys: they show the shared address but can\'t spend from it.',
+    'multisig.share.availability':
+        'Only software-seed addresses can be shared here. A watch-only address has no signing key, and a hardware address must be exported using the hardware device or its companion wallet.',
+    'multisig.share.address': 'Address to share',
+    'multisig.share.selectAddress': 'Select address',
+    'multisig.share.payload': 'Share payload',
+    'multisig.share.payloadHint': 'The QR code and text contain the same public cosigner fields.',
+    'multisig.share.qrAlt': 'QR code for multisig cosigner share payload',
+    'multisig.share.payloadAriaLabel': 'Cosigner share payload',
+    'multisig.share.copyPayload': 'Copy cosigner share payload',
+    'multisig.share.xpub': 'xpub',
+    'multisig.share.account': 'Account {path}',
+    'multisig.share.publicKey': 'Public key',
+    'multisig.share.masterFingerprint': 'Master fingerprint',
+    'multisig.share.derivationPath': 'Derivation path',
+    'multisig.share.identityCheck':
+        'Identity check: before funding the multisig, compare the master fingerprint and derivation path with the cosigner over a separate trusted channel. For a hardware signer, confirm its fingerprint on the device itself.',
+    'multisig.share.copyField': 'Copy {label}',
+    'multisig.share.unavailable': 'Not available from this signer',
+
+    // --- route fallback -----------------------------------------
+    'routeNotFound.title': 'Page not found',
+    'routeNotFound.body': "This page doesn't exist or is no longer available.",
+    'routeNotFound.backToHome': 'Back to Home',
+
+    // --- signer selection ---------------------------------------
+    'signerSelect.choose': 'Choose signer',
+    'signerSelect.title': 'Signer',
+    'signerSelect.intro':
+        "Choose where this operation derives its keys. This choice doesn't share recovery words or hardware secrets.",
+    'signerSelect.watcherNote':
+        "Watch-only mode remains active. Selecting a key source here doesn't enable local transaction signing.",
+
+    // --- rename forms -------------------------------------------
+    'renameAccount.name': 'Account name',
+    'renameWallet.title': 'Rename wallet',
+    'renameWallet.name': 'Wallet name',
+
+    // --- staking chooser ----------------------------------------
+    'stakeNew.backToStaking': 'Back to staking',
+    'stakeNew.title': 'New stake',
+    'stakeNew.chooseNetwork': 'Choose the network to stake on.',
+    'stakeNew.prompt': 'What would you like to stake?',
+    'stakeNew.bitcoinOnly':
+        'Staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',
+    'stakeNew.validatorTitle': 'Validator staking',
+    'stakeNew.validatorDescription':
+        'Stake XCHAIN to help secure the network and earn rewards.',
+    'stakeNew.contractTitle': 'Contract staking',
+    'stakeNew.contractDescription':
+        "Stake tokens into a contract. You'll pick the contract next.",
+
+    // --- vault unavailable --------------------------------------
+    'vaultUnavailable.recoverySafe': 'Your recovery phrase still holds everything.',
+    'vaultUnavailable.blockchainSafe':
+        'Your coins live on the blockchain, not in this app. Anything stored here is only a copy, and your recovery phrase restores it on this device or any other.',
+    'vaultUnavailable.restore': 'Restore from recovery phrase or backup',
+    'vaultUnavailable.wipeWarning':
+        "Don't do this unless you have your recovery phrase or an encrypted backup file to hand.",
+    'vaultUnavailable.wipeConfirm': 'Type WIPE to confirm',
+
+    // --- signature verification ---------------------------------
+    'verifySignature.title': 'Verify signature',
+    'verifySignature.valid': 'Valid signature. Signature matches this message and address.',
+    'verifySignature.invalid': "Invalid signature. Signature doesn't match this message and address.",
+    'verifySignature.malformed': 'Malformed signature. Enter a base64-encoded signature.',
+    'verifySignature.address': 'Address',
+    'verifySignature.addressPlaceholder': 'The address that produced the signature',
+    'verifySignature.message': 'Message',
+    'verifySignature.messagePlaceholder': 'The exact text that was signed',
+    'verifySignature.signature': 'Signature',
+    'verifySignature.signaturePlaceholder': 'Base64 signature blob',
+    'verifySignature.verifying': 'Verifying…',
+
+    // --- wallet management --------------------------------------
+    'walletDetails.title': 'Wallet details',
+    'walletDetails.name': 'Name',
+    'walletDetails.type': 'Type',
+    'walletDetails.origin': 'Origin',
+    'walletDetails.passphrase': '25th-word passphrase',
+    'walletDetails.created': 'Created',
+    'walletDetails.demoWallet': 'Demo wallet (throwaway)',
+    'walletDetails.id': 'ID',
+    'walletDetails.upgradeRecovery': 'Upgrade recovery phrase',
+    'walletDetails.exitDemo': 'Exit demo & wipe',
+    'walletPicker.title': 'Wallets',
+    'walletPicker.add': 'Add wallet',
+    'walletPicker.manage': 'Manage wallet',
+    'walletPicker.emptyTitle': 'No wallets yet',
+    'walletPicker.emptyBody': 'Wallets available to this app appear here.',
+    'walletPicker.demoPrefix': 'Demo wallet · ',
+    'walletPicker.legacy': 'FreeWallet (legacy)',
+    'walletPicker.importedKey': 'Imported key',
+    'walletPicker.bip39': 'BIP39',
+    'walletPicker.passphraseNeeded': ' · needs its passphrase at unlock',
+    'walletPicker.detailsFor': 'Wallet details for {wallet}',
 
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
+    'home.title': 'Home',
+    'home.offline.cached':
+        'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.',
+    'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
+    'home.updatingBalances': 'Updating balances…',
+    'home.loadingBalances': 'Loading balances',
+    'home.pendingAirdrops': 'Pending airdrops',
+    'home.resumeAirdrop': 'Resume airdrop: {amount} {token} × {count}',
+    'home.airdrop.waitingIndex': 'Recipient list sent, waiting to be indexed',
+    'home.airdrop.readyToSign': 'Ready to sign the airdrop',
+    'home.pendingPayments': 'Pending payments due',
+    'home.paymentDue': 'Payment due: pay {amount} to complete matched order #{order}',
+    'home.paymentDue.hint': 'Sign to finish paying for your matched order.',
+    'home.quickActions': 'Quick actions',
+    'home.exchange': 'Exchange',
+    'home.exchangeOffline': 'Exchange needs a network connection',
+    'home.createToken': 'Create token',
+    'home.markets': 'Markets',
+    'home.messaging': 'Messaging',
+    'home.addresses': 'Addresses',
+    'home.contracts': 'Contracts',
+    'home.staking': 'Staking',
+    'home.sendOffline': 'Send needs a network connection',
+    'home.settings': 'Settings',
+    'home.lockWallet': 'Lock wallet',
+    'home.signer.region': 'Signer-mode home',
+    'home.signer.title': 'Signer mode',
+    'home.signer.body':
+        "This wallet only signs transactions from a paired Watcher wallet. Send / Receive / balances aren't available. Switch the wallet's mode in Settings → Wallet Mode if you want full-wallet behaviour back.",
+    'home.signer.signTransaction': 'Sign a transaction',
+    'home.signer.signMessage': 'Sign a message',
+    'home.signer.verifySignature': 'Verify a signature',
+
+    // --- contract execution --------------------------------------
+    'execute.review.title': 'Review contract call',
+    'execute.loadingAddresses': 'Loading addresses…',
+    'execute.success': 'Method call broadcast.',
+    'execute.executeOn':
+        'Call on {network}',
+    'execute.review.summary.deposit':
+        'Deposit {quantity} {tick}, then call {method}{args} on contract #{contract}.',
+    'execute.review.summary.call': 'Call {method}{args} on contract #{contract}.',
+    'execute.review.args': '{count, plural, one { with # arg} other { with # args}}',
+    'execute.contract': 'Contract',
+    'execute.deposit': 'Deposit',
+    'execute.method': 'Method',
+    'execute.params': 'Params',
+    'execute.protocolFee': 'Protocol fee',
+    'execute.protocolFee.native': 'Paid in {coin}',
+    'execute.protocolFee.xchain': 'Paid from your XCHAIN balance',
+    'execute.nativeCoin': 'the native coin',
+    'execute.tokenToDeposit': 'Token to deposit',
+    'execute.callContract': 'Call contract',
+    'execute.caller': 'Caller',
+    'execute.enterMethodManually': 'Enter method manually',
+    'execute.methodHint': 'Name of the contract method to call.',
+    'execute.paramsOptional': 'Params (optional)',
+    'execute.paramsHint': 'Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods.',
+    'execute.useDeclaredMethods': 'Use declared methods',
+    'execute.depositOptional': 'Deposit (optional)',
+    'execute.noDeposit': 'No deposit',
+    'execute.depositAmount': 'Deposit amount',
+    'execute.depositHint':
+        'Sent into contract #{contract} in the same transaction, before the call. Only tokens on {chain} can be deposited.',
+    'execute.balanceAvailable': '{amount} {tick} available',
+    'execute.removeDeposit': 'Remove deposit',
+
+    // --- gated publishing ----------------------------------------
+    'gatedPublish.review.title': 'Review gated publish',
+    'gatedPublish.title': 'Gated content · {tick}',
+    'gatedPublish.watcherSavedKey':
+        'The pack key is saved in this wallet. Sign the transaction on your Signer wallet, then broadcast it from a Full-mode wallet.',
+    'gatedPublish.queuedWhat': 'gated file publish',
+    'gatedPublish.success': 'Encrypted file published',
+    'gatedPublish.transaction': 'Transaction:',
+    'gatedPublish.packKeyHash': 'Pack key hash:',
+    'gatedPublish.successHint.beforeToken':
+        'The decryption key is stored in this wallet and recorded on-chain encrypted to your own address. Anyone who receives',
+    'gatedPublish.successHint.afterToken':
+        'through a normal send gets the key automatically. To add more files that unlock together, publish again and pick this pack.',
+    'gatedPublish.pack.new': 'New pack (fresh key)',
+    'gatedPublish.pack.existing': 'Existing pack {hash}…',
+    'gatedPublish.signAndPublish': 'Sign and publish',
+    'gatedPublish.review.summary.beforeFile': 'Publish',
+    'gatedPublish.review.summary.afterFile': 'encrypted; only holders of {tick} will be able to read it.',
+    'gatedPublish.previewAlt': 'Preview of {file}',
+    'gatedPublish.file': 'File',
+    'gatedPublish.gateToken': 'Gate token',
+    'gatedPublish.fileMetadata': '{name} · {bytes} bytes · {type}',
+    'gatedPublish.pack': 'Pack',
+    'gatedPublish.unlockThreshold': 'Unlock threshold',
+    'gatedPublish.thresholdReview': 'hold ≥ {amount} {tick} to receive the key',
+    'gatedPublish.publishingFrom': 'Publishing from',
+    'gatedPublish.permanentHint':
+        "Permanent: the encrypted bytes live on-chain forever and the gate can't be removed later, only the key re-shared. One transaction publishes the file and records your recovery copy of the key; there is no key-less window.",
+    'gatedPublish.watcherHint':
+        'Watcher mode: this builds an unsigned transaction. The pack key stays in THIS wallet either way.',
+    'gatedPublish.gatedContent': 'Gated content',
+    'gatedPublish.formHint.beforeToken': 'Publish a file that only holders of',
+    'gatedPublish.formHint.afterToken':
+        'can read. The file is encrypted before it touches the chain; the key travels automatically with every normal send of the token.',
+    'gatedPublish.ownerMissing.beforeAddress': "This wallet doesn't hold the owner address",
+    'gatedPublish.ownerMissing.afterAddress':
+        'for {tick}. Only the token owner can publish gated files.',
+    'gatedPublish.fileLimit': 'File (up to about {bytes} bytes)',
+    'gatedPublish.fileToPublish': 'File to publish',
+    'gatedPublish.titleOptional': 'Title (optional)',
+    'gatedPublish.titleField': 'Title',
+    'gatedPublish.memoOptional': 'Memo (optional)',
+    'gatedPublish.unlockThresholdOptional': 'Unlock threshold (optional)',
+    'gatedPublish.noThreshold': 'No threshold',
+    'gatedPublish.thresholdHint':
+        'Holders need at least this many {tick} after a send to receive the unlock key. This is a first-access lock, not copy protection: anyone who ever got the key keeps it, even if they later hold less.',
+    'gatedPublish.pack.add': 'Add to pack',
+    'gatedPublish.pack.unlockTogether': '(files in this pack unlock together)',
+    'gatedPublish.pack.loading': 'Loading reusable packs…',
+    'gatedPublish.pack.empty':
+        'No reusable packs in this wallet yet. Files published under one pack share a single key and unlock together.',
+    'gatedPublish.ackForever':
+        "I understand the encrypted file is published on-chain forever and the gate can't be removed later.",
+
+    // --- governance ----------------------------------------------
+    'governance.title': 'Governance',
+    'governance.noAddress.title': 'No governance address',
+    'governance.noAddress.body': 'Governance requires an address on a supported chain.',
+    'governance.createPoll': 'Create poll',
+    'governance.delegateVotes': 'Delegate votes',
+    'governance.loadingAddresses': 'Loading governance addresses…',
+    'governance.loadingAddressesLabel': 'Loading governance addresses',
+    'governance.loadingPolls': 'Loading governance polls…',
+    'governance.loadingPollsLabel': 'Loading governance polls',
+    'governance.error.addresses': "Couldn't load governance addresses. Try again.",
+    'governance.error.polls': "Couldn't load governance polls. Try again.",
+    'governance.empty.title': 'No polls yet',
+    'governance.empty.body': 'Polls created on this chain appear here.',
+    'governance.closesAtBlock': 'Closes at block {block}',
+
+    // --- wallet import -------------------------------------------
+    'importWallet.lane': 'Import lane',
+    'importWallet.recoveryPhrase': 'Recovery phrase',
+    'importWallet.encryptedBackup': 'Encrypted backup',
+    'importWallet.browse': 'Browse',
+    'importWallet.restoring': 'Restoring…',
+    'importWallet.importing': 'Importing…',
+    'importWallet.import': 'Import',
+    'importWallet.title': 'Import wallet',
+    'importWallet.freeWallet.fullTitle': 'Import from FreeWallet',
+    'importWallet.freeWallet.title': 'FreeWallet import',
+    'importWallet.backup.fullTitle': 'Restore from encrypted backup',
+    'importWallet.backup.title': 'Restore backup',
+    'importWallet.existing.fullTitle': 'Import an existing wallet',
+    'importWallet.wif.fullTitle': 'Import a private key',
+    'importWallet.wif.title': 'Import private key',
+    'importWallet.wif.subtitle':
+        'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.',
+    'importWallet.wif.tab': 'Private key',
+    'importWallet.wif.key': 'WIF private key',
+    'importWallet.wif.chain': 'Private key chain',
+    'importWallet.wif.ack': "I understand this key isn't recoverable from a recovery phrase.",
+    'importWallet.freeWallet.fullSubtitle':
+        'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.',
+    'importWallet.freeWallet.subtitle':
+        'Enter your 12-word FreeWallet recovery phrase.',
+    'importWallet.backup.addFullSubtitle':
+        'Restore an encrypted backup as a new wallet. Your existing wallets stay in place.',
+    'importWallet.backup.replaceFullSubtitle':
+        'Choose a `.xchain-wallet` backup. Then enter its file, wallet, and device passwords.',
+    'importWallet.backup.addSubtitle':
+        'Restore as a new wallet. Your existing wallets stay in place.',
+    'importWallet.backup.replaceSubtitle':
+        'Choose a backup file, then enter the three passwords below.',
+    'importWallet.phrase.fullSubtitle':
+        'Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.',
+    'importWallet.phrase.subtitle':
+        'Enter a recovery phrase with 12, 15, 18, 21, or 24 words.',
+    'importWallet.backup.file': 'Backup file',
+    'importWallet.cancelScan': 'Cancel scan',
+    'importWallet.scanPointerQr': 'Scan pointer QR',
+    'importWallet.backup.scannerAlt': 'Backup-pointer QR scanner',
+    'importWallet.backup.pointerLoaded': 'Backup pointer loaded{name}.',
+    'importWallet.backup.location': 'Location: {location}',
+    'importWallet.backup.useFile': 'Use a file instead',
+    'importWallet.backup.chooseFile': 'Choose backup file',
+    'importWallet.backup.contents': 'Backup file contents',
+    'importWallet.backup.placeholder.version': '"version":1,"kdf":',
+    'importWallet.backup.placeholder.kdf': '"name":"argon2id"…',
+    'importWallet.backup.overwrite': 'Overwrite if any record collides (advanced)',
+    'importWallet.pastePhrase': 'Paste recovery phrase from clipboard',
+    'importWallet.scanQr': 'Scan QR',
+    'importWallet.phrase.scannerAlt':
+        'Recovery phrase QR scanner',
+    'importWallet.phrase.fullPlaceholder': 'word word word word word word word word word word word word',
+    'importWallet.phrase.placeholder': 'word word word…',
+    'importWallet.phrase.freeWalletCount': '{count} / 12 words',
+    'importWallet.phrase.wordCount':
+        '{count, plural, one {# word entered (use 12, 15, 18, 21, or 24)} other {# words entered (use 12, 15, 18, 21, or 24)}}',
+    'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
+    'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
+    'importWallet.phrase.suggestions': 'BIP39 word suggestions',
+    'importWallet.phrase.useWord': 'Use BIP39 word "{word}"',
+    'importWallet.phrase.releaseToLoad': 'Release to load',
+    'importWallet.phrase.dropHint': 'Drop a .txt file with your recovery phrase to load it here.',
+    'importWallet.password.fullHint':
+        'At least {count} characters. Encrypts this wallet on this device.',
+    'importWallet.password.hint': 'At least {count} characters.',
+    'importWallet.confirmPassword': 'Confirm password',
+    'importWallet.passphrase.toggle': 'This wallet uses a BIP39 passphrase',
+    'importWallet.passphrase.help': 'BIP39 passphrase help',
+    'importWallet.passphrase.helpBody':
+        'This extra secret combines with your recovery phrase to recreate the same wallet. It stays behind your password here; hardware wallets request it on the device and connect through Add Account, then Hardware Signer.',
+    'importWallet.passphrase.label': 'BIP39 passphrase',
+    'importWallet.passphrase.hint': 'Required to derive the same addresses as the original wallet.',
+    'importWallet.backToSetup': 'Back to wallet setup',
+    'importWallet.openInTab': 'Open in tab',
+
+    // --- token issue ---------------------------------------------
+    'issue.reviewTitle': 'Review issue',
+    'issue.title': 'Issue token',
+    'issue.issuance': 'issuance',
+    'issue.success': 'Token issued',
+    'issue.broadcastComplete': 'Broadcast complete.',
+    'issue.reviewTokenIssue': 'Review token issue',
+    'issue.draft.unfinished':
+        'Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.',
+    'issue.ticker': 'Ticker',
+    'issue.supply': 'Supply',
+    'issue.supplyHint': 'The most that can ever exist.',
+    'issue.initialMintOptional': 'Initial mint (optional)',
+    'issue.initialMintHeadroom': 'Leaves {amount} to mint later.',
+    'issue.initialMintHint':
+        'How much exists at creation. Leave blank to mint the whole supply now; a smaller number leaves the rest to mint later.',
+    'issue.maxMintOptional': 'Max mint per transaction (optional)',
+    'issue.maxMintHint': 'Caps how much can be minted in one transaction. Leave blank for no limit.',
+    'issue.divisible': 'Divisible (8 decimal places)',
+    'issue.descriptionOptional': 'Description (optional)',
+    'issue.descriptionHint': 'Up to 250 characters. Stored on-chain.',
+    'issue.lockSupply': 'Lock supply + minting (irreversible)',
+    'issue.lockSupplyWarning':
+        'Locking minting means the {amount} left under the cap can never be minted. Clear this box to mint it later.',
+    'issue.bridgingHint':
+        'Bridging is off. After the token exists you can open it to other chains from Manage Token, set how deep a lock must be buried before validators sign it, and freeze both settings for your holders.',
+    'issue.boundListHint':
+        "One thing to decide now: a token bound to an address allow-list or block-list can't be bridged, and a bound list can never be cleared. If you may want this token on other chains, don't bind a list to it.",
+    'issue.transferOwnershipOptional': 'Transfer ownership to (optional)',
+    'issue.transferOwnershipHint':
+        "Leave blank to keep control. Transferring ownership doesn't move the minted tokens; use the field below to send those too.",
+    'issue.sendInitialMintOptional': 'Send the initial mint to (optional)',
+    'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
@@ -496,7 +948,6 @@ export const en = {
     'extension.connect.chains.hint':
         'Pick which chains this site can see. You can change this later.',
     'extension.connect.chains.allow': 'Allow {chain} {network}',
-    'extension.connect.accounts': 'Accounts',
     'extension.connect.accounts.hint': 'Pick which accounts this site can see.',
     'extension.connect.accounts.share': 'Share {name}',
     'extension.connect.accounts.primary':
@@ -510,11 +961,8 @@ export const en = {
     'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
     'extension.sign.alwaysAllow':
         'Always allow this site. You can revoke this in Connected sites.',
-    'extension.sign.message': 'Message',
     'extension.sign.warningNoun.message': 'message',
-    'extension.sign.signer': 'Signer',
     'extension.sign.signingPaths': 'Signing paths',
-    'extension.sign.action': 'Action',
     'extension.sign.action.reading': 'Reading this action…',
     'extension.sign.action.unavailable':
         "This action couldn't be described. Approve only if you know exactly what it does.",
@@ -534,6 +982,76 @@ export const en = {
 
 
     // --- errors ---------------------------------------------------
+    // --- flow status and error copy -------------------------------
+    'flows.biometric.browserUnsupported': "This browser doesn't support the sign-in technology biometric unlock needs.",
+    'flows.biometric.deviceUnavailable':
+        'This device has no built-in fingerprint, face, or PIN unlock that this browser can use. Set one up in your system settings, then come back.',
+    'flows.biometric.probeFailed': "This browser couldn't check whether a built-in unlock method is available.",
+    'flows.biometric.genericUnavailable': "Biometric unlock isn't available on this device.",
+
+    'flows.dispenserAddress.self':
+        'This is the source address itself, so it can always host its own dispenser.',
+    'flows.dispenserAddress.preference':
+        'Allowed: this address lets anyone open a dispenser on it.',
+    'flows.dispenserAddress.fresh':
+        'Allowed: this address has no on-chain history, so anyone may open the first dispenser on it.',
+    'flows.dispenserAddress.origin':
+        'Allowed: your source address opened a dispenser here before, so it may open another.',
+    'flows.dispenserAddress.ownerOnly': 'This address only lets its owner open dispensers.',
+    'flows.dispenserAddress.unknown':
+        "Couldn't confirm this address accepts your dispenser; the network will decide. If it refuses, the network fee is lost.",
+
+    'flows.pairPartner.unavailableHelp':
+        'Pairing applies to Watcher and Signer wallets. Pick one of those modes first, then pair this wallet with its other half.',
+    'flows.pairPartner.pairSigner': 'Pair a signer',
+    'flows.pairPartner.pairWatcher': 'Pair a watcher',
+    'flows.pairPartner.watcherHelp':
+        'This wallet watches your coins and builds unsigned transactions. Pair it with the offline wallet that holds the same recovery phrase and signs them.',
+    'flows.pairPartner.signerHelp':
+        'This wallet signs transactions offline. Pair it with the online wallet that holds the same recovery phrase and watches your coins.',
+    'flows.pairPartner.modeMismatch':
+        'This wallet is in {localMode} mode, so its partner must be in {partnerMode} mode. The wallet you scanned is in {scannedMode} mode.',
+    'flows.pairPartner.noSharedChains':
+        'The two wallets have no chain in common, so there is nothing to compare. Switch on at least one matching chain in both wallets and try again.',
+    'flows.pairPartner.seedMismatch':
+        "These two wallets were made from different recovery phrases ({chains} doesn't match). Restore both halves from the same phrase and pair again.",
+    'flows.pairPartner.paired':
+        'Paired. Both wallets come from the same recovery phrase and agree on {count, plural, one {# chain} other {# chains}}.',
+
+    'flows.protocolFee.freeLabel': 'This action has no protocol fee',
+    'flows.protocolFee.freeHint':
+        'Only the network fee applies, so there is nothing to pay on top of it.',
+    'flows.protocolFee.forfeit': "The fee is sent on-chain and isn't refunded if the network rejects this transaction.",
+    'flows.protocolFee.conditionalForfeit':
+        "If this action charges one, it's sent on-chain and isn't refunded if the network rejects this transaction.",
+    'flows.protocolFee.amount': "This action's protocol fee is {amount} XCHAIN.",
+    'flows.protocolFee.paidIn': 'Protocol fee is paid in {ticker}',
+    'flows.protocolFee.paidInPlural': 'Protocol fees are paid in {ticker}',
+    'flows.protocolFee.onlyWay':
+        '{ticker} is the only way to pay a protocol fee on this chain.',
+    'flows.protocolFee.unverifiedNotice':
+        "The amount is exact, but the network doesn't check contract actions in advance, so it can't tell you beforehand whether this one will be accepted. If it's rejected, the fee is still spent.",
+    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
+
+    'flows.rbf.unsupportedBuild': "RBF replacement isn't supported by this build.",
+    'flows.rbf.noEntry': 'No entry to replace.',
+    'flows.rbf.noHash': 'No transaction hash on this entry.',
+    'flows.rbf.alreadyConfirmed': 'Already confirmed.',
+    'flows.rbf.actionUnsupported': "{action} actions aren't RBF-replaceable.",
+    'flows.rbf.notAllowed': 'This transaction did not allow fee replacement.',
+    'flows.rbf.nothingToUndo': 'Nothing to undo.',
+    'flows.rbf.cancelConfirmed': 'The cancellation already confirmed.',
+
+    'flows.signRisk.alwaysConfirm':
+        "You've set the wallet to always require explicit cross-check confirm on hardware signs.",
+    'flows.signRisk.multisig':
+        'Multisig contributions deserve an explicit cross-check. Your cosigners trust this signature.',
+    'flows.signRisk.firstRecipient':
+        "First-time recipient. Confirm the address on your device matches what's shown here.",
+    'flows.signRisk.largeAmount':
+        'Large amount ({amount} sats). Confirm both path and address on your device.',
+
+    'flows.pasteIntegrity.changed': 'Clipboard contents changed between paste and re-read.',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

@@ -16,6 +16,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -24,7 +25,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const statusSrc = read('packages/core/src/ui/StatusMessage.jsx');
 const sendSrc = read('packages/core/src/shared/routes/Send.jsx');
 const psbtSrc = read('packages/core/src/shared/routes/PsbtSignForm.jsx');
-const importSrc = read('packages/core/src/shared/routes/ImportWallet.jsx');
+const importSrc = withEnglishCopy(read('packages/core/src/shared/routes/ImportWallet.jsx'));
 const pairSrc = read('packages/core/src/shared/routes/PairSignerForm.jsx');
 
 // 1. StatusMessage exposes the `recovery` prop and renders an

@@ -73,7 +73,7 @@ describe('SignerSelectForm option guidance', () => {
         expect(screen.getByText('Travel Ledger')).toBeTruthy();
         expect(screen.getByText(/Hardware device: connect Ledger Nano X and approve there/i))
             .toHaveTextContent('firmware 2.2.4');
-        expect(screen.getByText(/does not share recovery words or hardware secrets/i)).toBeTruthy();
+        expect(screen.getByText(/doesn't share recovery words or hardware secrets/i)).toBeTruthy();
 
         fireEvent.click(screen.getByRole('radio', { name: /Travel Ledger/i }));
         expect(onChange).toHaveBeenCalledWith('signer-ledger');
@@ -83,7 +83,7 @@ describe('SignerSelectForm option guidance', () => {
         mount({ list: [HARDWARE_SIGNER], walletMode: 'watcher' });
 
         expect(await screen.findByRole('note')).toHaveTextContent(
-            /Watch-only mode remains active.*does not enable local transaction signing/i,
+            /Watch-only mode remains active.*doesn't enable local transaction signing/i,
         );
     });
 });

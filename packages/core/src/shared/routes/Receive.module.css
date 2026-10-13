@@ -166,6 +166,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-3);
 }
 
 @media (max-width: 420px) {
@@ -209,7 +210,7 @@
     min-width: 0;
 }
 
-@media not all and (min-width: 400px) {
+@media not all and (min-width: 480px) {
     .qrActions {
         flex-direction: column;
     }

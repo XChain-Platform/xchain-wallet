@@ -9,6 +9,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -56,6 +57,31 @@ afterEach(() => {
 });
 
 describe('History export button', () => {
+    it('tabs through every export choice, wraps focus, and returns focus after Escape', async () => {
+        const user = userEvent.setup();
+        mountHistory([historyRow()]);
+
+        const trigger = await screen.findByRole('button', { name: 'Export…' });
+        await waitFor(() => expect(trigger).toBeEnabled());
+        trigger.focus();
+        await user.keyboard('{Enter}');
+
+        const dialog = await screen.findByRole('dialog', { name: 'Export history' });
+        const controls = Array.from(dialog.querySelectorAll('input, button'));
+        expect(controls).toHaveLength(17);
+        await waitFor(() => expect(controls[0]).toHaveFocus());
+        for (const control of controls.slice(1)) {
+            await user.tab();
+            expect(control).toHaveFocus();
+        }
+        await user.tab();
+        expect(controls[0]).toHaveFocus();
+
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();
+        expect(trigger).toHaveFocus();
+    });
+
     it('is enabled for visible rows and disabled with a reason when filters hide them', async () => {
         mountHistory([historyRow()]);
 

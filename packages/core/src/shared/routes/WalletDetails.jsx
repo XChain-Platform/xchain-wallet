@@ -14,6 +14,7 @@ import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+import { t } from '../../i18n/index.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -107,7 +108,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }, [walletId, messaging]);
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={exitBusy} title="Wallet details" />
+        <PageHeader onBack={onBack} backDisabled={exitBusy} title={t('walletDetails.title')} />
     );
 
     if (error) {
@@ -123,7 +124,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <div className={styles.entryDescription}>Loading…</div>
+                    <div className={styles.entryDescription}>{t('common.loading')}</div>
                 </ListPage>
             </Screen>
         );
@@ -146,31 +147,31 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         <Screen variant={variant} header={header}>
             <ListPage>
                 <dl className={pickerStyles.detailList}>
-                    <Row label="Name" value={wallet.name || 'Unnamed wallet'} />
-                    <Row label="Type" value={formatLabel} />
-                    <Row label="Origin" value={originLabel} />
+                    <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
+                    <Row label={t('walletDetails.type')} value={formatLabel} />
+                    <Row label={t('walletDetails.origin')} value={originLabel} />
                     <Row
-                        label="25th-word passphrase"
+                        label={t('walletDetails.passphrase')}
                         value={!wallet.passphraseEnabled
                             ? 'Disabled'
                             : wallet.passphraseStored
                                 ? 'Stored'
                                 : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                     />
-                    <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
-                    <Row label="Created" value={createdLabel} />
+                    <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
+                    <Row label={t('walletDetails.created')} value={createdLabel} />
                     {isDemo ? (
                         <Row
-                            label="Status"
+                            label={t('history.filters.statusHeader')}
                             value={
                                 <span>
-                                    Demo wallet (throwaway)
+                                    {t('walletDetails.demoWallet')}
                                     {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
                                 </span>
                             }
                         />
                     ) : null}
-                    <Row label="ID" value={<code className={pickerStyles.code}>{wallet.id}</code>} />
+                    <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
                 </dl>
                 {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
                     <div style={{ marginTop: 'var(--xc-space-3)' }}>
@@ -182,7 +183,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             disabled={exitBusy}
                             icon={<Icon.MigrateIcon />}
                         >
-                            Upgrade recovery phrase
+                            {t('walletDetails.upgradeRecovery')}
                         </Button>
                     </div>
                 ) : null}
@@ -196,7 +197,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             disabled={exitBusy}
                             icon={<Icon.PencilIcon />}
                         >
-                            Rename wallet
+                            {t('renameWallet.title')}
                         </Button>
                     </div>
                 ) : null}
@@ -208,7 +209,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             block
                             onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
                         >
-                            Exit demo &amp; wipe
+                            {t('walletDetails.exitDemo')}
                         </Button>
                         {exitError && !exitConfirmOpen ? (
                             <p

@@ -116,8 +116,10 @@ describe('theme token contrast', () => {
         }
     });
 
-    it.each(Object.entries(themes))('%s theme preserves those ratios for disabled controls', (_, tokens) => {
-        expect(Number(resolveToken(tokens, '--xc-disabled-opacity'))).toBe(1);
+    it.each(Object.entries(themes))('%s theme visibly distinguishes disabled controls with shared tokens', (_, tokens) => {
+        const opacity = Number(resolveToken(tokens, '--xc-disabled-opacity'));
+        expect(opacity).toBeGreaterThan(0);
+        expect(opacity).toBeLessThan(1);
         const saturation = Number(resolveToken(tokens, '--xc-disabled-saturation'));
         expect(saturation).toBeGreaterThanOrEqual(0);
         expect(saturation).toBeLessThan(1);
@@ -140,6 +142,7 @@ describe('theme token contrast', () => {
     it('uses the disabled-state tokens instead of component opacity', () => {
         expect(css).toMatch(/:where\(input, select, textarea, button\):disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)\s*!important/s);
         expect(css).toMatch(/filter:\s*saturate\(var\(--xc-disabled-saturation\)\)/);
+        expect(buttonCss).toMatch(/\.btn:disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)/s);
         expect(buttonCss).toMatch(/\.success\s*\{[^}]*color:\s*var\(--xc-on-success\)/s);
     });
 

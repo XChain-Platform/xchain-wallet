@@ -34,6 +34,7 @@ import {
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
+import { t } from '../../../i18n/index.js';
 
 export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
@@ -43,9 +44,9 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     const [switchError, setSwitchError] = useState(/** @type {string|null} */ (null));
     const walletId = activeWallet?.id;
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const current = normalizeActiveNetwork(settings.activeNetwork);
 
@@ -63,9 +64,12 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
         const nextLabel = activeNetworkLabel(next);
         const currentLabel = activeNetworkLabel(current);
         const confirmed = await confirmDialog.confirm({
-            title: `Switch to ${nextLabel}?`,
-            message: `The wallet will reload and show ${nextLabel} chains. Your ${currentLabel} balances and chain settings stay unchanged.`,
-            confirmLabel: 'Switch network',
+            title: t('settings.network.switchTitle', { network: nextLabel }),
+            message: t('settings.network.switchMessage', {
+                nextNetwork: nextLabel,
+                currentNetwork: currentLabel,
+            }),
+            confirmLabel: t('settings.network.switchConfirm'),
         });
         if (!confirmed) return;
         setSwitchError(null);
@@ -76,7 +80,7 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
             await persistActiveNetwork({ messaging, update, walletId, network: next });
             reload();
         } catch (err) {
-            setSwitchError(userFacingMessage(err, 'Could not switch networks. Try again.'));
+            setSwitchError(userFacingMessage(err, t('settings.network.switchError')));
         } finally {
             setSwitching(false);
         }
@@ -85,11 +89,11 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     return (
         <>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
+                <span style={{ color: 'var(--xc-text-muted)' }}>{t('settings.network.label')}</span>
                 <select
                     value={current}
                     onChange={(e) => onChange(e.target.value)}
-                    aria-label="Active network"
+                    aria-label={t('settings.network.activeLabel')}
                     style={SELECT}
                     disabled={switching || Boolean(confirmDialog.request)}
                 >

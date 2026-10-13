@@ -22,14 +22,15 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-const formSrc = readFileSync(
+const formSrc = withEnglishCopy(readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'IssueTokenForm.jsx'),
     'utf8',
-);
+));
 
 // ─── 1. Imports ---------------------------------------------------
 
