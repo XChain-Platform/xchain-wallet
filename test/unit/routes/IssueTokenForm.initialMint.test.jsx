@@ -21,7 +21,7 @@
 // broadcast action.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
@@ -111,8 +111,8 @@ describe('IssueTokenForm initial mint', () => {
         fireEvent.change(ticker, { target: { value: 'NEWNAME' } });
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'NEWNAME' })));
 
-        resolveCurrent(null);
-        resolveOld({ tick: 'OLDNAME' });
+        resolveCurrent({ canonicalTick: null, creator: null, totalSupply: null });
+        resolveOld({ canonicalTick: 'OLDNAME', creator: 'bc1qcreator', totalSupply: '10' });
         await waitFor(() => expect(ticker).not.toHaveAttribute('aria-invalid', 'true'));
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
         await submit();
@@ -132,13 +132,29 @@ describe('IssueTokenForm initial mint', () => {
     });
 
     it('blocks a ticker that the current network already contains', async () => {
-        const getTokenInfo = vi.fn().mockResolvedValue({ tick: 'MINTABLE' });
+        const getTokenInfo = vi.fn().mockResolvedValue({
+            canonicalTick: 'MINTABLE', creator: 'bc1qcreator', totalSupply: '10',
+        });
         mountForm({ getTokenInfo });
         await fill({ supply: '10' });
 
         expect(await screen.findByText(/already exists on this network/i)).toBeTruthy();
         await submit();
         expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('treats the empty record the host returns for an unknown ticker as available', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({
+            canonicalTick: null, creator: null, totalSupply: null, divisibility: null,
+        });
+        mountForm({ getTokenInfo });
+        await fill({ supply: '10' });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
+        expect(screen.queryByText(/already exists on this network/i)).toBeNull();
+        await submit();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
     });
 
     it.each([

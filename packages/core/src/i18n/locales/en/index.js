@@ -481,6 +481,7 @@ export const en = {
     'issue.draft.unfinished':
         'Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.',
     'issue.ticker': 'Ticker',
+    'issue.tickerTaken': 'Ticker "{ticker}" already exists on this network.',
     'issue.supply': 'Supply',
     'issue.supplyHint': 'The most that can ever exist.',
     'issue.initialMintOptional': 'Initial mint (optional)',

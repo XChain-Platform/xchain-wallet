@@ -45,6 +45,7 @@ import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
@@ -311,12 +312,15 @@ export function IssueTokenForm({ walletId, onBack }) {
             Promise.resolve()
                 .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }))
                 .then((info) => {
-                    if (!cancelled) {
-                        setTickerCheck({
-                            ticker: checkedTicker,
-                            status: info == null ? 'available' : 'taken',
-                        });
-                    }
+                    if (cancelled) return;
+                    // The host answers an unknown tick with an all-empty
+                    // record, not null, so only a found record marks it taken.
+                    const verdict = tickLookupVerdict(info);
+                    setTickerCheck({
+                        ticker: checkedTicker,
+                        status: verdict === 'found' ? 'taken'
+                            : verdict === 'missing' ? 'available' : 'unknown',
+                    });
                 })
                 .catch(() => {
                     if (!cancelled) setTickerCheck({ ticker: checkedTicker, status: 'unknown' });
@@ -447,7 +451,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             return;
         }
         if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
-            setFormError(`Ticker "${checkedTicker}" already exists on this network.`);
+            setFormError(t('issue.tickerTaken', { ticker: checkedTicker }));
             return;
         }
         if (!isPositiveDecimal(supply)) {
@@ -964,7 +968,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoCorrect="off"
                 spellCheck={false}
                 error={tickerCheck.ticker === ticker.trim() && tickerCheck.status === 'taken'
-                    ? `Ticker "${ticker.trim()}" already exists on this network.`
+                    ? t('issue.tickerTaken', { ticker: ticker.trim() })
                     : undefined}
             />
             <Input
