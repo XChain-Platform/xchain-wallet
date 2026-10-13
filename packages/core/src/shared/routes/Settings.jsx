@@ -493,7 +493,7 @@ function DrillRow({ title, summary, onClick }) {
     return (
         <button
             type="button"
-            className={actionStyles.entry}
+            className={`${actionStyles.entry} ${settingsStyles.drillRow}`}
             style={{
                 width: '100%',
                 flexDirection: 'row',
@@ -503,8 +503,8 @@ function DrillRow({ title, summary, onClick }) {
             }}
             onClick={onClick}
         >
-            <span className={actionStyles.entryLabel} style={{ flexShrink: 0 }}>{title}</span>
-            <span style={{
+            <span className={`${actionStyles.entryLabel} ${settingsStyles.drillLabel}`}>{title}</span>
+            <span className={settingsStyles.drillSummary} style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--xc-space-2)',
