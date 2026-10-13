@@ -13,9 +13,9 @@
     text-decoration: none;
     max-width: 100%;
     min-width: 0;
-    /* Button labels stay on one line and ellipsize inside narrow containers.
-     * Wrapping splits a single CTA into a paragraph and breaks icon alignment. */
-    white-space: nowrap;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .icon {
@@ -28,9 +28,9 @@
 .label {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
 }
 
 .btn:focus-visible {
