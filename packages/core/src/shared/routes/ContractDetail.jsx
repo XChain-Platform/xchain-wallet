@@ -106,9 +106,17 @@ export function ContractDetail({
     const [executionsTotal, setExecutionsTotal] = useState(/** @type {number | null} */ (null));
     const [executionsError, setExecutionsError] = useState(/** @type {string | null} */ (null));
     const [executionsLoading, setExecutionsLoading] = useState(true);
-    const [executionsPage, setExecutionsPage] = useState(1);
+    const [executionsCursor, setExecutionsCursor] = useState(() => ({
+        chainId,
+        contractActionIndex,
+        page: 1,
+    }));
     const [stateExpanded, setStateExpanded] = useState(false);
     const [walletAddresses, setWalletAddresses] = useState(/** @type {string[]} */ ([]));
+    const executionsPage = executionsCursor.chainId === chainId
+        && executionsCursor.contractActionIndex === contractActionIndex
+        ? executionsCursor.page
+        : 1;
 
     useEffect(() => {
         let cancelled = false;
@@ -120,6 +128,7 @@ export function ContractDetail({
         setStateError(null);
         setBalances(null);
         setBalancesError(null);
+        setWalletAddresses([]);
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
@@ -354,7 +363,7 @@ export function ContractDetail({
                                 page={executionsPage}
                                 total={executionsTotal}
                                 pageSize={executions.length}
-                                onChange={setExecutionsPage}
+                                onChange={(page) => setExecutionsCursor({ chainId, contractActionIndex, page })}
                             />
                         </>
                     )}

@@ -109,7 +109,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         let cancelled = false;
         setAddressesByChain(null);
         setAddressesError(null);
-        messaging.getAddressesByChain(walletId)
+        Promise.resolve()
+            .then(() => messaging.getAddressesByChain(walletId))
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
@@ -155,7 +156,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 .map((a) => a.address)
                 .filter((address) => typeof address === 'string' && address.length > 0);
             Promise.all(addrs.map((addr) =>
-                messaging.getContractsForSource({ chainId: cid, address: addr })
+                Promise.resolve()
+                    .then(() => messaging.getContractsForSource({ chainId: cid, address: addr }))
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
                     .catch((err) => ({ addr, error: err?.message || String(err) }))
             )).then((results) => {
@@ -175,6 +177,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         rows: uniq,
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
+                }));
+            }).catch((err) => {
+                if (cancelled) return;
+                setMyByChain((prev) => ({
+                    ...prev,
+                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
                 }));
             });
         }
@@ -204,12 +212,14 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             const ops = [];
             for (const addr of addrs) {
                 ops.push(
-                    messaging.getDepositsForAddress({ chainId: cid, address: addr })
+                    Promise.resolve()
+                        .then(() => messaging.getDepositsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'deposit', rows: extractRows(resp) }))
                         .catch((err) => ({ error: err?.message || String(err) })),
                 );
                 ops.push(
-                    messaging.getWithdrawalsForAddress({ chainId: cid, address: addr })
+                    Promise.resolve()
+                        .then(() => messaging.getWithdrawalsForAddress({ chainId: cid, address: addr }))
                         .then((resp) => ({ kind: 'withdraw', rows: extractRows(resp) }))
                         .catch((err) => ({ error: err?.message || String(err) })),
                 );
@@ -263,6 +273,12 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         error: errs.length > 0 ? errs.join('; ') : null,
                     },
                 }));
+            }).catch((err) => {
+                if (cancelled) return;
+                setInteractionsByChain((prev) => ({
+                    ...prev,
+                    [cid]: { loading: false, rows: [], error: err?.message || String(err) },
+                }));
             });
         }
         return () => { cancelled = true; };
@@ -279,7 +295,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
         let cancelled = false;
         for (const cid of activeChains) {
-            messaging.getContractsBrowseAll({ chainId: cid })
+            Promise.resolve()
+                .then(() => messaging.getContractsBrowseAll({ chainId: cid }))
                 .then((resp) => {
                     if (cancelled) return;
                     const rows = extractRows(resp);
