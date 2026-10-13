@@ -116,4 +116,35 @@ describe('approval Router', () => {
 
         expect(screen.getByRole('alert').textContent).toBe('Approval request expired');
     });
+
+    it('refuses a broker response for a different approval id', async () => {
+        mocks.fetchApproval.mockResolvedValue({
+            id: 'another-request',
+            kind: 'connect',
+            payload: { origin: 'https://dapp.test' },
+        });
+
+        await renderRoute('request-1');
+
+        expect(screen.getByRole('alert').textContent)
+            .toBe('Approval response did not match this request.');
+        expect(screen.queryByTestId('connect-approval')).toBeNull();
+    });
+});
+
+describe('approval messaging', () => {
+    it('rejects when the broker did not settle the requested approval', async () => {
+        chrome.runtime.sendMessage.mockImplementation((_message, respond) => {
+            respond({ ok: true, result: { resolved: false } });
+        });
+        const messaging = await vi.importActual(
+            '../../../packages/extension/src/approval/messaging.js',
+        );
+
+        await expect(messaging.resolveApproval('expired-request', { approved: true }))
+            .rejects.toMatchObject({
+                name: 'ApprovalNotFoundError',
+                message: 'Approval request is no longer pending.',
+            });
+    });
 });

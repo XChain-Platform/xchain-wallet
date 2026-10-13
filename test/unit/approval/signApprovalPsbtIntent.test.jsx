@@ -22,11 +22,11 @@ import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     fetchApproval: vi.fn(async () => null),
-    listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
+    listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1' }]),
     getSettings: vi.fn(async () => ({})),
-    getAddressesByChain: async () => ({
+    getAddressesByChain: vi.fn(async () => ({
         'bitcoin-regtest': [{ address: 'bcrt1qownaddressownaddress' }],
-    }),
+    })),
     parsePsbt: vi.fn(async () => ({
         decomposed: {
             inputs: [{ address: 'bcrt1qownaddressownaddress', value: 150000 }],
@@ -73,6 +73,12 @@ afterEach(() => {
     cleanup();
     messaging.fetchApproval.mockReset();
     messaging.fetchApproval.mockResolvedValue(null);
+    messaging.listWallets.mockReset();
+    messaging.listWallets.mockResolvedValue([{ id: 'wallet-1', name: 'Wallet 1' }]);
+    messaging.getAddressesByChain.mockReset();
+    messaging.getAddressesByChain.mockResolvedValue({
+        'bitcoin-regtest': [{ address: 'bcrt1qownaddressownaddress' }],
+    });
     messaging.getSettings.mockReset();
     messaging.getSettings.mockResolvedValue({});
     messaging.describeAction.mockReset();
@@ -372,6 +378,55 @@ describe('SignApproval signPsbt intent', () => {
             actionString: 'MINT|1|JDOG|1',
             mode: 'report',
         });
+    });
+
+    it('resolves with the wallet that owns every requested signing path', async () => {
+        const signingAddress = 'bcrt1qsecondwalletsigner';
+        messaging.listWallets.mockResolvedValue([
+            { id: 'wallet-1', name: 'Wallet 1' },
+            { id: 'wallet-2', name: 'Wallet 2' },
+        ]);
+        messaging.getAddressesByChain.mockImplementation(async (walletId) => ({
+            'bitcoin-regtest': walletId === 'wallet-2'
+                ? [{ address: signingAddress, derivationPath: "m/84'/1'/0'/0/0" }]
+                : [{ address: 'bcrt1qfirstwallet' }],
+        }));
+        messaging.parsePsbt.mockResolvedValue({
+            decomposed: {
+                inputs: [{ address: signingAddress, value: 150000 }],
+                outputs: [{ address: 'bcrt1qrecipientrecipient', value: 149500 }],
+            },
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+        const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+
+        render(
+            <SignApproval
+                id="wallet-bound-request"
+                kind="signPsbt"
+                payload={{
+                    chainId: 'bitcoin-regtest',
+                    payload: {
+                        psbtHex: 'deadbeefcafe',
+                        signingPaths: [{ inputIndex: 0, address: signingAddress }],
+                    },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'secret' } });
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Approve/i }).disabled).toBe(false);
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Approve/i }));
+
+        await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledWith(
+            'wallet-bound-request',
+            expect.objectContaining({ approved: true, walletId: 'wallet-2' }),
+        ));
+        closeSpy.mockRestore();
     });
 });
 
