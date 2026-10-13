@@ -73,6 +73,13 @@ export function emptyLockoutState() {
 // and same reasoning as `configurePanicModePersistence`; see SSC-7.
 /** @type {{ load: () => Promise<unknown>, save: (s: LockoutState) => Promise<void>, clear: () => Promise<void> } | null} */
 let persistentStore = null;
+let persistenceGeneration = 0;
+
+function persistBestEffort(operation) {
+    try {
+        void Promise.resolve(operation()).catch(() => {});
+    } catch (_err) { /* the synchronous cache remains authoritative */ }
+}
 
 function getStorage() {
     try {
@@ -96,6 +103,8 @@ function coerceLockoutState(parsed) {
         !p
         || typeof p.failedAttempts !== 'number'
         || typeof p.lockedUntilMs !== 'number'
+        || !Number.isFinite(p.failedAttempts)
+        || !Number.isFinite(p.lockedUntilMs)
         || p.failedAttempts < 0
         || p.lockedUntilMs < 0
     ) {
@@ -119,10 +128,23 @@ function coerceLockoutState(parsed) {
  * @returns {Promise<void>}
  */
 export async function configureLockoutPersistence(store) {
+    if (store != null && (
+        typeof store.load !== 'function'
+        || typeof store.save !== 'function'
+        || typeof store.clear !== 'function'
+    )) {
+        throw new TypeError('configureLockoutPersistence: store must implement load, save, and clear');
+    }
+    const generation = ++persistenceGeneration;
     persistentStore = store || null;
+    memoryFallback = null;
     if (!persistentStore) return;
+    const configuredStore = persistentStore;
     try {
-        applyExternalLockoutState(await persistentStore.load());
+        const loaded = await configuredStore.load();
+        if (generation === persistenceGeneration && persistentStore === configuredStore) {
+            applyExternalLockoutState(loaded);
+        }
     } catch (_err) {
         // Load failed: leave the cache empty rather than trapping the user
         // out of a wallet. The next failure re-arms the ladder from zero.
@@ -135,6 +157,7 @@ export async function configureLockoutPersistence(store) {
  * @param {unknown} raw
  */
 export function applyExternalLockoutState(raw) {
+    persistenceGeneration += 1;
     const state = coerceLockoutState(raw);
     memoryFallback = (state.failedAttempts === 0 && state.lockedUntilMs === 0) ? null : state;
 }
@@ -156,6 +179,8 @@ function readState() {
             !parsed
             || typeof parsed.failedAttempts !== 'number'
             || typeof parsed.lockedUntilMs !== 'number'
+            || !Number.isFinite(parsed.failedAttempts)
+            || !Number.isFinite(parsed.lockedUntilMs)
             || parsed.failedAttempts < 0
             || parsed.lockedUntilMs < 0
         ) {
@@ -174,13 +199,12 @@ function readState() {
 function writeState(state) {
     const empty = state.failedAttempts === 0 && state.lockedUntilMs === 0;
     if (persistentStore) {
+        persistenceGeneration += 1;
         // Cache first so the synchronous reads above reflect the write
         // immediately, then mirror to the async store.
         memoryFallback = empty ? null : { ...state };
-        try {
-            if (empty) void persistentStore.clear();
-            else void persistentStore.save({ ...state });
-        } catch (_err) { /* best-effort; the cache holds it this session */ }
+        const store = persistentStore;
+        persistBestEffort(() => (empty ? store.clear() : store.save({ ...state })));
         return;
     }
     const store = getStorage();
@@ -250,7 +274,9 @@ export function recordSuccess() {
 export function clearLockoutState() {
     memoryFallback = null;
     if (persistentStore) {
-        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        persistenceGeneration += 1;
+        const store = persistentStore;
+        persistBestEffort(() => store.clear());
         return;
     }
     const store = getStorage();
@@ -261,6 +287,7 @@ export function clearLockoutState() {
 
 /** Test seam: forget any injected persistence. */
 export function __resetLockoutPersistenceForTests() {
+    persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
 }

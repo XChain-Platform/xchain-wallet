@@ -70,10 +70,17 @@ let memoryFallback = null;
 // one source of truth.
 /** @type {{ load: () => Promise<unknown>, save: (s: PanicModeState) => Promise<void>, clear: () => Promise<void> } | null} */
 let persistentStore = null;
+let persistenceGeneration = 0;
 // True between `configurePanicModePersistence` and the first hydrate resolving.
 // While true, `assertSigningAllowed` fails closed: we may be inside an active
 // freeze whose state has not loaded yet after a service-worker restart.
 let awaitingHydration = false;
+
+function persistBestEffort(operation) {
+    try {
+        void Promise.resolve(operation()).catch(() => {});
+    } catch (_err) { /* the synchronous cache remains authoritative */ }
+}
 
 /**
  * @typedef {Object} PanicModeState
@@ -118,6 +125,9 @@ function coercePanicState(parsed) {
         || typeof p.activatedAt !== 'number'
         || typeof p.expiresAt !== 'number'
         || typeof p.durationMs !== 'number'
+        || !Number.isFinite(p.activatedAt)
+        || !Number.isFinite(p.expiresAt)
+        || !Number.isFinite(p.durationMs)
         || p.activatedAt < 0
         || p.expiresAt < 0
         || p.durationMs < 0
@@ -198,13 +208,13 @@ function readState() {
 /** @param {PanicModeState} state */
 function writeState(state) {
     if (persistentStore) {
+        persistenceGeneration += 1;
+        awaitingHydration = false;
         // Cache first so synchronous reads reflect the write immediately, then
         // mirror to the async store (best-effort; the cache already holds it).
         memoryFallback = state.expiresAt === 0 ? null : { ...state };
-        try {
-            if (state.expiresAt === 0) void persistentStore.clear();
-            else void persistentStore.save({ ...state });
-        } catch (_err) { /* best-effort; cache is source of truth this session */ }
+        const store = persistentStore;
+        persistBestEffort(() => (state.expiresAt === 0 ? store.clear() : store.save({ ...state })));
         return;
     }
     const store = getStorage();
@@ -232,20 +242,32 @@ function writeState(state) {
  * @returns {Promise<void>}
  */
 export async function configurePanicModePersistence(store) {
+    if (store != null && (
+        typeof store.load !== 'function'
+        || typeof store.save !== 'function'
+        || typeof store.clear !== 'function'
+    )) {
+        throw new TypeError('configurePanicModePersistence: store must implement load, save, and clear');
+    }
+    const generation = ++persistenceGeneration;
     persistentStore = store || null;
+    memoryFallback = null;
     if (!persistentStore) {
         awaitingHydration = false;
         return;
     }
+    const configuredStore = persistentStore;
     awaitingHydration = true;
     try {
-        const persisted = await persistentStore.load();
-        applyExternalPanicModeState(persisted);
+        const persisted = await configuredStore.load();
+        if (generation === persistenceGeneration && persistentStore === configuredStore) {
+            applyExternalPanicModeState(persisted);
+        }
     } catch (_err) {
         // Load failed: leave the cache empty. A subsequent onChanged or write
         // will repopulate it; fail-closed only covers the load window.
     } finally {
-        awaitingHydration = false;
+        if (generation === persistenceGeneration) awaitingHydration = false;
     }
 }
 
@@ -256,6 +278,8 @@ export async function configurePanicModePersistence(store) {
  * @param {unknown} raw
  */
 export function applyExternalPanicModeState(raw) {
+    persistenceGeneration += 1;
+    awaitingHydration = false;
     const state = coercePanicState(raw);
     memoryFallback = state.expiresAt === 0 ? null : state;
 }
@@ -328,7 +352,9 @@ export function clearPanicModeState() {
     memoryFallback = null;
     awaitingHydration = false;
     if (persistentStore) {
-        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        persistenceGeneration += 1;
+        const store = persistentStore;
+        persistBestEffort(() => store.clear());
         return;
     }
     const store = getStorage();
@@ -339,6 +365,7 @@ export function clearPanicModeState() {
 
 /** Test seam: forget any injected persistence. */
 export function __resetPanicModePersistenceForTests() {
+    persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
     awaitingHydration = false;
