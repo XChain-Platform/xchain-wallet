@@ -122,7 +122,7 @@ export function exactTokenMaxAmount(raw) {
     return s;
 }
 
-export function isPositiveDecimalAmount(raw) {
+function isPositiveDecimalAmount(raw) {
     const value = String(raw ?? '').trim();
     return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value);
 }

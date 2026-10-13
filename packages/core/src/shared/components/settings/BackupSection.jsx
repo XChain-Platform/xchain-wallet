@@ -1472,7 +1472,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
 
 /**
  * Turn a `wallet.restoreLabels` result into the one line the user reads.
- * Exported for the unit test: the three outcomes worth telling apart are
+ * The three outcomes worth telling apart are
  * "found and merged something", "authenticated nothing under this seed
  * on this chain", and "the search itself failed" (an unreachable
  * explorer, collected per-chain in `errors` rather than thrown, per
@@ -1481,7 +1481,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
  * @param {any} result
  * @returns {string}
  */
-export function restoreLabelsMessage(result) {
+function restoreLabelsMessage(result) {
     if (!result) return '';
     if (result.skipped === 'wif-only') {
         return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';

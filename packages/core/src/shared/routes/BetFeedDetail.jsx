@@ -110,7 +110,7 @@ function trimZeros(v) {
     return s.replace(/0+$/, '').replace(/\.$/, '');
 }
 
-export function betAmountError(value, minimum) {
+function betAmountError(value, minimum) {
     const stake = String(value ?? '').trim();
     if (!/^\d+(\.\d+)?$/.test(stake) || compareDecimalStrings(stake, '0') !== 1) {
         return 'Enter a positive bet amount using digits and an optional decimal point.';

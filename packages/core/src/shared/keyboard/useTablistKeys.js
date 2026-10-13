@@ -40,8 +40,8 @@ export function nextTabIndex(key, index, count, rtl = false) {
     return null;
 }
 
-/** Handle one keydown; exported so tests can drive it without a hook. */
-export function handleTablistKeyDown(e) {
+/** Handle one delegated tablist keydown. */
+function handleTablistKeyDown(e) {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     const target = e.target;
     if (!target || typeof target.closest !== 'function') return;

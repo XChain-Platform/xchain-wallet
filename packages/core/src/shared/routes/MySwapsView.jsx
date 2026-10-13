@@ -82,7 +82,7 @@ const CLOSED_LABELS = Object.freeze({
 
 const STATE_READ_CONCURRENCY = 6;
 
-export function swapStateOf(detail) {
+function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
     return { status: String(state.status || ''), expiration: state.expiration ?? null };
