@@ -5,6 +5,21 @@
     min-width: 0;
 }
 
+.sm {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
+    --network-filter-icon-size: var(--xc-icon-sm);
+}
+
+.md {
+    --network-filter-control-height: var(--xc-control-h-md, 36px);
+    --network-filter-icon-size: var(--xc-icon-md);
+}
+
+.lg {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
+    --network-filter-icon-size: var(--xc-icon-lg);
+}
+
 .trigger {
     appearance: none;
     box-sizing: border-box;
@@ -13,10 +28,17 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
+    height: 36px;
+    height: var(--network-filter-control-height, var(--xc-control-h-md, 36px));
     padding: var(--xc-space-2) var(--xc-space-3);
+    padding: 0 var(--xc-control-pad-x, var(--xc-space-3));
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-md);
+    font-size: var(--xc-control-font, var(--xc-text-md));
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-control);
+    border-radius: var(--xc-control-radius, var(--xc-radius-md));
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -35,8 +57,8 @@
 
 .triggerIcon {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--network-filter-icon-size, var(--xc-icon-md));
+    height: var(--network-filter-icon-size, var(--xc-icon-md));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -47,8 +69,8 @@
 }
 
 .triggerIcon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 
@@ -62,7 +84,7 @@
 
 .triggerLabel {
     font-weight: 600;
-    font-size: var(--xc-text-sm);
+    font-size: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -77,6 +99,10 @@
     flex: 0 0 auto;
     color: var(--xc-text-muted);
     font-size: 12px;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ───── Popover ───── */

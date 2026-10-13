@@ -32,8 +32,16 @@ import styles from './NetworkFilter.module.css';
  * @param {string} props.value
  * @param {(coin: string) => void} props.onChange
  * @param {string} [props.ariaLabel]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ariaLabel }) {
+export function NetworkFilter({
+    chainRegistry,
+    coinFamilies,
+    value,
+    onChange,
+    ariaLabel,
+    size = 'md',
+}) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const listboxId = useId();
@@ -146,7 +154,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
     };
 
     return (
-        <div className={styles.wrap}>
+        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
             <button
                 type="button"
                 ref={triggerRef}

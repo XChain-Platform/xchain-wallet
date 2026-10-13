@@ -38,16 +38,18 @@ const chainRegistry = {
  * @param {object} props
  * @param {'all' | string} props.value      currently selected network
  * @param {(value: string) => void} props.onChange
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function NetworkFilterDropdown({ value, onChange }) {
+export function NetworkFilterDropdown({ value, onChange, size = 'md' }) {
     return (
-        <div className={styles.networkWrap}>
+        <div className={`${styles.networkWrap} ${styles[size] || ''}`.trim()}>
             <NetworkFilter
                 chainRegistry={chainRegistry}
                 coinFamilies={NETWORK_OPTIONS.map((entry) => entry.value)}
                 value={value || 'all'}
                 onChange={onChange}
                 ariaLabel="Filter by network"
+                size={size}
             />
         </div>
     );
