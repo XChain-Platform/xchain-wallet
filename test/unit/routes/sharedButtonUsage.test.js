@@ -51,6 +51,7 @@ const listRowRoutes = [
     'ContactsList',
     'CoSignerAccountList',
     'GovernancePolls',
+    'MarketActivity',
     'MyBets',
     'MyLists',
 ];
@@ -175,7 +176,7 @@ describe('shared route button usage', () => {
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
         const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
-        const expectedButtons = { MarketActivity: 1 };
+        const expectedButtons = {};
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
