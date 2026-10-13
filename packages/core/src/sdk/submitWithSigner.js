@@ -626,16 +626,11 @@ export async function submitWithSigner({
     // (and ultimately the §49.5 queued-broadcast surface) can recover
     // the signed hex instead of losing it on a network blip.
     //
-    // AWAITED, unlike every other progress call in this file. This is
-    // the one phase whose handler writes the DURABLE PendingTx row that says a
-    // transaction may be on the network (submitAction's composedOnProgress puts
-    // status 'broadcasting'). Fired and forgotten, that write races the broadcast,
-    // so a crash in between leaves a durable record claiming nothing was ever sent
-    // while the network already holds the tx. Awaiting it restores the same rule
-    // recordPendingCommit states above: the record precedes the effect, and a
-    // record that cannot be written stops the effect (the rejection propagates to
-    // submitAction, which marks the row 'failed' - no money has moved yet).
-    await onProgress('broadcasting', { txid: signed.txid });
+    // This awaited event writes the durable PendingTx checkpoint, including the
+    // exact signed bytes, before the relay can observe them. A restart can then
+    // re-offer those bytes without signing a replacement transaction, and a
+    // failed checkpoint stops the network effect.
+    await onProgress('broadcasting', { txid: signed.txid, txHex: signed.txHex });
     try {
         await broadcastSigned(encoder, signed.txHex);
     } catch (err) {
