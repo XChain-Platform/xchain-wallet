@@ -46,7 +46,7 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); });
 
-function renderDetail(tokenInfo = {}) {
+function renderDetail({ displayName = 'Collectible', tokenInfo = {} } = {}) {
     const messaging = {
         getTokenInfo: vi.fn().mockResolvedValue({
             creator: 'bcrt1qcreator',
@@ -62,14 +62,14 @@ function renderDetail(tokenInfo = {}) {
         listGatedContent: vi.fn().mockResolvedValue([]),
         getSupplyHistory: vi.fn().mockResolvedValue([]),
     };
-    render(
+    return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <TokenDetail
                 walletId="w1"
                 chainId={CHAIN}
                 tick="COLLECTIBLE"
                 kind="token"
-                displayName="Collectible"
+                displayName={displayName}
                 divisibility={0}
                 quantity="1"
                 onBack={() => {}}
@@ -117,8 +117,21 @@ describe('TokenDetail collectible media', () => {
             .toHaveAttribute('href', MEDIA_URL);
     });
 
+    it('renders token names and descriptions containing markup as text in details', async () => {
+        const displayName = '<img src=x onerror="globalThis.tokenNameExecuted = true">';
+        const description = '<script>globalThis.tokenDescriptionExecuted = true</script>';
+        const { container } = renderDetail({ displayName, tokenInfo: { description } });
+
+        expect(await screen.findByText(description)).toBeInTheDocument();
+        expect(screen.getByText(displayName)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.tokenNameExecuted).toBeUndefined();
+        expect(globalThis.tokenDescriptionExecuted).toBeUndefined();
+    });
+
     it('links only HTTP(S) destinations from token metadata', async () => {
-        renderDetail({
+        renderDetail({ tokenInfo: {
             website: 'javascript:alert(1)',
             websites: [
                 'https://issuer.example/',
@@ -137,7 +150,7 @@ describe('TokenDetail collectible media', () => {
                 { url: 'https://files.example/readme.txt', name: 'Safe file', type: 'text/plain' },
                 { url: 'data:text/html,unsafe', name: 'Unsafe file', type: 'text/html' },
             ],
-        });
+        } });
 
         fireEvent.click(screen.getByRole('tab', { name: 'About' }));
         expect(await screen.findByRole('link', { name: 'Website' }))

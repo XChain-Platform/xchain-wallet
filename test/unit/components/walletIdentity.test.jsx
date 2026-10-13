@@ -110,6 +110,25 @@ describe('wallet identity surfaces', () => {
             expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
         });
     });
+
+    it('renders wallet names containing markup as text in the wallet list', async () => {
+        const name = '<script>globalThis.walletExecuted = true</script>';
+        const messaging = { listWallets: async () => [{ id: 'markup-wallet', name, format: 'bip39' }] };
+        const { container } = render(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <WalletPicker
+                    activeWalletId="markup-wallet"
+                    onSwitch={() => {}}
+                    onAddWallet={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText(name)).toBeInTheDocument();
+        expect(container.querySelector('script')).toBeNull();
+        expect(globalThis.walletExecuted).toBeUndefined();
+    });
 });
 
 // Reads one block of tokens.css (the block that opens at `selector {`) into a map.
