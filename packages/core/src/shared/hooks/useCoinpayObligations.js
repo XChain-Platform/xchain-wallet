@@ -191,6 +191,8 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         // Clearing the window first makes the claim unconditional.
         const beat = () => {
             if (throttle.isInFlight()) return;
+            // Hidden, the badge is not on screen; onVisible catches up when it is.
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
             throttle.reset();
             throttle.start();
             run();
