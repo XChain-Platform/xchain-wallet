@@ -27,6 +27,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 // Resolves coin-code URIs (xchain:TBTC/...) to chainIds in the boot-time
 // deep-link parse; same instance pattern as the web shell's App.jsx.
@@ -2263,7 +2264,7 @@ function AppInner() {
                             setUnlockedView('dispenser-detail');
                         }}
                         onIssuerResolved={(creator) => {
-                            setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
+                            setTokenDetailRef(withResolvedIssuer(creator));
                         }}
                         onViewActivity={() => {
                             const scope = historyScopeForAsset(tokenDetailRef);
