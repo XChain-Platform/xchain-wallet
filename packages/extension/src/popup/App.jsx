@@ -163,6 +163,10 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import {
+    applySurfaceStateEvent,
+    attachSurfaceStateListener,
+} from '../shared/surfaceStateSync.js';
 import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
@@ -221,6 +225,7 @@ export function App() {
 
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
@@ -480,6 +485,23 @@ function AppInner() {
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
+
+    useEffect(() => attachSurfaceStateListener((event) => {
+        applySurfaceStateEvent(event, {
+            refreshSession: refresh,
+            selectWallet: (walletId) => {
+                writeActiveWallet(walletId);
+                setActiveWalletId(walletId);
+                setUnlockedView('home');
+            },
+            settingsChanged: (next) => {
+                if (typeof window === 'undefined') return;
+                window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: next }));
+            },
+            // Chain-scoped routes load from the active network when they mount.
+            remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
+        });
+    }), [refresh]);
 
     // §47 / Cluster L FOLLOWUP 2: consume `?uri=` from popup.html's
     // location.search when the popup boots. Manifest's
@@ -2637,7 +2659,7 @@ function AppInner() {
                         onHome={() => setUnlockedView('home')}
                     >
                         <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
                         </Suspense>
                     </RouteErrorBoundary>
                     {messageSentNotice ? (
