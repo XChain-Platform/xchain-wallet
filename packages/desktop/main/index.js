@@ -652,7 +652,7 @@ function openWindowAfterIdleCheck() {
 }
 
 /**
- * Raise a hidden window after applying the same idle gate used to create a
+ * Raise a hidden window after applying the same idle gate that guards creating a
  * window from a windowless application state.
  *
  * @returns {Promise<void>}
