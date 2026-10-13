@@ -231,14 +231,19 @@
     outline-offset: -2px;
 }
 
-/* §33 command-palette launcher row: a muted, pill-outlined variant of a
-   nav item so it reads as a search box rather than a destination. */
+/* §33 command-palette launcher reads as a search box rather than a destination. */
 .search {
     margin: 0 var(--xc-space-3) var(--xc-space-2);
-    width: auto;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    color: var(--xc-text-muted);
+}
+
+.search > button,
+.action > button {
+    justify-content: flex-start;
+    text-align: start;
+}
+
+.action {
+    margin: var(--xc-space-1) var(--xc-space-3) 0;
 }
 
 .itemActive {
@@ -389,6 +394,16 @@
 }
 
 .layout[data-xc-tier='rail'] .search {
+    margin-inline: var(--xc-space-2);
+}
+
+.layout[data-xc-tier='rail'] .search > button,
+.layout[data-xc-tier='rail'] .action > button {
+    justify-content: center;
+    padding-inline: 0;
+}
+
+.layout[data-xc-tier='rail'] .action {
     margin-inline: var(--xc-space-2);
 }
 

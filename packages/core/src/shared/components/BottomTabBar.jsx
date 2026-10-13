@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -178,6 +178,7 @@ export function BottomTabBar({
     return (
         <>
             <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
+                {/* Navigation tabs stay native buttons to preserve roving focus and full-row semantics. */}
                 {primaryTabs.map((tab) => {
                     const active = tab.id === activeTab;
                     return (
@@ -244,16 +245,17 @@ export function BottomTabBar({
                         <div className={styles.sheetHeader}>
                             <div className={styles.handle} aria-hidden="true" />
                             <h2 className={styles.sheetTitle}>More</h2>
-                            <button
-                                type="button"
-                                className={styles.sheetClose}
-                                onClick={() => setSheetOpen(false)}
-                                aria-label="Close more navigation"
-                            >
-                                <Icon.XIcon />
-                            </button>
+                            <span className={styles.sheetClose}>
+                                <Button
+                                    variant="secondary"
+                                    icon={<Icon.XIcon />}
+                                    onClick={() => setSheetOpen(false)}
+                                    aria-label="Close more navigation"
+                                />
+                            </span>
                         </div>
                         <div className={styles.sheetBody}>
+                            {/* Navigation rows stay native buttons to preserve full-row menu semantics. */}
                             {/* Safari needs an explicit list role because this class removes list styling. */}
                             <ul className={styles.sheetList} role="list">
                                 {sheetRows.map((row) => {

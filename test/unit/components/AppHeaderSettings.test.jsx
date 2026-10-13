@@ -20,7 +20,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
-import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
@@ -174,6 +174,46 @@ describe('AppHeader action row', () => {
         ]);
         expect(buttons.every((button) => Boolean(button.getAttribute('title')))).toBe(true);
         expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
+    });
+
+    it('uses the shared icon-only Button styling for chrome actions', () => {
+        render(
+            <>
+                <AppHeader {...allActions} platformCurrent={undefined} />
+                <BottomTabBar currentView="home" onSelect={() => {}} />
+            </>,
+        );
+
+        const actionNames = [
+            'Settings',
+            'Open command palette',
+            'Scan and addresses',
+            'Lock wallet',
+            'Open menu',
+        ];
+        const actionClasses = actionNames.map((name) => screen.getByRole('button', { name }).className);
+        expect(new Set(actionClasses).size).toBe(1);
+        expect(actionClasses[0]).toMatch(/iconOnly/);
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        expect(screen.getByRole('button', { name: 'Close more navigation' }).className)
+            .toBe(actionClasses[0]);
+    });
+
+    it('uses shared Buttons for non-destination left-nav actions', () => {
+        render(
+            <LeftNav
+                currentView="home"
+                onSelect={() => {}}
+                onCommandPalette={() => {}}
+                onLock={() => {}}
+            />,
+        );
+
+        const search = screen.getByRole('button', { name: 'Open command palette' });
+        const lock = screen.getByRole('button', { name: 'Lock' });
+        expect(search.className).toBe(lock.className);
+        expect(search.className).toMatch(/secondary/);
     });
 
     it('keeps only network state, lock and menu in one header row at 360px', () => {
@@ -360,7 +400,7 @@ describe('HeaderSettingsButton section gating', () => {
                 onOpenWalletPicker={() => {}}
             />,
         );
-        const plain = gear().className;
+        expect(gear()).not.toHaveAttribute('data-active');
 
         rerender(
             <HeaderSettingsButton
@@ -369,7 +409,7 @@ describe('HeaderSettingsButton section gating', () => {
                 walletNonDefault
             />,
         );
-        expect(gear().className).not.toBe(plain);
+        expect(gear()).toHaveAttribute('data-active', 'true');
     });
 
     it('returns focus to the settings trigger when Escape closes its popover', () => {
@@ -399,7 +439,7 @@ describe('HeaderSettingsButton section gating', () => {
                 networkFilter="litecoin"
             />,
         );
-        const plain = gear().className;
+        expect(gear()).not.toHaveAttribute('data-active');
         cleanup();
         render(
             <HeaderSettingsButton
@@ -408,7 +448,7 @@ describe('HeaderSettingsButton section gating', () => {
                 networkFilter="all"
             />,
         );
-        expect(gear().className).toBe(plain);
+        expect(gear()).not.toHaveAttribute('data-active');
     });
 });
 
