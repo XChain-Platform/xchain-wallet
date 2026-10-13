@@ -1327,7 +1327,7 @@ export function DeployContractForm({ walletId, onBack }) {
                     }}
                     rows={10}
                     spellCheck={false}
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
                     placeholder="// JavaScript contract source…"
@@ -1459,7 +1459,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

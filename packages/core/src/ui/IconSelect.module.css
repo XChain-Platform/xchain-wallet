@@ -93,6 +93,9 @@
 .sub {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .caret {

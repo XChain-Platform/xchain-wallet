@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -29,8 +29,10 @@ import {
 } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { actionRowIdentity, uniqueRows } from '../utils/pagedRows.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const ACTIVITY_PAGE_SIZE = 50;
 
 // Featured market shown on landing (same for everyone, independent of
 // holdings): XChain's own token. Tapping the header swaps it for any
@@ -91,6 +93,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexSwaps, setDexSwaps] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
+    const [visibleCounts, setVisibleCounts] = useState({
+        offers: ACTIVITY_PAGE_SIZE,
+        orders: ACTIVITY_PAGE_SIZE,
+        sales: ACTIVITY_PAGE_SIZE,
+        swaps: ACTIVITY_PAGE_SIZE,
+    });
 
     const tick = (selected.tick || '').toUpperCase();
 
@@ -105,14 +113,20 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         setSales(null);
         setDexOrders(null);
         setDexSwaps(null);
+        setVisibleCounts({
+            offers: ACTIVITY_PAGE_SIZE,
+            orders: ACTIVITY_PAGE_SIZE,
+            sales: ACTIVITY_PAGE_SIZE,
+            swaps: ACTIVITY_PAGE_SIZE,
+        });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
             const demo = flowsLib.synthesizeDemoMarketActivity(tick);
             if (!cancelled) {
-                setOffers(demo.offers);
-                setSales(demo.sales);
-                setDexOrders(demo.dexOrders);
-                setDexSwaps(demo.dexSwaps);
+                setOffers(uniqueRows(demo.offers, marketRowIdentity));
+                setSales(uniqueRows(demo.sales, marketRowIdentity));
+                setDexOrders(uniqueRows(demo.dexOrders, marketRowIdentity));
+                setDexSwaps(uniqueRows(demo.dexSwaps, marketRowIdentity));
                 setLoading(false);
             }
             return () => { cancelled = true; };
@@ -170,10 +184,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             Promise.all(swapsByChain),
         ]).then(([offersBatches, salesBatches, ordersBatches, swapsBatches]) => {
             if (cancelled) return;
-            setOffers(offersBatches.flat());
-            setSales(salesBatches.flat().sort(byTimeDesc));
-            setDexOrders(ordersBatches.flat());
-            setDexSwaps(swapsBatches.flat().sort(byTimeDesc));
+            setOffers(uniqueRows(offersBatches.flat(), marketRowIdentity));
+            setSales(uniqueRows(salesBatches.flat().sort(byTimeDesc), marketRowIdentity));
+            setDexOrders(uniqueRows(ordersBatches.flat(), marketRowIdentity));
+            setDexSwaps(uniqueRows(swapsBatches.flat().sort(byTimeDesc), marketRowIdentity));
             setLoading(false);
         });
         return () => { cancelled = true; };
@@ -256,10 +270,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {offers.length === 0 ? (
-                            <EmptyState title={<>No open dispensers selling {tick}.</>} titleAs="p" />
+                            <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
-                                {offers.map(({ chainId, row }) => {
+                                {offers.slice(0, visibleCounts.offers).map(({ chainId, row }, index) => {
                                     // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
                                     // (0 on a fiat-priced one), live escrow_remaining.
                                     const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
@@ -286,7 +300,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                         </>
                                     );
                                     return (
-                                        <li key={`${chainId}:${actionIndex}`}>
+                                        <li key={marketRowIdentity({ chainId, row }) || `offer:${index}`}>
                                             {onClick ? (
                                                 <button type="button" className={styles.row} onClick={onClick}>
                                                     {content}
@@ -297,6 +311,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 })}
                             </ul>
                         )}
+                        {offers.length > visibleCounts.offers ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                offers: counts.offers + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more open dispensers" />
+                        ) : null}
                     </section>
                 ) : null}
 
@@ -311,10 +331,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexOrders.length === 0 ? (
-                            <EmptyState title={<>No open DEX orders involving {tick}.</>} titleAs="p" />
+                            <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
-                                {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
+                                {dexOrders.slice(0, visibleCounts.orders).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
                                     const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
                                     const { give: giveQty, get: getQty } = offerAmounts(row);
@@ -326,9 +346,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                         : (giveQty != null && getQty != null
                                             ? `Buy ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                             : `Buy ${tick}`);
-                                    const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                     return (
-                                        <li key={String(key)}>
+                                        <li key={marketRowIdentity({ chainId, row }) || `order:${i}`}>
                                             <div className={styles.row}>
                                                 <TickerIcon chainId={chainId} tick={tick} size={32} />
                                                 <span className={styles.rowText}>
@@ -340,6 +359,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 })}
                             </ul>
                         )}
+                        {dexOrders.length > visibleCounts.orders ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                orders: counts.orders + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more DEX orders" />
+                        ) : null}
                     </section>
                 ) : null}
 
@@ -354,10 +379,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {sales.length === 0 ? (
-                            <EmptyState title={<>No recent dispenses of {tick}.</>} titleAs="p" />
+                            <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
-                                {sales.slice(0, 50).map(({ chainId, row }, i) => {
+                                {sales.slice(0, visibleCounts.sales).map(({ chainId, row }, i) => {
                                     // A dispense row's GET_AMOUNT is what the buyer actually
                                     // paid, so it is right even for a fiat-priced dispenser.
                                     const give = row.give_amount;
@@ -369,7 +394,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                         ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
                                         : '';
                                     return (
-                                        <li key={`${chainId}:${i}`}>
+                                        <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
                                             <div className={styles.row}>
                                                 <TickerIcon chainId={chainId} tick={tick} size={32} />
                                                 <span className={styles.rowText}>
@@ -387,6 +412,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 })}
                             </ul>
                         )}
+                        {sales.length > visibleCounts.sales ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                sales: counts.sales + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more recent dispenses" />
+                        ) : null}
                     </section>
                 ) : null}
 
@@ -401,10 +432,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexSwaps.length === 0 ? (
-                            <EmptyState title={<>No recent DEX swaps involving {tick}.</>} titleAs="p" />
+                            <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
-                                {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {
+                                {dexSwaps.slice(0, visibleCounts.swaps).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
                                     const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
                                     const giveQty = row.give_amount ?? row.giveAmount ?? null;
@@ -421,9 +452,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                         : (giveQty != null && getQty != null
                                             ? `Bought ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
                                             : `Bought ${tick}`);
-                                    const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
                                     return (
-                                        <li key={String(key)}>
+                                        <li key={marketRowIdentity({ chainId, row }) || `swap:${i}`}>
                                             <div className={styles.row}>
                                                 <TickerIcon chainId={chainId} tick={tick} size={32} />
                                                 <span className={styles.rowText}>
@@ -436,9 +466,28 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 })}
                             </ul>
                         )}
+                        {dexSwaps.length > visibleCounts.swaps ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                swaps: counts.swaps + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more recent DEX swaps" />
+                        ) : null}
                     </section>
                 ) : null}
             </ListPage>
         </Screen>
     );
+}
+
+function LoadMoreActivity({ onClick, label }) {
+    return (
+        <Button type="button" variant="secondary" onClick={onClick} aria-label={label}>
+            {label}
+        </Button>
+    );
+}
+
+function marketRowIdentity(entry) {
+    const identity = actionRowIdentity(entry?.row);
+    return identity == null ? null : `${entry.chainId}:${identity}`;
 }

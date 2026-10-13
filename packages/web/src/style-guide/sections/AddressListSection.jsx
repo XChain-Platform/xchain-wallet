@@ -50,7 +50,7 @@ export function AddressListSection() {
 
             <LiveExample label="Search + network dropdown above the contact card (dropdown is live)">
                 <div className={styles.abToolbar}>
-                    <input type="text" className={styles.abSearch} placeholder="Search name or address" readOnly />
+                    <input type="text" className={styles.abSearch} placeholder="Search name or address" autoComplete="off" readOnly />
                     <NetworkFilterDropdown value={network} onChange={setNetwork} />
                 </div>
                 <ul className={styles.abList}>

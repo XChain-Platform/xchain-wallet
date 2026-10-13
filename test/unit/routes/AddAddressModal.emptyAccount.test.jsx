@@ -52,7 +52,7 @@ describe('Add address on an account with no addresses', () => {
         renderModal(messaging);
 
         // The dead end: no options at all, only a Close button.
-        await waitFor(() => expect(screen.queryByText(/No coins are available/)).toBeNull());
+        await waitFor(() => expect(screen.queryByText(/No coins available/)).toBeNull());
         expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy();
         // The picker preselects the first active chain rather than nothing.
         expect(screen.getByText('Bitcoin')).toBeTruthy();
@@ -156,6 +156,6 @@ describe('Add address on an account with no addresses', () => {
             generateReceiveAddress: vi.fn(),
         }, { chainIds: [] });
 
-        await waitFor(() => expect(screen.getByText(/No coins are available/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/No coins available/)).toBeTruthy());
     });
 });

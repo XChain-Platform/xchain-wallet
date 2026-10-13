@@ -554,7 +554,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 value={pubkey}
                 onChange={(e) => setPubkey(e.target.value)}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

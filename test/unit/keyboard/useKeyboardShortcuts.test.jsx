@@ -51,14 +51,34 @@ describe('useKeyboardShortcuts', () => {
         expect(h.openHelp).not.toHaveBeenCalled();
     });
 
-    it('runs the g-leader navigation: g then h -> history, g then c -> contacts', () => {
+    it('runs every catalogued g-leader navigation', () => {
         const h = setup();
-        press({ key: 'g' });
-        press({ key: 'h' });
-        expect(h.navigate).toHaveBeenCalledWith('history');
-        press({ key: 'g' });
-        press({ key: 'c' });
-        expect(h.navigate).toHaveBeenCalledWith('contacts');
+        for (const [key, view] of [
+            ['b', 'home'],
+            ['h', 'history'],
+            ['s', 'send'],
+            ['r', 'receive'],
+            ['d', 'markets'],
+            ['c', 'contacts'],
+        ]) {
+            press({ key: 'g' });
+            press({ key });
+            expect(h.navigate).toHaveBeenLastCalledWith(view);
+        }
+        expect(h.navigate).toHaveBeenCalledTimes(6);
+    });
+
+    it('does not create unlisted shortcuts from Alt or Shift modifiers', () => {
+        const h = setup();
+        press({ key: 'g', altKey: true });
+        press({ key: 'h', altKey: true });
+        press({ key: '?', altKey: true });
+        press({ key: 'G', shiftKey: true });
+        press({ key: 'H', shiftKey: true });
+        expect(h.navigate).not.toHaveBeenCalled();
+
+        press({ key: '?', shiftKey: true });
+        expect(h.openHelp).toHaveBeenCalledOnce();
     });
 
     it('a lone g followed by an unmapped key navigates nowhere', () => {

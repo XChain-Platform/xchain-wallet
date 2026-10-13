@@ -6,23 +6,13 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// A settled market must not claim nobody ever bet on it.
-//
-// Found by driving the cancel/refund lane (wallet E2E session 23): market
-// #1268 took a real 300-XCHAIN bet, was cancelled, refunded the bettor in
-// full - and its own page then read "0 (no bets yet, 0 bets)" for both
-// outcomes, directly above a history line saying the market had been
-// cancelled and everyone refunded. Confirmed on a RESOLVED market too
-// (#1169, 400 XCHAIN staked and paid out), so it is every terminal market,
-// not a cancel-only quirk.
-//
-// The cause is a predicate that is right in its own layer: the explorer sums
-// `pools` over OPEN bets, which is what settlement uses, so the moment a
-// market reaches a terminal state the pool list is empty by construction.
-// The wallet has to rebuild the split from the bets when the market is over.
+// A settled market must preserve its final split without claiming nobody bet.
+// Current explorers return the complete accepted-bet aggregate. The bounded
+// bet-row reconstruction supports older or incomplete responses only when that
+// terminal aggregate is empty.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, act as domAct } from '@testing-library/react';
+import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail, splitFromBets, isLiveFeedStatus } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -42,8 +32,7 @@ const HD_ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
-// The shape the explorer really returns for a terminal market: terms intact,
-// `pools` empty, because every bet has left `open`.
+// Compatibility shape for a terminal market whose explorer omits final pools.
 function feed(status, extra = {}) {
     return {
         action_index: '1268',
@@ -97,7 +86,7 @@ async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-async function openMarket(messaging) {
+async function openMarket(messaging, props = {}) {
     let utils;
     await domAct(async () => {
         utils = render(
@@ -106,6 +95,7 @@ async function openMarket(messaging) {
                 { shell: 'web', messaging },
                 React.createElement(BetFeedDetail, {
                     walletId: 'w', chainId: CHAIN, feedIndex: '1268', onBack() {},
+                    ...props,
                 }),
             ),
         );
@@ -168,6 +158,45 @@ describe('isLiveFeedStatus', () => {
 });
 
 describe('BetFeedDetail: a settled market reports what happened', () => {
+    it('names the winner and explains that payouts need no claim', async () => {
+        const { messaging } = harness({
+            betFeed: () => Promise.resolve({ data: [feed('resolved', { winning_outcome: 0 })] }),
+            bets: () => Promise.resolve({ data: [
+                { action_index: '1269', outcome: 0, amount: '300', bet_status: 'won' },
+                { action_index: '1270', outcome: 1, amount: '100', bet_status: 'lost' },
+            ] }),
+        });
+        const utils = await openMarket(messaging);
+        const settlement = utils.getByTestId('bet-settlement');
+
+        expect(settlement.textContent).toContain('Winning outcome: "Yes" (outcome 0)');
+        expect(settlement.textContent).toContain('Winning bets settled as won');
+        expect(settlement.textContent).toContain('nothing to claim');
+        expect(utils.container.textContent).toContain('winner "Yes" (outcome 0)');
+    });
+
+    it('offers the existing oracle settlement controls only to this market owner', async () => {
+        const onSettleMarket = vi.fn();
+        const { messaging } = harness({
+            betFeed: () => Promise.resolve({
+                data: [feed('closed', { source: OWN, expire_at: Math.floor(Date.now() / 1000) + 3600 })],
+            }),
+        });
+        const utils = await openMarket(messaging, { onSettleMarket });
+
+        expect(utils.getByTestId('bet-settlement').textContent).toContain('Pending resolution');
+        expect(utils.getByTestId('bet-settlement').textContent).toContain('do not submit a claim');
+        fireEvent.click(utils.getByRole('button', { name: 'Settle this market' }));
+        expect(onSettleMarket).toHaveBeenCalledOnce();
+        utils.unmount();
+
+        const other = harness({
+            betFeed: () => Promise.resolve({ data: [feed('closed', { source: ORACLE })] }),
+        });
+        const otherUtils = await openMarket(other.messaging, { onSettleMarket });
+        expect(otherUtils.queryByRole('button', { name: 'Settle this market' })).toBeNull();
+    });
+
     it('rebuilds the split from the bets when the market is terminal', async () => {
         const { messaging, calls } = harness();
         const utils = await openMarket(messaging);
@@ -187,6 +216,24 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         // The same screen must not still be advising on a decision that is over.
         expect(text).not.toContain('every later bet changes it');
         expect(text).toContain('The split above is final');
+    });
+
+    it('keeps a complete terminal explorer aggregate instead of replacing it with a capped read', async () => {
+        const { messaging, calls } = harness({
+            betFeed: () => Promise.resolve({ data: [feed('resolved', {
+                winning_outcome: 0,
+                pools: [
+                    { outcome: 0, pool: '900', bet_count: 9 },
+                    { outcome: 1, pool: '100', bet_count: 1 },
+                ],
+            })] }),
+        });
+        const utils = await openMarket(messaging);
+        const text = utils.container.textContent;
+
+        expect(text).toContain('900 (90.0%, 9 bets)');
+        expect(text).toContain('100 (10.0%, 1 bet)');
+        expect(calls.some((call) => call.method === 'bets')).toBe(false);
     });
 
     it('leaves a live market on the explorer aggregate and asks for no bet rows', async () => {
