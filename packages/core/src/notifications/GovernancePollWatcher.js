@@ -37,10 +37,11 @@
 // this wallet holds the token, which is the same exposure as the existing
 // incoming-receipt notifications.
 
+import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
+
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const SEEN_CAP_PER_CHAIN = 500; // prune guard; open polls per chain stay far below this
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 export class GovernancePollWatcher {
     /**
@@ -82,7 +83,13 @@ export class GovernancePollWatcher {
         this._loadSeen = typeof loadSeen === 'function' ? loadSeen : null;
         this._saveSeen = typeof saveSeen === 'function' ? saveSeen : null;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'governance');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'GovernancePollWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
@@ -111,6 +118,7 @@ export class GovernancePollWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._addressPoll.reset();
     }
 
     /**
@@ -125,6 +133,10 @@ export class GovernancePollWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('GovernancePollWatcher: getSettings failed', e);
                 return;
             }
@@ -133,6 +145,9 @@ export class GovernancePollWatcher {
             const featureOn = !settings || !settings.notifications ||
                 settings.notifications.governancePolls !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             // Restore persisted seen-state once per session, before the first
             // baseline decision, so a persisted chain doesn't re-baseline.
@@ -151,15 +166,6 @@ export class GovernancePollWatcher {
                     }
                 }
             }
-
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('GovernancePollWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
 
             // Group addresses by chain; one open-poll query per chain.
             const byChain = new Map();

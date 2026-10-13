@@ -16,9 +16,17 @@ import { describe, it, expect } from 'vitest';
 import {
     userFacingMessage,
     isDeveloperMessage,
+    protocolRefusalReason,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
 const FALLBACK = 'Could not import that private key.';
+
+function protocolRefusal(reason) {
+    return Object.assign(new Error(`Encoder RPC error: ${reason}`), {
+        name: 'SDKEncoderError',
+        code: 'ENCODER_RPC_ERROR',
+    });
+}
 
 describe('userFacingMessage', () => {
     it('replaces a flow precondition string', () => {
@@ -98,5 +106,30 @@ describe('userFacingMessage', () => {
         expect(isDeveloperMessage(new Error('importWif: boom'))).toBe(true);
         expect(isDeveloperMessage(new Error('That is not a valid private key.'))).toBe(false);
         expect(isDeveloperMessage(undefined)).toBe(true);
+    });
+
+    it('passes through the node reason from a typed protocol refusal', () => {
+        const reason = '  The market closed before this bet reached the node.  ';
+        const err = protocolRefusal(reason);
+        expect(protocolRefusalReason(err)).toBe(reason.trim());
+        expect(userFacingMessage(err, FALLBACK)).toBe(reason.trim());
+        expect(isDeveloperMessage(err)).toBe(false);
+    });
+
+    it('caps a protocol refusal reason', () => {
+        const reason = 'A'.repeat(700);
+        const shown = userFacingMessage(protocolRefusal(reason), FALLBACK);
+        expect(shown).toBe(reason.slice(0, 500));
+    });
+
+    it.each([
+        'Could not validate /RBTC/api/feequote',
+        '{"error":"private detail"}',
+        'Could not validate the action\n    at privateFunction (/private/source.js:1:2)',
+    ])('hides unsafe content inside a typed protocol refusal: %s', (reason) => {
+        const err = protocolRefusal(reason);
+        expect(protocolRefusalReason(err)).toBeNull();
+        expect(userFacingMessage(err, FALLBACK)).toBe(FALLBACK);
+        expect(isDeveloperMessage(err)).toBe(true);
     });
 });

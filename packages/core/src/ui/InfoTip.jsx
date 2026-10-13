@@ -41,9 +41,10 @@ const BUBBLE_GAP = 6;
  */
 export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
     const [open, setOpen] = useState(false);
-    const [align, setAlign] = useState(/** @type {'start' | 'center' | 'end'} */ ('center'));
     const [side, setSide] = useState(placement);
     const [maxHeight, setMaxHeight] = useState(/** @type {number | null} */ (null));
+    const [maxWidth, setMaxWidth] = useState(/** @type {number | null} */ (null));
+    const [horizontalOffset, setHorizontalOffset] = useState(0);
     const id = useId();
     const wrapRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
     const bubbleRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
@@ -72,35 +73,42 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
             const rect = node.getBoundingClientRect();
             const bubbleRect = bubble.getBoundingClientRect();
             const center = rect.left + rect.width / 2;
+            const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
+            const viewportLeft = visualViewport?.offsetLeft || 0;
+            const viewportTop = visualViewport?.offsetTop || 0;
             const viewportWidth =
+                visualViewport?.width ||
                 (typeof document !== 'undefined' && document.documentElement?.clientWidth) ||
                 (typeof window !== 'undefined' && window.innerWidth) ||
                 0;
             const viewportHeight =
+                visualViewport?.height ||
                 (typeof document !== 'undefined' && document.documentElement?.clientHeight) ||
                 (typeof window !== 'undefined' && window.innerHeight) ||
                 0;
             if (viewportWidth <= 0) {
-                setAlign('center');
+                setMaxWidth(null);
+                setHorizontalOffset(0);
             } else {
-                const bubbleWidth = bubbleRect.width || Math.min(260, viewportWidth - 2 * VIEWPORT_MARGIN);
-                const halfWidth = bubbleWidth / 2;
-                const rtl = (node.closest('[dir]')?.getAttribute('dir') || document.documentElement.dir) === 'rtl';
-                if (center - halfWidth < VIEWPORT_MARGIN) {
-                    setAlign(rtl ? 'end' : 'start');
-                } else if (center + halfWidth > viewportWidth - VIEWPORT_MARGIN) {
-                    setAlign(rtl ? 'start' : 'end');
-                } else {
-                    setAlign('center');
-                }
+                const availableWidth = Math.max(1, viewportWidth - 2 * VIEWPORT_MARGIN);
+                const widthLimit = Math.min(260, availableWidth);
+                const bubbleWidth = Math.min(bubbleRect.width || widthLimit, widthLimit);
+                const centeredLeft = center - bubbleWidth / 2;
+                const minimumLeft = viewportLeft + VIEWPORT_MARGIN;
+                const maximumLeft = viewportLeft + viewportWidth - VIEWPORT_MARGIN - bubbleWidth;
+                const clampedLeft = Math.min(Math.max(centeredLeft, minimumLeft), maximumLeft);
+                setMaxWidth(widthLimit);
+                setHorizontalOffset(clampedLeft - centeredLeft);
             }
 
             if (viewportHeight > 0) {
-                const spaceAbove = Math.max(0, rect.top - BUBBLE_GAP - VIEWPORT_MARGIN);
-                const spaceBelow = Math.max(0, viewportHeight - rect.bottom - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const viewportBottom = viewportTop + viewportHeight;
+                const spaceAbove = Math.max(0, rect.top - viewportTop - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const spaceBelow = Math.max(0, viewportBottom - rect.bottom - BUBBLE_GAP - VIEWPORT_MARGIN);
                 const preferredSpace = placement === 'top' ? spaceAbove : spaceBelow;
                 const oppositeSpace = placement === 'top' ? spaceBelow : spaceAbove;
-                const nextSide = bubbleRect.height > preferredSpace && oppositeSpace > preferredSpace
+                const bubbleHeight = Math.max(bubbleRect.height, bubble.scrollHeight);
+                const nextSide = bubbleHeight > preferredSpace && oppositeSpace > preferredSpace
                     ? (placement === 'top' ? 'bottom' : 'top')
                     : placement;
                 setSide(nextSide);
@@ -109,18 +117,24 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
         };
         recompute();
         const onResize = () => recompute();
-        if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
+        const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', onResize);
+            window.addEventListener('scroll', onResize, true);
+        }
+        visualViewport?.addEventListener('resize', onResize);
+        visualViewport?.addEventListener('scroll', onResize);
         return () => {
-            if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', onResize);
+                window.removeEventListener('scroll', onResize, true);
+            }
+            visualViewport?.removeEventListener('resize', onResize);
+            visualViewport?.removeEventListener('scroll', onResize);
         };
-    }, [label, open, placement]);
+    }, [label, maxWidth, open, placement]);
 
     const cls = [styles.wrap, className].filter(Boolean).join(' ');
-    const alignClass = align === 'start'
-        ? styles.alignStart
-        : align === 'end'
-            ? styles.alignEnd
-            : styles.alignCenter;
 
     return (
         <span ref={wrapRef} className={cls}>
@@ -159,8 +173,13 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                 id={id}
                 role="tooltip"
                 hidden={!open}
-                className={`${styles.bubble} ${side === 'bottom' ? styles.placementBottom : styles.placementTop} ${alignClass}`}
-                style={maxHeight === null ? undefined : { maxHeight: `${maxHeight}px` }}
+                className={`${styles.bubble} ${side === 'bottom' ? styles.placementBottom : styles.placementTop}`}
+                style={{
+                    maxHeight: maxHeight === null ? undefined : `${maxHeight}px`,
+                    minWidth: maxWidth === null ? undefined : `${Math.min(180, maxWidth)}px`,
+                    maxWidth: maxWidth === null ? undefined : `${maxWidth}px`,
+                    transform: `translateX(-50%) translateX(${horizontalOffset}px)`,
+                }}
             >
                 {label}
             </span>

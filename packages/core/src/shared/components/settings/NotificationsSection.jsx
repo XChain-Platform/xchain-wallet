@@ -37,6 +37,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
+import { RelativeTime } from '../RelativeTime.jsx';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
 import {
     SOUND_FAMILIES,
@@ -100,7 +101,7 @@ function PermissionRow() {
     if (permission === 'granted') {
         hint = 'Allowed. Use the categories below to choose which notifications you receive.';
     } else if (permission === 'denied') {
-        hint = 'Blocked by your browser or system settings. Allow notifications for this app there to enable them.';
+        hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
     } else {
         action = (
             <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
@@ -498,7 +499,16 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                             {coinLabelForChain(a.chainId)}{' '}
                             {a.direction === 'above' ? 'rises above' : 'falls below'}{' '}
                             {formatThreshold(a.targetFiat, a.fiatCurrency)}
-                            {a.status === 'triggered' ? <span style={ROW_HINT}> · triggered</span> : null}
+                            {a.status === 'triggered' ? (
+                                <span style={ROW_HINT}>
+                                    {' · triggered'}
+                                    {a.triggeredAt ? (
+                                        <RelativeTime timestamp={a.triggeredAt}>
+                                            {(when) => ` ${when}`}
+                                        </RelativeTime>
+                                    ) : null}
+                                </span>
+                            ) : null}
                         </span>
                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                             {a.status === 'triggered' ? (
