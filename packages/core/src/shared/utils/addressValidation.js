@@ -21,6 +21,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { isDevMockAddress } from '../../sdk/devMockAddresses.js';
 
 const bsc = base58check(sha256);
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
 
 // Address version bytes (P2PKH / P2SH) + segwit prefix (HRP) per coin and
 // network. DOGE has no segwit HRP. Same constants the indexer validates with.
@@ -190,6 +191,42 @@ export function isValidAddressForChain(address, coin, network) {
     const params = ADDRESS_PARAMS[coin]?.[network];
     if (!params) return false;
     return matchesParams(a, params);
+}
+
+function chainLabel(coin, network) {
+    const name = COIN_DISPLAY[coin] || coin;
+    return `${name} ${network}`;
+}
+
+/**
+ * Plain-language validation copy for an address field tied to one chain.
+ * A checksum failure is presented as a typo. A well-formed address for a
+ * different chain names the network encoded in that address instead.
+ *
+ * Shared legacy version bytes cannot distinguish Bitcoin, Litecoin, and
+ * Dogecoin regtest from Bitcoin/Litecoin testnet. Those cases name both
+ * possible network kinds rather than claiming a precision the bytes lack.
+ *
+ * @param {string} address
+ * @param {{ coin?: string, networkKind?: string } | null | undefined} descriptor
+ * @returns {string | null}
+ */
+export function addressValidationError(address, descriptor) {
+    const a = String(address || '').trim();
+    const coin = descriptor?.coin;
+    const network = descriptor?.networkKind;
+    if (!a || !coin || !network) return null;
+    if (isValidAddressForChain(a, coin, network)) return null;
+
+    const target = chainLabel(coin, network);
+    const detected = detectAddressChain(a);
+    if (detected?.coin && detected.network) {
+        return `This is a ${chainLabel(detected.coin, detected.network)} address, not a ${target} address.`;
+    }
+    if (detected && detected.network === null) {
+        return `This address belongs to testnet or regtest, not ${target}.`;
+    }
+    return 'This address has a typo. Check it and try again.';
 }
 
 /**

@@ -18,6 +18,13 @@ import { SignApproval } from './kinds/SignApproval.jsx';
 import styles from './approval.module.css';
 
 const { t } = i18n;
+const SIGN_APPROVAL_KINDS = new Set([
+    'signMessage',
+    'signPsbt',
+    'signAction',
+    'coSign',
+    'signIn',
+]);
 
 function getRequestId() {
     const params = new URLSearchParams(window.location.search);
@@ -68,14 +75,14 @@ function ApprovalRoute() {
 
     if (error) {
         return (
-            <Screen variant="popup">
+            <Screen variant="small">
                 <div role="alert" className={styles.error}>{error}</div>
             </Screen>
         );
     }
     if (!data) {
         return (
-            <Screen variant="popup">
+            <Screen variant="small">
                 <p aria-live="polite">{t('extension.approval.loading')}</p>
             </Screen>
         );
@@ -83,6 +90,15 @@ function ApprovalRoute() {
 
     if (data.kind === 'connect') {
         return <ConnectApproval id={id} payload={data.payload} onReject={reject} />;
+    }
+    if (!SIGN_APPROVAL_KINDS.has(data.kind)) {
+        return (
+            <Screen variant="popup">
+                <div role="alert" className={styles.error}>
+                    Unsupported approval request type.
+                </div>
+            </Screen>
+        );
     }
     return (
         <SignApproval

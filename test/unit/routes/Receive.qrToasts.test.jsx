@@ -107,6 +107,14 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('never renders fee estimate availability notices', async () => {
+        renderReceive();
+
+        expect(await screen.findByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
+        expect(screen.queryByText(/fee estimate unavailable/i)).toBeNull();
+        expect(screen.queryByText(/safe default rates/i)).toBeNull();
+    });
+
     it.each([320, 360])('keeps the receive request usable at %ipx', async (viewportWidth) => {
         const originalInnerWidth = window.innerWidth;
         const originalResizeObserver = globalThis.ResizeObserver;

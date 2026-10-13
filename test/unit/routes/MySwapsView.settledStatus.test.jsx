@@ -18,8 +18,10 @@
 // is read as no information, not as "not settled", and falls through to
 // the existing expiration/open logic unchanged.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct, within } from '@testing-library/react';
+import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
@@ -42,6 +44,29 @@ const HD_ADDRESS = Object.freeze({
 });
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
+const swapViewCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/MySwapsView.module.css',
+), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function mediaBlock(text, query) {
+    const start = text.indexOf(`@media ${query}`);
+    if (start < 0) return '';
+    const openBrace = text.indexOf('{', start);
+    let depth = 0;
+    for (let index = openBrace; index < text.length; index += 1) {
+        if (text[index] === '{') depth += 1;
+        if (text[index] === '}') depth -= 1;
+        if (depth === 0) return text.slice(openBrace + 1, index);
+    }
+    return '';
+}
 
 // A swap row as the list feed serves it. `swap_status` is the indexer's
 // lifecycle status, absent on an older explorer's reader.
@@ -120,6 +145,44 @@ function rowFor(list, actionIndex) {
 afterEach(() => cleanup());
 
 describe('MySwapsView: settled status', () => {
+    it.each([320, 360])('keeps the swap row and edit detail usable at %ipx', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+
+        try {
+            const longAmount = '12345678901234567890.12345678901234567890';
+            const { messaging } = harness({
+                swaps: [swapRow(640, { give_amount: longAmount, get_amount: longAmount })],
+            });
+            const utils = await open(messaging);
+            const row = rowFor(section(utils, 'Open swaps'), 640);
+
+            expect(within(row).getByLabelText(`Give ${longAmount} DOGESWAP; get ${longAmount} DOGE`))
+                .toBeTruthy();
+            expect(within(row).getByLabelText('Status: Open').textContent).toBe('Open');
+            for (const label of ['Timeline', 'Edit', 'Cancel']) {
+                expect(within(row).getByRole('button', { name: label })).toBeTruthy();
+            }
+
+            fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+            const detail = utils.getByLabelText('Swap amounts');
+            expect(detail.textContent).toContain(`Give ${longAmount} DOGESWAP`);
+            expect(detail.textContent).toContain(`Get ${longAmount} DOGE`);
+            expect(utils.getByRole('button', { name: 'Set allow-list' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Set block-list' })).toBeTruthy();
+
+            const narrow = mediaBlock(swapViewCss, '(max-width: 420px)');
+            expect(ruleBody(narrow, '.rowHead')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+            expect(ruleBody(narrow, '.amounts')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+            expect(ruleBody(narrow, '.rowActions'))
+                .toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+            expect(ruleBody(swapViewCss, '.side')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(ruleBody(swapViewCss, '.statusBadge')).toMatch(/max-width:\s*100%/);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('files a swap_status "complete" row under Closed as Settled with no Edit or Cancel', async () => {
         const { messaging } = harness({
             swaps: [swapRow(665, { swap_status: 'complete' })],

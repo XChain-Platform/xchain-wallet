@@ -164,7 +164,9 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await main.getByRole('button', { name: 'Review', exact: true }).click();
             await expect(main.getByText('3 actions across 1 chain')).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('checkbox', { name: 'I understand parallel actions are not atomic.' }).check();
+            await main.getByRole('checkbox', {
+                name: 'I understand successful actions cannot be rolled back if a later action fails.',
+            }).check();
             await main.getByRole('button', { name: 'Sign all', exact: true }).click();
 
             const password = main.getByLabel('Password', { exact: true });

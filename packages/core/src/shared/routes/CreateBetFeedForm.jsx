@@ -673,8 +673,8 @@ export function CreateBetFeedForm({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <span className={styles.fromLabel}>Possible outcomes</span>
                 {outcomes.map((o, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                        <div style={{ flex: 1 }}>
+                    <div key={i} className={styles.betOutcomeRow}>
+                        <div className={styles.betOutcomeField}>
                             <Input
                                 label={`Outcome ${i}`}
                                 value={o}

@@ -37,6 +37,7 @@ const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 const { t } = i18n;
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
+import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -66,12 +67,13 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
@@ -84,6 +86,7 @@ import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
@@ -227,14 +230,14 @@ export function App() {
             <ToastHost>
                 <ReachabilityBanner />
                 <RouteErrorBoundary>
-                    <AppInner canOpenInTab={canOpenInTab} />
+                    <AppInner canOpenInTab={canOpenInTab} titleEnabled={shell === 'web'} />
                 </RouteErrorBoundary>
             </ToastHost>
         </MessagingProvider>
     );
 }
 
-function AppInner({ canOpenInTab }) {
+function AppInner({ canOpenInTab, titleEnabled }) {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     const [extensionHandoff] = useState(() => (
@@ -262,6 +265,12 @@ function AppInner({ canOpenInTab }) {
                         : 'home'
         ),
     );
+    useDocumentTitle({
+        statusState: status.state,
+        onboardingStep,
+        unlockedView,
+        enabled: titleEnabled,
+    });
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
     );
@@ -277,6 +286,11 @@ function AppInner({ canOpenInTab }) {
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
+    };
+    const formDone = () => {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setUnlockedView('home');
     };
     // ManageToken and the Developer Mode faucet lock their chain and ticker
     // into the form so the user cannot redirect the requested token action.
@@ -522,6 +536,36 @@ function AppInner({ canOpenInTab }) {
             );
     }, [extensionHandoff]);
 
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet: messaging.lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
+
     useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => attachSurfaceStateListener((event) => {
@@ -764,7 +808,7 @@ function AppInner({ canOpenInTab }) {
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
-            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            lock: handleLock,
             refresh,
             scan: () => palette.navigate('scan'),
             switchWallet: () => palette.navigate('wallet-picker'),
@@ -814,7 +858,7 @@ function AppInner({ canOpenInTab }) {
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -916,6 +960,12 @@ function AppInner({ canOpenInTab }) {
                             setSendPrefill(null);
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
+                        }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
+                        onDone={() => {
+                            setSendPrefill(null);
+                            setSendBackTo('home');
+                            setUnlockedView('home');
                         }}
                         onChangeAsset={(carry) => {
                             setSendPrefill({ assetSwitchDraft: carry });
@@ -1161,6 +1211,7 @@ function AppInner({ canOpenInTab }) {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                        onDone={formDone}
                     />
                 );
             }
@@ -2721,7 +2772,7 @@ function AppInner({ canOpenInTab }) {
                         onOpenSettings={() => openSettingsSection(null)}
                         // No header here either, so Home shows the lock
                         // button that web and desktop keep in their header.
-                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                        onLockWallet={handleLock}
                     />
                 </Fragment>
             );
@@ -2729,11 +2780,27 @@ function AppInner({ canOpenInTab }) {
             return (
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
+                    header={(
+                        <AppHeader
+                            onCommandPalette={palette.openPalette}
+                            onLock={handleLock}
+                            isWatcherMode={isWatcherMode}
+                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                        />
+                    )}
+                    notices={(
+                        <>
+                            <NetworkBanner activeNetwork={settings?.activeNetwork} />
+                            {/* In the layout, not the route body, so the banner
+                                cannot consume route height. */}
+                            {activeWalletId ? <DemoBanner activeWalletId={activeWalletId} onExited={refresh} /> : null}
+                        </>
+                    )}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
                             onSelect={setUnlockedView}
-                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onLock={handleLock}
                             onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                             onOpenSettings={() => openSettingsSection(null)}
                             hasVmAddress={hasVmAddress}
@@ -2741,11 +2808,7 @@ function AppInner({ canOpenInTab }) {
                             isSignerMode={isSignerMode}
                         />
                     )}
-                    header={activeWalletId ? (
-                        <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
-                    ) : null}
                 >
-                    <WatchOnlyBadge visible={isWatcherMode} />
                     <ScrollRestoration routeKey={unlockedView}>
                         <RouteErrorBoundary
                             resetKey={`${unlockedView}:${palette.navigationKey}`}
