@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -72,7 +72,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -454,7 +453,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -561,7 +560,28 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     if (stage === 'review-list' && fromAddress) {
         return wrap(
-            <form onSubmit={handleSignList} noValidate>
+            <FormPage
+                label="Review official token list"
+                onSubmit={handleSignList}
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            Publish list
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Publish the official-token list for {tick}
                     {' '}({memberTicks.length} token{memberTicks.length === 1 ? '' : 's'}).
@@ -600,29 +620,29 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
+            </FormPage>,
+        );
+    }
+
+    if (stage === 'review-link' && fromAddress) {
+        return wrap(
+            <FormPage
+                label="Review official token link"
+                onSubmit={handleSignLink}
+                status={hw && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
-                        Back
-                    </Button>
+                actions={(
                     <Button
                         type="submit"
                         variant="primary"
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        Publish list
+                        Make it official
                     </Button>
-                </div>
-            </form>,
-        );
-    }
-
-    if (stage === 'review-link' && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignLink} noValidate>
+                )}
+            >
                 <p className={styles.summary}>
                     Link the published list to {tick}. This makes it the
                     project's official-token list.
@@ -671,27 +691,28 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        Make it official
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose'
     const hasRoster = Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     return wrap(
-        <form onSubmit={handleReviewList} noValidate>
+        <FormPage
+            label="Official token list"
+            onSubmit={handleReviewList}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                >
+                    Review list
+                </Button>
+            )}
+        >
             <p className={styles.summary}>
                 The official-token list is {tick}'s on-chain seal of
                 approval: tokens on it show an "Official" badge in the
@@ -760,17 +781,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                >
-                    Review list
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
