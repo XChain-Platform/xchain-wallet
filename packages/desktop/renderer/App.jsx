@@ -179,6 +179,7 @@ import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useDeepLinks } from './deepLinkRoute.js';
+import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
@@ -2145,7 +2146,7 @@ function AppInner() {
                             setUnlockedView('dispenser-detail');
                         }}
                         onIssuerResolved={(creator) => {
-                            setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
+                            setTokenDetailRef(withResolvedIssuer(creator));
                         }}
                     />
                 );

@@ -78,6 +78,7 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
 import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -2307,7 +2308,7 @@ function AppInner() {
                             setUnlockedView('dispenser-detail');
                         }}
                         onIssuerResolved={(creator) => {
-                            setTokenDetailRef((prev) => (prev ? { ...prev, issuer: creator || null } : prev));
+                            setTokenDetailRef(withResolvedIssuer(creator));
                         }}
                         onViewActivity={() => {
                             // The same hop TokenDetail makes. This block used to call
