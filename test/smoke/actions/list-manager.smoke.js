@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { flows } from '../../../packages/core/src/index.js';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -166,7 +167,9 @@ for (const [shell, msgPath] of [
 
 const leftNav = readFileSync(join(sharedComponents, 'LeftNav.jsx'), 'utf8');
 assert.ok(/id:\s*'lists'/.test(leftNav), 'LeftNav lists a "lists" nav item');
-assert.ok(/lists:\s*\[.*'list-detail'.*'list-create'.*'list-fork'/.test(leftNav.replace(/\s+/g, ' ')),
+assert.ok(['list-detail', 'list-create', 'list-fork'].every(
+    (route) => ROUTE_NAV_GROUPS.lists.includes(route),
+),
     'LeftNav groups list-detail/list-create/list-fork under the Lists highlight');
 
 const bottomBar = readFileSync(join(sharedComponents, 'BottomTabBar.jsx'), 'utf8');

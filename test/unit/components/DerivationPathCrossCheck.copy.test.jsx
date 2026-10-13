@@ -28,4 +28,20 @@ describe('DerivationPathCrossCheck help copy', () => {
         expect(tip.textContent.length).toBeLessThan(140);
         expect(tip.textContent).not.toMatch(/BIP\d+/i);
     });
+
+    it('explains a mismatch plainly and leaves the derivation path unchanged', () => {
+        const path = "m/84'/0'/7'/0/3";
+        render(
+            <DerivationPathCrossCheck
+                signerName="Test Ledger"
+                signerKind="ledger"
+                path={path}
+                address="bc1qexample"
+            />,
+        );
+
+        expect(screen.getByText(path)).toHaveTextContent(path);
+        expect(screen.getByText(/device may be using a different account or signing address/i))
+            .toHaveTextContent(/Reject on the device\. Nothing is signed/i);
+    });
 });

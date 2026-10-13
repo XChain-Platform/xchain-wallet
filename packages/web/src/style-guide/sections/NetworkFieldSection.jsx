@@ -30,6 +30,8 @@ export function NetworkFieldSection() {
                 what={<>A named wrapper over <code>ChainPicker</code> that pins the house conventions: label <code>Network</code>, the wallet's own chains as options, testnet/regtest cue on. One import, zero styling decisions per form.</>}
                 when={<>The top of every action-authoring form (Send, Claim rewards, Unstake, Delegate, Issue, Broadcast…). Forms opened from a specific context (a staking position's Claim, a contract's Stake) still render it, seeded to that chain, so the network is visible and retargetable like on any other form.</>}
                 whenNot={<>Pure display of a fixed chain inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list toolbar's network filter dropdown).</>}
+                sizing={<><code>md</code> matches standard form controls; <code>lg</code> matches hero fields on focused transaction screens.</>}
+                variants={<>Custom label and <code>md</code> or <code>lg</code> size. Keep the default Network label on authoring forms.</>}
                 doRule={<>✓ Offer every chain the wallet holds addresses on (<code>Object.keys(addressesByChain)</code>) · seed from the launching context · reset dependent state (source address, token) in <code>onChange</code></>}
                 dontRule={<>✗ Render a bare <code>ChainBadge</code> bubble at the top of a form · restrict options to one chain just because the flow arrived with one · relabel it ("Chain", "Coin") per-form</>}
                 supersedes={<>The <code>styles.chainLine</code> + <code>ChainBadge</code> header bubble pattern on authoring forms. Component: <code>packages/core/src/ui/NetworkField.jsx</code>.</>}
@@ -52,6 +54,15 @@ export function NetworkFieldSection() {
                     onChange={setValue}
                     chainIds={WALLET_CHAINS}
                     chainRegistry={chainRegistry}
+                />
+            </LiveExample>
+            <LiveExample label="Hero size for a focused transaction screen.">
+                <NetworkField
+                    value={value}
+                    onChange={setValue}
+                    chainIds={WALLET_CHAINS}
+                    chainRegistry={chainRegistry}
+                    size="lg"
                 />
             </LiveExample>
         </Section>

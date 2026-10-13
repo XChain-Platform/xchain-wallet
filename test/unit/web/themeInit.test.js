@@ -61,6 +61,25 @@ describe('startup theme', () => {
         expect(result.setStyle).toHaveBeenCalledWith({ style: 'DARK' });
     });
 
+    it('declares install metadata and theme colors for both browser palettes', () => {
+        const html = readFileSync(resolve('packages/web/index.html'), 'utf8');
+        const manifest = JSON.parse(
+            readFileSync(resolve('packages/web/public/manifest.webmanifest'), 'utf8'),
+        );
+
+        expect(html).toContain('rel="manifest" href="/manifest.webmanifest"');
+        expect(html).toContain('content="#FFFFFF" media="(prefers-color-scheme: light)"');
+        expect(html).toContain('content="#0B0F17" media="(prefers-color-scheme: dark)"');
+        expect(html).toContain('rel="apple-touch-icon"');
+        expect(manifest).toMatchObject({
+            name: 'XChain Wallet',
+            short_name: 'XChain',
+            display: 'standalone',
+            theme_color: '#FFFFFF',
+        });
+        expect(manifest.icons.map(({ sizes }) => sizes)).toEqual(['192x192', '512x512']);
+    });
+
     it.each([
         ['packages/web/index.html', '/theme-init.js', '/src/main.jsx'],
         ['packages/desktop/renderer/index.html', './theme-init.js', './main.jsx'],

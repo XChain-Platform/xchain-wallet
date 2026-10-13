@@ -89,6 +89,7 @@ export function OriginIdentity({
     const displayedOrigin = neutralizeControlText(origin, { maxLength: 2048 });
     if (!displayedOrigin) return null;
     const details = originIdentityDetails(origin);
+    const hostEnding = neutralizeControlText(details.hostEnding, { maxLength: 255 });
 
     return (
         <Root
@@ -98,9 +99,14 @@ export function OriginIdentity({
             data-testid={testId}
         >
             <p className={`${styles.heading} ${headingClassName}`.trim()}>{label}</p>
-            <span hidden data-testid="request-origin-host-ending">
-                {details.hostEnding}
-            </span>
+            {hostEnding ? (
+                <div className={styles.line}>
+                    <span className={styles.lineLabel}>Host ending</span>
+                    <code className={styles.hostEnding} data-testid="request-origin-host-ending" dir="ltr">
+                        {hostEnding}
+                    </code>
+                </div>
+            ) : null}
             {details.registrableDomain ? (
                 <div className={styles.line}>
                     <span className={styles.lineLabel}>Site domain</span>
@@ -140,5 +146,5 @@ export function OriginIdentity({
 
 /** Compatibility helper for callers that display a three-label hostname ending. */
 export function originHostEnding(origin) {
-    return originIdentityDetails(origin).hostEnding;
+    return neutralizeControlText(originIdentityDetails(origin).hostEnding, { maxLength: 255 });
 }

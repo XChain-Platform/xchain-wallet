@@ -34,6 +34,7 @@
 }
 
 .registrableDomain,
+.hostEnding,
 .fullOrigin {
     direction: ltr;
     unicode-bidi: isolate;
@@ -46,6 +47,11 @@
 .registrableDomain {
     font-size: var(--xc-text-md);
     font-weight: 800;
+}
+
+.hostEnding {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
 }
 
 .fullOrigin {

@@ -14,6 +14,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { HDKey } from '@scure/bip32';
 
 let messaging;
+const toDataURL = vi.hoisted(() => vi.fn());
+
+vi.mock('qrcode', () => ({ default: { toDataURL } }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
@@ -62,6 +65,8 @@ function expectNoValues() {
 }
 
 beforeEach(() => {
+    toDataURL.mockReset();
+    toDataURL.mockResolvedValue('data:image/png,cosigner-share');
     messaging = { getMultisigCosignerInfo: vi.fn().mockResolvedValue(INFO) };
 });
 
@@ -82,6 +87,28 @@ describe('MultisigCosignerShare address selection', () => {
             'bc1qunlabelled',
         ]);
         expect(messaging.getMultisigCosignerInfo).not.toHaveBeenCalled();
+    });
+
+    it('marks watch-only, hardware, and imported-key addresses unavailable', () => {
+        mount({
+            addresses: [
+                { id: 'hd', address: 'bc1qhd', source: 'hd' },
+                { id: 'watch', address: 'bc1qwatch', source: 'watch-only' },
+                { id: 'trezor', address: 'bc1qtrezor', source: 'trezor' },
+                { id: 'ledger', address: 'bc1qledger', source: 'ledger' },
+                { id: 'wif', address: 'bc1qwif', source: 'imported-wif' },
+            ],
+        });
+
+        const options = screen.getAllByRole('option');
+        expect(options[1]).not.toBeDisabled();
+        expect(options[2]).toBeDisabled();
+        expect(options[2]).toHaveTextContent('watch-only, unavailable');
+        expect(options[3]).toBeDisabled();
+        expect(options[3]).toHaveTextContent('hardware, export on device');
+        expect(options[4]).toBeDisabled();
+        expect(options[5]).toBeDisabled();
+        expect(screen.getByText(/Only software-seed addresses can be shared here/i)).toBeTruthy();
     });
 
     it('clears shared values when the placeholder is selected again', async () => {
@@ -110,9 +137,53 @@ describe('MultisigCosignerShare address selection', () => {
         await waitFor(expectNoValues);
         expect(screen.getByLabelText('Address to share').value).toBe('');
     });
+
+    it('hides the prior payload while a different address loads', async () => {
+        let resolveSecond;
+        messaging.getMultisigCosignerInfo
+            .mockResolvedValueOnce(INFO)
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+        mount();
+        selectAddress('address-1');
+        expect(await screen.findByLabelText('Cosigner share payload')).toBeTruthy();
+
+        selectAddress('address-2');
+
+        expect(screen.queryByLabelText('Cosigner share payload')).toBeNull();
+        expectNoValues();
+        resolveSecond({ ...INFO, pubkey: '03abcdef' });
+        expect(await screen.findByTestId('cosigner-share-public-key'))
+            .toHaveTextContent('03abcdef');
+    });
 });
 
 describe('MultisigCosignerShare key details', () => {
+    it('shows the same complete public payload as QR and copyable text', async () => {
+        mount({ networkKind: 'mainnet' });
+        selectAddress();
+
+        const text = await screen.findByLabelText('Cosigner share payload');
+        const payload = JSON.parse(text.value);
+        expect(payload).toEqual({
+            type: 'xchain-multisig-cosigner',
+            version: 1,
+            network: 'mainnet',
+            address: 'bc1qlabelled',
+            xpub: INFO.xpub,
+            pubkey: INFO.pubkey,
+            fingerprint: INFO.fingerprint,
+            derivationPath: INFO.derivationPath,
+        });
+        expect(screen.getByRole('button', { name: 'Copy cosigner share payload' })).toBeTruthy();
+        expect(await screen.findByRole('img', {
+            name: 'QR code for multisig cosigner share payload',
+        })).toHaveAttribute('src', 'data:image/png,cosigner-share');
+        expect(toDataURL).toHaveBeenCalledWith(text.value, expect.any(Object));
+        expect(screen.getByRole('note')).toHaveTextContent(
+            /compare the master fingerprint and derivation path.*separate trusted channel/i,
+        );
+    });
+
     it('loads and displays every returned value for the chosen address', async () => {
         mount();
         selectAddress('address-2');
@@ -158,6 +229,10 @@ describe('MultisigCosignerShare key details', () => {
         expect(await screen.findByText('Not available from this signer')).toBeTruthy();
         expect(screen.queryByTestId('cosigner-share-xpub')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Copy xpub' })).toBeNull();
+        expect(screen.getByLabelText('Cosigner share payload')).not.toHaveValue(
+            expect.stringContaining(privateAccount.privateExtendedKey),
+        );
+        expect(JSON.parse(screen.getByLabelText('Cosigner share payload').value).xpub).toBeNull();
     });
 
     it('marks an empty signer field as unavailable', async () => {

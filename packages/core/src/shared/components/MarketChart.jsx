@@ -97,8 +97,8 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                         textColor: colors.text,
                     },
                     grid: {
-                        horzLines: { visible: false },
-                        vertLines: { visible: false },
+                        horzLines: { color: colors.grid },
+                        vertLines: { color: colors.grid },
                     },
                     rightPriceScale: { borderColor: colors.border },
                     timeScale: {
@@ -117,6 +117,10 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 const series = chart.addLineSeries({
                     color: colors.accent,
                     lineWidth: 2,
+                    priceFormat: {
+                        type: 'custom',
+                        formatter: (value) => `${formatChartPrice(value)} ${tick2}`,
+                    },
                     priceLineVisible: false,
                     lastValueVisible: true,
                     crosshairMarkerVisible: true,
@@ -144,6 +148,10 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     const next = readChartColors(container);
                     chart.applyOptions?.({
                         layout: { background: { color: 'transparent' }, textColor: next.text },
+                        grid: {
+                            horzLines: { color: next.grid },
+                            vertLines: { color: next.grid },
+                        },
                         rightPriceScale: { borderColor: next.border },
                         timeScale: { borderColor: next.border },
                         crosshair: {
@@ -168,7 +176,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             chartRef.current = null;
             seriesRef.current = null;
         };
-    }, [height, reducedMotion]);
+    }, [height, reducedMotion, tick2]);
     // Fetch matches whenever the pair changes.
 
     useEffect(() => {
@@ -301,6 +309,7 @@ function readChartColors(container) {
     return {
         text,
         muted: token('--xc-text-muted', text),
+        grid: token('--xc-text-muted', text),
         border: token('--xc-border', text),
         accent: token('--xc-accent-primary', text),
         success: token('--xc-success', text),

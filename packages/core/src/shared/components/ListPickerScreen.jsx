@@ -23,7 +23,7 @@
 // first member list has the requested `filterType`; a union whose member
 // read fails or that has no members is left out.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
@@ -79,6 +79,7 @@ export function ListPickerScreen({
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [counts, setCounts] = useState(/** @type {Record<string, number | null>} */ ({}));
     const [descriptions, setDescriptions] = useState(/** @type {Record<string, string | null>} */ ({}));
+    const [query, setQuery] = useState('');
 
     useEffect(() => {
         let cancelled = false;
@@ -152,6 +153,25 @@ export function ListPickerScreen({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rows, chainId, messaging]);
 
+    const visibleRows = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q || !rows) return rows || [];
+        return rows.filter((row) => {
+            const idx = String(row.action_index ?? '');
+            const kind = String(row.type) === '3'
+                ? 'union'
+                : String(row.type) === '1' ? 'token' : 'address';
+            return [
+                idx,
+                row.name,
+                descriptions[idx],
+                row.description,
+                row.status,
+                kind,
+            ].some((value) => String(value ?? '').toLowerCase().includes(q));
+        });
+    }, [rows, query, descriptions]);
+
     const header = <PageHeader onBack={onBack} title={title} />;
 
     if (loadError) {
@@ -181,51 +201,75 @@ export function ListPickerScreen({
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
-                <ul className={styles.abList}>
-                    {rows.map((row) => {
-                        const idx = String(row.action_index ?? '?');
-                        const isTick = String(row.type) === '1';
-                        const isUnion = String(row.type) === '3';
-                        const status = String(row.status || '');
-                        const count = counts[idx];
-                        const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
-                        const titleLabel = typeof row.name === 'string' && row.name.length > 0
-                            ? listLabel(idx, row.name)
-                            : `${kind} list #${idx}`;
-                        const rawDescription = descriptions[idx] || row.description;
-                        const description = typeof rawDescription === 'string' && rawDescription.length > 0
-                            ? neutralizeControlText(rawDescription)
-                            : '';
-                        const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
-                        return (
-                            <li key={idx}>
-                                <button
-                                    type="button"
-                                    className={styles.abRow}
-                                    onClick={() => onSelect({
-                                        actionIndex: idx,
-                                        type: String(row.type),
-                                        memberCount: count ?? null,
-                                        ...(typeof row.name === 'string' && row.name.length > 0
-                                            ? { name: row.name }
-                                            : {}),
-                                    })}
-                                >
-                                    <span className={styles.abName}>
-                                        {titleLabel}
-                                        {status && status !== 'valid' ? ` (${status})` : ''}
-                                    </span>
-                                    <span className={styles.abAddr}>
-                                        {description && count !== undefined
-                                            ? `${countText} · ${description}`
-                                            : countText}
-                                    </span>
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
+            <ListPage toolbar={(
+                <input
+                    type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    role="textbox"
+                    className={styles.abSearch}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search lists"
+                />
+            )}>
+                {visibleRows.length === 0 ? (
+                    <EmptyState
+                        title="No matching lists"
+                        body="Try a different search."
+                        titleAs="p"
+                        role={null}
+                    />
+                ) : (
+                    <ul className={styles.abList}>
+                        {visibleRows.map((row) => {
+                            const idx = String(row.action_index ?? '?');
+                            const isTick = String(row.type) === '1';
+                            const isUnion = String(row.type) === '3';
+                            const status = String(row.status || '');
+                            const count = counts[idx];
+                            const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
+                            const titleLabel = typeof row.name === 'string' && row.name.length > 0
+                                ? listLabel(idx, row.name)
+                                : `${kind} list #${idx}`;
+                            const rawDescription = descriptions[idx] || row.description;
+                            const description = typeof rawDescription === 'string' && rawDescription.length > 0
+                                ? neutralizeControlText(rawDescription)
+                                : '';
+                            const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
+                            return (
+                                <li key={idx}>
+                                    <button
+                                        type="button"
+                                        className={styles.abRow}
+                                        onClick={() => onSelect({
+                                            actionIndex: idx,
+                                            type: String(row.type),
+                                            memberCount: count ?? null,
+                                            ...(typeof row.name === 'string' && row.name.length > 0
+                                                ? { name: row.name }
+                                                : {}),
+                                        })}
+                                    >
+                                        <span className={styles.abName}>
+                                            {titleLabel}
+                                            {status && status !== 'valid' ? ` (${status})` : ''}
+                                        </span>
+                                        <span className={styles.abAddr}>
+                                            {description && count !== undefined
+                                                ? `${countText} · ${description}`
+                                                : countText}
+                                        </span>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </ListPage>
         </Screen>
     );

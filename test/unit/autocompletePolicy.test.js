@@ -97,13 +97,17 @@ describe('browser autocomplete policy', () => {
         }
     });
 
-    it('marks the username-less unlock password as current-password', () => {
+    it('pairs the unlock password with a stable username token', () => {
         const locked = fileEnding('Locked.jsx');
         const password = control('Locked.jsx', 'password');
+        const username = locked.controls.find((entry) => entry.attributes.name === 'username');
         expect(password?.attributes.autoComplete).toBe('current-password');
         expect(password?.attributes.name).toBe('password');
-        expect(locked.controls.some((entry) => Object.values(entry.attributes)
-            .some((value) => /username/i.test(value)))).toBe(false);
+        expect(username?.attributes.type).toBe('text');
+        expect(username?.attributes.value).toBe('xchain-wallet');
+        expect(username?.attributes.autoComplete).toBe('username');
+        expect(username?.attributes.readOnly).toBe('true');
+        expect(username?.attributes.hidden).toBe('true');
     });
 
     it('keeps recovery material and private keys out of browser storage', () => {
@@ -119,6 +123,11 @@ describe('browser autocomplete policy', () => {
                 if (entry.attributes.type === 'password' && /^wallet password$/i.test(entry.attributes.label || '')) continue;
                 if (entry.attributes.autoComplete !== 'off') {
                     failures.push(description(path, entry));
+                    continue;
+                }
+                if (/(mnemonic|recovery phrase|private key|\bwif\b)/i.test(text)
+                    && entry.attributes.spellCheck !== 'false') {
+                    failures.push(`${description(path, entry)} enables spellcheck`);
                 }
             }
         }

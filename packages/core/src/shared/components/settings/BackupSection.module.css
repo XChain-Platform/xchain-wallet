@@ -1,0 +1,49 @@
+.sheetMeta {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+@media print {
+    :global(body.xc-print-recovery-sheet) {
+        background: #fff !important;
+        padding: 0 !important;
+    }
+
+    :global(body.xc-print-recovery-sheet *) {
+        visibility: hidden !important;
+    }
+
+    :global(body.xc-print-recovery-sheet) .recoverySheet,
+    :global(body.xc-print-recovery-sheet) .recoverySheet * {
+        visibility: visible !important;
+        color: #000 !important;
+    }
+
+    :global(body.xc-print-recovery-sheet) .recoverySheet {
+        position: fixed !important;
+        inset: 0 !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        min-height: 100% !important;
+        padding: 24mm !important;
+        background: #fff !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        color: #000 !important;
+    }
+
+    :global(body.xc-print-recovery-sheet) .recoverySheet .secret {
+        filter: none !important;
+        background: #fff !important;
+        border-color: #000 !important;
+        color: #000 !important;
+    }
+
+    :global(body.xc-print-recovery-sheet) .recoverySheet .sheetMeta {
+        color: #333 !important;
+    }
+
+    :global(body.xc-print-recovery-sheet) .recoverySheet .screenOnly {
+        display: none !important;
+    }
+}
