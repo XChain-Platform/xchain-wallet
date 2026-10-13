@@ -54,6 +54,10 @@ import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 // Shared with the PRE-HOST fresh-install restore lane, which never reaches this
 // host: one resolver so the two lanes cannot drift on what they will fetch.
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
+import {
+    startLabelSyncRestoreTask,
+    waitForLabelSyncRestoreTask,
+} from './labelSyncRestoreTasks.js';
 
 const {
     importedAddressIdsFor,
@@ -1199,6 +1203,10 @@ export function createBackgroundHost(deps) {
         return wallets.map(toSafeWallet);
     });
 
+    host.register('wallet.labelSyncRestoreResult', (req) => (
+        waitForLabelSyncRestoreTask(req?.token)
+    ));
+
     host.register('wallet.exists', async (req, { vault }) => {
         const id = req?.walletId;
         if (typeof id !== 'string' || !id) return { exists: false };
@@ -1252,21 +1260,26 @@ export function createBackgroundHost(deps) {
         // 'preserve': the vault already holds the other wallets' contacts and
         // labels, and an added wallet's published copy must not overwrite a
         // record the user edited here since.
-        const labelSync = await restoreLabelSyncBestEffort({
-            vault,
-            walletId: r.wallet.id,
-            password: req?.password,
-            bip39Passphrase: req?.bip39Passphrase,
-            chainIds: labelSyncSearchChainIds(chainRegistry, activeChainIds),
-            sdkRegistry,
-            onConflict: 'preserve',
-        });
+        const labelSyncToken = r.wallet.origin === 'created'
+            ? null
+            : startLabelSyncRestoreTask({
+                walletId: r.wallet.id,
+                run: () => restoreLabelSyncBestEffort({
+                    vault,
+                    walletId: r.wallet.id,
+                    password: req?.password,
+                    bip39Passphrase: req?.bip39Passphrase,
+                    chainIds: labelSyncSearchChainIds(chainRegistry, activeChainIds),
+                    sdkRegistry,
+                    onConflict: 'preserve',
+                }),
+            });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
             account: r.account,
             addresses: r.addresses,
-            labelSync,
+            labelSyncToken,
         };
     });
 

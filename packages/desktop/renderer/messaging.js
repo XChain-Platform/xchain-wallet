@@ -68,6 +68,11 @@ export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
 }
 
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
+}
+
 /**
  * Restore an encrypted backup onto a FRESH install (no vault yet).
  * Pre-host, and named apart from `importBackupRequest` because that one adds
