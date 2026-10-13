@@ -282,6 +282,7 @@ export function DisplaySection() {
         setDisplayMessage(null);
         update({
             pinnedTokens: [],
+            pinnedTokensByWallet: {},
             watchedTokens: [],
             hiddenTokens: [],
             showPinAffordance: false,

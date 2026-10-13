@@ -64,10 +64,15 @@ describe('DisplaySection', () => {
         });
     });
 
-    it('resets display choices and token lists together', async () => {
+    it('resets display choices and leaves no pinned tokens for any wallet', async () => {
         const messaging = setup({
             privacy: { hideSmallBalances: true },
             pinnedTokens: ['bitcoin-mainnet:BTC'],
+            pinnedTokensByWallet: {
+                'wallet-a': ['bitcoin-mainnet:XCP'],
+                'wallet-b': ['litecoin-mainnet:LTC'],
+            },
+            watchedTokens: ['dogecoin-mainnet:DOGE'],
             hiddenTokens: ['bitcoin-mainnet:XCP'],
             showPinAffordance: true,
             showHideAffordance: true,
@@ -83,6 +88,7 @@ describe('DisplaySection', () => {
 
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             pinnedTokens: [],
+            pinnedTokensByWallet: {},
             watchedTokens: [],
             hiddenTokens: [],
             showPinAffordance: false,
@@ -92,6 +98,10 @@ describe('DisplaySection', () => {
             privacy: { hideSmallBalances: false },
         }));
         expect(await screen.findByText('Display settings reset to defaults.')).toBeTruthy();
+        expect(await messaging.getSettings()).toMatchObject({
+            pinnedTokens: [],
+            pinnedTokensByWallet: {},
+        });
     });
 
     it('looks up a watched ticker on its selected chain, refuses missing and duplicate tokens, and removes it', async () => {
