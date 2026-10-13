@@ -30,6 +30,7 @@
 
 import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
+import { serializeError } from './MessageHost.js';
 
 /** Message type the extension pages send to ask for a wipe. */
 export const WIPE_STORAGE_MESSAGE_TYPE = 'wallet.wipeStorage';
@@ -204,8 +205,13 @@ export function attachWipeStorageListener(deps = {}, chromeRuntime) {
     const listener = (message, sender, sendResponse) => {
         if (!message || typeof message !== 'object') return false;
         if (message.type !== WIPE_STORAGE_MESSAGE_TYPE) return false;
+        // A caller can close its page while the wipe is in flight. Keep a
+        // dead response port from turning the listener itself into a rejection.
+        const respond = (response) => {
+            try { sendResponse(response); } catch (_err) { /* caller is gone */ }
+        };
         if (!isTrustedExtensionSender(sender, runtime.id)) {
-            sendResponse({
+            respond({
                 ok: false,
                 error: {
                     name: 'BridgeError',
@@ -230,8 +236,12 @@ export function attachWipeStorageListener(deps = {}, chromeRuntime) {
             // ran. A hardcoded true made a failed clear read as a successful
             // wipe: core's wipeShellStorage gates on response.ok !== true, so
             // it never threw and the user was told a surviving vault was gone.
-            sendResponse({ ok: result?.ok === true, result });
-        })();
+            respond({ ok: result?.ok === true, result });
+        })().catch((err) => {
+            // Preserve the request-response contract if a replacement wipe
+            // implementation violates the normal never-throw boundary.
+            respond(serializeError(err));
+        });
         return true; // async response
     };
 
