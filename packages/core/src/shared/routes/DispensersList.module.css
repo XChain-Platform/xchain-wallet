@@ -172,7 +172,7 @@
 .status_cancelled,
 .status_expired {
     background: rgba(220, 38, 38, 0.15);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Drained or ran to completion: over, but not an owner-initiated teardown. */

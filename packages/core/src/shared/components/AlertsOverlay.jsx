@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './AlertsOverlay.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * Full-overlay alerts panel. Surfaces wallet-level notifications that
@@ -33,6 +34,9 @@ import { useBackHandler } from '../../ui/backStack.js';
 export function AlertsOverlay({ alerts, onClose }) {
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(onClose);
+    // Tab stays inside the dialog and focus returns to whatever opened it.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
@@ -41,6 +45,7 @@ export function AlertsOverlay({ alerts, onClose }) {
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"

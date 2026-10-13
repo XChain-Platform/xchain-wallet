@@ -42,15 +42,41 @@ function focusableWithin(container) {
     });
 }
 
+// The element that held focus just before the current one took it. A dialog
+// whose own button carries autoFocus has already stolen focus by the time its
+// effect runs, so document.activeElement no longer names the control that
+// opened it; this does.
+let lastBlurred = null;
+if (typeof document !== 'undefined') {
+    document.addEventListener('focusout', (e) => { lastBlurred = e.target; }, true);
+}
+
+/**
+ * The control that opened a dialog, or null when it was opened with focus on
+ * the page itself (a shortcut key), where there is nothing to hand back to.
+ */
+function openerFor(container) {
+    const active = document.activeElement;
+    if (active && active !== document.body && !container.contains(active)) return active;
+    const blurred = lastBlurred;
+    if (active && container.contains(active) && blurred && blurred.isConnected
+        && blurred !== document.body && !container.contains(blurred)) return blurred;
+    return null;
+}
+
 /**
  * Trap Tab focus within `containerRef` while `active`. On activate, snapshots
- * the current focus and moves it to `initialFocusRef` (or the first focusable
- * descendant); on deactivate, restores focus to the snapshotted element.
+ * the opener and moves focus to `initialFocusRef` (or the first focusable
+ * descendant); on deactivate, returns focus to the opener unless something
+ * else has already claimed it (a dialog that navigates away).
+ *
+ * `trap: false` keeps the focus move and the restore but leaves Tab alone,
+ * for a widget that owns Tab itself (the command palette's category jump).
  *
  * @param {import('react').RefObject<HTMLElement>} containerRef
- * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement> }} opts
+ * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement>, trap?: boolean }} opts
  */
-export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
+export function useFocusTrap(containerRef, { active, initialFocusRef, trap = true } = {}) {
     const previouslyFocused = useRef(null);
 
     useEffect(() => {
@@ -58,18 +84,20 @@ export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
         const container = containerRef.current;
         if (!container) return undefined;
 
-        previouslyFocused.current = document.activeElement;
+        previouslyFocused.current = openerFor(container);
 
         // Initial focus: the designated element (password / HW block) or the
         // first focusable descendant.
         const initial = (initialFocusRef && initialFocusRef.current) || focusableWithin(container)[0];
-        if (initial && typeof initial.focus === 'function') {
+        if (container.contains(document.activeElement)) {
+            // Already focused inside (an autoFocus control): leave it.
+        } else if (initial && typeof initial.focus === 'function') {
             // Defer to after paint so the element is actually focusable.
             requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
         }
 
         const onKeyDown = (e) => {
-            if (e.key !== 'Tab') return;
+            if (!trap || e.key !== 'Tab') return;
             const focusables = focusableWithin(container);
             if (focusables.length === 0) { e.preventDefault(); return; }
             const first = focusables[0];
@@ -90,11 +118,13 @@ export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
         return () => {
             container.removeEventListener('keydown', onKeyDown);
             const prev = previouslyFocused.current;
-            if (prev && typeof prev.focus === 'function') {
+            const now = document.activeElement;
+            const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
+            if (unclaimed && prev && prev.isConnected && typeof prev.focus === 'function') {
                 try { prev.focus(); } catch { /* noop */ }
             }
         };
-    }, [active, containerRef, initialFocusRef]);
+    }, [active, containerRef, initialFocusRef, trap]);
 }
 
 /**

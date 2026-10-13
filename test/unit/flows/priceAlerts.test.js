@@ -71,6 +71,56 @@ describe('flows/priceAlerts', () => {
         expect(await vault.priceAlerts.count()).toBe(1);
     });
 
+    it('edits an alert in place and re-arms it', async () => {
+        const original = await saveAlert({ vault, ...ALERT });
+        await markAlertTriggered({ vault, id: original.id });
+
+        const edited = await saveAlert({
+            vault,
+            ...ALERT,
+            id: original.id,
+            direction: 'below',
+            targetFiat: 64000,
+            fiatCurrency: 'eur',
+        });
+
+        expect(edited).toMatchObject({
+            id: original.id,
+            direction: 'below',
+            targetFiat: 64000,
+            fiatCurrency: 'eur',
+            status: 'armed',
+            triggeredAt: null,
+        });
+        expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('rejects an edit that would duplicate another alert', async () => {
+        const first = await saveAlert({ vault, ...ALERT });
+        await saveAlert({ vault, ...ALERT, direction: 'below' });
+
+        await expect(saveAlert({
+            vault,
+            ...ALERT,
+            id: first.id,
+            direction: 'below',
+        })).rejects.toThrow('A matching price alert already exists');
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
+    it('does not edit an alert through another wallet', async () => {
+        const original = await saveAlert({ vault, ...ALERT });
+
+        await expect(saveAlert({
+            vault,
+            ...ALERT,
+            id: original.id,
+            walletId: 'wallet-2',
+            targetFiat: 1,
+        })).rejects.toThrow('alert was not found for this wallet');
+        expect((await vault.priceAlerts.get(original.id)).targetFiat).toBe(70000);
+    });
+
     it('markAlertTriggered disarms with a timestamp', async () => {
         const a = await saveAlert({ vault, ...ALERT });
         const t = await markAlertTriggered({ vault, id: a.id, at: '2026-06-15T00:00:00.000Z' });

@@ -79,7 +79,7 @@
 .demoExitError {
     margin: 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .forgotBlock {
@@ -140,7 +140,7 @@
 .wipeError {
     margin: 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .unlockingNote {
@@ -149,4 +149,34 @@
     color: var(--xc-text-muted);
     text-align: center;
     line-height: 1.4;
+}
+
+/* Short viewports reserve the visible area for credentials, feedback, and
+   actions. The keyboard attribute covers iOS, where the keyboard overlays the
+   layout viewport instead of reducing the height used by media queries. */
+@media (max-width: 599px) and (max-height: 480px) {
+    .hero {
+        display: none;
+    }
+
+    .lockoutBanner {
+        padding: var(--xc-space-2);
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .forgotBlock {
+        margin-top: var(--xc-space-2);
+        padding-top: 0;
+        border-top: 0;
+    }
+}
+
+:global(html[data-xc-keyboard='open']) .hero,
+:global(html[data-xc-keyboard='open']) .forgotBlock {
+    display: none;
+}
+
+:global(html[data-xc-keyboard='open']) .lockoutBanner {
+    padding: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
 }

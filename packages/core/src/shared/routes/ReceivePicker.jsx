@@ -29,5 +29,5 @@ import { TokenPicker } from './TokenPicker.jsx';
 export function ReceivePicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
-    return <TokenPicker purpose="receive" {...rest} />;
+    return <TokenPicker {...rest} purpose="receive" />;
 }

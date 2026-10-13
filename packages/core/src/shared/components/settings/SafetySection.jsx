@@ -12,15 +12,26 @@
 //
 // Live rows:
 //   - Auto-lock timeout (minutes)
-//   - Test-send warning threshold (sats; 0 disables)
+//   - New-recipient test-send warning threshold (sats; 0 disables)
+//   - Always-on lookalike-address warnings
 //   - Undo-send: opt-in hold so a signed send can be cancelled before broadcast
 //   - Panic-mode activation and duress passphrase controls
-//   - Backup reminders cadence (off / monthly / quarterly)
+//   - Automatic backup-reminder status
 //
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
-import { INPUT, ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    INPUT,
+    ROW,
+    ROW_HINT,
+    ROW_LABEL,
+    ROW_VALUE,
+    SELECT,
+    STACK,
+    SettingsLoadError,
+    Status,
+} from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
 import { UndoSendRow } from './UndoSendRow.jsx';
@@ -34,12 +45,6 @@ const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 60, label: '1 hour' },
     { value: 240, label: '4 hours' },
     { value: 0, label: 'Never (until tab close)' },
-]);
-
-const BACKUP_REMINDER_OPTIONS = /** @type {const} */ ([
-    { value: 'off', label: 'Off' },
-    { value: 'monthly', label: 'Monthly' },
-    { value: 'quarterly', label: 'Quarterly' },
 ]);
 
 export function SafetySection() {
@@ -82,8 +87,15 @@ export function SafetySection() {
                 </select>
             </div>
             <div style={ROW}>
-                <span style={ROW_LABEL}>Test-send warning (sats)</span>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_LABEL}>New-recipient test-send warning (sats)</span>
+                    <span id="test-send-threshold-hint" style={ROW_HINT}>
+                        For native-coin sends above this amount to a recipient outside your contacts
+                        and send history. Enter 0 to turn this warning off.
+                    </span>
+                </div>
                 <input
+                    key={String(settings.grace.testSendThresholdSats)}
                     type="number"
                     inputMode="numeric"
                     min={0}
@@ -98,6 +110,7 @@ export function SafetySection() {
                         setThresholdError(null);
                         const threshold = raw.replace(/^0+(?=\d)/, '');
                         update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
+                            setThresholdError('Could not save the test-send warning threshold. Try again.');
                             // eslint-disable-next-line no-console
                             console.error('grace.testSendThresholdSats update failed:', err);
                         });
@@ -105,31 +118,34 @@ export function SafetySection() {
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                     placeholder="0 = no warning"
                     aria-label="Test-send warning threshold (sats)"
+                    aria-describedby="test-send-threshold-hint"
                     style={{ ...INPUT, width: 140, textAlign: 'right' }}
                 />
             </div>
             {thresholdError ? <Status text={thresholdError} tone="error" /> : null}
+            <div style={ROW}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_LABEL}>Lookalike address warnings</span>
+                    <span style={ROW_HINT}>
+                        The send form warns when an address closely resembles a contact or a previous
+                        recipient.
+                    </span>
+                </div>
+                <span style={ROW_VALUE}>Always on</span>
+            </div>
             <UndoSendRow />
             <BiometricRow />
             <PanicModeRow />
             <DuressPassphraseRow />
             <div style={ROW}>
-                <span style={ROW_LABEL}>Backup reminders</span>
-                <select
-                    value={settings.backupReminders ?? 'off'}
-                    onChange={(e) => {
-                        update({ backupReminders: e.target.value }).catch((err) => {
-                            // eslint-disable-next-line no-console
-                            console.error('backupReminders update failed:', err);
-                        });
-                    }}
-                    aria-label="Backup reminders"
-                    style={SELECT}
-                >
-                    {BACKUP_REMINDER_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                </select>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_LABEL}>Backup reminders</span>
+                    <span style={ROW_HINT}>
+                        Shown automatically for wallets without a verified recovery phrase or
+                        encrypted backup.
+                    </span>
+                </div>
+                <span style={ROW_VALUE}>Automatic</span>
             </div>
         </div>
     );

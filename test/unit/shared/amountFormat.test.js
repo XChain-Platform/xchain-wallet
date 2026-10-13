@@ -16,6 +16,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
     trimAmountTail,
+    tokenAmountPrecisionError,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
 
 // (a): the indexer sums in DECIMAL(65,18), so an aggregate reaches the
@@ -102,5 +103,32 @@ describe('shared/amountFormat caret helpers', () => {
         const mapped = indexAfterNonCommaCount(after, n);
         // 3 non-comma chars into "1,234" is index 4 (after the "3").
         expect(after[mapped - 1]).toBe('3');
+    });
+});
+
+describe('shared/amountFormat token precision validation', () => {
+    it('rejects decimal notation for an indivisible token', () => {
+        expect(tokenAmountPrecisionError('1.5', {
+            divisibility: 0,
+            tick: 'ART',
+        })).toBe('Amount must be a whole number because ART is indivisible.');
+        expect(tokenAmountPrecisionError('1.0', {
+            divisibility: 0,
+            tick: 'ART',
+        })).toBe('Amount must be a whole number because ART is indivisible.');
+        expect(tokenAmountPrecisionError('.5', {
+            divisibility: 0,
+            tick: 'ART',
+        })).toBe('Amount must be a whole number because ART is indivisible.');
+    });
+
+    it('enforces a known positive decimal scale and allows an unknown scale', () => {
+        expect(tokenAmountPrecisionError('1.234', {
+            divisibility: 2,
+            tick: 'CENTS',
+            noun: 'Price',
+        })).toBe('Price can have at most 2 decimal places for CENTS.');
+        expect(tokenAmountPrecisionError('1.23', { divisibility: 2, tick: 'CENTS' })).toBeNull();
+        expect(tokenAmountPrecisionError('1.234', { divisibility: null, tick: 'CENTS' })).toBeNull();
     });
 });

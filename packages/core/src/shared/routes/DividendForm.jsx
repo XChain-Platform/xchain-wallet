@@ -27,7 +27,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     perUnitMax,
     sumHolderUnits,
@@ -480,6 +480,16 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Per-unit amount must be a positive number.');
+            return;
+        }
+        // Keep each payout within the dividend token's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: dividendInfo?.divisibility,
+            tick: dividendTick,
+            noun: 'Per-unit amount',
+        });
+        if (precisionError) {
+            setFormError(precisionError);
             return;
         }
         // Stop a payout the balance cannot cover here, not three

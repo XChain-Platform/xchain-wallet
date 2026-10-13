@@ -42,7 +42,7 @@ const ADDRESSES = {
 // lookup looked plausible: the wrong number and a believable one.
 const HELD = '5000';
 
-function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null } = {}) {
+function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null, divisibility = 0 } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -53,6 +53,7 @@ function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null } 
             maxSupply,
             totalSupply,
             mintMax,
+            divisibility,
             locks: {},
         }),
         // The holdings lookup every other amount form reaches for. Wired
@@ -155,6 +156,16 @@ describe('MintForm sizes off mint headroom, not holdings', () => {
         fireEvent.click(submitButton());
         expect(await screen.findByRole('alert'))
             .toHaveTextContent('Only 3,800 S18PROBE can still be minted.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps an indivisible mint out of review when the amount has decimals', async () => {
+        const messaging = mountMint({ totalSupply: '1200' });
+        await screen.findByText(/3,800 S18PROBE available to mint/);
+        fireEvent.change(await amountField(), { target: { value: '1.5' } });
+        fireEvent.click(submitButton());
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Amount must be a whole number because S18PROBE is indivisible.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 

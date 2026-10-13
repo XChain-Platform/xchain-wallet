@@ -48,6 +48,8 @@
     opacity: 0.9;
     font-size: var(--xc-text-xs);
     line-height: 1.4;
+    max-height: 5.6em;
+    overflow-y: auto;
 }
 
 .staleness {
@@ -75,6 +77,11 @@
 
 .retry:hover {
     background: rgba(0, 0, 0, 0.05);
+}
+
+.retry:disabled {
+    cursor: wait;
+    opacity: 0.7;
 }
 
 /* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */

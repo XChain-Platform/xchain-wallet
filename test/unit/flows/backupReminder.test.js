@@ -9,7 +9,7 @@
 // Unit: flows/backupReminder (§19.7 / G034 + G062). Backup-verified state
 // lives in localStorage keyed by walletId. computeBackupReminderState is
 // the state machine that decides hidden/gentle/firm from verified-at,
-// wallet age, the reminder cadence, and a 24h dismissal window.
+// wallet age, and a 24h snooze window.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
@@ -42,58 +42,15 @@ describe('flows/backupReminder mark + read', () => {
 });
 
 describe('flows/backupReminder computeBackupReminderState (verified wallet)', () => {
-    it('is hidden when the cadence is off', () => {
+    it('stays hidden regardless of the reminder cadence or elapsed time', () => {
         markBackupVerified('w1', '2020-01-01T00:00:00.000Z');
-        const s = computeBackupReminderState({
-            walletId: 'w1',
-            settings: { backupReminders: 'off' },
-            now: Date.now(),
-        });
-        expect(s.kind).toBe('hidden');
-    });
-
-    it('is hidden inside the monthly window and gentle past it', () => {
-        const verifiedMs = Date.parse('2026-01-01T00:00:00.000Z');
-        markBackupVerified('w1', new Date(verifiedMs).toISOString());
-
-        const within = computeBackupReminderState({
-            walletId: 'w1',
-            settings: { backupReminders: 'monthly' },
-            now: verifiedMs + 10 * MS_PER_DAY,
-        });
-        expect(within.kind).toBe('hidden');
-
-        const past = computeBackupReminderState({
-            walletId: 'w1',
-            settings: { backupReminders: 'monthly' },
-            now: verifiedMs + 40 * MS_PER_DAY,
-        });
-        expect(past.kind).toBe('gentle');
-        expect(past.dismissable).toBe(true);
-        expect(past.headline).toMatch(/monthly/i);
-    });
-
-    it('uses the 90-day window for quarterly', () => {
-        const verifiedMs = Date.parse('2026-01-01T00:00:00.000Z');
-        markBackupVerified('w1', new Date(verifiedMs).toISOString());
-        expect(computeBackupReminderState({
-            walletId: 'w1', settings: { backupReminders: 'quarterly' }, now: verifiedMs + 60 * MS_PER_DAY,
-        }).kind).toBe('hidden');
-        expect(computeBackupReminderState({
-            walletId: 'w1', settings: { backupReminders: 'quarterly' }, now: verifiedMs + 100 * MS_PER_DAY,
-        }).headline).toMatch(/quarterly/i);
-    });
-
-    it('is hidden once dismissed even when past the cadence window', () => {
-        const verifiedMs = Date.parse('2026-01-01T00:00:00.000Z');
-        markBackupVerified('w1', new Date(verifiedMs).toISOString());
-        dismissBackupReminder('w1'); // dismissal window uses the real clock
-        const s = computeBackupReminderState({
-            walletId: 'w1',
-            settings: { backupReminders: 'monthly' },
-            now: verifiedMs + 40 * MS_PER_DAY,
-        });
-        expect(s.kind).toBe('hidden');
+        for (const backupReminders of ['off', 'monthly', 'quarterly']) {
+            expect(computeBackupReminderState({
+                walletId: 'w1',
+                settings: { backupReminders },
+                now: Date.parse('2030-01-01T00:00:00.000Z'),
+            })).toEqual({ kind: 'hidden' });
+        }
     });
 
     it('is hidden when the stored timestamp is unparseable', () => {
@@ -127,6 +84,8 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
         });
         expect(s.kind).toBe('gentle');
         expect(s.dismissable).toBe(true);
+        expect(s.headline).toBe('Back up your wallet');
+        expect(s.body).toMatch(/recovery phrase or export an encrypted backup/i);
     });
 
     it('escalates to a non-dismissable firm reminder at 7+ days', () => {
@@ -138,24 +97,25 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
         });
         expect(s.kind).toBe('firm');
         expect(s.dismissable).toBe(false);
+        expect(s.headline).toBe('Back up your wallet');
+        expect(s.body).toMatch(/permanently lock you out/i);
     });
 
-    it('respects dismissal only while still under the firm threshold', () => {
-        dismissBackupReminder('w1');
+    it('honours the full 24-hour snooze across the firm threshold', () => {
+        dismissBackupReminder('w1', created + 6.5 * MS_PER_DAY);
         const stillGentle = computeBackupReminderState({
             walletId: 'w1',
             walletCreatedAt: new Date(created).toISOString(),
             settings: {},
-            now: created + 3 * MS_PER_DAY,
+            now: created + 7 * MS_PER_DAY,
         });
         expect(stillGentle.kind).toBe('hidden');
 
-        // Past 7 days the firm reminder overrides any dismissal.
         const firm = computeBackupReminderState({
             walletId: 'w1',
             walletCreatedAt: new Date(created).toISOString(),
             settings: {},
-            now: created + 9 * MS_PER_DAY,
+            now: created + 7.5 * MS_PER_DAY,
         });
         expect(firm.kind).toBe('firm');
     });
@@ -166,8 +126,9 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
     });
 
     it('is hidden with no createdAt once dismissed', () => {
-        dismissBackupReminder('w1');
-        const s = computeBackupReminderState({ walletId: 'w1', settings: {}, now: Date.now() });
+        const now = Date.parse('2026-06-10T00:00:00.000Z');
+        dismissBackupReminder('w1', now);
+        const s = computeBackupReminderState({ walletId: 'w1', settings: {}, now });
         expect(s.kind).toBe('hidden');
     });
 });
