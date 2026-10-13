@@ -13,7 +13,7 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { useState } from 'react';
-import { Checkbox, SegmentedControl } from '@xchain-wallet/core/ui';
+import { Checkbox, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
@@ -109,6 +109,7 @@ export const SECTIONS = [
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
     { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
+    { id: 'radio-group',           label: 'Radio group',            Component: RadioGroupSection, primitives: ['RadioGroup'] },
     { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
@@ -330,6 +331,68 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
             {label ? <p className="sg-example-label">{label}</p> : null}
             <ViewFrame title={label} minHeight={minHeight} padded={padded}>{children}</ViewFrame>
         </div>
+    );
+}
+
+export function RadioGroupSection() {
+    const [delivery, setDelivery] = useState('private');
+
+    return (
+        <Section
+            id="radio-group"
+            title="Radio group"
+            tag="CANONICAL expanded exclusive choice"
+            kicker="A labelled set of mutually exclusive choices that preserves native radio keyboard behavior."
+        >
+            <Guidance
+                what={<>A native <code>fieldset</code> and <code>legend</code> containing same-name radio inputs, label-wide touch targets, and optional descriptions.</>}
+                when={<>Use when every choice should remain visible and supporting copy helps users compare the options.</>}
+                whenNot={<>Use <a href="#segmented-control">SegmentedControl</a> for two or three compact choices with short labels, or checkboxes when more than one value may be selected.</>}
+                sizing={<>The circle uses <code>--xc-control-icon-md</code>. Every label provides a 44px minimum touch target without enlarging the circle.</>}
+                variants={<>Option descriptions, disabled options or groups, required state, hint text, and error text.</>}
+                doRule={<>Give the group a concise legend, pass one stable value, and let the native inputs provide arrow-key movement.</>}
+                dontRule={<>Do not add route-local keyboard handlers, omit the legend, or use radio buttons for independent on/off settings.</>}
+                supersedes={<>Route-local radio markup for expanded exclusive choices. Use <code>&lt;RadioGroup&gt;</code> from <code>@xchain-wallet/core/ui</code>.</>}
+            />
+            <Markup>
+{`<RadioGroup
+    legend="Delivery visibility"
+    name="delivery"
+    value={delivery}
+    onChange={setDelivery}
+    options={[
+        { value: 'private', label: 'Private', description: 'Only the recipient can read it' },
+        { value: 'public', label: 'Public', description: 'Readable by anyone' },
+    ]}
+/>`}
+            </Markup>
+            <LiveExample label="Delivery visibility">
+                <RadioGroup
+                    legend="Delivery visibility"
+                    name="style-guide-delivery"
+                    value={delivery}
+                    onChange={setDelivery}
+                    options={[
+                        {
+                            value: 'private',
+                            label: 'Private',
+                            description: 'Only the recipient can read it.',
+                        },
+                        {
+                            value: 'public',
+                            label: 'Public',
+                            description: 'Stored as readable chain data.',
+                        },
+                        {
+                            value: 'scheduled',
+                            label: 'Scheduled release',
+                            description: 'Unavailable for this message type.',
+                            disabled: true,
+                        },
+                    ]}
+                />
+            </LiveExample>
+        </Section>
     );
 }
 

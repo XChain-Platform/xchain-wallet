@@ -30,6 +30,7 @@ export { ChoiceControl } from './ChoiceControl.jsx';
 export { Chip } from './Chip.jsx';
 export { Tabs } from './Tabs.jsx';
 export { SegmentedControl } from './SegmentedControl.jsx';
+export { RadioGroup } from './RadioGroup.jsx';
 export { Input } from './Input.jsx';
 export { Select } from './Select.jsx';
 export { Textarea } from './Textarea.jsx';

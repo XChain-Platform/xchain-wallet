@@ -20,7 +20,7 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -403,26 +403,16 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         />
                     </dl>
                 ) : null}
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="feePref"
-                        checked={feePref === '2'}
-                        onChange={() => pick('fee', setFeePref)('2')}
-                    />
-                    <span>Donate to protocol development (default)</span>
-                </label>
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="feePref"
-                        checked={feePref === '1'}
-                        onChange={() => pick('fee', setFeePref)('1')}
-                    />
-                    <span>{feePreferenceLabel(1)}</span>
-                </label>
+                <RadioGroup
+                    legend="Choose how the protocol fee is handled"
+                    name="feePref"
+                    value={feePref}
+                    onChange={pick('fee', setFeePref)}
+                    options={[
+                        { value: '2', label: 'Donate to protocol development (default)' },
+                        { value: '1', label: feePreferenceLabel(1) },
+                    ]}
+                />
             </FormSection>
 
             <FormSection title="Incoming sends">
@@ -438,26 +428,16 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
             </FormSection>
 
             <FormSection title="Dispensers on this address">
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="dispPref"
-                        checked={dispPref === '1'}
-                        onChange={() => pick('dispenser', setDispPref)('1')}
-                    />
-                    <span>Only this address may open dispensers (default)</span>
-                </label>
-                <label className={styles.checkRow}>
-                    {/* A native radio remains because the kit has no radio control. */}
-                    <input
-                        type="radio"
-                        name="dispPref"
-                        checked={dispPref === '2'}
-                        onChange={() => pick('dispenser', setDispPref)('2')}
-                    />
-                    <span>Anyone may open a dispenser funded by this address</span>
-                </label>
+                <RadioGroup
+                    legend="Choose who may open dispensers"
+                    name="dispPref"
+                    value={dispPref}
+                    onChange={pick('dispenser', setDispPref)}
+                    options={[
+                        { value: '1', label: 'Only this address may open dispensers (default)' },
+                        { value: '2', label: 'Anyone may open a dispenser funded by this address' },
+                    ]}
+                />
                 <Input
                     label="Memo (optional)"
                     value={memo}
