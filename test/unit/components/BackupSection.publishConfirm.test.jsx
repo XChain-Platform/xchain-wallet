@@ -187,6 +187,24 @@ describe('BackupSection label publication confirmation', () => {
         expect(await screen.findByLabelText('Wallet password')).toHaveValue('');
     });
 
+    it('shows a recovery message when copying the transaction id is unavailable', async () => {
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+        try {
+            mount();
+            fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+            fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Copy txid' }));
+
+            expect(await screen.findByText(/Copy is not available here/)).toBeTruthy();
+        } finally {
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
+    });
+
     // A transient broadcast failure resolves queued: the signed bytes wait in the
     // broadcast queue, so the panel must not say the labels were published, and the
     // pending batch notice must survive because nothing has landed yet.

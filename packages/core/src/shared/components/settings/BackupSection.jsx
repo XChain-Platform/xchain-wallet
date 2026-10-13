@@ -777,9 +777,13 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
     const [mn, setMn] = useState('');
     const [format, setFormat] = useState(/** @type {'bip39' | 'counterwallet-legacy'} */ ('bip39'));
     const [passphrase, setPassphrase] = useState('');
-    const [gapLimit, setGapLimit] = useState(10);
+    const [gapLimit, setGapLimit] = useState('10');
 
-    const canSubmit = mn.trim().length > 0 && !busy;
+    const gapLimitNumber = Number(gapLimit);
+    const gapLimitValid = /^\d+$/.test(gapLimit)
+        && gapLimitNumber >= 1
+        && gapLimitNumber <= 100;
+    const canSubmit = mn.trim().length > 0 && gapLimitValid && !busy;
 
     return (
         <div style={{
@@ -794,7 +798,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Test backup</div>
             <div style={ROW_HINT}>
                 Enter the recovery phrase from your paper backup (or password manager).
-                The wallet rebuilds the first {gapLimit} addresses on every active chain
+                The wallet rebuilds the first {gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain
                 from it and lists any that don't match. Nothing is saved.
             </div>
             <textarea
@@ -824,8 +828,9 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                         type="number"
                         min={1}
                         max={100}
+                        step={1}
                         value={gapLimit}
-                        onChange={(e) => setGapLimit(Math.max(1, Math.min(100, Number(e.target.value) || 10)))}
+                        onChange={(e) => setGapLimit(e.target.value)}
                         aria-label="Addresses to check"
                         style={{ ...passwordStyle, width: 70 }}
                     />
@@ -842,6 +847,9 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     style={passwordStyle}
                 />
             ) : null}
+            {!gapLimitValid ? (
+                <Status text="Addresses to check must be a whole number from 1 to 100." tone="error" />
+            ) : null}
             {error ? <Status text={error} tone="error" /> : null}
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
@@ -851,7 +859,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                         mnemonic: mn.trim(),
                         format,
                         bip39Passphrase: format === 'bip39' ? passphrase : '',
-                        gapLimit,
+                        gapLimit: gapLimitNumber,
                     })}
                     disabled={!canSubmit}
                     style={{
@@ -1158,6 +1166,23 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
  */
 function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
+    const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
+    const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+
+    const copyTxid = async () => {
+        setCopyStatus(null);
+        setCopyError(null);
+        if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+            setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(txid);
+            setCopyStatus('Transaction ID copied.');
+        } catch {
+            setCopyError('Could not copy the transaction ID. Select it and copy it manually.');
+        }
+    };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.
     if (!txid) {
@@ -1211,11 +1236,7 @@ function PublishLabelsReport({ result, onDone }) {
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 <button
                     type="button"
-                    onClick={() => {
-                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                            navigator.clipboard.writeText(txid).catch(() => {});
-                        }
-                    }}
+                    onClick={copyTxid}
                     style={ACTION_BTN}
                     disabled={!txid}
                 >
@@ -1223,6 +1244,8 @@ function PublishLabelsReport({ result, onDone }) {
                 </button>
                 <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
             </div>
+            {copyStatus ? <Status text={copyStatus} /> : null}
+            {copyError ? <Status text={copyError} tone="error" /> : null}
         </div>
     );
 }
