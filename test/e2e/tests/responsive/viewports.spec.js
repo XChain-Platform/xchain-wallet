@@ -50,6 +50,12 @@ import {
 
 const PASSWORD = 'responsive-pass-1234';
 
+const LOCK_VIEWPORTS = [
+    { name: 'small phone portrait', width: 320, height: 568, keyboardHeight: 300 },
+    { name: 'large phone portrait', width: 412, height: 732, keyboardHeight: 400 },
+    { name: 'phone landscape', width: 732, height: 412, keyboardHeight: 240 },
+];
+
 // Every primary destination the nav offers, minus Scan: that one asks for
 // the camera, and a permission prompt is not a layout.
 const ROUTES = [
@@ -103,7 +109,61 @@ async function expectTappable(page, label) {
     ).toEqual([]);
 }
 
+async function shrinkVisualViewport(page, height) {
+    await page.evaluate((visibleHeight) => {
+        const viewport = window.visualViewport;
+        if (!viewport) throw new Error('visualViewport is unavailable');
+        Object.defineProperty(viewport, 'height', {
+            configurable: true,
+            value: visibleHeight,
+        });
+        viewport.dispatchEvent(new Event('resize'));
+    }, height);
+    await expect(page.locator('html')).toHaveAttribute('data-xc-keyboard', 'open');
+}
+
+async function expectAboveFold(locator, label) {
+    const box = await locator.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+            top: rect.top,
+            bottom: rect.bottom,
+            visibleHeight: window.visualViewport?.height || window.innerHeight,
+        };
+    });
+    expect(box.top, `${label} starts above the visible viewport`).toBeGreaterThanOrEqual(0);
+    expect(box.bottom, `${label} ends below the visible viewport`).toBeLessThanOrEqual(box.visibleHeight);
+}
+
 test.describe('responsive: one interface at every width', () => {
+    test('the lock screen keeps its identity and controls reachable above a phone keyboard', async ({ page }) => {
+        await createWallet(page, { password: PASSWORD, name: 'Responsive wallet' });
+        await page.keyboard.press('ControlOrMeta+l');
+        await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
+
+        for (const viewport of LOCK_VIEWPORTS) {
+            await test.step(viewport.name, async () => {
+                await page.setViewportSize({ width: viewport.width, height: viewport.height });
+                await shrinkVisualViewport(page, viewport.keyboardHeight);
+                await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
+
+                const walletName = page.getByText('XChain Wallet', { exact: true });
+                const password = page.getByLabel('Password');
+                const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
+                const forgot = page.getByRole('button', { name: 'Forgot password?' });
+
+                await expect(walletName).toBeVisible();
+                await expectAboveFold(walletName, `${viewport.name} wallet name`);
+                await expectAboveFold(password, `${viewport.name} password field`);
+                await expectAboveFold(unlock, `${viewport.name} Unlock button`);
+
+                await forgot.scrollIntoViewIfNeeded();
+                await expect(forgot).toBeVisible();
+                await expectAboveFold(forgot, `${viewport.name} Forgot password link`);
+            });
+        }
+    });
+
     test('every primary screen fits, from the 360px popup to desktop', async ({ page }) => {
         test.slow();   // one wallet creation plus a full route walk per width
 

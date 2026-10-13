@@ -393,9 +393,10 @@ export function Locked({ onUnlocked }) {
         <div className={styles.hero}>
             <img
                 src={branding.logoUrl()}
-                alt={branding.PRODUCT_NAME}
+                alt=""
                 className={styles.logo}
             />
+            <span className={styles.walletName}>{branding.PRODUCT_NAME}</span>
         </div>
     );
 
@@ -424,6 +425,7 @@ export function Locked({ onUnlocked }) {
     const form = (
         <FormPage
             label="Unlock wallet"
+            className={styles.unlockForm}
             onSubmit={handleSubmit}
             status={busy && !inCaptureStep ? (
                 <p className={styles.unlockingNote} aria-live="polite">

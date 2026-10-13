@@ -12,6 +12,12 @@
     margin-bottom: var(--xc-space-3);
 }
 
+.walletName {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: var(--xc-text);
+}
+
 @media (min-width: 600px) {
     .hero {
         padding: 0;
@@ -157,7 +163,16 @@
 @media (max-height: 480px) {
     @media not all and (min-width: 600px) {
         .hero {
-            display: none;
+            flex-direction: row;
+            justify-content: center;
+            gap: var(--xc-space-2);
+            padding: 0;
+            margin-bottom: var(--xc-space-2);
+        }
+
+        .logo {
+            width: 40px;
+            margin-bottom: 0;
         }
 
         .lockoutBanner {
@@ -173,9 +188,41 @@
     }
 }
 
-:global(html[data-xc-keyboard='open']) .hero,
-:global(html[data-xc-keyboard='open']) .forgotBlock {
-    display: none;
+:global(html[data-xc-keyboard='open']) .unlockForm {
+    margin-top: 0;
+    padding: 0;
+}
+
+/* The body becomes part of the form's flex flow while the keyboard is open,
+   so the primary action stays above recovery help without making that help
+   unreachable in the screen's scroller. */
+:global(html[data-xc-keyboard='open']) .unlockForm > :first-child {
+    display: contents;
+}
+
+:global(html[data-xc-keyboard='open']) .unlockForm > :last-child {
+    order: 2;
+}
+
+:global(html[data-xc-keyboard='open']) .hero {
+    flex-direction: row;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    padding: 0;
+    margin-bottom: 0;
+}
+
+:global(html[data-xc-keyboard='open']) .logo {
+    width: 40px;
+    margin-bottom: 0;
+}
+
+:global(html[data-xc-keyboard='open']) .forgotBlock,
+:global(html[data-xc-keyboard='open']) .demoExitBlock {
+    order: 3;
+    margin-top: var(--xc-space-2);
+    padding-top: 0;
+    border-top: 0;
 }
 
 :global(html[data-xc-keyboard='open']) .lockoutBanner {
