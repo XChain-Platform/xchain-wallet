@@ -21,8 +21,11 @@ const electron = vi.hoisted(() => {
         userDataDir: '/tmp/xchain-main-entry-test',
         workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     };
+    const ownerWindow = {};
+    const popup = vi.fn();
     class BrowserWindow {
         static instances = [];
+        static fromWebContents = vi.fn(() => ownerWindow);
 
         constructor(options) {
             browserWindowOptions.push(options);
@@ -45,6 +48,8 @@ const electron = vi.hoisted(() => {
         appListeners,
         browserWindowOptions,
         isolatedSession,
+        ownerWindow,
+        popup,
         state,
         app: {
             isPackaged: true,
@@ -57,7 +62,10 @@ const electron = vi.hoisted(() => {
             whenReady: vi.fn(() => new Promise(() => {})),
         },
         BrowserWindow,
-        Menu: { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() },
+        Menu: {
+            buildFromTemplate: vi.fn(() => ({ popup })),
+            setApplicationMenu: vi.fn(),
+        },
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
         screen: {
@@ -338,6 +346,55 @@ describe('desktop main entry point', () => {
         const webview = { preventDefault: vi.fn() };
         handlers.get('will-attach-webview')(webview);
         expect(webview.preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('provides context editing actions without exposing an inspect action', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const handlers = new Map();
+        const contents = {
+            session: electron.session.defaultSession,
+            getURL: () => appIndex,
+            setWindowOpenHandler: vi.fn(),
+            on: vi.fn((name, handler) => { handlers.set(name, handler); }),
+        };
+        electron.appListeners.get('web-contents-created')({}, contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: true,
+            selectionText: 'wallet',
+            editFlags: {
+                canCut: false,
+                canCopy: true,
+                canPaste: false,
+                canSelectAll: true,
+            },
+        });
+
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'cut', enabled: false },
+            { role: 'copy', enabled: true },
+            { role: 'paste', enabled: false },
+            { type: 'separator' },
+            { role: 'selectAll', enabled: true },
+        ]);
+        expect(electron.popup).toHaveBeenLastCalledWith({ window: electron.ownerWindow });
+        expect(electron.BrowserWindow.fromWebContents).toHaveBeenLastCalledWith(contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: 'read-only text',
+            editFlags: { canCopy: true },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'copy', enabled: true },
+        ]);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: '',
+            editFlags: { canCopy: false },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(2);
     });
 
     it('creates the main BrowserWindow with every renderer security control enabled', async () => {
