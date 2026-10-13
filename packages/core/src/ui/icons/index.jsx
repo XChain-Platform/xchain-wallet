@@ -65,6 +65,28 @@ export function PlusIcon() {
     );
 }
 
+export function MintIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8" />
+            <path d="M8 12h8" />
+        </svg>
+    );
+}
+
+export function SweepIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M12 3v10" />
+            <path d="M7 13h10l3 8H4l3-8Z" />
+            <path d="M8 17v4" />
+            <path d="M12 17v4" />
+            <path d="M16 17v4" />
+        </svg>
+    );
+}
+
 export function KeyIcon() {
     return (
         <svg {...STROKE_PROPS}>
@@ -290,9 +312,10 @@ const LABEL_MAP = [
     [/^save\b/, SaveIcon],
     [/^submit\b|^confirm\b|^done\b|^ok\b|^apply\b|^accept\b|^approve\b|^yes\b|^validat/, CheckIcon],
     [/^cancel\b|^close\b|^dismiss\b|^skip\b|^not now\b|^nevermind\b|^reject\b|^deny\b|^no\b/, XIcon],
-    [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b|^sweep\b/, TrashIcon],
+    [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b/, TrashIcon],
     [/^edit\b|^rename\b|^modify\b|^update\b|^compose\b|^write\b|^draft\b/, PencilIcon],
-    [/^mint\b/, PrinterIcon],
+    [/^mint\b/, MintIcon],
+    [/^sweep\b/, SweepIcon],
     [/^transfer\b/, HandshakeIcon],
     [/^new\b|^add\b|^create\b|^generate\b|^issue\b/, PlusIcon],
     [/^refresh\b|^reload\b|^sync\b|^retry\b|^reconnect\b/, RefreshIcon],
