@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -273,6 +273,11 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
     const ContentTag = clickable ? 'button' : 'div';
+    const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
+    const escrowLabel = row.escrowed ? escrowLine(row) : null;
+    const fiatLabel = row.unavailable === 'partial'
+        ? `At least ${formatRowFiat(row, fiat, fiatCurrency)}`
+        : formatRowFiat(row, fiat, fiatCurrency);
     return (
         <div
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
@@ -336,7 +341,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                         ) : null}
                     </div>
-                    <div className={styles.subtitle}>{subtitle}</div>
+                    <div className={styles.subtitle} title={subtitle}>{subtitle}</div>
                 </div>
                 <div className={styles.amounts}>
                     <div className={styles.qty}>
@@ -350,11 +355,11 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             ? '•••••'
                             : row.unavailable === 'all'
                                 ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                                : formatAmount(row.quantity, row.divisibility, numberFormat)}
+                                : <FitAmount title={quantityLabel}>{quantityLabel}</FitAmount>}
                     </div>
                     {row.escrowed ? (
                         <div className={styles.fiat} data-testid="balance-escrowed">
-                            {balancesHidden ? '•••' : escrowLine(row)}
+                            {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
                         </div>
                     ) : null}
                     <div className={styles.fiat}>
@@ -363,8 +368,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             : row.unavailable === 'all'
                                 ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                                 : row.unavailable === 'partial'
-                                    ? <span title={row.unavailableReason || undefined}>At least {formatRowFiat(row, fiat, fiatCurrency)}</span>
-                                    : formatRowFiat(row, fiat, fiatCurrency)}
+                                    ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
+                                    : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
                     </div>
                 </div>
             </ContentTag>
@@ -401,6 +406,55 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 </button>
             ) : null}
         </div>
+    );
+}
+
+function FitAmount({ children, title }) {
+    const containerRef = useRef(null);
+    const innerRef = useRef(null);
+    const [scale, setScale] = useState(1);
+
+    useLayoutEffect(() => {
+        const container = containerRef.current;
+        const inner = innerRef.current;
+        if (!container || !inner) return undefined;
+        let cancelled = false;
+        const measure = () => {
+            if (cancelled) return;
+            inner.style.transform = 'scale(1)';
+            const available = Math.max(0, container.clientWidth - 2);
+            const required = inner.scrollWidth;
+            const next = available > 0 && required > available ? available / required : 1;
+            inner.style.transform = `scale(${next})`;
+            setScale(next);
+        };
+        measure();
+        document.fonts?.ready?.then(measure);
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => {
+                cancelled = true;
+                window.removeEventListener('resize', measure);
+            };
+        }
+        const observer = new ResizeObserver(measure);
+        observer.observe(container);
+        return () => {
+            cancelled = true;
+            observer.disconnect();
+        };
+    }, [children]);
+
+    return (
+        <span ref={containerRef} className={styles.amountFit} title={title}>
+            <span
+                ref={innerRef}
+                className={styles.amountFitInner}
+                style={{ transform: `scale(${scale})` }}
+            >
+                {children}
+            </span>
+        </span>
     );
 }
 

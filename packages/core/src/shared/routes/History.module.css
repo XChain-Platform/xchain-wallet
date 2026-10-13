@@ -439,8 +439,10 @@
 
 .rowMeta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -448,6 +450,7 @@
 .rowSummary {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -498,7 +501,10 @@
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    word-break: break-all;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
@@ -1319,5 +1325,7 @@
 .pendingAmount {
     font-style: italic;
     color: var(--xc-text-muted);
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
 }
