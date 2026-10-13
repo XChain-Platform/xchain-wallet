@@ -90,6 +90,7 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
             target: { files: [file] },
         });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
 
         expect(await screen.findByText('Imported 1 contact; 1 skipped.')).toBeTruthy();
         const summary = screen.getByText('Skipped contacts (1)');
@@ -116,6 +117,7 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
             target: { files: [file] },
         });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
 
         expect(await screen.findByText('Imported 1 contact; 1 skipped.')).toBeTruthy();
         expect(saveContact).toHaveBeenCalledWith({

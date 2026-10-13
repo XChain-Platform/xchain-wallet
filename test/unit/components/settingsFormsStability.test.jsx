@@ -3,17 +3,18 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let settings;
 let update;
+let messaging;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ shell: 'web', messaging: { sendHoldCancel: vi.fn() } }),
+    useMessaging: () => ({ shell: 'web', messaging }),
 }));
 vi.mock('../../../packages/core/src/shared/components/settings/BiometricRow.jsx', () => ({ BiometricRow: () => null }));
 vi.mock('../../../packages/core/src/shared/components/settings/PanicModeRow.jsx', () => ({ PanicModeRow: () => null }));
@@ -22,6 +23,9 @@ vi.mock('../../../packages/core/src/shared/components/settings/UndoSendRow.jsx',
 
 const { LanguageRegionSection } = await import(
     '../../../packages/core/src/shared/components/settings/LanguageRegionSection.jsx'
+);
+const { ContactsSection } = await import(
+    '../../../packages/core/src/shared/components/settings/ContactsSection.jsx'
 );
 const { SafetySection } = await import(
     '../../../packages/core/src/shared/components/settings/SafetySection.jsx'
@@ -39,6 +43,11 @@ const { WalletModeSection } = await import(
 beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
+    messaging = {
+        sendHoldCancel: vi.fn(),
+        listContacts: vi.fn(async () => []),
+        saveContact: vi.fn(async () => {}),
+    };
 });
 
 afterEach(() => cleanup());
@@ -64,6 +73,41 @@ describe('settings form validation', () => {
 
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByText(/three-letter ISO currency code/)).toBeTruthy();
+    });
+
+    it('uses shared wrapping rows and describes language and currency effects', () => {
+        render(<LanguageRegionSection />);
+
+        const languageRow = screen.getByLabelText('Language').parentElement;
+        expect(languageRow.style.flexWrap).toBe('wrap');
+        expect(screen.getByText(/language used for wallet navigation/)).toBeTruthy();
+        expect(screen.getByText(/Asset balances are unchanged/)).toBeTruthy();
+    });
+
+    it('confirms contact imports through a danger action', async () => {
+        render(<ContactsSection />);
+        await screen.findByText('0 contacts stored');
+
+        const importButton = screen.getByRole('button', { name: 'Import…' });
+        expect(importButton.className).toMatch(/danger/);
+        const importRow = screen.getByText('Import').parentElement.parentElement;
+        expect(importRow.style.border).toBe('1px solid var(--xc-border)');
+
+        const file = {
+            name: 'contacts.json',
+            text: vi.fn(async () => JSON.stringify([{ id: 'contact-1', name: 'Alice' }])),
+        };
+        fireEvent.change(screen.getByLabelText('Import contacts JSON'), {
+            target: { files: [file] },
+        });
+
+        expect(await screen.findByRole('dialog', { name: 'Import contacts?' })).toBeTruthy();
+        expect(messaging.saveContact).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Import contacts' }));
+
+        await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
+            record: { id: 'contact-1', name: 'Alice' },
+        }));
     });
 
     it('does not turn an empty test-send threshold into zero', () => {
