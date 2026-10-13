@@ -3,8 +3,8 @@
     flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    border-radius: var(--xc-radius-md);
+    padding: var(--xc-card-pad);
+    border-radius: var(--xc-card-radius);
     margin-bottom: var(--xc-space-3);
     border: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);

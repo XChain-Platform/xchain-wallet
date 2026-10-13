@@ -3,11 +3,11 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-card-pad);
     margin-bottom: var(--xc-space-3);
     background: var(--xc-warning-bg, var(--xc-bg-muted));
     border: 1px solid var(--xc-warning, var(--xc-border-strong));
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
 }
