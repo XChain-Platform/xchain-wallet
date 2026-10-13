@@ -393,19 +393,15 @@ fieldset {
     min-width: 0;
 }
 
-/* iOS WebKit zooms the whole page in when a form control under 16px takes
- * focus, and the zoom stays after the keyboard closes: the layout runs off
- * the right edge and the shell can be dragged sideways. Every Input is 14px
- * (--xc-text-md), so tapping Send's From field zoomed an iPhone 17 Pro
- * simulator by 1.14 (2026-10-12). The 16px floor is the documented way to
- * stop it without disabling pinch zoom. -webkit-touch-callout exists only in
- * iOS WebKit, so Android, desktop and macOS Safari keep their sizes. The
- * !important outranks the module classes and inline styles that set 14px. */
-@supports (-webkit-touch-callout: none) {
+/* iOS WebKit zooms the page when a focused form control renders below 16px.
+ * Keep narrow layouts at that floor without disabling pinch zoom or changing
+ * the compact control sizes on desktop. !important also covers module and
+ * inline font declarations on shared form controls. */
+@media (max-width: 599px) {
     input:not([type='checkbox']):not([type='radio']):not([type='range']),
     select,
     textarea {
-        font-size: 16px !important;
+        font-size: 1rem !important;
     }
 }
 
