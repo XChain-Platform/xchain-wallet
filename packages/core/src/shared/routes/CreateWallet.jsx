@@ -272,7 +272,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
-    const screenHeader = (
+    // The verify step keeps its in-form step-back beside the submit action.
+    // Omitting the chevron there leaves one Back control and one primary action.
+    const screenHeader = stage === 'verify' ? null : (
         <div className={pickerStyles.header}>
             <Button
                 type="button"

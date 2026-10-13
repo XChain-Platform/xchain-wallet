@@ -76,7 +76,7 @@
 }
 
 /* Filled variants pair each semantic background with its contrast-tested
- * label token. Fixed slate and purple fills keep their white labels. */
+ * label token. */
 
 .primary {
     background: var(--xc-accent-primary);
@@ -87,12 +87,13 @@
 }
 
 .secondary {
-    background: var(--xc-accent-secondary);
-    color: #FFFFFF;
-    border-color: var(--xc-accent-secondary);
+    background: transparent;
+    color: var(--xc-accent-text);
+    border-color: var(--xc-border-strong);
 }
 .secondary:hover:not(:disabled) {
-    filter: brightness(0.92);
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-accent-text);
 }
 
 /* Ghost gets a neutral slate fill so white text reads clearly in both
