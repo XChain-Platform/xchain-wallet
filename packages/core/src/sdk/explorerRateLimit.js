@@ -16,7 +16,7 @@
 // (BTC, LTC and DOGE all live on one host) and by every other device behind
 // the same address. So the state lives per HOST, not per SDK instance:
 //   - a 429 pauses the whole host until the wait it named, and the request
-//     that hit it is retried a bounded number of times with jittered backoff;
+//     that hit it is retried when it is a GET, with bounded jittered backoff;
 //   - after a 429 one trial request goes first and the rest wait for its answer;
 //   - identical GETs already in flight share one network request;
 //   - when `ratelimit-remaining` runs low, requests are spaced out over what
@@ -260,15 +260,16 @@ export class HostRateLimiter {
      * @param {string|null} key   coalescing key for an idempotent GET, null otherwise
      * @param {() => Promise<any>} send
      * @param {(seconds: number) => any} tooLong  builds the error for a pause past the cap
+     * @param {number} [maxRetries] retries available to this HTTP method
      */
-    async request(host, key, send, tooLong) {
+    async request(host, key, send, tooLong, maxRetries = this.opts.maxRetries) {
         if (key) {
             const recent = this.recent.get(key);
             if (recent && this.now() - recent.at <= this.opts.reuseMs) return cloneResponse(recent.res);
             const pending = this.inFlight.get(key);
             if (pending) return pending.then(cloneResponse);
         }
-        const run = this.attempt(host, send, tooLong);
+        const run = this.attempt(host, send, tooLong, maxRetries);
         if (!key) return run;
         this.inFlight.set(key, run);
         try {
@@ -288,7 +289,7 @@ export class HostRateLimiter {
         for (const [k, v] of this.recent) if (v.at < cutoff) this.recent.delete(k);
     }
 
-    async attempt(host, send, tooLong) {
+    async attempt(host, send, tooLong, maxRetries) {
         const st = this.state(host);
         const deadline = this.now() + this.opts.maxTotalMs;
         let retries = 0;
@@ -328,7 +329,7 @@ export class HostRateLimiter {
                 const wait = named !== null ? named : this.backoffMs(Math.max(retries, st.strikes - 1));
                 this.block(host, wait);
                 // Out of retries, or asked to wait longer than the cap: surface it.
-                if (retries >= this.opts.maxRetries || wait > this.opts.maxWaitMs) throw err;
+                if (retries >= maxRetries || wait > this.opts.maxWaitMs) throw err;
                 retries += 1;
             } finally {
                 if (endTrial) {
@@ -361,7 +362,7 @@ function hostOf(client) {
     }
 }
 
-/** Route one axios instance's get and post through the limiter (idempotent). */
+/** Route one axios instance's reads through the limiter; only GET may retry. */
 function wrapAxios(client, limiter) {
     if (!client || client.__xcRateLimited || typeof client.get !== 'function') return;
     const host = hostOf(client);
@@ -377,6 +378,7 @@ function wrapAxios(client, limiter) {
     if (post) {
         client.post = (url, body, config = {}) => limiter.request(
             host, null, () => post(url, body, config), (s) => pausedError(s, config),
+            0,
         );
     }
     client.__xcRateLimited = true;
@@ -445,7 +447,10 @@ function wrapExplorerClient(explorer, limiter) {
         if (typeof original !== 'function') continue;
         explorer[method] = async function rateLimitAwareCall(...args) {
             try {
-                return await original.apply(this, args);
+                const callArgs = method === 'post'
+                    ? [args[0], args[1], { ...(args[2] || {}), noRetry: true }]
+                    : args;
+                return await original.apply(this, callArgs);
             } catch (err) {
                 throw friendlyRateLimitError(err, limiter.pausedSeconds(hostOf(this.client)));
             }

@@ -76,6 +76,26 @@ describe('useNativeFiatRates', () => {
         expect(result.current).toEqual({});
         expect(calls).toEqual([]);
     });
+
+    it('aborts an in-flight price request on unmount', async () => {
+        let requestSignal;
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async (_url, init) => new Promise((_resolve, reject) => {
+                requestSignal = init.signal;
+                init.signal.addEventListener('abort', () => reject(
+                    Object.assign(new Error('aborted'), { name: 'AbortError' }),
+                ));
+            }),
+        });
+        const { unmount } = renderHook(() => useNativeFiatRates({ chainCoins: ['bitcoin'] }));
+        await waitFor(() => expect(requestSignal).toBeDefined());
+
+        unmount();
+
+        expect(requestSignal.aborted).toBe(true);
+    });
 });
 
 describe('priceNativeRows', () => {
