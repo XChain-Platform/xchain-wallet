@@ -46,6 +46,25 @@ export function ConfirmModal({
     onCancel,
 }) {
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
+    const confirmingRef = useRef(false);
+    const confirm = useCallback((event) => {
+        event?.preventDefault();
+        // Hold the first activation while the parent closes the dialog or exposes its busy state.
+        if (busy || confirmingRef.current) return;
+        confirmingRef.current = true;
+        const release = () => { confirmingRef.current = false; };
+        try {
+            const result = onConfirm();
+            if (result && typeof result.then === 'function') {
+                Promise.resolve(result).then(release, release);
+            } else {
+                setTimeout(release, 0);
+            }
+        } catch (error) {
+            release();
+            throw error;
+        }
+    }, [busy, onConfirm]);
     const rootRef = useRef(null);
     const panelRef = useRef(null);
     const titleId = useId();
@@ -87,7 +106,7 @@ export function ConfirmModal({
                     <Button
                         variant={danger ? 'danger' : 'primary'}
                         block
-                        onClick={onConfirm}
+                        onClick={confirm}
                         loading={busy}
                         disabled={busy}
                     >
