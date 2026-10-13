@@ -19,6 +19,7 @@ styles); that lives in Playwright at `test/e2e/`.
 ```
 test/a11y/
 ├── helpers/    shared axe assertions
+├── shells/     complete shell and route compositions
 ├── ui/         primitive components
 └── routes/     full route renders and the route coverage inventory
 ```
@@ -29,8 +30,10 @@ route fail the accessibility suite until its coverage status is recorded.
 
 The runtime route suite renders Send, Receive, History's ActionDetail,
 TokenDetail, Settings and its drilldown sections, and Onboarding's license,
-explainer, and welcome steps. `coverage.a11y.test.js` contains the complete,
-machine-checked list of route modules that remain unrendered by axe.
+explainer, and welcome steps. It also renders Home and Settings inside the
+desktop shell's wide side navigation and persistent header. The
+`coverage.a11y.test.js` inventory contains the complete, machine-checked list
+of route modules that remain unrendered by axe.
 
 ## Run
 

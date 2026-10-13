@@ -11,6 +11,7 @@ const routeModules = import.meta.glob(
 
 const ROUTES_RENDERED_BY_AXE = [
     'ActionDetail',
+    'Home',
     'Onboarding',
     'OnboardingCarousel',
     'Receive',
@@ -70,7 +71,6 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'GatedPublishForm',
     'GovernancePolls',
     'History',
-    'Home',
     'ImportWallet',
     'IssueTokenForm',
     'LinkForm',
@@ -160,6 +160,7 @@ describe('a11y route coverage inventory', () => {
             'Receive',
             'ActionDetail',
             'TokenDetail',
+            'Home',
             'Settings',
             'Onboarding',
             'OnboardingCarousel',
