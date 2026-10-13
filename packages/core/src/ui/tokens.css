@@ -100,17 +100,32 @@
     --xc-radius-xs: 2px;
     --xc-radius-sm: 4px;
     --xc-radius-md: 8px;
-    --xc-radius-control: 10px;
+    --xc-radius-control: var(--xc-control-radius);
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
-    /* Text controls share one visual scale across native and custom fields. */
-    --xc-control-h-sm: 32px;
-    --xc-control-h-md: 40px;
-    --xc-control-h-lg: 48px;
-    --xc-control-radius: var(--xc-radius-md);
-    --xc-control-font: var(--xc-text-md);
-    --xc-control-pad-x: var(--xc-space-3);
+    /* Controls share one measured scale across native and custom fields. */
+    --xc-control-h-sm: 28px;
+    --xc-control-h-md: 36px;
+    --xc-control-h-lg: 44px;
+    --xc-control-font-sm: 13px;
+    --xc-control-font-md: 14px;
+    --xc-control-font-lg: 16px;
+    --xc-control-pad-x-sm: 8px;
+    --xc-control-pad-x-md: 12px;
+    --xc-control-pad-x-lg: 16px;
+    --xc-button-pad-x-sm: 12px;
+    --xc-button-pad-x-md: 16px;
+    --xc-button-pad-x-lg: 20px;
+    --xc-control-icon-sm: 16px;
+    --xc-control-icon-md: 20px;
+    --xc-control-icon-lg: 24px;
+    --xc-control-line: 1.25;
+    --xc-control-radius: 8px;
+    --xc-control-border: 1px;
+    --xc-control-hit-min: 24px;
+    --xc-control-font: var(--xc-control-font-md);
+    --xc-control-pad-x: var(--xc-control-pad-x-md);
 
     /* Shared stacking contexts stay ordered across every shell. */
     --xc-z-base: 1;
@@ -673,6 +688,19 @@ fieldset {
     select,
     textarea {
         font-size: 1rem !important;
+        font-size: var(--xc-control-font-md) !important;
+    }
+}
+
+@media (pointer: coarse), (hover: none) {
+    :root {
+        --xc-control-h-sm: 36px;
+        --xc-control-h-md: 44px;
+        --xc-control-h-lg: 48px;
+        --xc-control-font-sm: 1rem;
+        --xc-control-font-md: 1rem;
+        --xc-control-font-lg: 1.0625rem;
+        --xc-control-hit-min: 44px;
     }
 }
 
@@ -682,14 +710,16 @@ fieldset {
  * Input field look. :where() keeps the specificity at zero, so a select's
  * own inline style or a later rule still wins. */
 :where(select:not([class])) {
-    padding: var(--xc-space-1) var(--xc-space-2);
+    height: var(--xc-control-h-md, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-md, 12px);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, 14px);
+    line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background-color: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    min-height: var(--xc-control-h-md);
+    border: var(--xc-control-border, 1px) solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius, 8px);
     max-width: 100%;
 }
 

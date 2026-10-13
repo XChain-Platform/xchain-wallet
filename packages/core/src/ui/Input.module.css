@@ -1,6 +1,8 @@
 .field {
     --xc-control-height: var(--xc-control-h-md);
-    --xc-control-hit-inset: -2px 0;
+    --xc-control-font-size: var(--xc-control-font-md, 14px);
+    --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
+    --xc-control-icon-size: var(--xc-control-icon-md, 20px);
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -8,17 +10,23 @@
 
 .sm {
     --xc-control-height: var(--xc-control-h-sm);
-    --xc-control-hit-inset: -6px 0;
+    --xc-control-font-size: var(--xc-control-font-sm, 13px);
+    --xc-control-padding-x: var(--xc-control-pad-x-sm, 8px);
+    --xc-control-icon-size: var(--xc-control-icon-sm, 16px);
 }
 
 .md {
     --xc-control-height: var(--xc-control-h-md);
-    --xc-control-hit-inset: -2px 0;
+    --xc-control-font-size: var(--xc-control-font-md, 14px);
+    --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
+    --xc-control-icon-size: var(--xc-control-icon-md, 20px);
 }
 
 .lg {
     --xc-control-height: var(--xc-control-h-lg);
-    --xc-control-hit-inset: 0;
+    --xc-control-font-size: var(--xc-control-font-lg, 16px);
+    --xc-control-padding-x: var(--xc-control-pad-x-lg, 16px);
+    --xc-control-icon-size: var(--xc-control-icon-lg, 24px);
 }
 
 .label {
@@ -31,11 +39,12 @@
 .input {
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-control-font);
+    font-size: var(--xc-control-font-size, 14px);
+    line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
+    border: var(--xc-control-border, 1px) solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius, 8px);
     min-width: 0;
     max-width: 100%;
     width: 100%;
@@ -44,8 +53,9 @@
 }
 
 .input:not(textarea) {
-    height: var(--xc-control-height);
-    padding: 0 var(--xc-control-pad-x);
+    height: var(--xc-control-height, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-control-padding-x, 12px);
 }
 
 .controlHitArea {
@@ -75,9 +85,13 @@
 .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
     cursor: pointer;
     opacity: 0.7;
+    width: var(--xc-tap-min, 24px);
+    height: var(--xc-tap-min, 24px);
+    background-size: var(--xc-control-icon-size, 20px) var(--xc-control-icon-size, 20px);
     margin-inline-start: var(--xc-space-1);
-    min-width: var(--xc-tap-min);
-    min-height: var(--xc-tap-min);
+    min-width: var(--xc-tap-min, 24px);
+    min-height: var(--xc-tap-min, 24px);
+    padding: 0;
     filter: invert(var(--xc-date-picker-invert, 0));
 }
 
@@ -102,7 +116,11 @@
     .controlHitArea::before {
         content: '';
         position: absolute;
-        inset: var(--xc-control-hit-inset);
+        top: 50%;
+        left: 0;
+        width: 100%;
+        height: max(100%, var(--xc-control-hit-min, 24px));
+        transform: translateY(-50%);
     }
 }
 

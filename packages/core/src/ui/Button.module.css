@@ -1,16 +1,21 @@
 .btn {
     --xc-button-height: var(--xc-control-h-md);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
     position: relative;
-    min-height: var(--xc-button-height);
-    padding: 0 var(--xc-control-pad-x);
-    border-radius: var(--xc-control-radius);
-    border: 1px solid transparent;
+    min-height: var(--xc-button-height, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-button-padding-x, 16px);
+    border-radius: var(--xc-control-radius, 8px);
+    border: var(--xc-control-border, 1px) solid transparent;
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-control-font);
+    font-size: var(--xc-button-font-size, 14px);
+    line-height: var(--xc-control-line, 1.25);
     font-weight: 600;
     cursor: pointer;
     transition: background var(--xc-transition), border-color var(--xc-transition);
@@ -50,20 +55,26 @@
 
 .md {
     --xc-button-height: var(--xc-control-h-md);
-    --xc-icon-size: var(--xc-icon-md);
-    min-height: var(--xc-control-h-md, 40px);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
+    min-height: var(--xc-control-h-md, 36px);
 }
 
 .sm {
     --xc-button-height: var(--xc-control-h-sm);
-    --xc-icon-size: var(--xc-icon-sm);
-    min-height: var(--xc-control-h-sm, 32px);
+    --xc-button-font-size: var(--xc-control-font-sm, 13px);
+    --xc-button-padding-x: var(--xc-button-pad-x-sm, 12px);
+    --xc-icon-size: var(--xc-control-icon-sm, 16px);
+    min-height: var(--xc-control-h-sm, 28px);
 }
 
 .lg {
     --xc-button-height: var(--xc-control-h-lg);
-    --xc-icon-size: var(--xc-icon-md);
-    min-height: var(--xc-control-h-lg, 48px);
+    --xc-button-font-size: var(--xc-control-font-lg, 16px);
+    --xc-button-padding-x: var(--xc-button-pad-x-lg, 20px);
+    --xc-icon-size: var(--xc-control-icon-lg, 24px);
+    min-height: var(--xc-control-h-lg, 44px);
 }
 
 .iconOnly {
@@ -76,16 +87,14 @@
     width: 100%;
 }
 
-@media (pointer: coarse) {
-    .btn::after {
+@media (pointer: coarse), (hover: none) {
+    .sm::before {
         content: '';
         position: absolute;
         top: 50%;
         left: 50%;
-        width: 100%;
-        height: 100%;
-        min-width: 44px;
-        min-height: 44px;
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
         transform: translate(-50%, -50%);
     }
 }

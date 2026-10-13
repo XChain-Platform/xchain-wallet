@@ -26,7 +26,7 @@ const componentCss = readdirSync(componentsDir)
 
 const expectedTokens = new Map([
     ['--xc-radius-xs', '2px'],
-    ['--xc-radius-control', '10px'],
+    ['--xc-radius-control', 'var(--xc-control-radius)'],
     ['--xc-shadow-header-menu', '0 8px 20px rgba(0, 0, 0, 0.18)'],
     ['--xc-shadow-toast', '0 8px 24px rgba(0, 0, 0, 0.15)'],
     ['--xc-shadow-popover', '0 12px 30px rgba(0, 0, 0, 0.18)'],
