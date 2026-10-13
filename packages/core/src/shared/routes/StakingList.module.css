@@ -8,33 +8,22 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .searchField {
-    flex: 1 1 0;
+    flex: 1 1 12rem;
     min-width: 0;
+}
+
+.toolbar > * {
+    flex-basis: 12rem;
+    max-width: 100%;
 }
 
 .searchField > * {
     margin-bottom: 0;
-}
-
-.search {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
 }
 
 /* Per-row unclaimed-reward indicator (§42.7.4: claimable rewards stay
