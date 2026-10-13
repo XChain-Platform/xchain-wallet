@@ -13,11 +13,15 @@ import { Section, Guidance, LiveExample } from '../StyleGuidePage.jsx';
 const SPACING = [
     { token: '--xc-space-1', value: '4px',  role: 'Inside-control gap (icon → label, label → counter pill)' },
     { token: '--xc-space-2', value: '8px',  role: 'Sibling controls in a row, AppHeader button gap' },
-    { token: '--xc-space-3', value: '12px', role: 'Card padding (default), field margin, tab padding' },
+    { token: '--xc-space-3', value: '12px', role: 'Compact card and tab padding' },
     { token: '--xc-space-4', value: '16px', role: 'Big-field input horizontal padding' },
     { token: '--xc-space-5', value: '20px', role: 'Loose-cluster spacing' },
     { token: '--xc-space-6', value: '24px', role: 'Card outer padding (main surface card)' },
     { token: '--xc-space-8', value: '32px', role: 'Section breaks, page-level vertical rhythm' },
+    { token: '--xc-form-gap', value: '16px', role: 'Between form fields' },
+    { token: '--xc-label-gap', value: '4px', role: 'From a field label to its control' },
+    { token: '--xc-help-gap', value: '4px', role: 'From a control to help or error text' },
+    { token: '--xc-section-gap', value: '24px', role: 'Between form sections' },
 ];
 
 const RADII = [

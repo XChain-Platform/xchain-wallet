@@ -39,6 +39,12 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
+    /* Form rhythm stays consistent across shared fields and page templates. */
+    --xc-form-gap: var(--xc-space-4);
+    --xc-label-gap: var(--xc-space-1);
+    --xc-help-gap: var(--xc-space-1);
+    --xc-section-gap: var(--xc-space-6);
+
     /* Screen owns page-edge spacing so route content stays geometry-free. */
     --xc-page-gutter: var(--xc-space-3);
     --xc-page-top: var(--xc-space-3);

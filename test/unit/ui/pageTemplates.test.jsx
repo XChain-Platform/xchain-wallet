@@ -26,6 +26,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary.jsx';
 import { FormSection } from '../../../packages/core/src/ui/FormSection.jsx';
+import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import { EmptyState } from '../../../packages/core/src/ui/EmptyState.jsx';
 import { SectionHeader } from '../../../packages/core/src/ui/SectionHeader.jsx';
@@ -369,6 +370,23 @@ describe('<FormSection>', () => {
     it('takes a lower heading level when nested', () => {
         render(<FormSection title="Fee" headingLevel="h3"><span /></FormSection>);
         expect(screen.getByRole('heading', { level: 3, name: 'Fee' })).toBeInTheDocument();
+    });
+
+    it('separates sibling fields with the shared form gap token', () => {
+        render(
+            <FormSection title="Recipient">
+                <Input label="Address" />
+                <Input label="Amount" />
+            </FormSection>,
+        );
+
+        const addressField = screen.getByLabelText('Address').parentElement;
+        const amountField = screen.getByLabelText('Amount').parentElement;
+        expect(addressField.parentElement).toBe(amountField.parentElement);
+        expect([...addressField.parentElement.children]).toEqual([addressField, amountField]);
+        expect(ruleBody(css('FormPage.module.css'), '.sectionBody'))
+            .toMatch(/gap:\s*var\(--xc-form-gap\)/);
+        expect(css('tokens.css')).toMatch(/--xc-form-gap:\s*var\(--xc-space-4\)/);
     });
 });
 

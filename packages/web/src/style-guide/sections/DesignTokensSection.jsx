@@ -60,11 +60,15 @@ export const TOKEN_GROUPS = [
         tokens: [
             token('--xc-space-1', '4px', 'Tight inline gap', 'length'),
             token('--xc-space-2', '8px', 'Compact control gap', 'length'),
-            token('--xc-space-3', '12px', 'Default field and card gap', 'length'),
+            token('--xc-space-3', '12px', 'Compact card and tab padding', 'length'),
             token('--xc-space-4', '16px', 'Default content padding', 'length'),
             token('--xc-space-5', '20px', 'Loose cluster spacing', 'length'),
             token('--xc-space-6', '24px', 'Large surface padding', 'length'),
             token('--xc-space-8', '32px', 'Section separation', 'length'),
+            token('--xc-form-gap', 'var(--xc-space-4)', 'Gap between form fields', 'length'),
+            token('--xc-label-gap', 'var(--xc-space-1)', 'Gap from a field label to its control', 'length'),
+            token('--xc-help-gap', 'var(--xc-space-1)', 'Gap from a control to its help or error text', 'length'),
+            token('--xc-section-gap', 'var(--xc-space-6)', 'Gap between form sections', 'length'),
         ],
     },
     {

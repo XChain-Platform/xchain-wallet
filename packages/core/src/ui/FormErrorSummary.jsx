@@ -55,7 +55,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             <p style={{ margin: 0, fontWeight: 600 }}>
                 {errors.length === 1 ? 'Fix this field:' : `Fix these ${errors.length} fields:`}
             </p>
-            <ul style={{ margin: 'var(--xc-space-2) 0 0', paddingInlineStart: 'var(--xc-space-5)' }}>
+            <ul style={{ margin: 'var(--xc-help-gap) 0 0', paddingInlineStart: 'var(--xc-space-5)' }}>
                 {errors.map((error, index) => (
                     <li key={`${error.id || 'form'}-${index}`}>
                         {error.id ? (
@@ -76,7 +76,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
                     type="button"
                     onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
                     style={{
-                        marginTop: 'var(--xc-space-2)',
+                        marginTop: 'var(--xc-help-gap)',
                         color: 'inherit',
                         background: 'transparent',
                         border: 0,
