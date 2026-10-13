@@ -79,6 +79,10 @@ describe('Locked forgot-password wipe', () => {
         fireEvent.change(password, { target: { value: 'secret' } });
         password.focus();
         await user.tab();
+        expect(screen.getByRole('button', { name: 'Show password' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toHaveFocus();
+        await user.tab();
         const trigger = screen.getByRole('button', { name: 'Forgot password?' });
         expect(trigger).toHaveFocus();
         await user.keyboard('{Enter}');
@@ -89,7 +93,7 @@ describe('Locked forgot-password wipe', () => {
         expect(trigger).toHaveFocus();
         expect(wipeWalletStorage).not.toHaveBeenCalled();
 
-        await user.tab();
+        await user.tab({ shift: true });
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toHaveFocus();
         await user.keyboard('{Enter}');
         await waitFor(() => expect(messaging.unlockWallet).toHaveBeenCalledWith('secret'));

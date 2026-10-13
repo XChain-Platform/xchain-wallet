@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     getLockoutState,
@@ -74,6 +74,7 @@ export function Locked({ onUnlocked }) {
     const variant = screenVariantFor(shell);
 
     const [password, setPassword] = useState('');
+    const [passwordVisible, setPasswordVisible] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     // §15.6 step 2. The unlock reply, not this screen, decides whether a
     // passphrase is ever asked for: the vault is sealed until the password
@@ -544,7 +545,15 @@ export function Locked({ onUnlocked }) {
                 </p>
             ) : null}
             actions={(
-                <>
+                <div className={styles.unlockActions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={busy}
+                        disabled={password.length === 0 || isLockedOut}
+                    >
+                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
+                    </Button>
                     {biometricAvailable ? (
                         <Button
                             type="button"
@@ -555,15 +564,119 @@ export function Locked({ onUnlocked }) {
                             Use biometrics
                         </Button>
                     ) : null}
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={busy}
-                        disabled={password.length === 0 || isLockedOut}
-                    >
-                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
-                    </Button>
-                </>
+                    {demoWalletId ? (
+                        <div className={styles.demoExitBlock}>
+                            <p className={styles.demoExitNote}>
+                                This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.
+                            </p>
+                            <Button
+                                type="button"
+                                variant="danger"
+                                onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
+                            >
+                                Exit demo &amp; wipe
+                            </Button>
+                            {demoWipeError && !demoConfirmOpen ? (
+                                <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
+                            ) : null}
+                            {demoConfirmOpen ? (
+                                <DemoExitConfirm
+                                    busy={demoWipeBusy}
+                                    error={demoWipeError}
+                                    message="This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This cannot be undone."
+                                    onConfirm={handleExitDemo}
+                                    onCancel={() => { setDemoConfirmOpen(false); setDemoWipeError(null); }}
+                                />
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div className={styles.forgotBlock}>
+                            <button
+                                ref={forgotTriggerRef}
+                                type="button"
+                                className={styles.forgotLink}
+                                onClick={() => setForgotOpen(true)}
+                                aria-expanded={forgotOpen}
+                                aria-controls="locked-forgot-password-panel"
+                                hidden={forgotOpen}
+                            >
+                                Forgot password?
+                            </button>
+                            {forgotOpen ? (
+                                <div
+                                    ref={forgotDialogRef}
+                                    id="locked-forgot-password-panel"
+                                    className={styles.wipeConfirm}
+                                    role="alertdialog"
+                                    aria-modal="false"
+                                    aria-label="Restore wallet access"
+                                >
+                                    {!restoreLane ? (
+                                        <>
+                                            <p className={styles.wipeNote}>
+                                                <strong>Your password cannot be recovered or reset.</strong>{' '}
+                                                You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.
+                                            </p>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={() => setRestoreLane('mnemonic')}
+                                            >
+                                                Use recovery phrase
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={() => setRestoreLane('backup')}
+                                            >
+                                                Use backup file
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className={styles.wipeWarning}>
+                                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
+                                            </p>
+                                            <p className={styles.wipeNote}>
+                                                Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
+                                            </p>
+                                            <Input
+                                                type="text"
+                                                label="Type WIPE to confirm"
+                                                value={wipeConfirmText}
+                                                onChange={(e) => setWipeConfirmText(e.target.value)}
+                                                autoComplete="off"
+                                                autoCapitalize="characters"
+                                                disabled={wipeBusy}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="danger"
+                                                onClick={handleForgotPasswordWipe}
+                                                loading={wipeBusy}
+                                                disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
+                                            >
+                                                Erase vault and restore
+                                            </Button>
+                                        </>
+                                    )}
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={handleForgotPasswordCancel}
+                                        disabled={wipeBusy}
+                                        autoFocus
+                                    >
+                                        Cancel
+                                    </Button>
+                                    {wipeError ? (
+                                        <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
+                </div>
             )}
         >
             {hero}
@@ -577,132 +690,33 @@ export function Locked({ onUnlocked }) {
                 aria-label="Wallet username"
                 hidden
             />
-            <Input
-                ref={inputRef}
-                type="password"
-                name="password"
-                label="Password"
-                value={password}
-                onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError(null);
-                }}
-                autoComplete="current-password"
-                disabled={busy || isLockedOut}
-                error={error || undefined}
-            />
-            {demoWalletId ? (
-                <div className={styles.demoExitBlock}>
-                    <p className={styles.demoExitNote}>
-                        This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.
-                    </p>
-                    <Button
-                        type="button"
-                        variant="danger"
-                        onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
-                    >
-                        Exit demo &amp; wipe
-                    </Button>
-                    {demoWipeError && !demoConfirmOpen ? (
-                        <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
-                    ) : null}
-                    {demoConfirmOpen ? (
-                        <DemoExitConfirm
-                            busy={demoWipeBusy}
-                            error={demoWipeError}
-                            message="This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This cannot be undone."
-                            onConfirm={handleExitDemo}
-                            onCancel={() => { setDemoConfirmOpen(false); setDemoWipeError(null); }}
-                        />
-                    ) : null}
-                </div>
-            ) : (
-                <div className={styles.forgotBlock}>
-                    <button
-                        ref={forgotTriggerRef}
-                        type="button"
-                        className={styles.forgotLink}
-                        onClick={() => setForgotOpen(true)}
-                        aria-expanded={forgotOpen}
-                        aria-controls="locked-forgot-password-panel"
-                        hidden={forgotOpen}
-                    >
-                        Forgot password?
-                    </button>
-                    {forgotOpen ? (
-                        <div
-                            ref={forgotDialogRef}
-                            id="locked-forgot-password-panel"
-                            className={styles.wipeConfirm}
-                            role="alertdialog"
-                            aria-modal="false"
-                            aria-label="Restore wallet access"
-                        >
-                            {!restoreLane ? (
-                                <>
-                                    <p className={styles.wipeNote}>
-                                        <strong>Your password cannot be recovered or reset.</strong>{' '}
-                                        You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.
-                                    </p>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => setRestoreLane('mnemonic')}
-                                    >
-                                        Use recovery phrase
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => setRestoreLane('backup')}
-                                    >
-                                        Use backup file
-                                    </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <p className={styles.wipeWarning}>
-                                        <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
-                                    </p>
-                                    <p className={styles.wipeNote}>
-                                        Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
-                                    </p>
-                                    <Input
-                                        type="text"
-                                        label="Type WIPE to confirm"
-                                        value={wipeConfirmText}
-                                        onChange={(e) => setWipeConfirmText(e.target.value)}
-                                        autoComplete="off"
-                                        autoCapitalize="characters"
-                                        disabled={wipeBusy}
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="danger"
-                                        onClick={handleForgotPasswordWipe}
-                                        loading={wipeBusy}
-                                        disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
-                                    >
-                                        Erase vault and restore
-                                    </Button>
-                                </>
-                            )}
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={handleForgotPasswordCancel}
-                                disabled={wipeBusy}
-                                autoFocus
-                            >
-                                Cancel
-                            </Button>
-                            {wipeError ? (
-                                <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </div>
-            )}
+            <div className={styles.passwordField}>
+                <Input
+                    ref={inputRef}
+                    className={styles.passwordInput}
+                    type={passwordVisible ? 'text' : 'password'}
+                    name="password"
+                    label="Password"
+                    value={password}
+                    onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    autoComplete="current-password"
+                    disabled={busy || isLockedOut}
+                    error={error || undefined}
+                />
+                <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    onClick={() => setPasswordVisible((visible) => !visible)}
+                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                    aria-pressed={passwordVisible}
+                    title={passwordVisible ? 'Hide password' : 'Show password'}
+                >
+                    {passwordVisible ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                </button>
+            </div>
         </FormPage>
     );
 
