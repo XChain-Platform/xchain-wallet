@@ -36,13 +36,14 @@
 // interval; the promises are all pre-resolved mocks, so flushing microtasks
 // inside `act` settles a load deterministically.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, act, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { render, act, cleanup, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const homeTabsRender = vi.hoisted(() => vi.fn());
 
@@ -83,6 +84,19 @@ const refusedTyped = (message, errorCode, retryAfterSeconds) => ({
 const landed = {
     [CHAIN]: [{
         address: ADDRESS, balances: {}, error: null, errorCode: null, retryAfterSeconds: null,
+    }],
+};
+
+const funded = {
+    [CHAIN]: [{
+        address: ADDRESS,
+        balances: {
+            native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
+            tokens: [],
+        },
+        error: null,
+        errorCode: null,
+        retryAfterSeconds: null,
     }],
 };
 
@@ -132,12 +146,83 @@ async function advance(ms) {
     await settle();
 }
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+beforeEach(() => { localStorage.clear(); });
+afterEach(() => { cleanup(); localStorage.clear(); vi.useRealTimers(); });
+
+describe('Home keeps balance loading, failure, and loaded-zero states distinct', () => {
+    it('shows a loading state before the first balance response', async () => {
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockImplementation(() => new Promise(() => {}));
+
+        mountHome(messaging);
+        await settle();
+
+        expect(document.querySelector('[aria-label="Loading balances"]')).not.toBeNull();
+        expect(onScreen()).not.toContain('Fund your wallet');
+        expect(onScreen()).not.toMatch(/Updated just now/);
+    });
+
+    it('shows an uncached failure with Retry instead of an empty wallet', async () => {
+        vi.useFakeTimers();
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_WITH_SECONDS));
+
+        mountHome(messaging);
+        await settle();
+
+        expect(onScreen()).toContain("Couldn't load balances");
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+        expect(onScreen()).not.toContain('Fund your wallet');
+        expect(onScreen()).not.toContain('$0.00');
+        expect(onScreen()).not.toMatch(/Updated just now/);
+    });
+
+    it('keeps saved funded balances and marks them stale when refresh fails', async () => {
+        vi.useFakeTimers();
+        writeBalanceCache(WALLET.id, null, {
+            balances: funded,
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
+        const messaging = baseMessaging();
+        messaging.getWalletBalances
+            .mockResolvedValueOnce(refused(RATE_LIMITED_WITH_SECONDS))
+            .mockResolvedValueOnce(funded);
+
+        mountHome(messaging);
+        await settle();
+
+        expect(onScreen()).toContain('LTC · Litecoin');
+        expect(onScreen()).toContain('Showing saved balances from the last successful sync.');
+        expect(onScreen()).not.toContain('Fund your wallet');
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await settle();
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+        expect(onScreen()).not.toContain('Showing saved balances');
+    });
+
+    it('shows the funding state only after a successful loaded-zero response', async () => {
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockResolvedValue(landed);
+
+        mountHome(messaging);
+        await settle();
+
+        expect(onScreen()).toContain('Fund your wallet');
+        expect(onScreen()).toMatch(/Updated just now/);
+        expect(onScreen()).not.toContain("Couldn't load balances");
+    });
+});
 
 describe('Home shows a rate limit as a wait, not as a broken screen', () => {
     it('does not re-render the portfolio while only the countdown changes', async () => {
         vi.useFakeTimers();
         homeTabsRender.mockClear();
+        writeBalanceCache(WALLET.id, null, {
+            balances: funded,
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        });
         const messaging = baseMessaging();
         messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_WITH_SECONDS));
 
