@@ -120,4 +120,12 @@ describe('multisig signing flow', () => {
         })).rejects.toThrow('finalizedTxHex must be hex');
         expect(put).not.toHaveBeenCalled();
     });
+
+    it('rejects a missing session id before reading storage', async () => {
+        const { vault } = storage('p2wsh-multisig');
+
+        await expect(finalizeMultisigSigningSession({ vault }))
+            .rejects.toThrow('sessionId is required');
+        expect(vault.multisigSigningSessions.get).not.toHaveBeenCalled();
+    });
 });
