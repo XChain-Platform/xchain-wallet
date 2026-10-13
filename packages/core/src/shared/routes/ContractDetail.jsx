@@ -23,6 +23,7 @@ import {
     OWNER_WITHDRAW_DISABLED_REASON,
 } from './contractResponseShape.js';
 import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
+import tableStyles from '../components/DataTable.module.css';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './ActionsMenu.module.css';
@@ -427,15 +428,19 @@ function StateTable({ state }) {
         return <EmptyState title="No state keys yet" body="Published contract state appears here." titleAs="p" />;
     }
     return (
-        <table style={{ width: '100%', tableLayout: 'fixed', fontSize: '0.85rem' }}>
+        <table className={tableStyles.table}>
+            <caption className={tableStyles.visuallyHiddenCaption}>Contract state</caption>
             <thead>
-                <tr><th align="left">Key</th><th align="left">Value</th></tr>
+                <tr>
+                    <th className={tableStyles.headerCell} scope="col">Key</th>
+                    <th className={tableStyles.headerCell} scope="col">Value</th>
+                </tr>
             </thead>
             <tbody>
                 {entries.map(([k, v]) => (
                     <tr key={k}>
-                        <td style={{ verticalAlign: 'top', paddingRight: '0.5rem', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{k}</td>
-                        <td style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{renderStateValue(v)}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Key" style={{ verticalAlign: 'top' }}>{k}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Value">{renderStateValue(v)}</td>
                     </tr>
                 ))}
             </tbody>
@@ -449,15 +454,19 @@ function BalancesTable({ balances }) {
         return <EmptyState title="No contract tokens" body="Tokens held by this contract appear here." titleAs="p" />;
     }
     return (
-        <table style={{ width: '100%', tableLayout: 'fixed', fontSize: '0.85rem' }}>
+        <table className={tableStyles.table}>
+            <caption className={tableStyles.visuallyHiddenCaption}>Contract token balances</caption>
             <thead>
-                <tr><th align="left">Token</th><th align="right">Amount</th></tr>
+                <tr>
+                    <th className={tableStyles.headerCell} scope="col">Token</th>
+                    <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Amount</th>
+                </tr>
             </thead>
             <tbody>
                 {rows.map((r, i) => (
                     <tr key={String(r.tick) + ':' + i}>
-                        <td style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{r.tick}</td>
-                        <td align="right" style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{String(r.quantity)}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono}`} data-label="Token">{r.tick}</td>
+                        <td className={`${tableStyles.cell} ${tableStyles.mono} ${tableStyles.numeric}`} data-label="Amount">{String(r.quantity)}</td>
                     </tr>
                 ))}
             </tbody>

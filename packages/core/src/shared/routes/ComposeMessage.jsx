@@ -39,6 +39,7 @@ import {
     MESSAGE_ATTACHMENT_TYPES,
     serializeMessageContent,
 } from '../utils/messageContent.js';
+import { utf8ByteLength } from '../utils/memoLimit.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -407,10 +408,10 @@ export function ComposeMessage({
         () => serializeMessageContent(message, attachment),
         [message, attachment],
     );
-    const messageLength = message.length;
-    const wireMessageLength = wireMessage.length;
-    const messageLengthError = wireMessageLength > MAX_MESSAGE_LENGTH
-        ? `${attachment ? 'Message and attachment are' : 'Message is'} ${wireMessageLength.toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`
+    const messageBytes = utf8ByteLength(message);
+    const wireMessageBytes = utf8ByteLength(wireMessage);
+    const messageLengthError = wireMessageBytes > MAX_MESSAGE_LENGTH
+        ? `${attachment ? 'Message and attachment are' : 'Message is'} ${wireMessageBytes.toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`
         : undefined;
 
     function handleAttachmentPick(event) {
@@ -985,7 +986,7 @@ export function ComposeMessage({
                 placeholder="Write your message…"
                 hint={messageLengthError
                     ? undefined
-                    : `${messageLength.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`}
+                    : `${messageBytes.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`}
                 error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />

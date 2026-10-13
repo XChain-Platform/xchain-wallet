@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ChainBadge,
     EmptyState,
     Icon,
+    Input,
     ListPage,
     PageHeader,
     Screen,
@@ -41,7 +42,11 @@ import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import {
+    tickerForCoin,
+    tickerForDescriptor,
+    transactionExplorerLinks,
+} from '../../registry/coinTicker.js';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
@@ -77,10 +82,16 @@ import {
     formatDecimalAmount,
     formatDisplayAmount,
     formatHistoryAmount,
+    formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
+import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import { Settings } from './Settings.jsx';
 import {
     hasAvailableChain,
@@ -92,6 +103,7 @@ import styles from './History.module.css';
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
 const HISTORY_PAGE_SIZE = 100;
+const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 function historyChainFilterKey(walletId) {
     return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
@@ -117,6 +129,7 @@ function writePersistedGroupingMode(walletId, mode) {
 }
 
 const chainRegistry = registryLib.defaultRegistry();
+const NATIVE_TICKER_BY_COIN = (descriptor) => tickerForDescriptor(descriptor);
 
 // LINK action coin field is a ticker (e.g. "BTC", "DOGE", "LTC"). The
 // chain registry's descriptor.coin is the lowercase coin name. This
@@ -222,7 +235,8 @@ function pendingStateOf(entry) {
  */
 function isNativeCoinMovement(entry) {
     const coin = coinOfChainId(entry?.chainId);
-    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const descriptor = chainRegistry.get(entry?.chainId) || (coin ? { coin } : null);
+    const nativeTicker = NATIVE_TICKER_BY_COIN(descriptor);
     const tick = String(entry?.raw?.tick || '').toUpperCase();
     return Boolean(nativeTicker) && tick === nativeTicker;
 }
@@ -463,6 +477,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
+    const browserOnline = useOnlineStatus();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -470,6 +485,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [showingCachedHistory, setShowingCachedHistory] = useState(false);
     const historyLoadedRef = useRef(false);
     historyLoadedRef.current = historyLoaded;
     const [refreshing, setRefreshing] = useState(false);
@@ -503,6 +519,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
+    const [searchContacts, setSearchContacts] = useState(/** @type {any[]} */ ([]));
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
     // The inclusive endpoints cover exactly 30 local calendar days.
@@ -517,6 +534,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [exportColumns, setExportColumns] = useState(
         /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
     );
+    const [exporting, setExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState({ completed: 0, total: 0 });
+    const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
+    const exportAbortRef = useRef(/** @type {AbortController | null} */ (null));
+    const exportTime = useLongOperationStatus(exporting);
+    useEffect(() => () => exportAbortRef.current?.abort(), []);
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     // M2.3: the open row is remembered by TRANSACTION as well as by key.
     // A pending entry is keyed on its hash and a confirmed one on its
@@ -534,11 +557,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    useEffect(() => {
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => {
+                if (!cancelled) setSearchContacts(Array.isArray(rows) ? rows : []);
+            })
+            .catch(() => {
+                if (!cancelled) setSearchContacts([]);
+            });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
+        const cached = readHistoryCache(walletId, accountId);
         setAddressesByChain(null);
-        setEntries([]);
-        setHistoryFetchedAt(null);
+        setEntries(cached?.entries || []);
+        setHistoryFetchedAt(cached?.fetchedAt || null);
+        setHistoryLoaded(Boolean(cached));
+        setShowingCachedHistory(!isNavigatorOnline() && Boolean(cached));
         setLoadingChains(new Set());
         setRefreshing(false);
         setLoadError(null);
@@ -556,7 +595,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         let cancelled = false;
         setLoadError(null);
         setAddressesByChain(null);
-        setHistoryLoaded(false);
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -588,7 +626,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 setEnabledChains(remembered ?? all);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (cancelled) return;
+                if (cached) {
+                    setAddressesByChain(cached.addressesByChain);
+                    return;
+                }
+                setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
@@ -675,13 +718,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             if (throttle.isInFlight()) return;
             setRefreshTick((n) => n + 1);
         };
-        const id = setInterval(() => {
-            // A hidden tab is not watching; polling it only burns the shared
-            // rate limit the explorer zone is sized against.
-            if (typeof document !== 'undefined' && document.hidden) return;
-            bump();
-        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
-        if (typeof window === 'undefined') return () => clearInterval(id);
+        const stopPollInterval = startVisibleInterval(bump, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        if (typeof window === 'undefined') return stopPollInterval;
         // A refocus is worth a fan-out only when the rows are already an
         // interval old; a burst of window switches used to cost one each.
         // `start()` rather than `claim()`: the fan-out this bump asks for is
@@ -691,7 +729,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
         window.addEventListener('focus', onFocus);
         return () => {
-            clearInterval(id);
+            stopPollInterval();
             window.removeEventListener('focus', onFocus);
         };
     }, [addressesByChain, walletId]);
@@ -711,6 +749,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
             // `succeed()`: no read happened, so the window must not move.
+            pollThrottleRef.current.fail();
+            return;
+        }
+        if (!browserOnline) {
+            const cached = readHistoryCache(walletId, accountId);
+            if (cached) {
+                setEntries(cached.entries);
+                setHistoryFetchedAt(cached.fetchedAt);
+                setShowingCachedHistory(true);
+            } else if (entriesRef.current.length > 0) {
+                setShowingCachedHistory(true);
+            }
+            setLoadingChains(new Set());
+            setHistoryLoaded(true);
             pollThrottleRef.current.fail();
             return;
         }
@@ -951,21 +1003,37 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
             }
             merged.entries.sort(compareMergedEntries);
+            const fetchedAt = Date.now();
             setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
             setHistoryLoaded(true);
+            setShowingCachedHistory(false);
+            writeHistoryCache(walletId, accountId, {
+                entries: merged.entries,
+                addressesByChain,
+                fetchedAt,
+            });
             setRefreshing(false);
         }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
             setRefreshing(false);
+            const cached = readHistoryCache(walletId, accountId);
             if (historyLoadedRef.current) {
+                // Rows are already on screen (live or saved): keep them, say
+                // so, and name the saved copy when one exists.
+                if (cached) setShowingCachedHistory(true);
                 showToast({
                     message: humanizeError(err, 'refresh history').message,
                     variant: 'error',
                 });
+            } else if (cached) {
+                setEntries(cached.entries);
+                setHistoryFetchedAt(cached.fetchedAt);
+                setHistoryLoaded(true);
+                setShowingCachedHistory(true);
             } else {
                 setHistoryLoaded(true);
                 setLoadError('Could not load history. Try again.');
@@ -973,7 +1041,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, refreshTick, walletId, accountId]);
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -991,6 +1059,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const activeChainIds = Object.entries(addressesByChain || {})
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
+
+    const contactNamesByAddress = useMemo(() => {
+        const names = new Map();
+        for (const contact of searchContacts) {
+            const name = String(contact?.name || '').trim();
+            if (!name) continue;
+            for (const contactEntry of contact?.entries || []) {
+                const address = String(contactEntry?.address || '').trim().toLowerCase();
+                if (address) names.set(address, name);
+            }
+        }
+        return names;
+    }, [searchContacts]);
 
     // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation counts on confirmed rows.
     // The polled indexer watermark advances even when this wallet has no new
@@ -1019,6 +1100,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // no real explorer behind synthesized history).
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        if (!browserOnline) return undefined;
         if (flowsLib.isDemoWallet(walletId)) return undefined;
         const chains = Object.entries(addressesByChain)
             .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
@@ -1040,7 +1122,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setIndexerWatermarkByChainId(next);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, refreshTick]);
+    }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
@@ -1061,11 +1143,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // pick includes everything that happened that day.
             dateToMs: localDayEndMs(dateTo),
             walletAddresses: walletAddressSet,
+            contactNamesByAddress,
         });
     }, [
         entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress,
         searchQuery, actionTypeFilter, statusFilter, dateFrom, dateTo,
-        walletAddressSet,
+        walletAddressSet, contactNamesByAddress,
     ]);
 
     // §7/§8: SPV action verification. Verify only visible, confirmed
@@ -1092,6 +1175,45 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             },
         },
     });
+    const closeExport = () => {
+        exportAbortRef.current?.abort();
+        exportAbortRef.current = null;
+        setExporting(false);
+        setExportError(null);
+        setExportModalOpen(false);
+    };
+    const startExport = async () => {
+        if (exporting) return;
+        const controller = new AbortController();
+        exportAbortRef.current = controller;
+        setExporting(true);
+        setExportError(null);
+        setExportProgress({ completed: 0, total: visibleEntries.length });
+        try {
+            const completed = await runExport({
+                entries: visibleEntries,
+                scope: chainScopeLabel(enabledChains, activeChainIds),
+                format: exportFormat,
+                columns: Array.from(exportColumns),
+                fiatCurrency,
+                signal: controller.signal,
+                onProgress: (count) => setExportProgress({
+                    completed: count,
+                    total: visibleEntries.length,
+                }),
+            });
+            if (completed && !controller.signal.aborted) setExportModalOpen(false);
+        } catch (err) {
+            if (!controller.signal.aborted) {
+                setExportError(humanizeError(err, 'export history').message);
+            }
+        } finally {
+            if (exportAbortRef.current === controller) {
+                exportAbortRef.current = null;
+                setExporting(false);
+            }
+        }
+    };
     const toggleShowFiatInHistory = async () => {
         if (fiatToggleBusy) return;
         setFiatToggleBusy(true);
@@ -1112,7 +1234,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const actionVerifyMap = useActionProofVerification({
         messaging,
         items: verifyItems,
-        enabled: verifyProofsEnabled,
+        enabled: verifyProofsEnabled && browserOnline,
     });
 
     const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
@@ -1389,7 +1511,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // anything but a failed record, so this cannot make a live send vanish.
     // The row closes and the list re-reads; a refused or failed delete
     // leaves the row in place, which is the honest outcome.
-    const dismissFailedPending = async (pendingTxId) => {
+    const dismissFailedPending = useCallback(async (pendingTxId) => {
         if (typeof messaging?.dismissFailedPendingTx !== 'function') return;
         try {
             await messaging.dismissFailedPendingTx({ pendingTxId });
@@ -1399,9 +1521,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         selectedTxRef.current = null;
         setSelectedKey(null);
         setRefreshTick((n) => n + 1);
-    };
+    }, [messaging]);
 
-    const onRowClick = (entry) => {
+    const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
         // page. Falls back to the legacy inline expand for builds /
@@ -1416,6 +1538,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
             if (!peerCache[pKey]) {
+                if (!browserOnline) {
+                    setPeerCache((prev) => ({
+                        ...prev,
+                        [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+                    }));
+                    return;
+                }
                 setPeerCache((prev) => ({
                     ...prev,
                     [pKey]: { loading: true, action: null, error: null },
@@ -1442,7 +1571,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
             }
         }
-    };
+    }, [messaging, onSelectEntry, peerCache, selectedKey]);
 
     const header = (
         <PageHeader
@@ -1546,38 +1675,53 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     return wrap(
         <ListPage toolbar={(
             <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
-                <input
-                    ref={searchInputRef}
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className={styles.searchInput}
-                    placeholder={t('history.filters.searchPlaceholder')}
-                    aria-label={t('history.filters.searchLabel')}
-                    value={searchQuery}
-                    onChange={(ev) => setSearchQuery(ev.target.value)}
-                    autoComplete="off"
-                />
+                <div className={styles.searchRow}>
+                    <input
+                        ref={searchInputRef}
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className={styles.searchInput}
+                        placeholder={t('history.filters.searchPlaceholder')}
+                        aria-label={t('history.filters.searchLabel')}
+                        value={searchQuery}
+                        onChange={(ev) => setSearchQuery(ev.target.value)}
+                        autoComplete="off"
+                    />
+                    {searchQuery ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
+                            aria-label={t('history.filters.clearSearch')}
+                            onClick={() => {
+                                setSearchQuery('');
+                                searchInputRef.current?.focus();
+                            }}
+                        >
+                            {t('common.clear')}
+                        </Button>
+                    ) : null}
+                </div>
 
                 <div className={styles.dateRow}>
-                    <input
+                    <Input
                         type="date"
                         aria-label={t('history.filters.fromDate')}
                         value={dateFrom}
                         max={dateTo || undefined}
                         onChange={(ev) => updateDateFrom(ev.target.value)}
-                        className={styles.dateInput}
                     />
                     <span className={styles.dateSep}>→</span>
-                    <input
+                    <Input
                         type="date"
                         aria-label={t('history.filters.toDate')}
                         value={dateTo}
                         min={dateFrom || undefined}
                         onChange={(ev) => updateDateTo(ev.target.value)}
-                        className={styles.dateInput}
                     />
                 </div>
                 <div className={styles.dateTools}>
@@ -1725,25 +1869,33 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             </div>
         )}>
 
+            {!browserOnline || showingCachedHistory ? (
+                <StatusMessage
+                    variant="warning"
+                    id="history-offline-action-reason"
+                >
+                    {!browserOnline
+                        ? (showingCachedHistory
+                            ? t('history.offline.cached')
+                            : t('history.offline.empty'))
+                        : t('history.offline.refreshFailed')}
+                </StatusMessage>
+            ) : null}
+
             {exportModalOpen ? (
                 <ExportModal
-                    onClose={() => setExportModalOpen(false)}
+                    onClose={closeExport}
                     format={exportFormat}
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
                     fiatCurrency={fiatCurrency}
                     visibleCount={visibleEntries.length}
-                    onConfirm={() => {
-                        runExport({
-                            entries: visibleEntries,
-                            scope: chainScopeLabel(enabledChains, activeChainIds),
-                            format: exportFormat,
-                            columns: Array.from(exportColumns),
-                            fiatCurrency,
-                        });
-                        setExportModalOpen(false);
-                    }}
+                    exporting={exporting}
+                    progress={exportProgress}
+                    operationTime={exportTime}
+                    error={exportError}
+                    onConfirm={startExport}
                 />
             ) : null}
 
@@ -1756,7 +1908,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
-                        title={t('history.empty.noMatchesTitle')}
+                        title={searchQuery.trim()
+                            ? t('history.empty.noSearchResultsTitle', { query: searchQuery.trim() })
+                            : t('history.empty.noMatchesTitle')}
                         body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
@@ -1830,7 +1984,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                             ? false
                                                             : connectorByKey.has(entry.key)
                                                     }
-                                                    onClick={() => onRowClick(entry)}
+                                                    onClick={onRowClick}
                                                     peerCache={peerCache}
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
@@ -1841,6 +1995,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     fiatCurrency={fiatCurrency}
                                                     walletAddresses={walletAddressSet}
                                                     onDismissFailed={dismissFailedPending}
+                                                    networkAvailable={browserOnline}
                                                 />
                                             ))}
                                             {memberLimit < item.members.length ? (
@@ -1875,7 +2030,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             entry={entry}
                             selected={selectedKey === entry.key}
                             showConnector={connectorByKey.has(entry.key)}
-                            onClick={() => onRowClick(entry)}
+                            onClick={onRowClick}
                             peerCache={peerCache}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
@@ -1886,6 +2041,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             fiatCurrency={fiatCurrency}
                             walletAddresses={walletAddressSet}
                             onDismissFailed={dismissFailedPending}
+                            networkAvailable={browserOnline}
                         />
                     );
                 })}
@@ -1916,7 +2072,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const { settings } = useSettings();
@@ -2125,14 +2281,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
             icon: <Icon.ForwardIcon />,
-            disabled: rbfBusy !== null,
+            disabled: rbfBusy !== null || !networkAvailable,
+            disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('speedup'),
         });
         moreOptions.push({
             id: 'rbf-cancel',
             label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
             icon: <Icon.XIcon />,
-            disabled: rbfBusy !== null,
+            disabled: rbfBusy !== null || !networkAvailable,
+            disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('cancel'),
         });
     }
@@ -2226,7 +2384,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 incomplete pending records. */}
             {explorerButtons.length > 0 || moreOptions.length > 0 ? (
                 <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
-                    {explorerButtons.map((link) => (
+                    {explorerButtons.map((link) => networkAvailable ? (
                         <a
                             key={link.id}
                             href={link.url}
@@ -2246,6 +2404,27 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             )}
                             <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
+                    ) : (
+                        <button
+                            key={link.id}
+                            type="button"
+                            className={styles.detailAction}
+                            disabled
+                            title={OFFLINE_ACTION_REASON}
+                            aria-describedby="history-offline-action-reason"
+                        >
+                            {link.iconImg ? (
+                                <img
+                                    src={link.iconImg}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className={styles.detailActionFavicon}
+                                />
+                            ) : (
+                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
+                            )}
+                            <span>{link.label}</span>
+                        </button>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
                         <button
@@ -2269,6 +2448,8 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                             className={styles.moreMenuItem}
                                             onClick={opt.onClick}
                                             disabled={Boolean(opt.disabled)}
+                                            title={opt.disabledReason}
+                                            aria-describedby={opt.disabledReason ? 'history-offline-action-reason' : undefined}
                                         >
                                             {opt.icon ? (
                                                 <span className={styles.moreMenuItemIcon} aria-hidden="true">
@@ -2322,7 +2503,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onChange={(e) => setContactName(e.target.value)}
                             autoFocus
                             maxLength={80}
-                            placeholder={t('history.contact.name')}
+                            placeholder={t('common.contactName')}
                         />
                     </label>
                     {contactSaveError ? (
@@ -2672,8 +2853,22 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     // amounts never reach here, so there's no coin-rate-on-token bug to
     // replicate.
     if (nativeAmount != null) {
+        const nativeCoin = coinOfChainId(entry.chainId);
+        const nativeTick = NATIVE_TICKER_BY_COIN(
+            chainRegistry.get(entry.chainId) || (nativeCoin ? { coin: nativeCoin } : null),
+        ) || '';
+        const amountSpeech = balancesHidden
+            ? 'Amount hidden'
+            : formatHistoryAmountForSpeech(
+                nativeAmount,
+                nativeTick,
+                historyAmountDirection(entry),
+            );
+        const fiatSpeech = nativeFiatValue != null && !balancesHidden
+            ? formatFiatAmountForSpeech(nativeFiatValue, fiatCurrency)
+            : '';
         rows.push(['Amount', (
-            <span>
+            <span aria-label={`${amountSpeech}${fiatSpeech ? `, approximately ${fiatSpeech}` : ''}`}>
                 {balancesHidden
                     ? '•••••'
                     : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
@@ -2901,7 +3096,16 @@ function fullDetailRows(entry, balancesHidden = false) {
             const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
                 && /^(amount|quantity)$/i.test(k);
             display = isPrimarySendAmount
-                ? formatHistoryAmount(v, historyAmountDirection(entry))
+                ? (
+                    <span aria-label={formatHistoryAmountForSpeech(
+                        v,
+                        raw.tick ?? raw.TICK ?? raw.token ?? '',
+                        historyAmountDirection(entry),
+                    )}
+                    >
+                        {formatHistoryAmount(v, historyAmountDirection(entry))}
+                    </span>
+                )
                 : formatDisplayAmount(v);
         } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
@@ -2963,7 +3167,7 @@ function explorerLinksFor(entry, settings) {
     const links = [];
     if (!entry) return links;
     const txHash = entry.txHash;
-    const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
+    const [coin = '', networkKind = 'mainnet'] = String(entry.chainId || '').split('-');
 
     // XChain actions have their own detail page. Plain transfers keep the
     // third-party transaction links below when that network has coverage.
@@ -2986,66 +3190,8 @@ function explorerLinksFor(entry, settings) {
     // External chain explorers: only mainnet and testnet have
     // working third-party coverage. Regtest is local-only; suppress
     // external links so they don't render mainnet URLs that 404.
-    if (!txHash) return links;
-    if (network !== 'mainnet' && network !== 'testnet') return links;
-
-    if (coin === 'bitcoin') {
-        // Mempool.space serves Bitcoin testnet under `/testnet4/`
-        // (current testnet variant). Blockstream.info still indexes
-        // the legacy `/testnet/` (testnet3) endpoint, so testnet
-        // links there may not resolve for testnet4 hashes; kept
-        // anyway as a second affordance.
-        const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
-        const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
-        links.push({
-            id: 'mempool',
-            label: 'Mempool',
-            iconImg: 'https://mempool.space/resources/favicons/favicon.ico',
-            url: `https://mempool.space/${mempoolPath}tx/${txHash}`,
-        });
-        links.push({
-            id: 'blockstream',
-            label: 'Blockstream',
-            iconImg: 'https://blockstream.info/favicon.ico',
-            url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
-        });
-    } else if (coin === 'litecoin') {
-        // LitecoinSpace mirrors mempool.space's URL scheme (it's a
-        // fork); mainnet has no prefix, testnet is `/testnet/`.
-        // Blockchair covers mainnet only.
-        const litecoinSpacePath = network === 'testnet' ? 'testnet/' : '';
-        links.push({
-            id: 'litecoinspace',
-            label: 'LitecoinSpace',
-            iconImg: 'https://litecoinspace.org/favicon.ico',
-            url: `https://litecoinspace.org/${litecoinSpacePath}tx/${txHash}`,
-        });
-        if (network === 'mainnet') {
-            links.push({
-                id: 'blockchair',
-                label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/litecoin/transaction/${txHash}`,
-            });
-        }
-    } else if (coin === 'dogecoin') {
-        // No reliable third-party DOGE testnet explorer at time of
-        // writing; show external links on mainnet only.
-        if (network === 'mainnet') {
-            links.push({
-                id: 'blockchair',
-                label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/dogecoin/transaction/${txHash}`,
-            });
-            links.push({
-                id: 'blockcypher',
-                label: 'BlockCypher',
-                iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
-                url: `https://live.blockcypher.com/doge/tx/${txHash}`,
-            });
-        }
-    }
+    const descriptor = chainRegistry.get(entry.chainId) || { coin, networkKind };
+    links.push(...transactionExplorerLinks(descriptor, txHash));
     return links;
 }
 
@@ -3063,6 +3209,7 @@ function explorerLinksFor(entry, settings) {
  */
 function RecipientsBlock({ entry }) {
     const { messaging } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const action = String(entry?.action || '').toUpperCase();
     const isDividend = action === 'DIVIDEND';
     const isAirdrop = action === 'AIRDROP';
@@ -3152,7 +3299,15 @@ function RecipientsBlock({ entry }) {
     if (stage === 'idle') {
         return (
             <div style={blockStyle}>
-                <Button type="button" variant="secondary" size="sm" onClick={load}>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={load}
+                    disabled={!networkAvailable}
+                    title={!networkAvailable ? OFFLINE_ACTION_REASON : undefined}
+                    aria-describedby={!networkAvailable ? 'history-offline-action-reason' : undefined}
+                >
                     {isDividend
                         ? t('history.recipients.showHolders')
                         : t('history.recipients.showRecipients')}
@@ -3228,7 +3383,7 @@ function RecipientsBlock({ entry }) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
-                        aria-label={t('history.contact.name')}
+                        aria-label={t('common.contactName')}
                         disabled={stage === 'saving'}
                         style={{
                             flex: 1,
@@ -3325,10 +3480,6 @@ function coinOfChainId(chainId) {
     return coin || null;
 }
 
-// Coin family -> native ticker, used to gate the History fiat
-// toggle to genuinely native-coin amounts.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
-
 /**
  * Resolve an exact native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
@@ -3348,7 +3499,8 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
 function nativeAmountFieldOf(entry) {
     if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
     const coin = coinOfChainId(entry.chainId);
-    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const descriptor = chainRegistry.get(entry.chainId) || (coin ? { coin } : null);
+    const nativeTicker = NATIVE_TICKER_BY_COIN(descriptor);
     if (!nativeTicker) return null;
     const raw = entry.raw || {};
     const tick = raw.tick ?? raw.TICK ?? raw.token;
@@ -3374,7 +3526,7 @@ function nativeAmountFieldOf(entry) {
 function PendingRowLabel({ entry }) {
     const state = pendingStateOf(entry);
     const warning = state != null && PENDING_WARNING_STATES.has(state);
-    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.generic');
+    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.seen');
     return (
         <span
             className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}
@@ -3465,7 +3617,7 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
+export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
     const receiveLabel = entry.receiveLabel
@@ -3476,7 +3628,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
         <li data-history-key={entry.key}>
             <button
                 type="button"
-                onClick={onClick}
+                onClick={() => onClick(entry)}
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
                 aria-expanded={selected}
             >
@@ -3523,6 +3675,11 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                                 <span
                                     className={styles.pendingAmount}
                                     data-history-amount={settledAmount.direction || 'unknown'}
+                                    aria-label={formatHistoryAmountForSpeech(
+                                        settledAmount.amount,
+                                        settledAmount.tick,
+                                        settledAmount.direction,
+                                    )}
                                 >
                                     {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
                                 </span>
@@ -3560,11 +3717,12 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     showFiatInHistory={showFiatInHistory}
                     fiatCurrency={fiatCurrency}
                     onDismissFailed={onDismissFailed}
+                    networkAvailable={networkAvailable}
                 />
             ) : null}
         </li>
     );
-}
+});
 
 /**
  * Collapsed group card (§28.2). Renders a single summary row that
@@ -4110,12 +4268,56 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
     );
 }
 
-function runExport({ entries, scope, format, columns, fiatCurrency }) {
-    if (!Array.isArray(entries) || entries.length === 0) return;
+const EXPORT_CHUNK_SIZE = 250;
+
+function exportTurn() {
+    return new Promise((resolve) => setTimeout(resolve, 16));
+}
+
+async function runExport({
+    entries, scope, format, columns, fiatCurrency, signal, onProgress,
+}) {
+    if (!Array.isArray(entries) || entries.length === 0) return false;
     const filename = flowsLib.buildExportFilename({ scope, format });
-    const fileContent = format === 'csv'
-        ? flowsLib.entriesToCsv(entries, { columns, fiatCurrency })
-        : flowsLib.entriesToJson(entries, { scope, columns, fiatCurrency });
+    const exportedAt = new Date().toISOString();
+    const chunks = [];
+    let jsonMetadata = null;
+    for (let offset = 0; offset < entries.length; offset += EXPORT_CHUNK_SIZE) {
+        await exportTurn();
+        if (signal?.aborted) return false;
+        const slice = entries.slice(offset, offset + EXPORT_CHUNK_SIZE);
+        if (format === 'csv') {
+            const text = flowsLib.entriesToCsv(slice, { columns, fiatCurrency });
+            const firstBreak = text.indexOf('\n');
+            chunks.push(offset === 0 ? text : text.slice(firstBreak + 1));
+        } else {
+            const payload = JSON.parse(flowsLib.entriesToJson(slice, {
+                scope,
+                columns,
+                fiatCurrency,
+                exportedAt,
+            }));
+            if (!jsonMetadata) {
+                jsonMetadata = { ...payload };
+                delete jsonMetadata.entries;
+            }
+            chunks.push(...payload.entries.map((entry) => (
+                JSON.stringify(entry, null, 2)
+                    .split('\n')
+                    .map((line) => `    ${line}`)
+                    .join('\n')
+            )));
+        }
+        if (onProgress) onProgress(Math.min(offset + slice.length, entries.length));
+    }
+    if (signal?.aborted) return false;
+    let fileContent;
+    if (format === 'csv') {
+        fileContent = chunks.join('');
+    } else {
+        const metadataText = JSON.stringify(jsonMetadata, null, 2);
+        fileContent = `${metadataText.slice(0, -2)},\n  "entries": [\n${chunks.join(',\n')}\n  ]\n}`;
+    }
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
     const blob = new Blob([fileContent], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -4127,6 +4329,7 @@ function runExport({ entries, scope, format, columns, fiatCurrency }) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
 }
 
 /* ───── Cluster I FOLLOWUP 5 - export modal ───────────────────────── */
@@ -4188,6 +4391,10 @@ function ExportModal({
     columns, setColumns,
     fiatCurrency,
     visibleCount,
+    exporting,
+    progress,
+    operationTime,
+    error,
     onConfirm,
 }) {
     // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
@@ -4220,9 +4427,9 @@ function ExportModal({
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"
-                aria-label={t('history.export.title')}
+                aria-labelledby="xc-history-export-title"
             >
-                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
+                <h2 id="xc-history-export-title" style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
 
                 <fieldset style={MODAL_FIELDSET}>
                     <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
@@ -4233,6 +4440,7 @@ function ExportModal({
                             value="csv"
                             checked={format === 'csv'}
                             onChange={() => setFormat('csv')}
+                            disabled={exporting}
                         />
                         {t('history.export.csv')}
                     </label>
@@ -4243,6 +4451,7 @@ function ExportModal({
                             value="json"
                             checked={format === 'json'}
                             onChange={() => setFormat('json')}
+                            disabled={exporting}
                         />
                         {t('history.export.json')}
                     </label>
@@ -4261,6 +4470,7 @@ function ExportModal({
                                     type="checkbox"
                                     checked={columns.has(col)}
                                     onChange={() => toggleColumn(col)}
+                                    disabled={exporting}
                                 />
                                 <span>
                                     <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
@@ -4277,15 +4487,33 @@ function ExportModal({
                     {t('history.export.rowCount', { count: visibleCount })}
                 </p>
 
+                {exporting ? (
+                    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        {t('history.export.progress', {
+                            completed: progress.completed,
+                            total: progress.total,
+                        })}
+                        {operationTime.showElapsed
+                            ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
+                            : ''}
+                    </p>
+                ) : null}
+                {operationTime.timedOut ? (
+                    <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
+                        {t('history.export.slow')}
+                    </p>
+                ) : null}
+                {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+
                 <div style={MODAL_ACTIONS}>
                     <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
                     <button
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
-                        disabled={visibleCount === 0 || columns.size === 0}
+                        disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >
-                        {t('history.export.confirm')}
+                        {exporting ? t('history.export.preparing') : t('history.export.confirm')}
                     </button>
                 </div>
             </div>

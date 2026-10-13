@@ -10,10 +10,11 @@
 
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     getLocale,
+    onLocaleChange,
     registerLocale,
     setLocale,
     t,
@@ -66,6 +67,24 @@ afterAll(async () => {
 });
 
 describe('translations', () => {
+    it('keeps English copy platform-neutral and typographically consistent', () => {
+        const values = Object.values(en);
+
+        expect(values.filter((value) => /\.\.\.| {2,}|\bclick\b/i.test(value))).toEqual([]);
+        expect(values.filter((value) => (
+            /\b(cannot|does not|do not|will not|could not|has not|is not|are not|it is)\b/i.test(value)
+        ))).toEqual([]);
+        const narrativeValues = Object.entries(en)
+            .filter(([key]) => (
+                (/(?:Body|Hint|Help)$|\.error\./.test(key))
+                && key !== 'history.filters.fiatHelp'
+            ))
+            .map(([, value]) => value);
+        expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
+        expect(en['send.memoCount']).toBe('{used, number} / {max, number} {used, plural, one {byte} other {bytes}}');
+        expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
+    });
+
     it('looks up English keys and exposes unknown keys', () => {
         expect(t('scan.title')).toBe('Scan');
         expect(t('missing.unit.key')).toBe('missing.unit.key');
@@ -77,6 +96,20 @@ describe('translations', () => {
 
         expect(t('common.back')).toBe('Retour');
         expect(t('scan.title')).toBe('Scan');
+    });
+
+    it('stamps root language metadata when the selected locale is already active', async () => {
+        document.documentElement.removeAttribute('dir');
+        document.documentElement.lang = 'stale';
+        const subscriber = vi.fn();
+        const unsubscribe = onLocaleChange(subscriber);
+
+        await setLocale('en');
+
+        expect(document.documentElement.lang).toBe('en');
+        expect(document.documentElement.dir).toBe('ltr');
+        expect(subscriber).not.toHaveBeenCalled();
+        unsubscribe();
     });
 
     it('interpolates message variables', () => {
@@ -115,9 +148,9 @@ describe('translations', () => {
     });
 
     it.each([
-        [0, '0 / 10 characters.', 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', '0 recipients are the most one send carries. Use an airdrop to distribute to a longer list.', '0 of 0 history items shown', '0 Confirmations'],
-        [1, '1 / 10 character.', 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', '1 recipient is the most one send carries. Use an airdrop to distribute to a longer list.', '1 of 1 history item shown', '1 Confirmation'],
-        [3, '3 / 10 characters.', 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', '3 recipients are the most one send carries. Use an airdrop to distribute to a longer list.', '3 of 3 history items shown', '3 Confirmations'],
+        [0, '0 / 10 bytes', 'Total: 5 XCP across 0 recipients, in one transaction and one network fee.', '0 recipients are the most one send carries. Use an airdrop to distribute to a longer list.', '0 of 0 history items shown', '0 Confirmations'],
+        [1, '1 / 10 byte', 'Total: 5 XCP across 1 recipient, in one transaction and one network fee.', '1 recipient is the most one send carries. Use an airdrop to distribute to a longer list.', '1 of 1 history item shown', '1 Confirmation'],
+        [3, '3 / 10 bytes', 'Total: 5 XCP across 3 recipients, in one transaction and one network fee.', '3 recipients are the most one send carries. Use an airdrop to distribute to a longer list.', '3 of 3 history items shown', '3 Confirmations'],
     ])('pluralizes translated count copy for %i', (count, memo, recipients, maximum, shown, confirmations) => {
         expect(t('send.memoCount', { used: count, max: 10 })).toBe(memo);
         expect(t('send.recipient.total', { total: '5 XCP', count })).toBe(recipients);
@@ -143,6 +176,24 @@ describe('translations', () => {
             missingCount: count,
             missing: 'abc',
         })).toContain(`missing ${missingCopy}:`);
+    });
+
+    it('keeps duplicate English text only when translation context differs', () => {
+        const keysByText = Object.entries(en).reduce((groups, [key, text]) => {
+            const keys = groups.get(text) ?? [];
+            keys.push(key);
+            groups.set(text, keys);
+            return groups;
+        }, new Map());
+        const duplicateKeyGroups = [...keysByText.values()]
+            .filter((keys) => keys.length > 1)
+            .map((keys) => keys.sort())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+
+        expect(duplicateKeyGroups).toEqual([
+            ['home.receive', 'uri.intent.receive'],
+            ['send.title', 'uri.intent.send'],
+        ]);
     });
 
     it('reports a table-driven key from a new namespace as missing', () => {

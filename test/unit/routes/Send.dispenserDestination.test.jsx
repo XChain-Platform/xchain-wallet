@@ -15,8 +15,8 @@
 // dispenser notice there. Fixtures follow the explorer's two lanes: the
 // by-address list row has no lists or FIAT_CODE; the by-index detail does.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -88,17 +88,35 @@ function mount(extraMessaging = {}, sendProps = {}) {
 }
 
 async function fillAndReview({ to, amount }) {
-    fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: to } });
-    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: amount } });
+    await flushTimers();
+    fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: to } });
+    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: amount } });
+    await flushTimers();
     fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+    await flushTimers();
 }
 
-afterEach(() => cleanup());
+async function flushTimers() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
+
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 // A negative assertion only means something once the debounced lookup ran.
 async function lookupSettled(messaging) {
-    await waitFor(() => expect(messaging.getDispensersForAddress).toHaveBeenCalled(), { timeout: 3000 });
-    await new Promise((r) => { setTimeout(r, 50); });
+    await flushTimers();
+    expect(messaging.getDispensersForAddress).toHaveBeenCalled();
 }
 
 describe('Send review: destination matches an open dispenser', () => {
@@ -107,9 +125,9 @@ describe('Send review: destination matches an open dispenser', () => {
             getDispensersForAddress: vi.fn().mockResolvedValue({ data: [COIN_DISPENSER_ROW] }),
         });
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
 
-        expect(await screen.findByText(/This pays dispenser #9001/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/This pays dispenser #9001/))
             .toBeInTheDocument();
         expect(screen.getByText(/you would receive 10 DOGI/)).toBeInTheDocument();
         expect(messaging.getDispensersForAddress).toHaveBeenCalledWith({
@@ -120,7 +138,7 @@ describe('Send review: destination matches an open dispenser', () => {
     it('says nothing extra for an ordinary address that is not a dispenser', async () => {
         const messaging = mount();
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
         await lookupSettled(messaging);
 
         expect(screen.queryByText(/This pays dispenser/)).toBeNull();
@@ -140,7 +158,7 @@ describe('Send review: destination matches an open dispenser', () => {
         }, { prefill: { chainId: CHAIN_ID, tick: 'XCHAIN' } });
         await fillAndReview({ to: DISPENSER_ADDR, amount: '12' });
 
-        expect(await screen.findByText(/This pays dispenser #9002/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/This pays dispenser #9002/))
             .toBeInTheDocument();
         expect(screen.getByText(/you would receive 10 DOGI, all it has left/)).toBeInTheDocument();
         expect(screen.getByText(/rest of this payment is not refunded/)).toBeInTheDocument();
@@ -174,9 +192,9 @@ describe('Send review: destination matches an open dispenser', () => {
             }),
         });
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
-        await screen.findByText(/This pays dispenser #9001/, {}, { timeout: 3000 });
+        expect(screen.getByText(/This pays dispenser #9001/)).toBeInTheDocument();
 
-        expect(await screen.findByText(/address you are sending from is not allowed to buy/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/address you are sending from is not allowed to buy/))
             .toBeInTheDocument();
     });
 
@@ -193,9 +211,9 @@ describe('Send review: destination matches an open dispenser', () => {
         });
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
 
-        expect(await screen.findByText(/This pays dispenser #9001: it is priced in USD/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/This pays dispenser #9001: it is priced in USD/))
             .toBeInTheDocument();
-        expect(await screen.findByText(/oracle has no current price/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/oracle has no current price/))
             .toBeInTheDocument();
         expect(messaging.oracleFeeds).toHaveBeenCalledWith({ chainId: CHAIN_ID, address: ORACLE_ADDRESS });
     });
@@ -208,7 +226,7 @@ describe('Send review: destination matches an open dispenser', () => {
             oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'DOGI', fiat: 'USD', live: { value: '0.05' } }]),
         });
         await fillAndReview({ to: DISPENSER_ADDR, amount: '0.02' });
-        await screen.findByText(/This pays dispenser #9001/, {}, { timeout: 3000 });
+        expect(screen.getByText(/This pays dispenser #9001/)).toBeInTheDocument();
         expect(screen.queryByText(/oracle has no current price/)).toBeNull();
     });
 

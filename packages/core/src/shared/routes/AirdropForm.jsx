@@ -823,7 +823,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 return;
             }
             setFormError(null);
-            setConfirmLeg('AIRDROP');
             setStage('review-airdrop');
             return;
         }
@@ -880,9 +879,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     const submitAirdropConfirmed = useConfirmSubmit({
         ...hwDispatch, software: 'airdropAction', hardware: 'airdropActionHw',
     });
-    // Which leg the confirm page is showing, so its decoded intent matches.
-    const [, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
-
     function sourceDescriptor() {
         return {
             address: fromAddress.address,
@@ -900,7 +896,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     async function openListConfirm() {
         const from = sourceDescriptor();
         setSubmitError(null);
-        setConfirmLeg('LIST');
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -1000,7 +995,6 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     async function openAirdropConfirm() {
         const from = sourceDescriptor();
         setSubmitError(null);
-        setConfirmLeg('AIRDROP');
         try {
             const res = await actionConfirm.run({
                 chainId,
