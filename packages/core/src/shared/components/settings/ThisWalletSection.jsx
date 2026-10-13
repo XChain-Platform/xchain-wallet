@@ -367,6 +367,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     type="password"
                     value={currentPassword}
                     onChange={update(setCurrentPassword)}
+                    aria-label="Current wallet password"
                     autoComplete="current-password"
                     autoFocus
                     disabled={busy}
@@ -379,6 +380,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     type="password"
                     value={newPassword}
                     onChange={update(setNewPassword)}
+                    aria-label="New wallet password"
                     autoComplete="new-password"
                     disabled={busy}
                     style={PASSWORD_INPUT}
@@ -390,6 +392,7 @@ function ChangePasswordRow({ walletId, disabled }) {
                     type="password"
                     value={confirmation}
                     onChange={update(setConfirmation)}
+                    aria-label="Confirm new wallet password"
                     autoComplete="new-password"
                     disabled={busy}
                     style={PASSWORD_INPUT}
