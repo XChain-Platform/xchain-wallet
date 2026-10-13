@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { AddressList } from '../../../packages/core/src/shared/routes/AddressList.jsx';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet', format: 'bip39' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -233,6 +234,29 @@ describe('Address detail actions', () => {
         ]);
     });
 
+    it('renders picker actions with shared list-row interaction styles', async () => {
+        const onSelect = vi.fn();
+        mount(messagingWith(), {
+            pickerMode: true,
+            pickerActions: [{
+                key: 'new',
+                label: 'New dispenser address',
+                sublabel: 'Generate an address',
+                onSelect,
+            }],
+        });
+
+        const action = await screen.findByRole('button', {
+            name: 'New dispenser address Generate an address',
+        });
+        expect(action).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(action).toHaveAttribute('type', 'button');
+        expect(action).toHaveAttribute('aria-busy', 'false');
+
+        fireEvent.click(action);
+        expect(onSelect).toHaveBeenCalledOnce();
+    });
+
     it('bounds thousands of addresses and keeps the list scroller anchored while expanding', async () => {
         const records = Array.from({ length: 5_000 }, (_, index) => ({
             id: `addr-${index}`,
@@ -277,6 +301,9 @@ describe('Address detail actions', () => {
 
         const bitcoinRow = await screen.findByRole('button', { name: `View address ${ADDRESS}` });
         const dogecoinRow = screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` });
+        expect(bitcoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(dogecoinRow).toHaveClass(listRowStyles.row, listRowStyles.interactive);
+        expect(bitcoinRow).toHaveAttribute('aria-busy', 'false');
         expect(bitcoinRow).toHaveTextContent(/Bitcoin\s+regtest/i);
         expect(dogecoinRow).toHaveTextContent(/Dogecoin\s+regtest/i);
     });

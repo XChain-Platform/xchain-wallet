@@ -96,7 +96,6 @@ for (const [path, klass] of targets) {
 const clippedTargets = [
     [join(components, 'BalanceList.module.css'), 'rowClickable'],
     [join(components, 'ContactsPickerScreen.module.css'), 'abRow'],
-    [join(routes, 'AddressList.module.css'), 'addrRow'],
     [join(routes, 'ContactsList.module.css'), 'row'],
     [join(routes, 'DispensersList.module.css'), 'row'],
     [join(routes, 'MyLists.module.css'), 'row'],
