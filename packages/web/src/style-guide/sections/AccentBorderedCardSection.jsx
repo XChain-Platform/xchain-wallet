@@ -8,9 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Icon } from '@xchain-wallet/core/ui';
+import { TotalBalanceHero } from '@xchain-wallet/core/shared/components/TotalBalanceHero.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
-import styles from './AccentBorderedCardSection.module.css';
+import {
+    SAMPLE_BALANCE_ROWS,
+    SharedComponentExampleProvider,
+} from './sharedComponentExamples.jsx';
 
 export function AccentBorderedCardSection() {
     return (
@@ -25,63 +28,37 @@ export function AccentBorderedCardSection() {
                 when={<>The single most important figure on a screen: total balance on Home, a deal-closing summary on a confirmation screen, the "you are here" status on an in-flight transaction. Use ONCE per screen.</>}
                 whenNot={<>Default grouping: <a href="#gray-card">gray surface card</a>. Highlighted-but-not-primary cards (the portfolio chart wrap, the quick-action tiles): the outlined accent-border variant (Quick-action card pattern). Status callouts (error / warning / success): tinted status colors, not the brand fill.</>}
                 sizing={<>Padding usually compact: <code>var(--xc-space-2) var(--xc-space-3)</code> (8/12px). The card is short and wide, prioritizing the figure inside. Radius <code>var(--xc-radius-md)</code>. Box-shadow <code>0 6px 18px rgba(30, 144, 199, 0.25)</code>. White text uses opacity stops: 100% for the figure, ~85% for the label, ~60% for the scope/sub.</>}
-                variants={<>Inline action buttons (eye toggle for "balances hidden", refresh, etc.) render as 28×28 round buttons with <code>background: rgba(255,255,255,0.15)</code> and white SVG inside. Hover bumps the white fill to 0.25.</>}
+                variants={<>The shared <code>TotalBalanceHero</code> always provides chart and privacy actions. <code>onRefresh</code>, <code>onToggleFilter</code>, <code>onCommandPalette</code>, <code>onOpenSettings</code>, and <code>onLockWallet</code> add only the actions each shell can perform.</>}
                 doRule={<>✓ Reserve for the ONE primary figure on a page · always pair with white text so contrast stays AAA · use the gradient (not a flat fill, so the depth signal makes it read as "hero") · tint the box-shadow with the accent so it feels glowy, not generic-card-drop-shadow</>}
                 dontRule={<>✗ Use a solid flat fill instead of the gradient (loses the hero depth) · use this for secondary cards (defeats the "one peak per page" rule) · put dark text on it (breaks the white-on-blue identity)</>}
-                supersedes={<>The <code>.hero</code> rule in <code>TotalBalanceHero.module.css</code>. Lift to a shared <code>&lt;AccentHeroCard&gt;</code> in <code>@xchain-wallet/core/ui</code> when a second caller appears.</>}
+                supersedes={<>Hand-written copies of the Home balance hero. Use <code>TotalBalanceHero</code> so pricing, privacy, staleness, and shell actions keep the same behavior.</>}
             />
 
             <Markup>
-{`<div className={styles.hero}>
-    <div className={styles.row}>
-        <span className={styles.label}>Total balance <span className={styles.scope}>· 24h</span></span>
-        <button className={styles.eye} aria-label="Hide balances"><Icon.EyeIcon /></button>
-    </div>
-    <div className={styles.figure}>$12,345.67</div>
-    <div className={styles.delta}>+$182.40 (1.5%) ▲</div>
-</div>
+{`import { TotalBalanceHero } from '@xchain-wallet/core/shared/components/TotalBalanceHero.jsx';
 
-// CSS
-.hero {
-    background: linear-gradient(
-        180deg,
-        var(--xc-accent-primary) 0%,
-        color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%
-    );
-    color: #FFFFFF;
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
-}`}
+<TotalBalanceHero
+    rows={pricedBalanceRows}
+    walletId={walletId}
+    networkFilter={networkFilter}
+    lastSyncedAt={balancesFetchedAt}
+    pricesFetchedAt={pricesFetchedAt}
+    onRefresh={refreshBalances}
+    refreshing={refreshing}
+/>`}
             </Markup>
 
-            <LiveExample label="Total balance hero (the canonical Home pattern)">
-                <div className={styles.hero}>
-                    <div className={styles.row}>
-                        <span className={styles.label}>
-                            Total balance <span className={styles.scope}>· 24h</span>
-                        </span>
-                        <div className={styles.actions}>
-                            <button type="button" className={styles.eye} aria-label="Hide balances">
-                                <Icon.EyeIcon />
-                            </button>
-                            <button type="button" className={styles.eye} aria-label="Refresh">
-                                <Icon.RefreshIcon />
-                            </button>
-                        </div>
-                    </div>
-                    <div className={styles.figure}>$12,345.67</div>
-                    <div className={styles.delta}>+$182.40 (1.5%) ▲</div>
-                </div>
-            </LiveExample>
-
-            <LiveExample label="Compact status hero (single line, no chart)">
-                <div className={styles.hero}>
-                    <div className={styles.row}>
-                        <span className={styles.label}>Transaction confirmed</span>
-                        <span className={styles.label} style={{ fontWeight: 500 }}>#2,043,118</span>
-                    </div>
-                </div>
+            <LiveExample label="Active-address balance hero with the production actions">
+                <SharedComponentExampleProvider>
+                    <TotalBalanceHero
+                        rows={SAMPLE_BALANCE_ROWS}
+                        walletId="style-guide-wallet"
+                        networkFilter="all"
+                        lastSyncedAt={Date.parse('2026-10-13T09:00:00Z')}
+                        pricesFetchedAt={Date.parse('2026-10-13T09:00:00Z')}
+                        onRefresh={() => {}}
+                    />
+                </SharedComponentExampleProvider>
             </LiveExample>
         </Section>
     );
