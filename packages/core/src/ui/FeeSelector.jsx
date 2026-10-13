@@ -10,19 +10,23 @@
 
 import { useId, useMemo, useState } from 'react';
 import { isPerKbUnit } from '../flows/feeEstimate.js';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../shared/utils/amountFormat.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
-const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
-const HIGH_FEE_MULTIPLIER = 100;
+const SPEED_LABELS = { low: 'Slow', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
 const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
 
 /**
- * FeeSelector (§44.2): Low / Normal / Fast / Custom slider. Rendering
+ * FeeSelector (§44.2): Slow / Normal / Fast / Custom slider. Rendering
  * is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
@@ -176,12 +180,15 @@ export function FeeSelector({
 
     const beginFeeEdit = () => {
         if (disabled || !allowCustom) return;
-        setFeeDraft(activeEstimate?.coinAmount ?? '');
+        setFeeDraft(formatWithThousands(activeEstimate?.coinAmount ?? ''));
     };
 
     const onFeeDraftChange = (raw) => {
         setFeeDraft(raw);
-        const n = parseFloat(raw);
+        const canonical = normalizeLocalizedDecimal(raw);
+        const n = canonical !== null && canonical !== '' && canonical !== '.'
+            ? Number(canonical)
+            : Number.NaN;
         onChange({
             mode: 'custom',
             customRate: Number.isFinite(n) && n >= 0 ? feeToDisplayRate(n) : 0,
@@ -218,30 +225,52 @@ export function FeeSelector({
 
     const onCustomRateChange = (raw) => {
         setCustomRateDraft(raw);
-        const parsed = Number(raw);
-        const n = raw.trim() !== '' && parsed > 0 ? parsed : Number.NaN;
+        const canonical = normalizeLocalizedDecimal(raw);
+        const parsed = canonical !== null && canonical !== '' && canonical !== '.'
+            ? Number(canonical)
+            : Number.NaN;
+        const n = parsed > 0 ? parsed : Number.NaN;
         onChange({ mode: 'custom', customRate: Number.isFinite(n) ? n : 0 });
     };
 
     const customRateRaw = customRateDraft
-        ?? (Number.isFinite(value?.customRate) ? String(value.customRate) : '');
-    const customRateNumber = Number(customRateRaw);
-    const highestPresetRate = Math.max(
-        0,
-        ...tierList.map(({ estimate }) => estimate?.rateValue)
-            .filter((rate) => Number.isFinite(rate) && rate > 0),
-    );
+        ?? (Number.isFinite(value?.customRate) ? formatWithThousands(String(value.customRate)) : '');
+    const customRateCanonical = normalizeLocalizedDecimal(customRateRaw);
+    const customRateNumber = customRateCanonical !== null
+        && customRateCanonical !== ''
+        && customRateCanonical !== '.'
+        ? Number(customRateCanonical)
+        : Number.NaN;
+    const feeDraftCanonical = feeDraft === null ? null : normalizeLocalizedDecimal(feeDraft);
+    const feeDraftNumber = feeDraftCanonical !== null
+        && feeDraftCanonical !== ''
+        && feeDraftCanonical !== '.'
+        ? Number(feeDraftCanonical)
+        : Number.NaN;
+    const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
+        ? tiers.fast.rateValue
+        : null;
+    const minimumRate = Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0
+        ? tiers.minimumRate
+        : null;
     let customFeedback = null;
     let customFeedbackTone = null;
-    if (isCustom && customRateRaw.trim() === '') {
+    if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
+        customFeedback = 'Enter a valid non-negative network fee amount.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && customRateRaw.trim() === '') {
         customFeedback = 'Enter a custom fee rate.';
         customFeedbackTone = 'error';
     } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
         customFeedback = 'Custom fee rate must be greater than zero.';
         customFeedbackTone = 'error';
-    } else if (isCustom && highestPresetRate > 0
-        && customRateNumber > highestPresetRate * HIGH_FEE_MULTIPLIER) {
-        customFeedback = 'This fee rate is unusually high. Check it carefully before sending.';
+    } else if (isCustom && minimumRate !== null && customRateNumber < minimumRate) {
+        customFeedback = `This rate is below the network minimum of ${formatWithThousands(minimumRate)} ${tiers.unit}. `
+            + 'It may not relay.';
+        customFeedbackTone = 'warning';
+    } else if (isCustom && fastPresetRate !== null
+        && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
+        customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
         customFeedbackTone = 'warning';
     }
 
@@ -260,8 +289,8 @@ export function FeeSelector({
                     disabled={disabled}
                     aria-label="Network fee"
                     aria-valuetext={isCustom
-                        ? `Custom: ${Number.isFinite(value?.customRate) ? value.customRate : ''} ${tiers.unit}`.trim()
-                        : `${SPEED_LABELS[sliderSpeed]}: ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                        ? `Custom: ${Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : ''} ${tiers.unit}`.trim()
+                        : `${SPEED_LABELS[sliderSpeed]}: ${formatWithThousands(activeEstimate?.coinAmount ?? '')}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
                     className={styles.slider}
                 />
                 <div className={styles.sliderTicks} aria-hidden="true">
@@ -276,7 +305,10 @@ export function FeeSelector({
                             tabIndex={-1}
                             aria-label={SPEED_LABELS[s]}
                         >
-                            {SPEED_LABELS[s]}
+                            <span>{SPEED_LABELS[s]}</span>
+                            {Number.isFinite(tiers[s]?.etaMinutes) ? (
+                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} min</span>
+                            ) : null}
                         </button>
                     ))}
                 </div>
@@ -293,7 +325,7 @@ export function FeeSelector({
                                     <span className={styles.customRow}>
                                         <input
                                             id={feeInputId}
-                                            type="number"
+                                            type="text"
                                             inputMode="decimal"
                                             min={0}
                                             step="any"
@@ -302,6 +334,8 @@ export function FeeSelector({
                                             onChange={(e) => onFeeDraftChange(e.target.value)}
                                             onBlur={() => setFeeDraft(null)}
                                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                            aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
+                                            aria-describedby={customFeedback ? customFeedbackId : undefined}
                                             aria-label={`Network fee amount${coinTicker ? ` (${coinTicker})` : ''}`}
                                             disabled={disabled}
                                             autoFocus
@@ -321,9 +355,9 @@ export function FeeSelector({
                                                 aria-label="Edit exact fee amount"
                                                 title="Click to edit the exact fee"
                                             >
-                                                {activeEstimate.coinAmount}
+                                                {formatWithThousands(activeEstimate.coinAmount)}
                                             </button>
-                                        ) : activeEstimate.coinAmount}
+                                    ) : formatWithThousands(activeEstimate.coinAmount)}
                                         {coinTicker ? (
                                             <span className={styles.sliderReadoutCoin}> {coinTicker}</span>
                                         ) : null}
@@ -337,7 +371,7 @@ export function FeeSelector({
                                 <span className={styles.customRow}>
                                     <input
                                         id={customInputId}
-                                        type="number"
+                                        type="text"
                                         inputMode="decimal"
                                         min={0.00000001}
                                         step="any"
@@ -364,10 +398,12 @@ export function FeeSelector({
                                     aria-label={`Edit fee rate (${tiers.unit})`}
                                     title="Click to edit the fee rate"
                                 >
-                                    {activeEstimate.rate}
+                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
                                 </button>
                             ) : (
-                                <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
+                                <span className={styles.sliderReadoutRate}>
+                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
+                                </span>
                             )}
                             </div>
                             {customFeedback ? (

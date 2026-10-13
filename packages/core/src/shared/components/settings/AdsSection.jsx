@@ -135,10 +135,8 @@ export function AdsSection() {
                                 {perTxIsDefault ? ' · default' : ' · custom'}
                             </span>
                             <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                inputMode="numeric"
+                                type="text"
+                                inputMode="decimal"
                                 defaultValue={resolved.perTxAmountSats}
                                 onBlur={(e) => {
                                     // Empty field = drop the override and follow
@@ -146,6 +144,10 @@ export function AdsSection() {
                                     if (e.target.value.trim() === '') {
                                         e.target.value = String(resolved.perTxAmountSats);
                                         onChainPatch(chainId, { perTxAmountSats: null });
+                                        return;
+                                    }
+                                    if (!/^\d+$/.test(e.target.value.trim())) {
+                                        e.target.value = String(resolved.perTxAmountSats);
                                         return;
                                     }
                                     const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
@@ -175,15 +177,17 @@ export function AdsSection() {
                                 </div>
                             </div>
                             <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                inputMode="numeric"
+                                type="text"
+                                inputMode="decimal"
                                 defaultValue={resolved.triggerAmountSats}
                                 onBlur={(e) => {
                                     if (e.target.value.trim() === '') {
                                         e.target.value = String(resolved.triggerAmountSats);
                                         onChainPatch(chainId, { triggerAmountSats: null });
+                                        return;
+                                    }
+                                    if (!/^\d+$/.test(e.target.value.trim())) {
+                                        e.target.value = String(resolved.triggerAmountSats);
                                         return;
                                     }
                                     const n = Math.max(0, Math.floor(Number(e.target.value) || 0));

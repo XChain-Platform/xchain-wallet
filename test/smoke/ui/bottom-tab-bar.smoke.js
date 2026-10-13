@@ -22,7 +22,7 @@
 //      footer items (Switch wallet / Settings / Lock); Contracts is
 //      gated on hasVmAddress (DEPLOY sits in COMMON_ACTIONS, so the
 //      row is not BTC-exclusive).
-//   4. CSS module declares a 56px absolutely positioned bar that respects
+//   4. CSS module declares a scalable absolutely positioned bar that respects
 //      the iOS safe-area inset.
 //   5. FullLayoutWithNav grew a `bottomBar` slot; web, desktop and extension
 //      App.jsx pass a `<BottomTabBar>` to that slot. The main pane
@@ -89,13 +89,13 @@ assert.ok(/e\.key === 'Escape'[\s\S]*?setSheetOpen\(false\)/.test(barSrc),
 assert.ok(/if \(sheetOpen\) setSheetOpen\(false\)/.test(barSrc),
     'Sheet closes when the user navigates (currentView changes)');
 
-// --- 4. CSS: absolute 56px bar + safe-area inset ------------------------
+// --- 4. CSS: scalable absolute bar + safe-area inset --------------------
 
 const cssSrc = readFileSync(cssPath, 'utf8');
 assert.ok(/\.bar\s*\{[\s\S]*?position:\s*absolute/.test(cssSrc),
     '.bar is positioned at the bottom of the measured shell');
-assert.ok(/\.bar\s*\{[\s\S]*?height:\s*56px/.test(cssSrc),
-    '.bar reserves a 56px row');
+assert.ok(/\.bar\s*\{[\s\S]*?min-height:\s*3\.5rem/.test(cssSrc),
+    '.bar reserves a scalable row');
 assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
     '.bar respects the iOS safe-area inset');
 assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*70vh/.test(cssSrc),
@@ -131,8 +131,8 @@ assert.ok(/\.bottomBarSlot\s*\{[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot collapses above 600px');
 // Padding is applied via a class on the layout div (JS-added when bottomBar
 // is non-null) rather than a viewport-keyed media query.
-assert.ok(/\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(56px/.test(navCssSrc),
-    'main pane reserves 56px bottom-padding below 600px when bottomBar is present');
+assert.ok(/\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(3\.5rem/.test(navCssSrc),
+    'main pane reserves scalable bottom-padding when bottomBar is present');
 
 const webApp = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
@@ -159,5 +159,5 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp], ['extensio
 }
 
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; scalable absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
 );

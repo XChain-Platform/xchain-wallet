@@ -168,6 +168,19 @@
     margin: var(--xc-space-4) 0;
 }
 
+.labelEditor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--xc-space-2);
+}
+
+@media (max-width: 420px) {
+    .labelEditor {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
@@ -201,6 +214,17 @@
 .qrActions > * {
     flex: 1 1 0;
     min-width: 0;
+}
+
+@media (max-width: 380px) {
+    .qrActions {
+        flex-direction: column;
+    }
+
+    .qrActions > * {
+        flex-basis: auto;
+        width: 100%;
+    }
 }
 
 .generateAddressAction {

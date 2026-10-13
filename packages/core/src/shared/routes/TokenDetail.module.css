@@ -9,9 +9,10 @@
 
 .headerTitle {
     display: block;
-    max-width: min(60vw, 32rem);
-    white-space: normal;
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     line-height: 1.2;
 }
 
@@ -211,7 +212,7 @@
     font-size: 0.85em;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.65);
-    margin-inline-start: 4px;
+    margin-inline-start: var(--xc-space-1);
     white-space: nowrap;
     vertical-align: baseline;
 }
