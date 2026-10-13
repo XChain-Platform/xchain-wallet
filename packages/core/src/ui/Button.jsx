@@ -23,14 +23,14 @@ function defaultIconFor(children) {
 /**
  * @param {object} props
  * @param {'primary' | 'secondary' | 'ghost' | 'danger' | 'success'} [props.variant]
- * @param {'sm' | 'md'} [props.size]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {boolean} [props.block]
  * @param {boolean} [props.loading]
  * @param {boolean} [props.disabled]
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
- * @param {import('react').ReactNode} props.children
+ * @param {import('react').ReactNode} [props.children]
  */
 export function Button({
     variant = 'primary',
@@ -44,17 +44,19 @@ export function Button({
     children,
     ...rest
 }) {
-    const className = [
-        styles.btn,
-        styles[variant],
-        styles[size],
-        block ? styles.block : null,
-        loading ? styles.loading : null,
-    ].filter(Boolean).join(' ');
     // `icon` is `undefined` when the caller didn't pass it → fall back
     // to the auto-lookup. `null` is the explicit opt-out and renders
     // no icon at all. Any truthy value renders verbatim.
     const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
+    const iconOnly = Boolean(resolvedIcon) && children == null;
+    const className = [
+        styles.btn,
+        styles[variant],
+        styles[size],
+        iconOnly ? styles.iconOnly : null,
+        block ? styles.block : null,
+        loading ? styles.loading : null,
+    ].filter(Boolean).join(' ');
     return (
         <button
             type={type}

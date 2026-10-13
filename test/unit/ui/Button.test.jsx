@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '../../../packages/core/src/ui/Button.jsx';
+import styles from '../../../packages/core/src/ui/Button.module.css';
 import { SendIcon } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('<Button>', () => {
@@ -55,8 +56,14 @@ describe('<Button>', () => {
     });
 
     it('uses the shared size scale and hides decorative icons', () => {
-        render(<Button size="sm" icon={<SendIcon />}>Send</Button>);
-        const icon = screen.getByRole('button').querySelector('svg');
+        render(
+            <>
+                <Button data-testid="sm" size="sm" icon={<SendIcon />}>Send</Button>
+                <Button data-testid="md">Receive</Button>
+                <Button data-testid="lg" size="lg">Approve</Button>
+            </>,
+        );
+        const icon = screen.getByTestId('sm').querySelector('svg');
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
         // Attributes hold a plain pixel fallback; var() there renders at 300px
@@ -68,7 +75,41 @@ describe('<Button>', () => {
             .toMatch(/svg\[data-xc-icon\]\)\s*\{[^}]*width:\s*var\(--xc-icon-size,\s*var\(--xc-icon-md\)\)/s);
         expect(icon).toHaveAttribute('aria-hidden', 'true');
         expect(icon).toHaveAttribute('focusable', 'false');
-        expect(css).toMatch(/\.sm\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-sm\)/s);
-        expect(css).toMatch(/\.md\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-md\)/s);
+        expect(screen.getByTestId('sm')).toHaveClass(styles.sm);
+        expect(screen.getByTestId('md')).toHaveClass(styles.md);
+        expect(screen.getByTestId('lg')).toHaveClass(styles.lg);
+        const sizes = [['sm', '32'], ['md', '40'], ['lg', '48']];
+        const followsSharedScale = (candidate) => sizes.every(([size, height]) => new RegExp(
+            `\\.${size}\\s*\\{[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
+            's',
+        ).test(candidate));
+        for (const [size] of sizes) {
+            expect(css).toMatch(new RegExp(
+                `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`
+                + `[^}]*--xc-icon-size:\\s*var\\(--xc-icon-${size}\\)`,
+                's',
+            ));
+        }
+        expect(followsSharedScale(css)).toBe(true);
+        const shortened = css.replace(
+            'min-height: var(--xc-control-h-sm, 32px)',
+            'min-height: 20px',
+        );
+        expect(shortened).not.toBe(css);
+        expect(followsSharedScale(shortened)).toBe(false);
+        expect(css).toMatch(/\.btn\s*\{[^}]*padding:\s*0 var\(--xc-control-pad-x\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s);
+        expect(css).not.toMatch(/min-height:\s*(?:28|36)px/);
+    });
+
+    it('keeps icon-only buttons square with an invisible coarse-pointer hit area', () => {
+        render(<Button size="sm" icon={<SendIcon />} aria-label="Send" data-testid="send" />);
+        const button = screen.getByTestId('send');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
+        expect(button).toHaveClass(styles.sm, styles.iconOnly);
+        expect(css).toMatch(/\.iconOnly\s*\{[^}]*width:\s*var\(--xc-button-height\)[^}]*min-width:\s*var\(--xc-button-height\)/s);
+        expect(css).toMatch(/@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s);
     });
 });
