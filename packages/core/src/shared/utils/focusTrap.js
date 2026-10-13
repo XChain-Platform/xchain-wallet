@@ -127,6 +127,48 @@ function openerFor(container) {
     return null;
 }
 
+function pageFocusTarget(closedLayer) {
+    const available = (candidate) => candidate
+        && candidate.isConnected
+        && !closedLayer?.contains(candidate)
+        && !candidate.closest('[inert]')
+        && candidate.getAttribute('aria-hidden') !== 'true';
+    const heading = Array.from(document.querySelectorAll(
+        '#xc-main h1, main h1, [role="main"] h1',
+    )).find(available);
+    if (heading) return heading;
+    return Array.from(document.querySelectorAll('#xc-main, main, [role="main"]'))
+        .find(available) || null;
+}
+
+/**
+ * Returns focus after a transient layer closes without overriding a route or
+ * control that already claimed it. A removed opener falls back to the active
+ * page heading, or its main region when the page has no heading.
+ *
+ * @param {HTMLElement | null} opener
+ * @param {HTMLElement | null} [closedLayer]
+ * @returns {boolean} whether focus moved
+ */
+export function restoreFocusAfterClose(opener, closedLayer = null) {
+    const now = document.activeElement;
+    const unclaimed = !now || now === document.body || !now.isConnected
+        || Boolean(closedLayer?.contains(now));
+    if (!unclaimed) return false;
+
+    const target = opener?.isConnected ? opener : pageFocusTarget(closedLayer);
+    if (!target || typeof target.focus !== 'function') return false;
+    if (!target.matches(FOCUSABLE_SELECTOR) && !target.hasAttribute('tabindex')) {
+        target.tabIndex = -1;
+    }
+    try {
+        target.focus({ preventScroll: true });
+        return document.activeElement === target;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Trap Tab focus within `containerRef` while `active`. On activate, snapshots
  * the opener and moves focus to `initialFocusRef` (or the first focusable
@@ -193,12 +235,7 @@ export function useFocusTrap(containerRef, {
             const layerIndex = activeTraps.indexOf(layer);
             if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
             unlockBodyScroll();
-            const prev = previouslyFocused.current;
-            const now = document.activeElement;
-            const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
-            if (unclaimed && prev && prev.isConnected && typeof prev.focus === 'function') {
-                try { prev.focus(); } catch { /* noop */ }
-            }
+            restoreFocusAfterClose(previouslyFocused.current, container);
         };
     }, [active, containerRef, initialFocusRef, restoreFocusRef, trap]);
 }
