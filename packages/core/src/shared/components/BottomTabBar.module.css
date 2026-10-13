@@ -91,9 +91,10 @@
     display: block;
     max-width: 100%;
     line-height: 1.1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 /* Scrim + bottom sheet. The sheet sits above the bar so its safe-area

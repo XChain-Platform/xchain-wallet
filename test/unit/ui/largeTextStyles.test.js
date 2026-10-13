@@ -29,7 +29,7 @@ describe('large text layout styles', () => {
         expect(typeTokens.every((value) => /^\d*\.?\d+rem$/.test(value))).toBe(true);
     });
 
-    it('keeps tab labels inside a scalable bar without fixed pixel type', () => {
+    it('keeps whole tab labels inside a scalable bar without fixed pixel type', () => {
         const css = readCore('shared', 'components', 'BottomTabBar.module.css');
         const bar = rule(css, '.bar');
         const tab = rule(css, '.tab');
@@ -39,11 +39,12 @@ describe('large text layout styles', () => {
         expect(bar).toMatch(/min-height:\s*3\.5rem/);
         expect(bar).not.toMatch(/(?:^|\s)height:/);
         expect(tab).toMatch(/min-width:\s*0/);
-        expect(label).toMatch(/text-overflow:\s*ellipsis/);
-        expect(label).toMatch(/white-space:\s*nowrap/);
+        expect(label).toMatch(/white-space:\s*normal/);
+        expect(label).toMatch(/word-break:\s*normal/);
+        expect(label).not.toMatch(/text-overflow|overflow:\s*hidden/);
     });
 
-    it('keeps header titles and menu rows from entering adjacent controls', () => {
+    it('keeps header titles bounded and network labels intact', () => {
         const appHeader = readCore('shared', 'components', 'AppHeader.module.css');
         const pageHeader = readCore('ui', 'PageHeader.module.css');
         const networkButton = readCore('shared', 'components', 'HeaderNetworkButton.module.css');
@@ -53,7 +54,9 @@ describe('large text layout styles', () => {
         expect(rule(appHeader, '.left')).toMatch(/overflow:\s*hidden/);
         expect(rule(pageHeader, '.title')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*nowrap/);
-        expect(rule(networkButton, '.networkSelectLabel')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(networkButton, '.networkSelectLabel')).toMatch(/overflow-wrap:\s*break-word/);
+        expect(rule(networkButton, '.networkSelectLabel')).toMatch(/word-break:\s*normal/);
+        expect(rule(networkButton, '.networkSelectLabel')).not.toMatch(/text-overflow/);
     });
 
     it('truncates button labels and balance names without icon shrinkage', () => {

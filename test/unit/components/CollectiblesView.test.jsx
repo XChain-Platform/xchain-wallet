@@ -95,7 +95,7 @@ describe('CollectiblesView cards', () => {
         expect(screen.getByRole('list', { name: 'Hidden collectibles' })).toBeTruthy();
     });
 
-    it('defines bounded phone and desktop grids and wraps long names', () => {
+    it('defines bounded phone and desktop grids and preserves long names', () => {
         const css = readFileSync(
             'packages/core/src/shared/components/CollectiblesView.module.css',
             'utf8',
@@ -103,7 +103,8 @@ describe('CollectiblesView cards', () => {
 
         expect(css).toMatch(/minmax\(min\(9rem, 100%\), 1fr\)/);
         expect(css).toMatch(/@media \(min-width: 48rem\)[\s\S]*minmax\(10rem, 12rem\)/);
-        expect(css).toMatch(/overflow-wrap: anywhere/);
-        expect(css).toMatch(/-webkit-line-clamp: 2/);
+        expect(css).toMatch(/overflow-wrap: break-word/);
+        expect(css).toMatch(/word-break: normal/);
+        expect(css).not.toMatch(/-webkit-line-clamp/);
     });
 });

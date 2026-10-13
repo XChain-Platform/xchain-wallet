@@ -44,12 +44,10 @@
     font-size: var(--xc-text-sm);
 }
 
-/* Pin the reused network dropdown to the same height as the search
-   input so the two controls line up. The dropdown otherwise sizes to
-   its 20px coin icon and ends up a few px taller. 38px matches the
-   standard header control height. */
+/* Keep the reused network dropdown at least as tall as the search input.
+   Longer labels can increase its height instead of being clipped. */
 .netSelect {
-    height: 38px;
+    min-height: 38px;
 }
 
 /* No focus ring on the search box: the user wants it to look identical
@@ -64,6 +62,17 @@
 .networkWrap {
     flex: 1 1 0;
     min-width: 0;
+}
+
+@media (max-width: 360px) {
+    .bar {
+        flex-wrap: wrap;
+    }
+
+    .searchWrap,
+    .networkWrap {
+        flex-basis: 100%;
+    }
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
