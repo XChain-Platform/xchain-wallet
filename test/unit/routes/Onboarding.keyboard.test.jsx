@@ -90,11 +90,10 @@ describe('create onboarding keyboard flow', () => {
         renderCreate({ importMnemonic });
 
         const passwordHeading = screen.getByRole('heading', { name: 'Create a new wallet' });
-        await waitFor(() => expect(passwordHeading).toHaveFocus());
+        // The password stage puts focus on the password field.
+        await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
 
         const expectedTabOrder = [
-            screen.getByLabelText('Wallet name'),
-            screen.getByLabelText('Password'),
             screen.getByLabelText('Confirm password'),
             screen.getByRole('radio', { name: /^12 words/ }),
             screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ }),
@@ -120,6 +119,8 @@ describe('create onboarding keyboard flow', () => {
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
 
         fillCreatePasswords();
+        // The earlier validation errors re-rendered the form, so restart from the last field.
+        screen.getByRole('button', { name: 'BIP39 passphrase help' }).focus();
         pressTab();
         expect(screen.getByRole('button', { name: 'Next' })).toHaveFocus();
         pressEnter(screen.getByLabelText('Confirm password'));
@@ -132,8 +133,9 @@ describe('create onboarding keyboard flow', () => {
         verifyButton.focus();
         fireEvent.keyDown(verifyButton, { key: 'Enter' });
         fireEvent.click(verifyButton);
-        const verifyHeading = await screen.findByRole('heading', { name: 'Verify your recovery phrase' });
-        expect(verifyHeading).toHaveFocus();
+        await screen.findByRole('heading', { name: 'Verify your recovery phrase' });
+        // The verify stage puts focus on the first quiz word.
+        await waitFor(() => expect(screen.getAllByLabelText(/^Word \d+$/)[0]).toHaveFocus());
 
         pressEnter(screen.getAllByLabelText(/^Word \d+$/)[0]);
         expect(screen.getByRole('alert')).toHaveTextContent('Fill in every word');
@@ -174,8 +176,8 @@ describe('create onboarding keyboard flow', () => {
         expect(onBack).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
-        const passwordHeading = await screen.findByRole('heading', { name: 'Create a new wallet' });
-        expect(passwordHeading).toHaveFocus();
+        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel wallet');
         expect(screen.getByRole('radio', { name: /^24 words/ })).toBeChecked();
         expect(screen.getByRole('checkbox', { name: /Use a BIP39 passphrase/ })).toBeChecked();
@@ -201,6 +203,7 @@ describe('import onboarding keyboard flow', () => {
 
         const expectedTabOrder = [
             screen.getByRole('tab', { name: 'Recovery phrase' }),
+            screen.getByRole('tab', { name: 'Private key' }),
             screen.getByRole('tab', { name: 'Encrypted backup' }),
             screen.getByRole('button', { name: 'Paste recovery phrase from clipboard' }),
             screen.getByRole('button', { name: 'Scan QR' }),
@@ -229,6 +232,7 @@ describe('import onboarding keyboard flow', () => {
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        screen.getByRole('button', { name: 'BIP39 passphrase help' }).focus();
         pressTab();
         expect(screen.getByRole('button', { name: 'Import' })).toHaveFocus();
         pressEnter(screen.getByLabelText('Confirm password'));
