@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -691,38 +691,25 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 />
             ) : null}
 
-            <fieldset style={{ border: '1px solid var(--xc-border)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
-                <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
-                <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
-                    Set automatically from the signing public key below. Change it only if you need to override the detected mode.
+            <RadioGroup
+                legend="Mode"
+                name="stakeMode"
+                value={stakeMode}
+                onChange={(value) => { setStakeMode(value); setFormError(null); }}
+                options={[
+                    { value: '1', label: 'New stake' },
+                    { value: '2', label: 'Top up an existing stake' },
+                ]}
+                hint="Set automatically from the signing public key below. Change it only if you need to override the detected mode."
+            />
+            {detectStatus !== 'idle' ? (
+                <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
+                    {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
+                    {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
+                    {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
+                    {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
                 </p>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                    <input
-                        type="radio"
-                        name="stakeMode"
-                        value="1"
-                        checked={stakeMode === '1'}
-                        onChange={() => { setStakeMode('1'); setFormError(null); }}
-                    /> New stake
-                </label>
-                <label style={{ display: 'block' }}>
-                    <input
-                        type="radio"
-                        name="stakeMode"
-                        value="2"
-                        checked={stakeMode === '2'}
-                        onChange={() => { setStakeMode('2'); setFormError(null); }}
-                    /> Top up an existing stake
-                </label>
-                {detectStatus !== 'idle' ? (
-                    <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
-                        {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
-                        {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
-                        {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
-                        {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
-                    </p>
-                ) : null}
-            </fieldset>
+            ) : null}
 
             <AmountField
                 label="Amount"
