@@ -5,7 +5,8 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-page-gutter);
     background: var(--xc-surface);
     border-bottom: 1px solid var(--xc-border);
     width: 100%;
@@ -144,7 +145,7 @@
 @media (orientation: landscape) and (max-height: 480px) {
     .bar {
         gap: var(--xc-space-2);
-        padding: var(--xc-space-1) var(--xc-space-2);
+        padding-block: var(--xc-space-1);
     }
 
     .logo {

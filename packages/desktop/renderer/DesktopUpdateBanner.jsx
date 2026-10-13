@@ -34,6 +34,7 @@
 // getting that wrong silences the next one too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { t } from '../../core/src/i18n/index.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -58,14 +59,6 @@ const WRAP = {
     borderRadius: 'var(--xc-radius-md)',
     fontSize: 'var(--xc-text-sm)',
     color: 'var(--xc-text)',
-};
-
-const LINK_BUTTON = {
-    background: 'none',
-    border: 'none',
-    color: 'var(--xc-text-muted)',
-    cursor: 'pointer',
-    fontSize: 'var(--xc-text-sm)',
 };
 
 /**
@@ -245,34 +238,35 @@ export function DesktopUpdateBanner() {
                 ) : null}
             </div>
             {state === 'available' ? (
-                <button type="button" onClick={() => runAction('download')} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('download')}>
                     {t('desktopUpdate.download')}
-                </button>
+                </Button>
             ) : null}
             {state === 'ready' || state === 'restart-blocked' ? (
-                <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
                     {t('desktopUpdate.restart')}
-                </button>
+                </Button>
             ) : null}
             {state === 'install-failed' && installCause !== 'read-only' ? (
-                <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
                     {t('desktopUpdate.retry')}
-                </button>
+                </Button>
             ) : null}
             {state === 'error' ? (
-                <button type="button" onClick={() => runAction(retryAction.current)} style={LINK_BUTTON}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction(retryAction.current)}>
                     {t('desktopUpdate.retry')}
-                </button>
+                </Button>
             ) : null}
             {['checking', 'downloading', 'verifying'].includes(state) ? null : (
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setDismissed(true)}
                     aria-label={t('desktopUpdate.dismissLabel')}
-                    style={LINK_BUTTON}
                 >
                     {t('desktopUpdate.dismiss')}
-                </button>
+                </Button>
             )}
         </div>
     );

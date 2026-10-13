@@ -19,17 +19,7 @@
     color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    /* Align the chevron's point with the AppHeader logo's left edge.
-       Two offsets stack. First, the bar-padding delta: AppHeader pads its
-       bar by space-3, Screen.header pads by space-4, so the content box
-       starts 4px too far right. Second, the chevron glyph sits 9px inside
-       its own 24px SVG (the BackIcon vertex is at 9/24 of the viewBox),
-       so a box-aligned button still reads indented. Subtract both so the
-       visible chevron point lands under the logo's left edge. Tune
-       --xc-page-header-chevron-nudge if a different chevron is swapped in. */
-    --xc-page-header-chevron-nudge: 9px;
     padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
-    margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-page-header-chevron-nudge));
     border-radius: var(--xc-radius-sm);
     transition: color 0.12s ease;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
@@ -92,10 +82,6 @@
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-2);
-    /* Symmetric counterpart to .back's negative margin-inline-start so
-       trailing controls sit flush with the right edge of the AppHeader
-       above. */
-    margin-inline-end: calc(var(--xc-space-3) - var(--xc-space-4));
 }
 
 /* Trailing action buttons read as circles, the round counterpart to the
