@@ -31,6 +31,23 @@ One rule on every platform (phone, extension popup, desktop app, browser), decid
 
 The breakpoint is a viewport media query, not a container query (the Android WebView 102 the app ships to has no container queries) and not the shell: the old `isFull ? <div className={styles.card}>` pattern, chosen from `screenVariantFor(shell)`, put a card on a phone browser and is superseded. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
 
+### Viewport width scale
+
+Core CSS modules use this reviewed set of viewport widths. Choose the narrowest point that solves the layout problem instead of adding a nearby value.
+
+| width | use |
+|---|---|
+| `400px` | extension-width detail layouts |
+| `420px` | narrow row and toolbar stacking |
+| `480px` | compact grids and dense controls |
+| `520px` | header control compression |
+| `600px` | the form and narrow route boundary |
+| `640px` | compact shell fallback |
+| `48rem` | wide collectible grids |
+| `1024px` | desktop reference frame and future desktop-only refinements |
+
+The current CSS-module audit uses `400px`, `420px`, `480px`, `520px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
+
 ### The list rule: full width, always
 
 `<ListPage>` content fills the full width of the content area up to the scrollbar and never runs under it (Screen reserves the scrollbar gutter), at every width. There is no narrow/wide switch and no 560px column for lists. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.

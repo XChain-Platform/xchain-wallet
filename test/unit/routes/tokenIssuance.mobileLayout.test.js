@@ -52,7 +52,7 @@ describe('token issuance mobile layout', () => {
     });
 
     it.each(routeStyles)('%s stacks review labels and values at 360px', (path) => {
-        const narrow = mediaBlock(readCss(path), '(max-width: 399px)');
+        const narrow = mediaBlock(readCss(path), 'not all and (min-width: 400px)');
         expect(ruleBody(narrow, '.detailsList')).toMatch(
             /grid-template-columns:\s*minmax\(0, 1fr\)/,
         );
