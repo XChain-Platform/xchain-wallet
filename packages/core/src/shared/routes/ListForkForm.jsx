@@ -104,7 +104,13 @@ const REPOINT_TARGETS = [
  * @param {() => void} props.onDone
  * @param {Partial<Record<'issue-lists' | 'dispenser-lists' | 'order-lists', () => void>>} [props.repointHandlers]
  */
-export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
+export function ListForkForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListForkFormScreen key={formKey} {...props} />;
+}
+
+function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers = {} }) {
     const { chainId, actionIndex: oldIndex, type: listType, items: currentItems } = listRef;
     // true / false from the explorer, null when it does not say.
     const resolution = typeof listRef.editResolutionActive === 'boolean' ? listRef.editResolutionActive : null;
@@ -150,6 +156,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // Close re-entry before React renders the visible submitting state.
     const firstLegInFlightRef = useRef(false);
+    const secondLegInFlightRef = useRef(false);
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
@@ -625,24 +632,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
     async function handleSignSecond(event) {
         event.preventDefault();
-        if (submitting || !intermediateIndex) return;
+        if (submitting || secondLegInFlightRef.current || !intermediateIndex) return;
         const sizeError = listActionSizeError(secondActionSize);
         if (sizeError) { setSubmitError(sizeError); return; }
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
-        if (singleEncode) {
-            await runLegThroughConfirm(secondParams, (res) => {
-                const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('List fork broadcast did not return a txid.');
-                setTx2Txid(txid);
-                setPassword('');
-                setStage('repoint');
-            });
-            return;
-        }
+        secondLegInFlightRef.current = true;
         setSubmitting(true);
         setSubmitError(null);
         try {
+            if (singleEncode) {
+                await runLegThroughConfirm(secondParams, (res) => {
+                    const txid = res?.txid || res?.broadcast?.txid;
+                    if (!txid) throw new Error('List fork broadcast did not return a txid.');
+                    setTx2Txid(txid);
+                    setPassword('');
+                    setStage('repoint');
+                });
+                return;
+            }
             const from = sourceDescriptor();
             const base = { walletId, chainId, from, params: secondParams, payFeeInNativeCoin: nativeFee.flag, ...(feePerKb != null ? { feePerKb } : {}) };
             const res = hw
@@ -661,6 +669,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             }));
             if (!hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
         } finally {
+            secondLegInFlightRef.current = false;
             setSubmitting(false);
         }
     }
