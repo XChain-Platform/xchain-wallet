@@ -556,7 +556,6 @@ function AppInner({ canOpenInTab }) {
             if (!route) return;
             if (route.view === 'deep-link-error') {
                 setDeepLinkNotice(route.message);
-                pendingUriView.current = null;
                 return;
             }
             if (route.view === 'send') setSendPrefill(route.sendPrefill);
@@ -566,7 +565,6 @@ function AppInner({ canOpenInTab }) {
             }
             setUnlockedView(route.view);
             launchRouteState.current.remember(route.view);
-            pendingUriView.current = route.view;
         } catch {
             // The shared router returns an error route for malformed input;
             // this remains defensive against an unexpected parser failure.
