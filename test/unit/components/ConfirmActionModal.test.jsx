@@ -39,6 +39,28 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve/);
     });
 
+    it('uses a plain headline when an action has no decoded summary', () => {
+        render(<ConfirmActionModal {...base({ decoded: null })} />);
+        expect(screen.getByText('Review action')).toBeTruthy();
+        expect(screen.getByTestId('confirm-modal').getAttribute('aria-label'))
+            .toBe('Confirm Review action');
+    });
+
+    it('shows the browser-verified requesting site in a labelled block', () => {
+        render(<ConfirmActionModal {...base({
+            requestOrigin: 'https://very-long-requesting-site.example/path',
+        })} />);
+        const site = screen.getByTestId('confirm-request-origin');
+        expect(site.tagName).toBe('SECTION');
+        expect(site.getAttribute('aria-label')).toBe('Requesting site');
+        expect(site.textContent).toContain('https://very-long-requesting-site.example/path');
+    });
+
+    it('does not claim a requesting site for a wallet-initiated action', () => {
+        render(<ConfirmActionModal {...base()} />);
+        expect(screen.queryByTestId('confirm-request-origin')).toBeNull();
+    });
+
     // #40. The page that is the last check before signing did not say who was
     // signing, in a wallet that holds several addresses per chain.
     describe('the From row (#40)', () => {
@@ -48,10 +70,10 @@ describe('ConfirmActionModal', () => {
             render(<ConfirmActionModal {...base({ sourceAddress: ADDR })} />);
             const row = screen.getByTestId('confirm-source');
             expect(row.textContent).toMatch(/^From/);
-            // AddressText truncates for display and carries the full string on
-            // title, which is what a user comparing against their address list
-            // needs to be able to read.
+            // The final review keeps the complete address visible and also
+            // exposes it through the title attribute.
             expect(row.querySelector('[title]')?.getAttribute('title')).toBe(ADDR);
+            expect(row.textContent).toContain(ADDR);
         });
 
         it('renders no row when no source was supplied', () => {
