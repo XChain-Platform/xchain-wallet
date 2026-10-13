@@ -151,7 +151,11 @@ describe('dispenser Buy panel funding check (D-37)', () => {
     it('keeps fill counts above the safe integer limit exact', async () => {
         const messaging = mount({
             buyerHolds: '90071992.54740993',
-            dispenser: { ...DISPENSER, get_amount: '0.00000001' },
+            dispenser: {
+                ...DISPENSER,
+                get_amount: '0.00000001',
+                escrow_remaining: '900719925474099300',
+            },
         });
         await screen.findByText(/90,071,992\.54740993 MEMEVALID available/);
         fireEvent.change(screen.getByLabelText(/Fills/i), {

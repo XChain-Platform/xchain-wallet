@@ -15,7 +15,11 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import {
+    dispenserFillPriceLabel,
+    formatDecimal,
+    isOpenDispenserSelling,
+} from '../utils/dispenserPricing.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -113,7 +117,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
         Promise.all(targetChains.map((cid) =>
             Promise.resolve().then(() => fetchOne(cid))
-                .then((resp) => ({ cid, rows: extractRows(resp) }))
+                .then((resp) => ({
+                    cid,
+                    rows: extractRows(resp).filter((row) => isOpenDispenserSelling(
+                        row,
+                        searchMode === 'token' ? q : '',
+                    )),
+                }))
                 .catch((err) => {
                     const message = err?.message || String(err);
                     // D-34(b): the explorer answers 404 for "this token has no
@@ -306,7 +316,8 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
 }
 
 function ResultRow({ row, oracleFeeds, onSelect }) {
-    const rate = dispenserRateLabel(row, oracleFeeds);
+    const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
+    const price = dispenserFillPriceLabel(row, oracleFeeds);
     const status = String(flowsLib.dispenserLiveState(row).status || '-');
     return (
         <button
@@ -315,7 +326,10 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
             onClick={onSelect}
         >
             <span className={styles.entryLabel}>
-                {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} /> · {rate}
+                {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} />
+            </span>
+            <span className={styles.entryDescription}>
+                Gives {give} per fill · Price per fill: {price}
             </span>
             <span className={styles.entryDescription}>
                 #{row.action_index ?? '?'} · status {status}

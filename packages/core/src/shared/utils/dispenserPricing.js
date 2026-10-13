@@ -93,14 +93,24 @@ export function oraclePriceLabel(row, feeds) {
 export function dispenserRateLabel(row, oracleFeeds) {
     if (isDispenserPriceStale(row)) return DISPENSER_PRICE_STALE_MESSAGE;
     const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
+    if (isFiatPricedRow(row) && !isOraclePricedRow(row)
+        && !(row.fiat_amount != null && row.fiat_code)) {
+        return `${give}, priced in fiat: open the dispenser for the current price`;
+    }
+    return `${give} per ${dispenserFillPriceLabel(row, oracleFeeds)}`;
+}
+
+/** Price of one complete fill, without repeating the quantity dispensed. */
+export function dispenserFillPriceLabel(row, oracleFeeds) {
+    if (isDispenserPriceStale(row)) return DISPENSER_PRICE_STALE_MESSAGE;
     if (isFiatPricedRow(row)) {
-        if (isOraclePricedRow(row)) return `${give} per ${oraclePriceLabel(row, oracleFeeds)}`;
+        if (isOraclePricedRow(row)) return oraclePriceLabel(row, oracleFeeds);
         return row.fiat_amount != null && row.fiat_code
-            ? `${give} per ${formatDecimal(row.fiat_amount)} ${row.fiat_code}`
-            : `${give}, priced in fiat: open the dispenser for the current price`;
+            ? `${formatDecimal(row.fiat_amount)} ${row.fiat_code}`
+            : 'priced in fiat: open the dispenser for the current price';
     }
     const payAsset = row.get_tick || row.get_coin || '?';
-    return `${give} per ${formatDecimal(row.get_amount)} ${payAsset}`;
+    return `${formatDecimal(row.get_amount)} ${payAsset}`;
 }
 
 /**

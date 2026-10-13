@@ -54,7 +54,8 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
             oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'MGRTEST', fiat: 'USD', live: { value: '0.05' } }]),
         });
         await searchFor('MGRTEST');
-        expect(await screen.findAllByText(/1 MGRTEST per 0\.05 USD \(oracle ndDEAA/)).not.toHaveLength(0);
+        expect(await screen.findAllByText(/Gives 1 MGRTEST per fill · Price per fill: 0\.05 USD \(oracle ndDEAA/))
+            .not.toHaveLength(0);
         expect(screen.getAllByText(/status open/)).not.toHaveLength(0);
         expect(screen.queryAllByText(/status valid/)).toHaveLength(0);
         expect(document.body.textContent).not.toMatch(/per 0 DOGE/);
@@ -81,7 +82,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         await searchFor('MGRTEST');
         expect(await screen.findAllByText(/Not selling right now: no price in the last 24 hours/))
             .not.toHaveLength(0);
-        expect(screen.queryAllByText(/1 MGRTEST per 0\.05 USD/)).toHaveLength(0);
+        expect(screen.queryAllByText(/Price per fill: 0\.05 USD/)).toHaveLength(0);
     });
 
     it('never quotes zero coin on a host that cannot read oracle feeds', async () => {
@@ -89,5 +90,25 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         await searchFor('MGRTEST');
         expect(await screen.findAllByText(/open the dispenser for the price/)).not.toHaveLength(0);
         expect(document.body.textContent).not.toMatch(/per 0 DOGE/);
+    });
+
+    it('omits closed and empty rows while keeping open per-fill terms explicit', async () => {
+        renderExplorer({
+            getDispensersForToken: vi.fn().mockResolvedValue({
+                data: [
+                    { ...MODE_B_ROW, action_index: 'open' },
+                    { ...MODE_B_ROW, action_index: 'closed', current_status: 'cancelled' },
+                    { ...MODE_B_ROW, action_index: 'empty', escrow_remaining: '0' },
+                ],
+            }),
+            oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'MGRTEST', fiat: 'USD', live: { value: '0.05' } }]),
+        });
+        await searchFor('MGRTEST');
+
+        expect(await screen.findAllByText(/Gives 1 MGRTEST per fill · Price per fill: 0\.05 USD/))
+            .not.toHaveLength(0);
+        expect(screen.getAllByText(/#open · status open/)).not.toHaveLength(0);
+        expect(screen.queryByText(/#closed/)).toBeNull();
+        expect(screen.queryByText(/#empty/)).toBeNull();
     });
 });

@@ -641,6 +641,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         () => remainingFillsFrom(escrowRemaining, dispenser?.give_amount),
         [escrowRemaining, dispenser],
     );
+    const hasCompleteFill = remainingFills == null || remainingFills > 0n;
     const isTokenPaid = Boolean(getTick) && !!getAmount;
     const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
     // What a buyer pays with: the payment token, or the chain's native coin.
@@ -650,8 +651,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const coinBuyable = isCoinPaid && !isFiatPriced && Boolean(feeCoinTicker)
         && String(getCoin).toUpperCase() === feeCoinTicker;
     const payTick = isTokenPaid ? getTick : (coinBuyable ? feeCoinTicker : '');
-    const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0 && !ownerAddress;
-    const showPayHere = isCoinPaid && !ownerAddress;
+    const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0
+        && !ownerAddress && isOpen && hasCompleteFill;
+    const showPayHere = isCoinPaid && !ownerAddress && isOpen && hasCompleteFill;
 
     // A coin-paid dispenser can be priced below the chain's dust floor (one
     // opened before the create form refused that, or by another client), and the
@@ -672,6 +674,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const count = BigInt(value);
         return count > 0n ? count : null;
     }, [fills]);
+    const fillsError = fillsCount == null
+        ? 'Enter a whole number of fills, at least 1.'
+        : null;
+    const inventoryError = fillsCount != null && remainingFills != null && fillsCount > remainingFills
+        ? `Only ${remainingFills} complete fill${remainingFills === 1n ? '' : 's'} remain. Reduce the number of fills.`
+        : null;
 
     // Default Fills to the floor the first time a dispenser needing one loads,
     // so a buyer who never learns dispensers can be priced under dust does not
@@ -1033,6 +1041,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
     const buyConfirmNotes = (
         <>
+            <p className={styles.successLabel}>Review purchase</p>
+            <dl className={styles.detailsList} data-testid="buy-review-summary">
+                <dt className={styles.detailsLabel}>Price per fill</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
+                <dt className={styles.detailsLabel}>Fills</dt>
+                <dd className={styles.detailsValue}>{String(fillsCount)}</dd>
+                <dt className={styles.detailsLabel}>You pay</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(totalPayAmount))} {payTick}</dd>
+                <dt className={styles.detailsLabel}>You receive</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(totalReceive))} {giveTick}</dd>
+            </dl>
             {buyDestinationNotice ? (
                 <div data-testid="buy-dispenser-notice">
                     <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
@@ -1127,7 +1146,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         }
         // Resolve every buyer and pay-to list before any transaction reaches Confirm.
         if (await refreshBuyerEligibility()) return;
-        if (buyUnderfunded || buyDustBlock) return;
+        if (buyUnderfunded || buyDustBlock || fillsError || inventoryError) return;
         setBuyStage('submitting');
         setBuyError(null);
         try {
@@ -1156,6 +1175,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setBuyPassword('');
         }
     }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
+        fillsError, inventoryError,
         ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy]);
 
     /**
@@ -1830,6 +1850,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <span>. A payment made now would be refused and kept.</span>
                 </p>
             ) : null}
+            {!ownerAddress && isOpen && !hasCompleteFill ? (
+                <p role="status" className={local.closeWindowNote}>
+                    This dispenser has no complete fills left to buy.
+                </p>
+            ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
@@ -2134,7 +2159,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <div className={local.buyFillsRow}>
                         <Input
                             label="Fills"
-                            hint="Multiply per-fill amounts by this number (integer ≥ 1)."
+                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
                             inputMode="numeric"
                             value={fills}
                             onChange={(e) => setFills(e.target.value)}
@@ -2150,6 +2175,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             Max
                         </Button>
                     </div>
+                    {totalPayAmount && totalReceive ? (
+                        <dl className={styles.detailsList} data-testid="buy-totals">
+                            <dt className={styles.detailsLabel}>Price per fill</dt>
+                            <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
+                            <dt className={styles.detailsLabel}>Give per fill</dt>
+                            <dd className={styles.detailsValue}>{formatWithThousands(String(giveAmount))} {giveTick}</dd>
+                            <dt className={styles.detailsLabel}>You pay</dt>
+                            <dd className={styles.detailsValue}>{formatWithThousands(totalPayAmount)} {payTick}</dd>
+                            <dt className={styles.detailsLabel}>You receive</dt>
+                            <dd className={styles.detailsValue}>{formatWithThousands(totalReceive)} {giveTick}</dd>
+                        </dl>
+                    ) : null}
+                    {fillsError ? (
+                        <p role="alert" className={styles.warning}>{fillsError}</p>
+                    ) : null}
+                    {inventoryError ? (
+                        <p role="alert" className={styles.warning}>{inventoryError}</p>
+                    ) : null}
                     {minFillsNotice ? (
                         <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
                     ) : null}
@@ -2184,6 +2227,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
                             || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
                             || buyerEligibilityBarred || dispenserSelfBarred || priceStale
+                            || Boolean(inventoryError)
                             || buyStage === 'submitting' || buyConfirm.composing}
                     >
                         {ownerLane.isWatcherMode
