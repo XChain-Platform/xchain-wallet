@@ -1724,18 +1724,6 @@ export function getNativePricesRequest(opts) {
     return /** @type {any} */ (sendMessage('prices.native', opts));
 }
 
-/**
- * One fiat-rate source request, made by main on the renderer's behalf
- * (the renderer CSP pins connect-src 'self'). Main fetches only the
- * price lookup's own URLs; see isFiatRateSourceUrl.
- *
- * @param {string} url
- * @returns {Promise<{ ok: boolean, status: number, body?: unknown, error?: string }>}
- */
-export function fiatFetchRequest(url) {
-    return /** @type {any} */ (sendMessage('prices.fiatFetch', { url }));
-}
-
 // ---------------------------------------------------------------------
 // row 105: the calls this file's own header promised and did not
 // have.
