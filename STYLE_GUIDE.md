@@ -255,12 +255,12 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-space-5` | 20px | loose cluster spacing |
 | `--xc-space-6` | 24px | card outer padding |
 | `--xc-space-8` | 32px | section breaks and page-level rhythm |
-| `--xc-text-xs` | 11px | metadata, hint text |
-| `--xc-text-sm` | 13px | labels, secondary body text |
-| `--xc-text-md` | 14px | default body text and button labels |
-| `--xc-text-lg` | 16px | large-input text, section titles, page title |
-| `--xc-text-xl` | 20px | asset hero name, panel headings |
-| `--xc-text-2xl` | 24px | hero figures and prominent asset tickers |
+| `--xc-text-xs` | 0.6875rem | metadata, hint text |
+| `--xc-text-sm` | 0.8125rem | labels, secondary body text |
+| `--xc-text-md` | 0.875rem | default body text and button labels |
+| `--xc-text-lg` | 1rem | large-input text, section titles, page title |
+| `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
+| `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
 
 ## Colors
 

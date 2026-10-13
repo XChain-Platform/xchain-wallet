@@ -11,9 +11,10 @@
     transition: background var(--xc-transition), border-color var(--xc-transition);
     user-select: none;
     text-decoration: none;
-    /* Button labels never wrap. If a label is too long for its container,
-     * shorten the label - wrapping splits a single CTA into a paragraph
-     * and breaks alignment with the icon. */
+    max-width: 100%;
+    min-width: 0;
+    /* Button labels stay on one line and ellipsize inside narrow containers.
+     * Wrapping splits a single CTA into a paragraph and breaks icon alignment. */
     white-space: nowrap;
 }
 
@@ -27,6 +28,9 @@
 .label {
     display: inline-flex;
     align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .btn:focus-visible {
@@ -107,10 +111,10 @@
 }
 
 .spinner {
-    width: 12px;
-    height: 12px;
+    width: 0.75rem;
+    height: 0.75rem;
     border-radius: 50%;
-    border: 2px solid currentColor;
+    border: 0.125rem solid currentColor;
     border-top-color: transparent;
     animation: spin 0.7s linear infinite;
 }

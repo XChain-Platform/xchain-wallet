@@ -23,12 +23,12 @@
     /* Typography - system fonts by default per §5.4 */
     --xc-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    --xc-text-xs: 11px;
-    --xc-text-sm: 13px;
-    --xc-text-md: 14px;
-    --xc-text-lg: 16px;
-    --xc-text-xl: 20px;
-    --xc-text-2xl: 24px;
+    --xc-text-xs: 0.6875rem;
+    --xc-text-sm: 0.8125rem;
+    --xc-text-md: 0.875rem;
+    --xc-text-lg: 1rem;
+    --xc-text-xl: 1.25rem;
+    --xc-text-2xl: 1.5rem;
 
     /* Minimum interactive target (responsive-first, slice 2).
      *

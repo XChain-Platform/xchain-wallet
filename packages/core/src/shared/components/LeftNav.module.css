@@ -101,13 +101,13 @@
 }
 
 /* §24.3 / G054: when a bottom-tab bar is supplied (compact tier only),
-   give the main pane enough bottom-padding to clear the fixed 56px bar
+   give the main pane enough bottom-padding to clear the scalable bar
    (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
    no viewport-keyed media query because a narrow frame inside a wide
    window should still surface the bar. */
 
 .layoutWithBottomBar > .main {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0));
     /* The bar pays the home-indicator inset, so the Screen above it does not. */
     --xc-screen-safe-bottom: 0px;
 }

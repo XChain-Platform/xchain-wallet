@@ -96,7 +96,7 @@ export function BottomTabBar({
     // without the bar leave the variable unset and keep their own offset.
     useEffect(() => {
         const root = document.documentElement;
-        root.style.setProperty('--xc-bottom-bar-h', '56px');
+        root.style.setProperty('--xc-bottom-bar-h', '3.5rem');
         return () => root.style.removeProperty('--xc-bottom-bar-h');
     }, []);
 
