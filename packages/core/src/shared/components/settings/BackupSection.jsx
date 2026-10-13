@@ -46,7 +46,7 @@ import {
     registry as registryLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
-import { ChainBadge } from '@xchain-wallet/core/ui';
+import { ChainBadge, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
@@ -1337,14 +1337,19 @@ function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
     const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const copyResetRef = useRef(null);
     const haptic = useHapticFeedback();
 
+    useEffect(() => () => clearTimeout(copyResetRef.current), []);
+
     const copyTxid = async () => {
+        clearTimeout(copyResetRef.current);
         setCopyStatus(null);
         setCopyError(null);
         const { ok } = await copyText(txid);
         if (ok) {
-            setCopyStatus('Transaction ID copied.');
+            setCopyStatus('Copied');
+            copyResetRef.current = setTimeout(() => setCopyStatus(null), 1500);
             haptic.tap();
             return;
         }
@@ -1408,11 +1413,11 @@ function PublishLabelsReport({ result, onDone }) {
                     style={ACTION_BTN}
                     disabled={!txid}
                 >
-                    Copy txid
+                    {copyStatus ? 'Copied' : 'Copy txid'}
                 </button>
                 <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
             </div>
-            {copyStatus ? <Status text={copyStatus} /> : null}
+            {copyStatus ? <StatusMessage variant="success">{copyStatus}</StatusMessage> : null}
             {copyError ? <Status text={copyError} tone="error" /> : null}
         </div>
     );

@@ -713,16 +713,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             : { message: 'Could not share or copy the payment link.', variant: 'error' });
     }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
 
-    // Single-tap request copy uses the exact payload rendered in the QR so a
-    // pasted request cannot disagree with the amount or network a payer scans.
+    // Single-tap address copy uses the exact value shown without URI parameters
+    // or display formatting. The adjacent Copy payment link control owns the QR
+    // payload.
     const copyAddress = useCallback(async () => {
-        if (!qrUri) return;
-        const { ok } = await copyText(qrUri);
+        if (!address?.address) return;
+        const { ok } = await copyText(address.address);
         showToast({
-            message: ok ? 'Payment link copied to clipboard.' : 'Could not copy the payment link. Clipboard access is unavailable.',
+            message: ok ? 'Address copied to clipboard.' : 'Could not copy the address. Clipboard access is unavailable.',
             variant: ok ? 'default' : 'error',
         });
-    }, [qrUri, showToast]);
+    }, [address?.address, showToast]);
     const onAddressKeyDown = useCallback((event) => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -886,8 +887,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onChange={() => {}}
                     onClick={copyAddress}
                     onKeyDown={onAddressKeyDown}
-                    title="Tap to copy payment link"
-                    hint="Tap the address to copy its payment link."
+                    title="Tap to copy address"
+                    hint="Tap the address to copy it."
                     style={{ cursor: 'text', userSelect: 'text' }}
                     wrapReadOnlyAddress
                     onIconClick={() => setAddressPickerOpen(true)}
