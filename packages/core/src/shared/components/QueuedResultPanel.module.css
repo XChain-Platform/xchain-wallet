@@ -27,7 +27,7 @@
 }
 
 .queuedIcon {
-    font-size: var(--xc-text-2xl, 1.5rem);
+    font-size: var(--xc-icon-xl);
     line-height: 1;
 }
 

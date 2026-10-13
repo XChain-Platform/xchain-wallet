@@ -27,7 +27,7 @@
 }
 
 .icon {
-    font-size: 1.25em;
+    font-size: var(--xc-icon-sm);
     flex-shrink: 0;
 }
 
@@ -36,6 +36,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* Two pixels keeps title and detail grouped; the spacing scale starts at four. */
     gap: 2px;
 }
 
@@ -58,6 +59,7 @@
 }
 
 .retry {
+    /* Ten pixels preserves the compact action width; the spacing scale has no equivalent. */
     padding: var(--xc-space-1) 10px;
     border-radius: var(--xc-radius-sm);
     border: 1px solid currentColor;
@@ -87,6 +89,7 @@
 /* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
 .retry:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* Two pixels separates the focus ring; the spacing scale starts at four. */
     outline-offset: 2px;
 }
 
