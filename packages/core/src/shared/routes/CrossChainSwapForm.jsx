@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -89,7 +89,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -504,7 +503,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -571,7 +570,43 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             ? `ownership of ${getTick}`
             : `${getAmount} ${getTick}`;
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review cross-chain swap"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => { setStage('form'); setSubmitError(null); }}
+                            disabled={stage === 'submitting'}
+                        >
+                            Edit
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={
+                                isWatcherMode
+                                    ? false
+                                    : hw
+                                        ? hwStatus !== 'available'
+                                        : (!signerReady && password.length === 0)
+                            }
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign cross-chain swap'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Offer to give {giveSide} on {giveDescriptor?.displayName || giveChainId} in exchange
                     for {getSide} on {getDescriptor?.displayName || getChainId}.
@@ -636,38 +671,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => { setStage('form'); setSubmitError(null); }}
-                        disabled={stage === 'submitting'}
-                    >
-                        Edit
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign cross-chain swap'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -749,14 +753,34 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
-                gap: 'var(--xc-space-3)',
-            }}>
-                <fieldset style={fieldsetStyle}>
-                    <legend style={legendStyle}>You give</legend>
+        <FormPage
+            label="Cross-chain swap"
+            onSubmit={handleReview}
+            sectioned
+            status={(validationError || formError) ? (
+                <>
+                    {validationError ? (
+                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'Swap' : 'Review')}
+                </Button>
+            )}
+        >
+            <FormSection title="You give">
                     <ChainPicker
                         label="Give chain"
                         value={giveChainId || ''}
@@ -803,10 +827,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                                 : null}
                         />
                     ) : null}
-                </fieldset>
+            </FormSection>
 
-                <fieldset style={fieldsetStyle}>
-                    <legend style={legendStyle}>You get</legend>
+            <FormSection title="You get">
                     <ChainPicker
                         label="Get chain"
                         value={getChainId || ''}
@@ -847,69 +870,48 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             }}
                         />
                     ) : null}
-                </fieldset>
-            </div>
+            </FormSection>
 
-            <label style={{ display: 'block', margin: '0.5rem 0 0.25rem', fontWeight: 600 }}>Expiration</label>
-            <label style={{ display: 'block' }}>
-                <input type="radio" name="xswap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label style={{ display: 'block' }}>
-                <input type="radio" name="xswap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
-            {expMode === 'custom' ? (
+            <FormSection title="Expiration">
+                <label style={{ display: 'block' }}>
+                    <input type="radio" name="xswap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
+                    {' '}Default window
+                </label>
+                <label style={{ display: 'block' }}>
+                    <input type="radio" name="xswap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
+                    {' '}Expire at a specific time
+                </label>
+                {expMode === 'custom' ? (
                 <Input
                     label="Expires"
                     type="datetime-local"
                     value={expInput}
                     onChange={(e) => setExpInput(e.target.value)}
                 />
-            ) : null}
+                ) : null}
 
-            <Input
-                label="Memo (optional)"
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={giveTicker || ''}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                <Input
+                    label="Memo (optional)"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
                 />
-            ) : null}
-            {/* Off Bitcoin this is mandatory, so it renders as a
-                disclosure rather than a choice - the same treatment every other
-                ORDER/SWAP authoring surface gives it. */}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
 
-            {validationError ? (
-                <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
-            ) : null}
-
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? 'Swap' : 'Review')}
-                </Button>
-            </div>
-        </form>,
+                {feeTiers ? (
+                    <FeeSelector
+                        label="Network fee"
+                        coinTicker={giveTicker || ''}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null}
+                {/* Off Bitcoin this is mandatory, so it renders as a
+                    disclosure rather than a choice - the same treatment every other
+                    ORDER/SWAP authoring surface gives it. */}
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
+            </FormSection>
+        </FormPage>,
     );
 }
 
@@ -921,16 +923,3 @@ function DetailRow({ label, value }) {
         </>
     );
 }
-
-const fieldsetStyle = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-3)',
-    margin: 0,
-    background: 'var(--xc-bg-muted)',
-};
-
-const legendStyle = {
-    fontWeight: 600,
-    padding: '0 var(--xc-space-2)',
-};

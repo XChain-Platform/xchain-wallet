@@ -23,7 +23,19 @@
 // are offered only while open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    EmptyState,
+    FormPage,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -166,7 +178,6 @@ function explorerTxUrl(descriptor, txid) {
 export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [items, setItems] = useState(/** @type {any[] | null} */ (null));
     const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
@@ -235,7 +246,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? L.wrapFull : L.wrapPopup}>{children}</div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -258,11 +269,12 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
     if (items.length === 0) {
         return wrap(
-            <div className={L.empty}>
-                <p className={L.emptyTitle}>No swaps yet</p>
-                <p className={L.hint}>Atomic token swaps you offer show up here across every pair.</p>
-                {onCreateSwap ? <div className={F.actions}><Button variant="primary" onClick={onCreateSwap}>Create a swap</Button></div> : null}
-            </div>,
+            <EmptyState
+                title="No swaps yet"
+                body="Atomic token swaps you offer show up here across every pair."
+                actionLabel={onCreateSwap ? 'Create a swap' : undefined}
+                onAction={onCreateSwap}
+            />,
         );
     }
 
@@ -330,13 +342,16 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     return wrap(
         <>
             {openItems.length > 0 ? (
-                <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
-            ) : <p className={L.hint}>No open swaps.</p>}
+                <section>
+                    <SectionHeader title="Open" />
+                    <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
+                </section>
+            ) : <EmptyState title="No open swaps." titleAs="p" />}
             {closedItems.length > 0 ? (
-                <>
-                    <p className={L.sectionLabel}>Closed</p>
+                <section>
+                    <SectionHeader title="Closed" />
                     <ul className={L.list} role="list" aria-label="Closed swaps">{closedItems.map(renderRow)}</ul>
-                </>
+                </section>
             ) : null}
         </>,
     );
@@ -424,10 +439,9 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }
 
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel swap' : 'Edit swap'} />;
-    const isFull = variant === 'full';
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={F.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -503,7 +517,21 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }
 
     return wrap(
-        <form onSubmit={submit} noValidate>
+        <FormPage
+            label={isCancel ? 'Cancel swap' : 'Edit swap'}
+            onSubmit={submit}
+            status={error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={isCancel ? 'danger' : 'primary'}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
+                >
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
+                </Button>
+            )}
+        >
             <p className={F.summary}>
                 Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
@@ -556,18 +584,6 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
             ) : null}
-            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
-
-            <div className={F.actions}>
-                <Button
-                    type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
-                >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
