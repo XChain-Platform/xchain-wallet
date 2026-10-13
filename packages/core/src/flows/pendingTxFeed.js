@@ -131,10 +131,18 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     if (!vault) throw new Error('livePendingTxs: vault is required');
     if (!chainId) throw new Error('livePendingTxs: chainId is required');
     const all = await vault.pendingTxs.list();
-    // Surface retention write failures so a partially persisted cleanup is never reported as success.
-    const removedIds = typeof vault.pendingTxs.delete === 'function'
-        ? new Set(await pruneConfirmedPendingTxs({ vault, records: all }))
-        : new Set();
+    // Pruning expired confirmed records is housekeeping. A failed cleanup write
+    // (a full disk, a storage quota) is logged and the list still loads: the
+    // records it could not remove are shown as the confirmed rows they are,
+    // and the pending sends with Speed up and Cancel stay reachable.
+    let removedIds = new Set();
+    if (typeof vault.pendingTxs.delete === 'function') {
+        try {
+            removedIds = new Set(await pruneConfirmedPendingTxs({ vault, records: all }));
+        } catch (err) {
+            console.warn('[xchain] pending transaction cleanup failed:', err);
+        }
+    }
     const descriptor = chainRegistry?.get?.(chainId) || null;
     const wanted = address ? String(address).toLowerCase() : null;
     const out = [];

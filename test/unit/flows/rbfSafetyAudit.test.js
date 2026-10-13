@@ -94,7 +94,15 @@ describe('RBF safety audit regressions', () => {
         expect(getTransaction).not.toHaveBeenCalled();
     });
 
-    it('surfaces a retention deletion failure instead of returning a successful feed', async () => {
+    it('logs a failed cleanup write and still loads the pending list', async () => {
+        const live = {
+            id: 'live',
+            chain: 'BTC',
+            network: 'regtest',
+            fromAddress: SOURCE,
+            txid: 'b'.repeat(64),
+            status: 'broadcast',
+        };
         const stale = {
             id: 'stale',
             chain: 'BTC',
@@ -108,15 +116,26 @@ describe('RBF safety audit regressions', () => {
         const failure = new Error('vault save failed');
         const vault = {
             pendingTxs: {
-                list: vi.fn(async () => [stale]),
+                list: vi.fn(async () => [stale, live]),
                 delete: vi.fn(async () => { throw failure; }),
             },
         };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-        await expect(livePendingTxs({
-            vault,
-            chainRegistry: { get: () => ({ coin: 'BTC', networkKind: 'regtest' }) },
-            chainId: 'bitcoin-regtest',
-        })).rejects.toBe(failure);
+        try {
+            const out = await livePendingTxs({
+                vault,
+                chainRegistry: { get: () => ({ coin: 'BTC', networkKind: 'regtest' }) },
+                chainId: 'bitcoin-regtest',
+            });
+            // Under storage pressure the list still loads, so Speed up and
+            // Cancel stay reachable for the live send; the record the cleanup
+            // could not remove is still listed rather than reported as gone.
+            expect(out.map((row) => row.id).sort()).toEqual(['live', 'stale']);
+            expect(vault.pendingTxs.delete).toHaveBeenCalledWith('stale');
+            expect(warn).toHaveBeenCalledWith('[xchain] pending transaction cleanup failed:', failure);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
