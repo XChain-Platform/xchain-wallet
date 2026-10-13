@@ -40,7 +40,7 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, safeStorage, screen, session, shell, Notification } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, powerMonitor, safeStorage, screen, session, shell, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,6 +95,7 @@ import {
     createRuntime,
     enforceIdleAutoLock,
     enforceLaunchAutoLock,
+    enforceSystemAutoLock,
     ensureHost,
     handleIpcMessage,
     tearDownHost,
@@ -667,6 +668,15 @@ function runWindowlessIdleGate(action, logAction) {
     return reopenInFlight;
 }
 
+function runSystemAutoLock(eventName) {
+    if (!runtime) return Promise.resolve();
+    return enforceSystemAutoLock(runtime).then((res) => {
+        if (!res.locked) return;
+        console.info(`[xchain] auto-lock: wallet locked on ${eventName}`);
+        broadcastToWindows('xchain:state-changed', { kind: 'session' });
+    });
+}
+
 /**
  * Open a window from File > New Window or for a deep link with no primary
  * window. With no window visible, the
@@ -871,6 +881,9 @@ app.whenReady().then(async () => {
             console.error('[xchain] desktop auto-unlock failed:', err);
         }
     }
+
+    powerMonitor.on('lock-screen', () => { void runSystemAutoLock('screen lock'); });
+    powerMonitor.on('suspend', () => { void runSystemAutoLock('system suspend'); });
 
     // §40.12 / Step 18: allow WebHID access for Ledger + Trezor vendor
     // IDs so PairSignerForm can reach the device picker. Without these
