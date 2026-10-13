@@ -15,7 +15,7 @@
 // action, and popping it runs that screen's own back action.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { registerBackHandler, resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 
@@ -135,5 +135,33 @@ describe('back stack', () => {
         await pressBack();
         expect(under).toHaveBeenCalledTimes(1);
         offUnder();
+    });
+
+    it('sends Escape only to the top overlay', () => {
+        const under = vi.fn();
+        const over = vi.fn();
+        const offUnder = registerBackHandler(under);
+        const offOver = registerBackHandler(over);
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(over).toHaveBeenCalledTimes(1);
+        expect(under).not.toHaveBeenCalled();
+
+        offOver();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(under).toHaveBeenCalledTimes(1);
+        offUnder();
+    });
+
+    it('does not turn Escape into route navigation', () => {
+        const overlayBack = vi.fn();
+        const routeBack = vi.fn();
+        const unregisterOverlay = registerBackHandler(overlayBack);
+        const unregister = registerBackHandler(routeBack, 'route');
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(overlayBack).toHaveBeenCalledTimes(1);
+        expect(routeBack).not.toHaveBeenCalled();
+        unregister();
+        unregisterOverlay();
     });
 });

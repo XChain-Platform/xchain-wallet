@@ -63,6 +63,7 @@ import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
@@ -3981,6 +3982,7 @@ function ExportModal({
     // closing hands focus back to the opener.
     const dialogRef = useRef(null);
     useFocusTrap(dialogRef, { active: true });
+    useBackHandler(onClose);
     useEffect(() => {
         function onKey(e) { if (e.key === 'Escape') onClose(); }
         document.addEventListener('keydown', onKey);

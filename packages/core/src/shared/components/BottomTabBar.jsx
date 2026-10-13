@@ -13,6 +13,7 @@ import { Icon } from '@xchain-wallet/core/ui';
 import { formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -83,9 +84,10 @@ export function BottomTabBar({
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
     const moreTriggerRef = useRef(null);
-    const sheetWasOpen = useRef(false);
+    const sheetRef = useRef(null);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
+    useFocusTrap(sheetRef, { active: sheetOpen, restoreFocusRef: moreTriggerRef });
 
     // Close the sheet whenever the user navigates. The parent flips
     // currentView, which is enough of a signal that the user picked a
@@ -104,11 +106,6 @@ export function BottomTabBar({
         if (sheetOpen) setSheetOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentView]);
-
-    useEffect(() => {
-        if (sheetWasOpen.current && !sheetOpen) moreTriggerRef.current?.focus();
-        sheetWasOpen.current = sheetOpen;
-    }, [sheetOpen]);
 
     // Esc closes the sheet (sheet acts as a transient overlay).
     useEffect(() => {
@@ -192,8 +189,10 @@ export function BottomTabBar({
                         tabIndex={-1}
                     />
                     <div
+                        ref={sheetRef}
                         id="xc-bottom-sheet"
                         role="dialog"
+                        aria-modal="true"
                         aria-label="More navigation"
                         className={styles.sheet}
                     >
