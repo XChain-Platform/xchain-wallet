@@ -18,6 +18,8 @@
 import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
@@ -54,6 +56,21 @@ const { SignApproval } = await import(
 );
 const { Router } = await import('../../../packages/extension/src/approval/Router.jsx');
 const messaging = await import('../../../packages/extension/src/approval/messaging.js');
+
+const readCss = (relativePath) => readFileSync(join(process.cwd(), relativePath), 'utf8');
+
+function setApprovalViewport() {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+        configurable: true,
+        value: 360,
+    });
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+        configurable: true,
+        value: 600,
+    });
+}
 
 const DEFAULT_PARSED_PSBT = {
     decomposed: {
@@ -430,6 +447,94 @@ describe('SignApproval signPsbt intent', () => {
             expect.objectContaining({ approved: true, walletId: 'wallet-2' }),
         ));
         closeSpy.mockRestore();
+    });
+});
+
+describe('SignApproval 360x600 layout', () => {
+    it('keeps long origin and message details in the body scrollport with both actions docked', async () => {
+        setApprovalViewport();
+        const origin = `https://${'attacker-controlled-subdomain-'.repeat(12)}trusted.example:65535`;
+        const message = `Authorize:${'unbroken-message-segment'.repeat(80)}`;
+        const appName = 'UnbrokenDeclaredApplicationName'.repeat(4);
+        const view = render(
+            <SignApproval
+                id="narrow-message"
+                kind="signMessage"
+                payload={{ origin, appName, payload: { message } }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(await screen.findByTestId('request-origin-full')).toHaveTextContent(origin);
+        expect(screen.getByText(message)).toBeTruthy();
+
+        const approvalScreen = view.container.firstElementChild;
+        const detailScrollport = approvalScreen.querySelector('main');
+        const actionFooter = approvalScreen.querySelector('footer');
+        expect(detailScrollport).not.toBeNull();
+        expect(detailScrollport).toContainElement(screen.getByText(message));
+        expect(actionFooter).not.toBeNull();
+        expect(actionFooter).not.toBe(detailScrollport);
+        expect(actionFooter.querySelectorAll('button')).toHaveLength(2);
+        expect(screen.getByRole('button', { name: /Reject/i })).toBeVisible();
+        expect(screen.getByRole('button', { name: /Approve/i })).toBeVisible();
+
+        const screenCss = readCss('packages/core/src/ui/Screen.module.css');
+        const approvalCss = readCss('packages/extension/src/approval/approval.module.css');
+        const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
+        const originCss = readCss('packages/core/src/shared/components/OriginIdentity.module.css');
+        expect(screenCss).toMatch(/\.screen\s*\{[^}]*height:[^;}]+;[^}]*overflow:\s*hidden/s);
+        expect(screenCss).toMatch(/\.body\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden/s);
+        expect(screenCss).toMatch(/\.footer\s*\{[^}]*flex:\s*0 0 auto/s);
+        expect(approvalCss).toMatch(/\.footer > \*\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0/s);
+        expect(approvalCss).toMatch(/\.summaryValue\s*\{[^}]*max-width:\s*100%;[^}]*word-break:\s*break-all/s);
+        expect(signCss).toMatch(/\.sourceApp\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(originCss).toMatch(/\.fullOrigin[\s\S]*?overflow-wrap:\s*anywhere/);
+    });
+
+    it('renders every output without allowing detail rows or choices to set the window width', async () => {
+        setApprovalViewport();
+        const outputs = Array.from({ length: 24 }, (_, index) => ({
+            address: `bcrt1q${String(index).padStart(2, '0')}${'destination'.repeat(16)}`,
+            value: index + 1,
+        }));
+        messaging.parsePsbt.mockResolvedValue({
+            decomposed: {
+                inputs: [{ address: 'bcrt1qownaddressownaddress', value: 1000000 }],
+                outputs,
+            },
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+        const view = render(
+            <SignApproval
+                id="narrow-outputs"
+                kind="signPsbt"
+                payload={{
+                    chainId: 'bitcoin-regtest',
+                    origin: `https://${'long-origin-label-'.repeat(16)}example.test`,
+                    payload: { psbtHex: 'deadbeefcafe' },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        const panel = await screen.findByTestId('psbt-intent-panel');
+        expect(panel.querySelectorAll('[title^="bcrt1q"]')).toHaveLength(25);
+        expect(screen.getAllByText('Recipient')).toHaveLength(24);
+
+        const detailScrollport = view.container.querySelector('main');
+        const actionFooter = view.container.querySelector('footer');
+        expect(detailScrollport).toContainElement(panel);
+        expect(detailScrollport.nextElementSibling).toBe(actionFooter);
+        expect(actionFooter.querySelectorAll('button')).toHaveLength(2);
+
+        const approvalCss = readCss('packages/extension/src/approval/approval.module.css');
+        const signCss = readCss('packages/extension/src/approval/kinds/SignApproval.module.css');
+        expect(approvalCss).toMatch(/\.toggleRow\s*\{[^}]*min-width:\s*0/s);
+        expect(approvalCss).toMatch(/\.toggleRow > span:last-child\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/s);
+        expect(signCss).toMatch(/\.detailsRow\s*\{[^}]*grid-template-columns:\s*minmax\(0, max-content\) minmax\(0, 1fr\)/s);
+        expect(signCss).toMatch(/\.detailsValue\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/s);
     });
 });
 
