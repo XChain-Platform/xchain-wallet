@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -46,6 +47,9 @@ export function ConfirmModal({
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(cancel);
+    // Tab stays inside the dialog and focus returns to whatever opened it.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') cancel(); };
         window.addEventListener('keydown', onKey);
@@ -54,6 +58,7 @@ export function ConfirmModal({
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"

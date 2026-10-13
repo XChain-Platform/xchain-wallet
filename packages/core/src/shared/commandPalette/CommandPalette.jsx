@@ -31,6 +31,7 @@ import { Icon } from '../../ui/index.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * @param {object} props
@@ -50,6 +51,10 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     useBackHandler(open ? onClose : undefined);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    // The input owns Tab (it jumps result categories), so this only returns
+    // focus to the control that opened the palette when it closes.
+    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef, trap: false });
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
@@ -159,6 +164,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"

@@ -248,6 +248,16 @@ export function LeftNav({
     );
 }
 
+// Moves focus to the page's main region (Screen renders it as #xc-main). A
+// plain href="#xc-main" would also work, but the app can run under a hash
+// router where an in-page anchor navigates, so focus is moved by hand.
+function skipToMain(e) {
+    const main = typeof document !== 'undefined' ? document.getElementById('xc-main') : null;
+    if (!main) return;
+    e.preventDefault();
+    main.focus();
+}
+
 /**
  * Wraps the unlocked-route render tree in a flex layout that places
  * `<LeftNav>` alongside the active route.
@@ -291,6 +301,9 @@ export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
             data-xc-tier={tier}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
+            {sidebar ? (
+                <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
+            ) : null}
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
