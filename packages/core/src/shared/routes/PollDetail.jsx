@@ -644,6 +644,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         const shown = isSplit
             ? ballot.map((e) => `${e.option}: ${options[e.option] ?? ''} (${e.share})`).join(' · ')
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the vote…'
+            : isWatcherMode
+                ? null
+                : isHwSource
+                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
+                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to submit this vote.' : null;
         return wrap(
             <FormPage
                 label="Review vote"
@@ -654,8 +661,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 actions={(
                     <>
                         <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
+                        {reviewDisabledReason ? (
+                            <p id="vote-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                        ) : null}
                         <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                            disabled={Boolean(reviewDisabledReason)}
+                            aria-describedby={reviewDisabledReason ? 'vote-review-disabled-reason' : undefined}>
                             {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
                         </Button>
                     </>
@@ -694,6 +705,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         );
     }
 
+    const voteDisabledReason = !fromAddress
+        ? 'Add or choose an address on this chain to vote.'
+        : options.length === 0
+            ? 'This poll has no voting options.'
+            : null;
+
     return wrap(
         <ListPage>
             {pollInfo}
@@ -705,7 +722,21 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
                     status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
+                    actions={(
+                        <>
+                            {voteDisabledReason ? (
+                                <p id="vote-disabled-reason" role="status" className={styles.hint}>{voteDisabledReason}</p>
+                            ) : null}
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                disabled={Boolean(voteDisabledReason)}
+                                aria-describedby={voteDisabledReason ? 'vote-disabled-reason' : undefined}
+                            >
+                                {sourceBallot.length ? 'Change vote' : 'Vote'}
+                            </Button>
+                        </>
+                    )}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>

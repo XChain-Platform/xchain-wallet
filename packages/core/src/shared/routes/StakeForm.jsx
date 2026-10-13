@@ -509,6 +509,13 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     if (stage === 'review' || stage === 'submitting') {
         const verb = stakeMode === '2' ? 'Top up' : 'Stake';
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the stake…'
+            : isWatcherMode
+                ? null
+                : isHwSource
+                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
+                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to sign this stake.' : null;
         return wrap(
             <FormPage
                 label="Review stake"
@@ -517,15 +524,16 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
+                    <>
+                    {reviewDisabledReason ? (
+                        <p id="stake-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
+                        disabled={Boolean(reviewDisabledReason)}
+                        aria-describedby={reviewDisabledReason ? 'stake-review-disabled-reason' : undefined}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -533,6 +541,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : 'Stake XCHAIN'}
                     </Button>
+                    </>
                 )}
             >
                 <p className={styles.summary}>
@@ -634,6 +643,16 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         );
     }
 
+    const stakeDisabledReason = actionConfirm.composing
+        ? 'Preparing the stake for review…'
+        : !fromAddress
+            ? 'Add or choose a source address to continue.'
+            : !amount.trim()
+                ? 'Enter the amount you want to stake.'
+                : !signingPubkey.trim()
+                    ? 'Enter the signing public key to continue.'
+                    : null;
+
     return wrap(
         <FormPage
             label="Stake XCHAIN"
@@ -643,14 +662,20 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
             actions={(
+                <>
+                {stakeDisabledReason ? (
+                    <p id="stake-disabled-reason" role="status" className={styles.hint}>{stakeDisabledReason}</p>
+                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !amount.trim() || !signingPubkey.trim() || actionConfirm.composing}
+                    disabled={Boolean(stakeDisabledReason)}
+                    aria-describedby={stakeDisabledReason ? 'stake-disabled-reason' : undefined}
                 >
                     {singleEncode ? 'Stake' : 'Preview'}
                 </Button>
+                </>
             )}
         >
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />

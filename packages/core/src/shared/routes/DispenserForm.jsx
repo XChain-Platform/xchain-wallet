@@ -1153,6 +1153,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the dispenser…'
+            : isWatcherMode
+                ? null
+                : hw
+                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
+                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to create this dispenser.' : null;
         // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
         // because changing form inputs is the recovery path.
         return wrap(
@@ -1168,16 +1175,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     </StatusMessage>
                 ) : null}
                 actions={(
+                    <>
+                    {reviewDisabledReason ? (
+                        <p id="dispenser-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
-                            stage === 'submitting'
-                            || (!isWatcherMode && (hw
-                                ? hwStatus !== 'available'
-                                : (!signerReady && password.length === 0)))
-                        }
+                        disabled={Boolean(reviewDisabledReason)}
+                        aria-describedby={reviewDisabledReason ? 'dispenser-review-disabled-reason' : undefined}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -1185,6 +1192,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                                 ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
                     </Button>
+                    </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
@@ -1445,6 +1453,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const dispenserErrors = formError
         ? [{ ...dispenserErrorTarget, message: formError }]
         : [];
+    const dispenserDisabledReason = derivingGetAddress || actionConfirm.composing
+        ? 'Preparing the dispenser for review…'
+        : outsideBlocked && outsideVerdictLoading
+            ? 'Checking whether the dispenser address can be used…'
+            : outsideBlocked && outsideVerdict?.allowed === false
+                ? outsideVerdict.message || 'Choose a dispenser address that this source can use.'
+                : null;
 
     return wrap(
         <FormPage
@@ -1453,14 +1468,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={<FormErrorSummary errors={dispenserErrors} focusKey={validationAttempt} />}
             actions={(
+                <>
+                {dispenserDisabledReason ? (
+                    <p id="dispenser-disabled-reason" role="status" className={styles.hint}>{dispenserDisabledReason}</p>
+                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
+                    disabled={Boolean(dispenserDisabledReason)}
+                    aria-describedby={dispenserDisabledReason ? 'dispenser-disabled-reason' : undefined}
                 >
                     {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
                 </Button>
+                </>
             )}
         >
             {draftBanner}

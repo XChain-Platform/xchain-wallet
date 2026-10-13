@@ -500,6 +500,13 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the order…'
+            : isWatcherMode
+                ? null
+                : isHwSource
+                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
+                    : (!signerReady && password.length === 0) ? 'Enter your wallet password to place this order.' : null;
         return wrap(
             <FormPage
                 label="Review order"
@@ -511,11 +518,15 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 actions={(
                     <>
                         <Button variant="secondary" onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
+                        {reviewDisabledReason ? (
+                            <p id="order-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                        ) : null}
                         <Button
                             type="submit"
                             variant="primary"
                             loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                            disabled={Boolean(reviewDisabledReason)}
+                            aria-describedby={reviewDisabledReason ? 'order-review-disabled-reason' : undefined}
                         >
                             {isWatcherMode ? 'Create unsigned transaction'
                                 : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
@@ -571,6 +582,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         );
     }
 
+    const orderDisabledReason = confirmAction.composing
+        ? 'Preparing the order for review…'
+        : !fromAddress
+            ? 'Add or choose a source address to continue.'
+            : null;
+
     return wrap(
         <FormPage
             label="Create order"
@@ -581,11 +598,15 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             actions={(
                 <>
                     {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
+                    {orderDisabledReason ? (
+                        <p id="order-disabled-reason" role="status" className={styles.hint}>{orderDisabledReason}</p>
+                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={confirmAction.composing}
-                        disabled={!fromAddress || confirmAction.composing}
+                        disabled={Boolean(orderDisabledReason)}
+                        aria-describedby={orderDisabledReason ? 'order-disabled-reason' : undefined}
                     >
                         {singleEncode ? 'Place order' : 'Preview'}
                     </Button>
