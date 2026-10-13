@@ -81,6 +81,18 @@
     --xc-icon-lg: 20px;
     --xc-icon-xl: 24px;
 
+    /* Identity and asset artwork use one size in each visual context. */
+    --xc-avatar-size-header: 28px;
+    --xc-avatar-size-list: 40px;
+    --xc-avatar-size-hero: 88px;
+    --xc-avatar-pip-header: 14px;
+    --xc-avatar-pip-list: 20px;
+    --xc-avatar-pip-hero: 32px;
+    --xc-avatar-initials-header: var(--xc-text-xs);
+    --xc-avatar-initials-list: var(--xc-text-md);
+    --xc-avatar-initials-hero: 36px;
+    --xc-avatar-shape: var(--xc-radius-pill);
+
     /* Minimum interactive target (responsive-first, slice 2).
      *
      * WCAG 2.2 AA 2.5.8 "Target Size (Minimum)": every pointer target is
