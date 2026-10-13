@@ -147,16 +147,16 @@ describe('MarketView market state', () => {
         ['chart', 'chart', 'Chart panel'],
         ['price ticker', 'ticker', 'XCHAIN'],
         ['market panel', 'panel', 'Pick exact price'],
-    ])('keeps the market screen usable when its %s throws and retries it inline', (_label, failure, recoveredText) => {
+    ])('keeps the market screen usable when its %s throws and retries it inline', async (_label, failure, recoveredText) => {
         widgetFailure.current = failure;
         renderMarket();
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
         expect(screen.getByRole('tablist', { name: 'Market panels' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
 
         widgetFailure.current = null;
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        expect(screen.getByText(recoveredText)).toBeInTheDocument();
+        expect(await screen.findByText(recoveredText)).toBeInTheDocument();
     });
 });
