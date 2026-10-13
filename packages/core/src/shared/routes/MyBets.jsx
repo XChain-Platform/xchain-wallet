@@ -261,7 +261,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
             </p>
             {pendingRows.length > 0 ? (
                 <section>
-                    <SectionHeader as="h3" title="Pending resolution" />
+                    <SectionHeader title="Pending resolution" />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {pendingRows.map(betRow)}
                     </div>
@@ -269,7 +269,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
             ) : null}
             {pastRows.length > 0 ? (
                 <section>
-                    <SectionHeader as="h3" title="Past bets" />
+                    <SectionHeader title="Past bets" />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {pastRows.map(betRow)}
                     </div>

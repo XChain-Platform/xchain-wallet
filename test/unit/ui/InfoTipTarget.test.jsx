@@ -58,13 +58,15 @@ describe('InfoTip target (slice 2)', () => {
         expect(glyph.textContent).toBe('?');
     });
 
-    it('still opens its bubble on click', () => {
+    it('opens on a touch tap and closes on a touch tap outside', () => {
         render(<InfoTip aria="More info" label="Explanation" />);
         const trigger = screen.getByRole('button', { name: 'More info' });
         expect(screen.queryByRole('tooltip')).toBeNull();
-        fireEvent.focus(trigger);
-        fireEvent.click(trigger);
+        fireEvent.pointerDown(trigger, { pointerType: 'touch' });
+        fireEvent.click(trigger, { detail: 1 });
         expect(screen.getByRole('tooltip').textContent).toBe('Explanation');
+        fireEvent.pointerDown(document.body, { pointerType: 'touch' });
+        expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
     it('opens from the keyboard and closes on Escape', () => {
@@ -79,15 +81,6 @@ describe('InfoTip target (slice 2)', () => {
         expect(screen.getByRole('tooltip')).toBeTruthy();
     });
 
-    it('closes on an outside tap', () => {
-        render(<InfoTip aria="More info" label="Explanation" />);
-        const trigger = screen.getByRole('button', { name: 'More info' });
-
-        fireEvent.click(trigger);
-        fireEvent.pointerDown(document.body);
-        expect(screen.queryByRole('tooltip')).toBeNull();
-    });
-
     it('attaches its screen-reader description before the trigger receives focus', () => {
         render(<InfoTip aria="More info" label="A useful explanation" />);
         const trigger = screen.getByRole('button', { name: 'More info' });
@@ -98,7 +91,7 @@ describe('InfoTip target (slice 2)', () => {
         expect(tooltip.hidden).toBe(true);
     });
 
-    it('uses the rendered bubble size and flips below a top-edge trigger', () => {
+    it('clamps the rendered bubble inside the right edge and flips below a top-edge trigger', () => {
         Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
         Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 240 });
         render(<InfoTip aria="More info" label="Explanation" placement="top" />);
@@ -110,9 +103,62 @@ describe('InfoTip target (slice 2)', () => {
 
         fireEvent.focus(trigger);
 
-        expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.alignEnd)).toBe(true);
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-51px)');
         expect(screen.getByRole('tooltip').classList.contains(infoTipStyles.placementBottom)).toBe(true);
         expect(screen.getByRole('tooltip').style.maxHeight).toBe('200px');
+        expect(screen.getByRole('tooltip').style.maxWidth).toBe('260px');
+    });
+
+    it('keeps the bubble margin when the trigger is against the left edge', () => {
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 });
+        Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 240 });
+        render(<InfoTip aria="More info" label="Explanation" />);
+        const trigger = screen.getByRole('button', { name: 'More info' });
+        const wrap = trigger.parentElement;
+        const tooltip = screen.getByRole('tooltip', { hidden: true });
+        wrap.getBoundingClientRect = () => ({ left: 1, right: 25, top: 100, bottom: 124, width: 24, height: 24 });
+        tooltip.getBoundingClientRect = () => ({ left: -52, right: 78, top: 14, bottom: 94, width: 130, height: 80 });
+
+        fireEvent.click(trigger);
+
+        expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(60px)');
+    });
+
+    it('clamps to the visible viewport when a touch viewport is zoomed and panned', () => {
+        const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+        Object.defineProperty(window, 'visualViewport', {
+            configurable: true,
+            value: {
+                width: 200,
+                height: 180,
+                offsetLeft: 50,
+                offsetTop: 20,
+                addEventListener() {},
+                removeEventListener() {},
+            },
+        });
+
+        try {
+            render(<InfoTip aria="More info" label="Explanation" />);
+            const trigger = screen.getByRole('button', { name: 'More info' });
+            const wrap = trigger.parentElement;
+            const tooltip = screen.getByRole('tooltip', { hidden: true });
+            wrap.getBoundingClientRect = () => ({ left: 218, right: 242, top: 100, bottom: 124, width: 24, height: 24 });
+            tooltip.getBoundingClientRect = () => ({ left: 165, right: 295, top: 14, bottom: 94, width: 130, height: 80 });
+
+            fireEvent.click(trigger);
+
+            expect(screen.getByRole('tooltip').style.transform).toBe('translateX(-50%) translateX(-53px)');
+            expect(screen.getByRole('tooltip').style.minWidth).toBe('180px');
+            expect(screen.getByRole('tooltip').style.maxWidth).toBe('184px');
+        } finally {
+            cleanup();
+            if (originalVisualViewport) {
+                Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+            } else {
+                delete window.visualViewport;
+            }
+        }
     });
 
     it('lets long tooltip text wrap inside the viewport', () => {

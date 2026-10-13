@@ -92,6 +92,11 @@ assert.equal(
     'https',
     'androidScheme https: crypto.subtle needs a secure context',
 );
+assert.deepEqual(
+    capConfig.server?.allowNavigation,
+    [],
+    'remote origins stay in the system browser instead of entering the wallet WebView',
+);
 assert.equal(
     capConfig.android?.allowMixedContent,
     false,
@@ -191,6 +196,13 @@ assert.match(
     /androidx\.core\.content\.FileProvider[\s\S]*?android:exported="false"/,
     'the FileProvider is not exported',
 );
+for (const component of manifest.matchAll(/<(activity|receiver|provider)\b([\s\S]*?)\/?>(?:\s*<\/\1>)?/g)) {
+    assert.match(
+        component[2],
+        /android:exported="(?:true|false)"/,
+        `every ${component[1]} declares android:exported explicitly`,
+    );
+}
 
 // --- 6. No Firebase / Play Services -----------------------------------
 
@@ -525,17 +537,34 @@ assert.deepEqual(
     [
         'android.permission.CAMERA',
         'android.permission.INTERNET',
+        'android.permission.POST_NOTIFICATIONS',
         'android.permission.USE_BIOMETRIC',
         'android.permission.USE_FINGERPRINT',
     ],
-    'exactly four permissions: internet, camera (QR), and the two spellings of'
-    + ' biometric. Every addition here is store-review surface (§5) and has to'
+    'exactly five permissions: internet, camera (QR), notifications, and the two'
+    + ' spellings of biometric. Every addition here is store-review surface (§5) and has to'
     + ' earn its place against a shipped feature.',
+);
+assert.doesNotMatch(
+    manifest,
+    /android\.permission\.(?:READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)/,
+    'legacy and broad storage permissions stay out of the manifest',
 );
 assert.match(
     manifest,
     /USE_FINGERPRINT"\s*\n?\s*android:maxSdkVersion="27"/,
     'the legacy fingerprint permission is capped at API 27',
+);
+const qrScanner = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8');
+assert.match(
+    qrScanner,
+    /data-testid="qr-scanner-camera-rationale"[\s\S]*?uses the camera only to scan QR codes[\s\S]*?paste the code instead/,
+    'the JS shell explains camera use and the paste alternative before Android prompts',
+);
+assert.match(
+    qrScanner,
+    /cameraRationaleAccepted[\s\S]*?!cameraRationaleAccepted[\s\S]*?getUserMedia/,
+    'the Android rationale gate runs before getUserMedia requests camera permission',
 );
 
 // --- 10. S3: deep links, camera, ceremony -----------------------------
@@ -1045,9 +1074,19 @@ assert.match(appGradle, /minifyEnabled false/,
     + 'crash and ANR report from that build onward is unreadable.');
 assert.match(appGradle, /R8 DECISION, PINNED/, 'and the reasoning is written down');
 assert.equal(
-    capConfig.android?.webContentsDebuggingEnabled,
+    Object.hasOwn(capConfig.android, 'webContentsDebuggingEnabled'),
     false,
-    'no WebView debugging in the shipped app',
+    'Capacitor follows the native debuggable flag instead of disabling DevTools in debug builds',
+);
+assert.match(
+    appGradle,
+    /release\s*\{\s*(?:\/\/[^\n]*\s*)*debuggable false/,
+    'release clears FLAG_DEBUGGABLE so Capacitor disables WebView debugging',
+);
+assert.match(
+    appGradle,
+    /debug\s*\{\s*debuggable true/,
+    'debug sets FLAG_DEBUGGABLE so Capacitor keeps WebView debugging available',
 );
 // Capacitor's debug-build logging writes every plugin call's arguments to
 // logcat, and the argon2id and biometricEnroll calls carry the wallet
@@ -1064,6 +1103,16 @@ assert.equal(
 // every screen that shows or accepts key material asks for it.
 assert.match(pluginJava, /public void setScreenProtected\(PluginCall call\)/);
 assert.match(pluginJava, /FLAG_SECURE/, 'the native switch really sets FLAG_SECURE');
+assert.doesNotMatch(
+    mainActivity,
+    /LayoutParams\.FLAG_SECURE/,
+    'FLAG_SECURE stays out of MainActivity so protection is not app-wide',
+);
+assert.match(
+    mainActivity,
+    /FLAG_SECURE stays out of the activity-wide setup/,
+    'MainActivity documents why the secure flag is route-scoped',
+);
 for (const route of [
     'ViewPrivateKey.jsx',
     'CreateWallet.jsx',
@@ -1080,6 +1129,22 @@ for (const route of [
         `${route} protects its screen (seed, key export, phrase entry, unlock)`,
     );
 }
+const addressListSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'AddressList.jsx'), 'utf8',
+);
+assert.match(
+    addressListSrc,
+    /useProtectedScreen\(showWifForm\)/,
+    'the WIF private-key entry is protected without blocking capture on the address list',
+);
+const pairPartnerSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'PairPartnerWallet.jsx'), 'utf8',
+);
+assert.match(
+    pairPartnerSrc,
+    /useProtectedScreen\(stage === 'seed'\)/,
+    'the shared recovery phrase is protected while public pairing codes stay capturable',
+);
 // And NOT on the screens where blocking screenshots would be user-hostile.
 for (const route of ['Receive.jsx', 'Settings.jsx']) {
     const p = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', route);
@@ -1430,7 +1495,7 @@ console.log(
     + ' Class 3 only, invalidated by enrollment, CryptoObject-bound, with no device-credential'
     + ' fallback; vault writes fsync before an atomic rename and refuse to overwrite an unreadable'
     + ' vault; ciphertext unreadable while the device is locked; permissions are exactly internet,'
-    + ' camera and the two biometric spellings, the legacy one capped at API 27.'
+    + ' camera, notifications and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
     + ' URLs to the browser, plus inbound xchain and payment schemes and no'
@@ -1443,7 +1508,8 @@ console.log(
     + ' S4: allowBackup=false with BOTH the cloud-backup and device-transfer surfaces excluded and'
     + ' the API 26-30 rules beside them; cleartext refused and user-added CAs untrusted in release,'
     + ' with the regtest exemption confined to the debug source set; R8 pinned off with its reasoning;'
-    + ' no WebView debugging; FLAG_SECURE wired to the five screens that show or accept key material'
+    + ' WebView debugging follows the build type and is off in release; remote navigation denied;'
+    + ' FLAG_SECURE wired to every route state that shows or accepts key material'
     + ' and deliberately not to receive/settings; the update feed carries one semver field and the'
     + ' client renders none of it, identifies nobody and refuses redirects; the capability floor is'
     + ' feature-detected before React mounts; and the listing pack, wire audit, privacy-policy mobile'

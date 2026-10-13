@@ -4,7 +4,7 @@
 .overlay {
     position: absolute;
     inset: 0;
-    z-index: 60; /* above the QR scanner overlay (z-index: 50) */
+    z-index: var(--xc-z-overlay);
     background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: flex-start;
@@ -39,12 +39,11 @@
 }
 
 .searchIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     color: var(--xc-text-muted);
     flex: 0 0 auto;
 }
-
-.searchIcon svg { width: 18px; height: 18px; }
 
 .input {
     flex: 1 1 auto;
@@ -106,14 +105,13 @@
 }
 
 .rowIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     flex: 0 0 auto;
     color: var(--xc-text-muted);
 }
 
 .rowActive .rowIcon { color: var(--xc-on-accent); }
-
-.rowIcon svg { width: 18px; height: 18px; }
 
 .rowText {
     display: flex;

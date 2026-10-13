@@ -32,7 +32,7 @@ describe('useScreenShortcuts', () => {
         expect(e).toHaveBeenCalledOnce();
     });
 
-    it('suppresses single keys while typing but lets combos through', () => {
+    it('suppresses single keys and modifier combos while typing', () => {
         const e = vi.fn();
         const submit = vi.fn();
         render(<Harness keys={{ e, 'mod+enter': submit }} />);
@@ -41,6 +41,9 @@ describe('useScreenShortcuts', () => {
         fireEvent.keyDown(field, { key: 'e' });
         expect(e).not.toHaveBeenCalled();
         fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
+        expect(submit).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
         expect(submit).toHaveBeenCalledOnce();
     });
 

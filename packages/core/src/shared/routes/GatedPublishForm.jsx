@@ -484,7 +484,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     <img
                         src={reviewPreviewUrl}
                         alt={`Preview of ${fileMeta?.name || 'file'}`}
-                        style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                        width={160}
+                        height={160}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
@@ -581,7 +585,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         <img
                             src={previewUrl}
                             alt={`Preview of ${fileMeta.name}`}
-                            style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: 'var(--xc-space-3) auto' }}
+                            width={160}
+                            height={160}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: 'var(--xc-space-3) auto' }}
                         />
                     ) : null}
                     <p className={styles.hint}>
@@ -627,8 +635,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         value={gateMinAmount}
                         onChange={(e) => setGateMinAmount(e.target.value)}
                         disabled={ownerMissing}
+                        aria-describedby="gated-publish-threshold-hint"
                     />
-                    <span className={styles.hint}>
+                    <span id="gated-publish-threshold-hint" className={styles.hint}>
                         Holders need at least this many {tick} after a send to
                         receive the unlock key. This is a first-access lock, not
                         copy protection: anyone who ever got the key keeps it,
