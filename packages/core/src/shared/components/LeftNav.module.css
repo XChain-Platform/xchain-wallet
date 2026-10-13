@@ -20,9 +20,9 @@
     color: var(--xc-text);
 }
 
-/* Skip-to-content link (WCAG 2.4.1): the sidebar sits ahead of the page in tab
-   order, so a keyboard user would otherwise Tab past every destination on
-   every screen. Parked above the window until it takes focus. */
+/* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
+   sit around every route at all widths. Park the link above the window until
+   it takes focus, then expose the direct path to the active screen. */
 .skipLink {
     position: absolute;
     inset-inline-start: var(--xc-space-3);

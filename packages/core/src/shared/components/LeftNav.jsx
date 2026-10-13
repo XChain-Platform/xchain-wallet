@@ -350,9 +350,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             data-xc-tier={tier}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
-            {sidebar ? (
-                <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
-            ) : null}
+            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}

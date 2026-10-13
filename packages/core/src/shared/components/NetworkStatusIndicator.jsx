@@ -126,6 +126,8 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 className={styles.popover}
                 role="dialog"
                 aria-label="Network status"
+                hidden={!visible}
+                inert={!visible ? '' : undefined}
             >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
