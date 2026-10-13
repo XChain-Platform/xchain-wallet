@@ -43,13 +43,14 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 // full-width bar that pushes the scroll area down.
 const WRAP = {
     position: 'fixed',
-    top: 'var(--xc-space-3)',
-    left: 'var(--xc-space-3)',
-    right: 'var(--xc-space-3)',
-    zIndex: 1000,
+    // Fixed content clears device insets while sharing the app's page gutter.
+    top: 'max(var(--xc-page-top), env(safe-area-inset-top, 0px))',
+    left: 'max(var(--xc-page-gutter), env(safe-area-inset-left, 0px))',
+    right: 'max(var(--xc-page-gutter), env(safe-area-inset-right, 0px))',
+    zIndex: 'var(--xc-z-modal)',
     maxWidth: '480px',
     margin: '0 auto',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+    boxShadow: 'var(--xc-shadow-popover)',
     display: 'flex',
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',

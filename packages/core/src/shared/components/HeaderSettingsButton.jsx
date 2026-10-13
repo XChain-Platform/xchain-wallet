@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
+import { ConfirmModal } from './ConfirmModal.jsx';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import {
     activeNetworkLabel,
     activeNetworkOptions,
-    confirmActiveNetworkSwitch,
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
@@ -78,11 +79,13 @@ export function HeaderSettingsButton({
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
+    const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
+    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
@@ -96,7 +99,7 @@ export function HeaderSettingsButton({
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            focusTrigger();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -133,7 +136,14 @@ export function HeaderSettingsButton({
 
     const switchNetwork = async (next) => {
         if (next === currentNetwork) return;
-        if (!confirmActiveNetworkSwitch(currentNetwork, next)) return;
+        const from = activeNetworkLabel(currentNetwork);
+        const to = activeNetworkLabel(next);
+        const confirmed = await confirmDialog.confirm({
+            title: `Switch from ${from} to ${to}?`,
+            message: `The wallet will reload and refresh balances and history for ${to}. ${from} data stays saved and hidden until you switch back.`,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
         setSwitchingNetwork(true);
         try {
             await onActiveNetworkChange(next);
@@ -146,42 +156,47 @@ export function HeaderSettingsButton({
     };
 
     return (
-        <div ref={wrapRef} className={styles.wrap}>
-            {hasActiveNetwork ? (
-                <span
-                    className={`${styles.networkBadge} ${currentNetwork === 'mainnet' ? '' : styles.networkBadgeNonMainnet}`}
-                    aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                    title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
-                >
-                    {/* Short form for phone widths: the dot shows and the
-                        name is visually hidden but still read out, so the
-                        badge never renders as clipped letters. */}
-                    <span className={styles.networkBadgeDot} aria-hidden="true" />
-                    <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
+        <>
+            <div ref={wrapRef} className={styles.wrap}>
+                {hasActiveNetwork ? (
+                    <span
+                        className={`${styles.networkBadge} ${currentNetwork === 'mainnet' ? '' : styles.networkBadgeNonMainnet}`}
+                        aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
+                        title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
+                    >
+                        {/* Short form for phone widths: the dot shows and the
+                            name is visually hidden but still read out, so the
+                            badge never renders as clipped letters. */}
+                        <span className={styles.networkBadgeDot} aria-hidden="true" />
+                        <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
+                    </span>
+                ) : null}
+                <span ref={triggerRef} className={styles.trigger}>
+                    <Button
+                        variant="secondary"
+                        icon={(
+                            <>
+                                <Icon.GearIcon />
+                                {anyNonDefault ? <span className={styles.dot} /> : null}
+                            </>
+                        )}
+                        onClick={() => setOpen((v) => !v)}
+                        aria-haspopup="dialog"
+                        aria-expanded={open ? 'true' : 'false'}
+                        aria-label="Settings"
+                        title="Settings"
+                        data-active={anyNonDefault ? 'true' : undefined}
+                    />
                 </span>
-            ) : null}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={`${styles.btn} ${anyNonDefault ? styles.btnActive : ''}`}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Settings"
-                title="Settings"
-            >
-                <Icon.GearIcon />
-                {anyNonDefault ? <span className={styles.dot} aria-hidden="true" /> : null}
-            </button>
-            {open ? (
-                <div
-                    ref={popoverPlacement.ref}
-                    style={popoverPlacement.style}
-                    className={styles.popover}
-                    role="dialog"
-                    aria-modal="false"
-                    aria-labelledby="xc-wallet-settings-title"
-                >
+                {open ? (
+                    <div
+                        ref={popoverPlacement.ref}
+                        style={popoverPlacement.style}
+                        className={styles.popover}
+                        role="dialog"
+                        aria-modal="false"
+                        aria-labelledby="xc-wallet-settings-title"
+                    >
                     <div id="xc-wallet-settings-title" className={styles.sectionLabel}>Wallet settings</div>
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
@@ -255,9 +270,17 @@ export function HeaderSettingsButton({
                             </button>
                         </div>
                     ) : null}
-                </div>
+                    </div>
+                ) : null}
+            </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
             ) : null}
-        </div>
+        </>
     );
 }
 

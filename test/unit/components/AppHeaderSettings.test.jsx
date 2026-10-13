@@ -16,11 +16,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
@@ -176,6 +177,29 @@ describe('AppHeader action row', () => {
         expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
     });
 
+    it('uses the shared icon-only Button for window-area actions', () => {
+        render(<AppHeader {...allActions} platformCurrent={undefined} />);
+
+        const actions = [
+            'Settings',
+            'Open command palette',
+            'Scan and addresses',
+            'Lock wallet',
+            'Open menu',
+        ].map((name) => screen.getByRole('button', { name }));
+
+        expect(new Set(actions.map((button) => button.className)).size).toBe(1);
+        expect(actions[0].className).toMatch(/secondary/);
+        expect(actions[0].className).toMatch(/iconOnly/);
+
+        cleanup();
+        render(<ShortcutHelp open onClose={() => {}} />);
+        const close = screen.getByRole('button', { name: 'Close' });
+        expect(close.className).toMatch(/secondary/);
+        expect(close.className).toMatch(/iconOnly/);
+        expect(close.className).toMatch(/sm/);
+    });
+
     it('keeps only network state, lock and menu in one header row at 360px', () => {
         const originalWidth = window.innerWidth;
         window.innerWidth = 360;
@@ -304,7 +328,7 @@ describe('HeaderSettingsButton section gating', () => {
 
     it('shows the active network badge and confirms a header switch', async () => {
         const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const nativeConfirm = vi.spyOn(window, 'confirm');
         render(
             <HeaderSettingsButton
                 activeNetwork="testnet"
@@ -319,8 +343,12 @@ describe('HeaderSettingsButton section gating', () => {
             target: { value: 'regtest' },
         });
 
-        expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/refresh balances and history for Regtest/));
-        expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest');
+        const dialog = screen.getByRole('dialog', { name: 'Switch from Testnet to Regtest?' });
+        expect(dialog).toHaveTextContent(/refresh balances and history for Regtest/);
+        expect(nativeConfirm).not.toHaveBeenCalled();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
     });
 
     it('does not guess a network badge before settings load', () => {
@@ -334,9 +362,8 @@ describe('HeaderSettingsButton section gating', () => {
         expect(screen.queryByLabelText(/Active network:/)).toBeNull();
     });
 
-    it('keeps the current network when the header confirmation is cancelled', () => {
+    it('keeps the current network when the header confirmation is cancelled', async () => {
         const onActiveNetworkChange = vi.fn();
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
         render(
             <HeaderSettingsButton
                 activeNetwork="mainnet"
@@ -348,7 +375,10 @@ describe('HeaderSettingsButton section gating', () => {
         const select = screen.getByLabelText('Active network in header');
         expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
         fireEvent.change(select, { target: { value: 'testnet' } });
+        const dialog = screen.getByRole('dialog', { name: 'Switch from Mainnet to Testnet?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
+        await waitFor(() => expect(dialog).not.toBeInTheDocument());
         expect(onActiveNetworkChange).not.toHaveBeenCalled();
         expect(select.value).toBe('mainnet');
     });
@@ -360,7 +390,7 @@ describe('HeaderSettingsButton section gating', () => {
                 onOpenWalletPicker={() => {}}
             />,
         );
-        const plain = gear().className;
+        expect(gear()).not.toHaveAttribute('data-active');
 
         rerender(
             <HeaderSettingsButton
@@ -369,7 +399,7 @@ describe('HeaderSettingsButton section gating', () => {
                 walletNonDefault
             />,
         );
-        expect(gear().className).not.toBe(plain);
+        expect(gear()).toHaveAttribute('data-active', 'true');
     });
 
     it('returns focus to the settings trigger when Escape closes its popover', () => {
@@ -399,7 +429,7 @@ describe('HeaderSettingsButton section gating', () => {
                 networkFilter="litecoin"
             />,
         );
-        const plain = gear().className;
+        expect(gear()).not.toHaveAttribute('data-active');
         cleanup();
         render(
             <HeaderSettingsButton
@@ -408,7 +438,7 @@ describe('HeaderSettingsButton section gating', () => {
                 networkFilter="all"
             />,
         );
-        expect(gear().className).toBe(plain);
+        expect(gear()).not.toHaveAttribute('data-active');
     });
 });
 
