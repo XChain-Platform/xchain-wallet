@@ -25,14 +25,6 @@
     padding: 0;
 }
 
-.chainField {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
 .chainSelect {
     width: 100%;
     min-width: 0;
@@ -96,7 +88,6 @@
 }
 
 @media not all and (min-width: 400px) {
-    .chainField,
     .factRow {
         grid-template-columns: minmax(0, 1fr);
     }

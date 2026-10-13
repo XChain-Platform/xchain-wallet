@@ -337,39 +337,6 @@
     word-break: break-all;
 }
 
-/* Plain copy icon inline at the end of the address text (no button chrome). */
-.copyIcon {
-    appearance: none;
-    border: none;
-    background: transparent;
-    padding: 0;
-    margin-inline-start: var(--xc-space-1);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    display: inline-flex;
-    vertical-align: middle;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    min-width: var(--xc-tap-min);
-    align-items: center;
-    justify-content: center;
-}
-
-.copyIcon:hover {
-    color: var(--xc-text);
-}
-
-.copyIcon:focus-visible {
-    outline: none;
-    color: var(--xc-text);
-}
-
-.copyIcon svg {
-    width: 14px;
-    height: 14px;
-}
-
 /* About-section tab strip on the address detail view. */
 .tabsRow {
     display: flex;
@@ -507,12 +474,6 @@
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .copyIcon:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}
 
 /* Engines disagree on whether gradients survive forced-colors mode, so pin
  * the surface and its label to one system pair instead of guessing. */

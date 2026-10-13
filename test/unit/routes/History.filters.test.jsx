@@ -421,7 +421,7 @@ describe('History filters', () => {
             // The two date fields stack into one full-width column on phones.
             expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
             expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);
-            expect(ruleBody(narrow, '.filterFooter > .filterDisclosure'))
+            expect(ruleBody(narrow, '.filterFooter > :first-child'))
                 .toMatch(/flex:\s*1 1 100%[\s\S]*box-sizing:\s*border-box/);
             expect(ruleBody(narrow, '.rowMeta')).toMatch(/flex-wrap:\s*wrap/);
             expect(ruleBody(narrow, '.pendingAmount')).toMatch(/flex:\s*1 1 100%/);

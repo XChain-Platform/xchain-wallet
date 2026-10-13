@@ -60,7 +60,12 @@ describe('Recovery screen phone layouts', () => {
             'utf8',
         );
         const wrap = vaultCss.match(/\.wrap\s*\{[^}]*\}/)[0];
-        const restoreAction = vaultCss.match(/\.escapeLink\s*\{[^}]*\}/)[0];
+        // The restore action is a kit Button, so its wrapping lives on .btn.
+        const buttonCss = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/ui/Button.module.css'),
+            'utf8',
+        );
+        const restoreAction = buttonCss.match(/\.btn\s*\{[^}]*\}/)[0];
 
         expect(wrap).toMatch(/width:\s*100%/);
         expect(wrap).toMatch(/min-width:\s*0/);

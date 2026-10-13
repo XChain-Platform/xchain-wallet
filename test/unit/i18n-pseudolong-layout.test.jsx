@@ -79,7 +79,6 @@ const SCREEN_TEXT_RULES = {
         [receiveCss, '.hint'],
     ],
     History: [
-        [historyCss, '.filterDisclosure'],
         [historyCss, '.segBtn'],
         [historyCss, '.chip'],
         [historyCss, '.detailAction'],
@@ -106,7 +105,6 @@ const BUTTON_TEXT_RULES = [
     [homeCss, '.quickAction'],
     [homeCss, '.quickActionMoreItem'],
     [sendCss, '.detailsToggle'],
-    [historyCss, '.filterDisclosure'],
     [historyCss, '.segBtn'],
     [historyCss, '.chip'],
     [historyCss, '.detailAction'],
