@@ -19,7 +19,12 @@ import {
     ChainBadge,
     AddressText,
     FeeSelector,
- ChainPicker,  Icon, InfoTip, StatusMessage,} from '@xchain-wallet/core/ui';
+    FormPage,
+    ChainPicker,
+    Icon,
+    InfoTip,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -253,7 +258,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
     const { showToast } = useToast();
@@ -2098,7 +2102,35 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form id="send-review-form" onSubmit={handleSubmit} noValidate>
+            <FormPage
+                id="send-review-form"
+                label="Review send"
+                onSubmit={handleSubmit}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            !!testSendGate
+                            || (isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? (hwStatus !== 'available'
+                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
+                                    : (!signerReady && password.length === 0))
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : descriptor?.displayName
+                                    ? `Sign on ${descriptor.displayName}`
+                                    : 'Sign'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 {dispenserNoticeBlock}
                 <BalanceChanges
@@ -2262,31 +2294,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         ) : null}
                     </StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !!testSendGate
-                            || (isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? (hwStatus !== 'available'
-                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
-                                    : (!signerReady && password.length === 0))
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : descriptor?.displayName
-                                    ? `Sign on ${descriptor.displayName}`
-                                    : 'Sign'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -2352,7 +2360,32 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     ) : null;
     const hasTokenSelected = !!chainId && !!tick.trim();
     return wrap(
-        <form id="send-form" onSubmit={handleReview} noValidate>
+        <FormPage
+            id="send-form"
+            label="Send"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={
+                        /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                            ? { label: 'Use Max', onAction: onMax }
+                            : undefined
+                    }
+                >
+                    {formError}
+                </StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!!testSendGate}
+                >
+                    Send
+                </Button>
+            )}
+        >
             {/*
               * State the signing freeze at the TOP of the form, before
               * the user picks a destination and an amount. The refusal used to
@@ -2723,30 +2756,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 </label>
             </details>
             {testSendGateBanner}
-            {formError ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={
-                        /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                            ? { label: 'Use Max', onAction: onMax }
-                            : undefined
-                    }
-                >
-                    {formError}
-                </StatusMessage>
-            ) : null}
-        </form>,
-        <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
-            <Button
-                type="submit"
-                form="send-form"
-                variant="primary"
-                block
-                disabled={!!testSendGate}
-            >
-                Send
-            </Button>
-        </div>,
+        </FormPage>,
     );
 }
 

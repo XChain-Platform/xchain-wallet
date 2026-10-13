@@ -82,16 +82,6 @@
     margin-top: var(--xc-space-4);
 }
 
-.actionsBar {
-    margin-top: var(--xc-space-1);
-}
-
-.actionsBarFull {
-    max-width: 560px;
-    margin-inline-start: auto;
-    margin-inline-end: auto;
-}
-
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
