@@ -210,6 +210,55 @@ export const en = {
     'stakeNew.contractDescription':
         "Stake tokens into a contract. You'll pick the contract next.",
 
+    // --- vault unavailable --------------------------------------
+    'vaultUnavailable.recoverySafe': 'Your recovery phrase still holds everything.',
+    'vaultUnavailable.blockchainSafe':
+        'Your coins live on the blockchain, not in this app. Anything stored here is only a copy, and your recovery phrase restores it on this device or any other.',
+    'vaultUnavailable.restore': 'Restore from recovery phrase or backup',
+    'vaultUnavailable.wipeWarning':
+        'Do not do this unless you have your recovery phrase or an encrypted backup file to hand.',
+    'vaultUnavailable.wipeConfirm': 'Type WIPE to confirm',
+
+    // --- signature verification ---------------------------------
+    'verifySignature.title': 'Verify signature',
+    'verifySignature.valid': 'Valid signature. Signature matches this message and address.',
+    'verifySignature.invalid': 'Invalid signature. Signature does not match this message and address.',
+    'verifySignature.malformed': 'Malformed signature. Enter a base64-encoded signature.',
+    'verifySignature.chain': 'Chain',
+    'verifySignature.address': 'Address',
+    'verifySignature.addressPlaceholder': 'The address that produced the signature',
+    'verifySignature.message': 'Message',
+    'verifySignature.messagePlaceholder': 'The exact text that was signed',
+    'verifySignature.signature': 'Signature',
+    'verifySignature.signaturePlaceholder': 'Base64 signature blob',
+    'verifySignature.verifying': 'Verifying…',
+
+    // --- wallet management --------------------------------------
+    'walletDetails.title': 'Wallet details',
+    'walletDetails.name': 'Name',
+    'walletDetails.type': 'Type',
+    'walletDetails.origin': 'Origin',
+    'walletDetails.passphrase': '25th-word passphrase',
+    'walletDetails.accounts': 'Accounts',
+    'walletDetails.created': 'Created',
+    'walletDetails.status': 'Status',
+    'walletDetails.demoWallet': 'Demo wallet (throwaway)',
+    'walletDetails.id': 'ID',
+    'walletDetails.upgradeRecovery': 'Upgrade recovery phrase',
+    'walletDetails.rename': 'Rename wallet',
+    'walletDetails.exitDemo': 'Exit demo & wipe',
+    'walletPicker.title': 'Wallets',
+    'walletPicker.add': 'Add wallet',
+    'walletPicker.manage': 'Manage wallet',
+    'walletPicker.emptyTitle': 'No wallets yet',
+    'walletPicker.emptyBody': 'Wallets available to this app appear here.',
+    'walletPicker.demoPrefix': 'Demo wallet · ',
+    'walletPicker.legacy': 'FreeWallet (legacy)',
+    'walletPicker.importedKey': 'Imported key',
+    'walletPicker.bip39': 'BIP39',
+    'walletPicker.passphraseNeeded': ' · needs its passphrase at unlock',
+    'walletPicker.detailsFor': 'Wallet details for {wallet}',
+
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
     'home.title': 'Home',

@@ -56,6 +56,7 @@ import { useState } from 'react';
 import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { t } from '../../i18n/index.js';
 import styles from './VaultUnavailable.module.css';
 
 /** Headline and body per kind. Plain language, and never blame the user. */
@@ -170,16 +171,14 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                             who has just been told their wallet will not open should
                             not have to work out whether their coins are gone. */}
                         <p className={styles.reassure}>
-                            <strong>Your recovery phrase still holds everything.</strong>
+                            <strong>{t('vaultUnavailable.recoverySafe')}</strong>
                             {' '}
-                            Your coins live on the blockchain, not in this app. Anything
-                            stored here is only a copy, and your recovery phrase restores
-                            it on this device or any other.
+                            {t('vaultUnavailable.blockchainSafe')}
                         </p>
 
                         {offersRetry ? (
                             <Button type="button" variant="primary" block onClick={handleRetry}>
-                                Try again
+                                {t('common.tryAgain')}
                             </Button>
                         ) : null}
 
@@ -197,7 +196,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 aria-expanded="false"
                                 aria-controls="vault-unavailable-wipe-panel"
                             >
-                                Restore from recovery phrase or backup
+                                {t('vaultUnavailable.restore')}
                             </button>
                         ) : null}
 
@@ -210,14 +209,13 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                             >
                                 <p className={styles.wipeWarning}>
                                     <strong>
-                                        Do not do this unless you have your recovery phrase
-                                        or an encrypted backup file to hand.
+                                        {t('vaultUnavailable.wipeWarning')}
                                     </strong>
                                 </p>
                                 <p className={styles.wipeNote}>{wipeCopy.note}</p>
                                 <Input
                                     type="text"
-                                    label="Type WIPE to confirm"
+                                    label={t('vaultUnavailable.wipeConfirm')}
                                     value={confirmText}
                                     onChange={(e) => setConfirmText(e.target.value)}
                                     autoComplete="off"
@@ -241,7 +239,7 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     onClick={() => { setWipeOpen(false); setConfirmText(''); setWipeError(null); }}
                                     disabled={busy}
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </Button>
                                 {wipeError ? (
                                     <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>

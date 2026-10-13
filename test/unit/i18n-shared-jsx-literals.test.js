@@ -46,6 +46,10 @@ const localizedRoutes = [
     'RouteNotFound.jsx',
     'SignerSelectForm.jsx',
     'StakeNew.jsx',
+    'VaultUnavailable.jsx',
+    'VerifySignatureForm.jsx',
+    'WalletDetails.jsx',
+    'WalletPicker.jsx',
 ];
 
 describe('shared route localization', () => {

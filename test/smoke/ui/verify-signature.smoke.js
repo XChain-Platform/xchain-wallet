@@ -56,11 +56,11 @@ assert.match(formSrc, /<ChainPicker/, 'has chain picker');
 // Live registry read (useSupportedChains) rather than a once-memoised
 // supportedChains() snapshot, so a synced descriptor reaches the picker.
 assert.match(formSrc, /useSupportedChains\(chainRegistry\)/, 'chains come from the live registry, not wallet');
-assert.match(formSrc, /label="Address"/, 'has address input');
+assert.match(formSrc, /label=\{t\('verifySignature\.address'\)\}/, 'has localized address input');
 assert.match(formSrc, /id="verify-message"/, 'message textarea present');
 assert.match(formSrc, /id="verify-signature"/, 'signature textarea present');
-assert.match(formSrc, /Signature matches this message and address/, 'valid copy names both inputs');
-assert.match(formSrc, /Signature does not match this message and address/, 'invalid copy names both inputs');
+assert.match(formSrc, /t\('verifySignature\.valid'\)/, 'uses localized valid-result copy');
+assert.match(formSrc, /t\('verifySignature\.invalid'\)/, 'uses localized invalid-result copy');
 assert.match(formSrc, /role="status"/, 'result row has status role');
 assert.match(formSrc, /aria-live="polite"/, 'result row is aria-live');
 
