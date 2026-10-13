@@ -835,6 +835,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return s;
     }, [addressesByChain]);
 
+    const activeChainIds = Object.entries(addressesByChain || {})
+        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+        .map(([cid]) => cid);
+
     // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation
     // counts on confirmed rows. Derived from the highest blockIndex
     // seen across loaded history rows (lower bound for the chain tip,
@@ -957,12 +961,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         enabled: verifyProofsEnabled,
     });
 
-    const filtersActive = (
+    const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
+    const filtersActive = Boolean(
         searchQuery
         || actionTypeFilter.size > 0
         || statusFilter.size > 0
         || dateFrom
         || dateTo
+        || chainFilterActive
+        || crossChainOnly
+        || multisigOnly
     );
 
     const toggleSetMember = (setter) => (id) => {
@@ -983,6 +991,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             statusFilter: new Set(statusFilter),
             dateFrom,
             dateTo,
+            enabledChains: new Set(enabledChains),
+            chainFilterActive,
+            crossChainOnly,
+            multisigOnly,
         };
         const hadAny = Boolean(filtersActive);
         setSearchQuery('');
@@ -990,6 +1002,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setStatusFilter(new Set());
         setDateFrom('');
         setDateTo('');
+        setEnabledChains(new Set(activeChainIds));
+        setCrossChainOnly(false);
+        setMultisigOnly(false);
+        writeChainSet(HISTORY_CHAIN_FILTER_KEY, null);
         if (hadAny) {
             showToast({
                 message: 'Filter cleared',
@@ -1000,9 +1016,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setStatusFilter(snapshot.statusFilter);
                     setDateFrom(snapshot.dateFrom);
                     setDateTo(snapshot.dateTo);
+                    setEnabledChains(snapshot.enabledChains);
+                    setCrossChainOnly(snapshot.crossChainOnly);
+                    setMultisigOnly(snapshot.multisigOnly);
+                    writeChainSet(
+                        HISTORY_CHAIN_FILTER_KEY,
+                        snapshot.chainFilterActive ? snapshot.enabledChains : null,
+                    );
                 },
             });
         }
+    };
+
+    const updateDateFrom = (value) => {
+        setDateFrom(value);
+        if (value && dateTo && value > dateTo) setDateTo(value);
+    };
+
+    const updateDateTo = (value) => {
+        setDateTo(value);
+        if (value && dateFrom && value < dateFrom) setDateFrom(value);
     };
 
     // For drawing the vertical connector: an entry is "threaded with
@@ -1209,9 +1242,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             </ListPage>,
         );
     }
-    const activeChainIds = Object.entries(addressesByChain)
-        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
-        .map(([cid]) => cid);
     if (activeChainIds.length === 0) {
         return wrap(
             <ListPage>
@@ -1244,7 +1274,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         type="date"
                         aria-label="From date"
                         value={dateFrom}
-                        onChange={(ev) => setDateFrom(ev.target.value)}
+                        max={dateTo || undefined}
+                        onChange={(ev) => updateDateFrom(ev.target.value)}
                         className={styles.dateInput}
                     />
                     <span className={styles.dateSep}>→</span>
@@ -1252,7 +1283,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         type="date"
                         aria-label="To date"
                         value={dateTo}
-                        onChange={(ev) => setDateTo(ev.target.value)}
+                        min={dateFrom || undefined}
+                        onChange={(ev) => updateDateTo(ev.target.value)}
                         className={styles.dateInput}
                     />
                 </div>
