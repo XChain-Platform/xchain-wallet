@@ -63,7 +63,15 @@ export default defineConfig({
     // Vite transform on a loaded box costs several more. Both scale with
     // contention, so both budgets do too.
     timeout: budget.timeout,
-    expect: { timeout: budget.expectTimeout },
+    expect: {
+        timeout: budget.expectTimeout,
+        toHaveScreenshot: {
+            animations: 'disabled',
+            caret: 'hide',
+            maxDiffPixels: 100,
+            maxDiffPixelRatio: 0.001,
+        },
+    },
     globalSetup: './global-setup.ci.js',
     reporter: process.env.CI
         ? [['github'], ['html', { open: 'never' }]]
