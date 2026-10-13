@@ -78,6 +78,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const [governChains, setGovernChains] = useState(/** @type {string[]} */ ([]));
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [pollsReload, setPollsReload] = useState(0);
 
     // Resolve which governance-capable chains the wallet can act on; the
     // first (registry order) seeds the Network field, which lets the user
@@ -99,7 +101,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
-    }, [walletId, messaging, governanceChainIds]);
+    }, [walletId, messaging, governanceChainIds, addressesReload]);
 
     useEffect(() => {
         if (!chainId) return;
@@ -110,7 +112,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load polls.'); });
         return () => { cancelled = true; };
-    }, [chainId, messaging]);
+    }, [chainId, messaging, pollsReload]);
 
     const header = <PageHeader onBack={onBack} title="Governance" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
@@ -125,7 +127,17 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     }
     if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
     if (!chainId) {
-        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{error}</StatusMessage></ListPage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            </ListPage>,
+        );
     }
 
     return wrap(
@@ -137,7 +149,15 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             </>
         )}>
 
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {error ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setPollsReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            ) : null}
             {chainId && !rows && !error ? <p>Loading polls…</p> : null}
             {rows && rows.length === 0 ? (
                 <EmptyState title="No polls yet" body="Polls created on this chain appear here." />

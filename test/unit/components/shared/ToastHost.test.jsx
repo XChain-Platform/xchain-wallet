@@ -51,17 +51,29 @@ afterEach(() => {
 });
 
 describe('ToastHost', () => {
-    it('announces each toast once with urgency matching its variant', () => {
+    it('announces all nonblocking toasts through one polite region', () => {
         setup();
         show({ id: 'ok', message: 'Saved', durationMs: 0 });
         show({ id: 'bad', message: 'Save failed', variant: 'error', durationMs: 0 });
 
         const region = screen.getByRole('region', { name: 'Notifications' });
-        expect(region.getAttribute('aria-live')).toBeNull();
-        expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
-        expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
-        expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
-        expect(screen.getByRole('alert')).toHaveAttribute('aria-atomic', 'true');
+        expect(region).toHaveAttribute('aria-live', 'polite');
+        expect(region).toHaveAttribute('aria-atomic', 'false');
+        expect(region).toHaveTextContent('Saved');
+        expect(region).toHaveTextContent('Save failed');
+        expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('publishes copied and saved results through the same region', () => {
+        setup();
+        act(() => toastApi.announce('Copied'));
+        const region = screen.getByRole('region', { name: 'Notifications' });
+        expect(region).toHaveTextContent('Copied');
+
+        act(() => toastApi.announce('Saved'));
+        expect(region).toHaveTextContent('Saved');
+        expect(region).not.toHaveTextContent('Copied');
     });
 
     it('gives queued toasts their full timeout after they become visible', () => {

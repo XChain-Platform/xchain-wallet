@@ -15,9 +15,14 @@ const haptic = vi.hoisted(() => ({
     tap: vi.fn(),
     error: vi.fn(),
 }));
+const liveRegion = vi.hoisted(() => ({ announce: vi.fn() }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHapticFeedback: () => haptic,
+}));
+
+vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
+    useToast: () => liveRegion,
 }));
 
 import { CopyButton } from '../../../packages/core/src/ui/CopyButton.jsx';
@@ -61,6 +66,8 @@ describe('<CopyButton>', () => {
             });
             expect(haptic.tap).toHaveBeenCalledOnce();
             expect(haptic.error).not.toHaveBeenCalled();
+            expect(liveRegion.announce).toHaveBeenCalledWith('Copied');
+            expect(screen.getByRole('button')).not.toHaveAttribute('aria-live');
             act(() => {
                 vi.advanceTimersByTime(101);
             });
@@ -68,6 +75,18 @@ describe('<CopyButton>', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('lets an enclosing result region own the copy announcement', async () => {
+        render(
+            <div role="status" aria-live="polite">
+                <CopyButton value="x" />
+            </div>,
+        );
+        fireEvent.click(screen.getByRole('button'));
+        await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+        expect(liveRegion.announce).not.toHaveBeenCalled();
+        expect(screen.getAllByRole('status')).toHaveLength(1);
     });
 
     it('names clipboard unavailability when every copy path is refused', async () => {

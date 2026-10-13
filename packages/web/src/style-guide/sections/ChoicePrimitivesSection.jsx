@@ -39,7 +39,7 @@ function IconSelectExample() {
     );
 }
 
-function AddressComboboxExample() {
+function AddressComboboxExample({ size = 'md' }) {
     const [value, setValue] = useState('');
     return (
         <AddressCombobox
@@ -48,6 +48,7 @@ function AddressComboboxExample() {
             onChange={(event) => setValue(event.target.value)}
             suggestions={DESTINATIONS}
             placeholder="Address or contact"
+            size={size}
         />
     );
 }
@@ -120,6 +121,9 @@ export function AddressComboboxSection() {
             </Markup>
             <LiveExample label="Focus the field, type a contact name, or use the arrow keys.">
                 <AddressComboboxExample />
+            </LiveExample>
+            <LiveExample label="Hero size for the primary destination field.">
+                <AddressComboboxExample size="lg" />
             </LiveExample>
         </Section>
     );

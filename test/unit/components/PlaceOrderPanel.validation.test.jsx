@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
@@ -15,6 +15,14 @@ const ADDRESS = {
 };
 
 afterEach(() => cleanup());
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
 
 function mount(props = {}, overrides = {}) {
     const messaging = {
@@ -36,6 +44,21 @@ function mount(props = {}, overrides = {}) {
 }
 
 describe('PlaceOrderPanel validation', () => {
+    it('gates order review while wallet balances are loading', async () => {
+        const balanceRequest = deferred();
+        mount({}, { getWalletBalances: vi.fn(() => balanceRequest.promise) });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Loading wallet balances…');
+        expect(screen.getByRole('button', { name: 'Loading wallet…' })).toBeDisabled();
+
+        await act(async () => balanceRequest.resolve({}));
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading wallet balances…')).toBeNull();
+        });
+        expect(screen.getByRole('button', { name: 'Place buy order' })).toBeEnabled();
+    });
+
     it('rejects numeric syntax that cannot be serialized as a protocol decimal', async () => {
         const messaging = mount({ prefillPrice: '1e3' });
         await waitFor(() => expect(screen.getByLabelText('Price (BTC)').value).toBe('1e3'));
@@ -51,9 +74,12 @@ describe('PlaceOrderPanel validation', () => {
         const price = await screen.findByLabelText('Price (BTC)');
         fireEvent.change(price, { target: { value: '1,234.5' } });
         expect(price.value).toBe('1234.5');
+        expect(price.style.textAlign).toBe('right');
+        expect(price.style.fontVariantNumeric).toBe('tabular-nums');
 
         const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
         const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
+        expect(buy.parentElement.style.flexWrap).toBe('wrap');
         expect(buy.style.background).toBe('var(--xc-success)');
         expect(sell.style.background).toBe('var(--xc-danger)');
         expect(buy.style.color).toBe('var(--xc-on-accent)');

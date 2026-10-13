@@ -76,10 +76,11 @@ export function HeaderSettingsButton({
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
-    // The system Back gesture closes this before it leaves the screen.
-    useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    // The system Back gesture and Escape close this before it leaves the
+    // screen; the shared stack consumes Escape, so focus goes back here.
+    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
     // The gear sits wherever the header puts it; at phone width that is
     // near the left edge, and a panel aligned to it would hang off-screen.
     const clamp = useViewportClamp(open);
