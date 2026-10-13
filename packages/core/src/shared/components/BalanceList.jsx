@@ -44,6 +44,8 @@ import {
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
+ * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
  * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
  */
 export function BalanceList({
@@ -62,6 +64,8 @@ export function BalanceList({
     onToggleHide,
     verifyMap,
     hideSmallBalances = false,
+    smallBalanceThreshold = 'dust',
+    numberFormat = 'full',
     showChain = false,
     fiatCurrency = 'USD',
 }) {
@@ -93,7 +97,7 @@ export function BalanceList({
     // moves into its own collapsed section. Collapsed, not dropped: a balance
     // the wallet knows about but will not show anywhere is a support ticket.
     const small = hideSmallBalances
-        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r))
+        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r, smallBalanceThreshold))
         : [];
     const smallSet = new Set(small.map((r) => `${r.chainId}:${r.tick}`));
     const visible = small.length > 0
@@ -114,6 +118,7 @@ export function BalanceList({
                     <BalanceRowEl
                         key={key}
                         row={r}
+                        numberFormat={numberFormat}
                         fiatCurrency={fiatCurrency}
                         multisig={r.chainId === multisigChainId ? multisig : null}
                         onSelect={onSelectToken}
@@ -144,6 +149,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`hidden:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
@@ -177,6 +183,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`small:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
@@ -195,7 +202,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD' }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -326,7 +333,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                         ? '•••••'
                         : row.unavailable === 'all'
                             ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                            : formatAmount(row.quantity, row.divisibility)}
+                            : formatAmount(row.quantity, row.divisibility, numberFormat)}
                 </div>
                 {row.escrowed ? (
                     <div className={styles.fiat} data-testid="balance-escrowed">
@@ -449,22 +456,36 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
  *
  * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
  * @returns {boolean}
  */
-export function isSmallBalanceRow(row) {
+export function isSmallBalanceRow(row, threshold = 'dust') {
     if (!row) return false;
     if (row.escrowed) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
+    if (threshold !== 'dust') {
+        return q < decimalUnitsToBaseUnits(threshold, row.divisibility);
+    }
     if (row.kind === 'native') {
-        const threshold = SMALL_BALANCE_BASE_UNITS[coinFromChainId(row.chainId)]
+        const chainThreshold = SMALL_BALANCE_BASE_UNITS[coinFromChainId(row.chainId)]
             ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
-        return q < threshold;
+        return q < chainThreshold;
     }
     const div = Number(row.divisibility) || 0;
     if (div <= 0) return false;
     return q < (10n ** BigInt(div)) / 10000n;
+}
+
+function decimalUnitsToBaseUnits(value, divisibility) {
+    const div = Math.max(0, Number(divisibility) || 0);
+    const [whole, fraction = ''] = String(value).split('.');
+    const scale = 10n ** BigInt(div);
+    const kept = fraction.slice(0, div).padEnd(div, '0');
+    let result = BigInt(whole || '0') * scale + BigInt(kept || '0');
+    if (fraction.slice(div).replace(/0/g, '')) result += 1n;
+    return result;
 }
 
 /**
@@ -741,15 +762,17 @@ function safeBigInt(v) {
     return 0n;
 }
 
-export function formatAmount(quantityStr, divisibility) {
+export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
     const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
+    const group = numberFormat === 'plain' ? (value) => String(value) : groupThousands;
+    if (!divisibility || divisibility <= 0) return group(q);
     const negative = q.startsWith('-');
     const abs = negative ? q.slice(1) : q;
     const padded = abs.padStart(divisibility + 1, '0');
     const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    const out = `${groupThousands(whole)}.${frac}`;
+    let frac = padded.slice(padded.length - divisibility);
+    if (numberFormat === 'trim') frac = frac.replace(/0+$/, '');
+    const out = frac ? `${group(whole)}.${frac}` : group(whole);
     return negative ? `-${out}` : out;
 }
 
