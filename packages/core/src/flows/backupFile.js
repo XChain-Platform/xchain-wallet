@@ -188,10 +188,22 @@ export async function exportBackupFile({
     const addresses = allAddresses.filter((a) =>
         (a.accountId && accountIds.has(a.accountId)) || importedAddrIds.has(a.id),
     );
-    const addressStrings = new Set(addresses.map((a) => a.address));
+    const addressScopes = new Set(addresses.map(addressScopeKey));
     const pendingTxs = includePendingTxs
-        ? allPending.filter((p) => addressStrings.has(p.fromAddress))
+        ? allPending.filter((p) => addressScopes.has(pendingTxScopeKey(p)))
         : [];
+    const connectedSites = allConnected.flatMap((site) => {
+        const grantedAccounts = site?.permissions?.accounts;
+        // Persisted records always carry this array. Keeping an unrecognized
+        // record intact lets the vault validator report the schema problem.
+        if (!Array.isArray(grantedAccounts)) return [site];
+        const scopedAccounts = grantedAccounts.filter((id) => accountIds.has(id));
+        if (scopedAccounts.length === 0) return [];
+        return [{
+            ...site,
+            permissions: { ...site.permissions, accounts: scopedAccounts },
+        }];
+    });
 
     /** @type {BackupPayload} */
     const payload = {
@@ -200,7 +212,7 @@ export async function exportBackupFile({
         accounts,
         addresses,
         contacts: allContacts,
-        connectedSites: allConnected,
+        connectedSites,
         settings,
         signers: [],
         pendingTxs,
@@ -302,18 +314,15 @@ export async function importBackupFile({
             `importBackupFile: unsupported payloadVersion ${decoded.payloadVersion} (expected ${BACKUP_PAYLOAD_VERSION})`,
         );
     }
-    if (!decoded.wallet || typeof decoded.wallet.id !== 'string') {
+    if (!decoded.wallet || typeof decoded.wallet.id !== 'string' || decoded.wallet.id.length === 0) {
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // Migrate the wallet the moment it leaves the envelope, for the same
-    // reason settings are migrated below: `put` validates against the CURRENT
-    // schema version and never migrates, so a record written before any bump
-    // fails the restore rather than the wallet. Ordering is load-bearing:
-    // `migrateWallet` returns a NEW object, while the re-key below rewrites
-    // the sealed blobs IN PLACE, so migrating afterwards would hand `put` a
-    // copy still sealed under the old device's password.
-    decoded.wallet = migrateWallet(decoded.wallet);
+    // Migrate and scope-check every record before the first vault write.
+    // Migration or scope errors in a later collection must not turn a restore
+    // into a wallet-only partial write, and records for another wallet must
+    // not ride in a valid encrypted envelope.
+    prepareDecodedPayload(decoded);
 
     // Re-seal the wallet's key material under this device's
     // password BEFORE anything is written. Doing it here rather than at
@@ -537,10 +546,11 @@ async function collectConflicts(vault, payload, opts = {}) {
  *   - account.id, account.walletId
  *   - address.id, address.accountId
  *   - pendingTx.id    (kept independent; pending txs are address-scoped
- *                     via `fromAddress`, not id-scoped)
+ *                     via chain / network / `fromAddress`, not id-scoped)
  *
- * Contacts / connectedSites / settings ids stay as-is (they're global
- * across wallets and there's nothing to disambiguate). Exported for
+ * Contacts / connectedSites / settings ids stay as-is (they're global),
+ * while connectedSites.permissions.accounts follows the account remint.
+ * Exported for
  * test access; production callers go through `importBackupFile({mode:
  * 'add'})`.
  *
@@ -578,6 +588,14 @@ export function remintIdentifiers(decoded) {
         }
     }
 
+    for (const site of decoded.connectedSites ?? []) {
+        const grantedAccounts = site?.permissions?.accounts;
+        if (!Array.isArray(grantedAccounts)) continue;
+        site.permissions.accounts = grantedAccounts.map((accountId) => (
+            accountIdMap.get(accountId) ?? accountId
+        ));
+    }
+
     // Wallet's importedKeys point at the re-minted address ids by
     // value; rewire so a wif-imported wallet lands intact.
     if (Array.isArray(decoded.wallet.importedKeys)) {
@@ -589,9 +607,9 @@ export function remintIdentifiers(decoded) {
     }
 
     // PendingTxs: re-mint id so a re-import of the same backup doesn't
-    // collide; keep the rest of the row (fromAddress / txid / status)
-    // untouched. fromAddress is the canonical address string, not an
-    // id, so it survives the address-id re-mint.
+    // collide; keep the rest of the row (chain / network / fromAddress /
+    // txid / status) untouched. fromAddress is the canonical address string,
+    // not an id, so it survives the address-id re-mint.
     for (const ptx of decoded.pendingTxs ?? []) {
         if (ptx && typeof ptx.id === 'string') {
             ptx.id = randomUUID();
@@ -752,4 +770,88 @@ async function applyCollection(collection, records, onConflict, writes, skipped,
         await collection.put(migrateRecord(rec));
         writes[name] += 1;
     }
+}
+
+function addressScopeKey(record) {
+    return JSON.stringify([record?.chain, record?.network, record?.address]);
+}
+
+function pendingTxScopeKey(record) {
+    return JSON.stringify([record?.chain, record?.network, record?.fromAddress]);
+}
+
+function prepareDecodedPayload(decoded) {
+    decoded.wallet = migrateWallet(decoded.wallet);
+    decoded.accounts = migratePayloadRecords(decoded.accounts, 'accounts', migrateAccount);
+    decoded.addresses = migratePayloadRecords(decoded.addresses, 'addresses', migrateAddress);
+    decoded.contacts = migratePayloadRecords(decoded.contacts, 'contacts', migrateContact);
+    decoded.connectedSites = migratePayloadRecords(
+        decoded.connectedSites, 'connectedSites', migrateConnectedSite,
+    );
+    decoded.pendingTxs = migratePayloadRecords(decoded.pendingTxs, 'pendingTxs', migratePendingTx);
+    if (decoded.signers != null && !Array.isArray(decoded.signers)) {
+        throw new Error('importBackupFile: payload signers must be an array');
+    }
+    decoded.signers ??= [];
+    if (decoded.settings != null) decoded.settings = migrateSettings(decoded.settings);
+
+    const walletId = decoded.wallet.id;
+    const accountIds = new Set(decoded.accounts.map((account) => account.id));
+    for (const account of decoded.accounts) {
+        if (account.walletId !== walletId) {
+            throw new Error(`importBackupFile: account "${account.id}" belongs to another wallet`);
+        }
+    }
+
+    const importedAddressIds = new Set(
+        (Array.isArray(decoded.wallet.importedKeys) ? decoded.wallet.importedKeys : [])
+            .map((key) => key?.addressId)
+            .filter((id) => typeof id === 'string' && id.length > 0),
+    );
+    const addressScopes = new Set();
+    for (const address of decoded.addresses) {
+        const belongsToAccount = typeof address.accountId === 'string'
+            && accountIds.has(address.accountId);
+        if (!belongsToAccount && !importedAddressIds.has(address.id)) {
+            throw new Error(`importBackupFile: address "${address.id}" belongs to another wallet`);
+        }
+        addressScopes.add(addressScopeKey(address));
+    }
+    for (const addressId of importedAddressIds) {
+        if (!decoded.addresses.some((address) => address.id === addressId)) {
+            throw new Error(`importBackupFile: imported key references missing address "${addressId}"`);
+        }
+    }
+
+    for (const pendingTx of decoded.pendingTxs) {
+        if (!addressScopes.has(pendingTxScopeKey(pendingTx))) {
+            throw new Error(
+                `importBackupFile: pending transaction "${pendingTx.id}" belongs to another wallet or network`,
+            );
+        }
+    }
+    decoded.connectedSites = decoded.connectedSites.flatMap((site) => {
+        const grantedAccounts = site?.permissions?.accounts;
+        if (!Array.isArray(grantedAccounts)) return [site];
+        const scopedAccounts = grantedAccounts.filter((accountId) => accountIds.has(accountId));
+        if (scopedAccounts.length === 0) return [];
+        return [{
+            ...site,
+            permissions: { ...site.permissions, accounts: scopedAccounts },
+        }];
+    });
+}
+
+function migratePayloadRecords(records, name, migrateRecord) {
+    if (records == null) return [];
+    if (!Array.isArray(records)) {
+        throw new Error(`importBackupFile: payload ${name} must be an array`);
+    }
+    return records.map((record, index) => {
+        if (!record || typeof record !== 'object'
+            || typeof record.id !== 'string' || record.id.length === 0) {
+            throw new Error(`importBackupFile: payload ${name}[${index}] has no id`);
+        }
+        return migrateRecord(record);
+    });
 }
