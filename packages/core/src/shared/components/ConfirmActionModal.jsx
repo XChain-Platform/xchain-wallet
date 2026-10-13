@@ -34,14 +34,16 @@ import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
-import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
+import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
+const chainRegistry = defaultRegistry();
 
 function formatReviewDecoded(decoded) {
     if (!decoded) return decoded;
@@ -221,8 +223,9 @@ export function ConfirmActionModal({
     const nativeProtocolFeeSats = paysProtocolFeeNatively
         ? Number(composed?.protocolFeeSats || composed?.quote?.requiredFeeSats)
         : null;
+    const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
     const nativeProtocolFeeAmount = Number.isFinite(nativeProtocolFeeSats)
-        ? satsToCoinDecimal(nativeProtocolFeeSats)
+        ? formatNativeBaseUnits(nativeProtocolFeeSats, descriptor)
         : null;
     const nativeProtocolFeeFiat = nativeProtocolFeeAmount
         && typeof formatNativeFee === 'function'

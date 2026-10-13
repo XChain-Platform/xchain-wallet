@@ -10,13 +10,7 @@
 
 import { branding as brandingLib, registry as registryLib } from '@xchain-wallet/core';
 import { tickerColor } from './BalanceList.jsx';
-
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-
-function nativeTickerFor(descriptor) {
-    if (!descriptor?.coin) return null;
-    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
-}
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -37,7 +31,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function TickerIcon({ chainId, tick, size = 28 }) {
     const descriptor = chainRegistry.get(chainId);
     const tickUpper = String(tick || '').toUpperCase();
-    const nativeTicker = nativeTickerFor(descriptor);
+    const nativeTicker = tickerForDescriptor(descriptor);
     const isNative = !!nativeTicker && tickUpper === nativeTicker;
     const pipSize = Math.max(10, Math.round(size * 0.5));
     const wrapStyle = {

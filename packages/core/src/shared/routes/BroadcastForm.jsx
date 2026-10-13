@@ -39,19 +39,13 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
 
 // Separator between the parts the form packs into one MEMO slot (the optional
 // UTC timestamp and the message body).: this used to be ' | ', and '|'
@@ -108,10 +102,8 @@ function rawTransactionMismatch(decoded, descriptor) {
     return null;
 }
 
-function formatCoinAmount(valueSat, ticker) {
-    const whole = valueSat / 100000000n;
-    const fraction = String(valueSat % 100000000n).padStart(8, '0').replace(/0+$/, '');
-    return `${fraction ? `${whole}.${fraction}` : whole} ${ticker}`;
+function formatCoinAmount(valueSat, descriptor) {
+    return `${formatNativeBaseUnits(valueSat, descriptor)} ${tickerForDescriptor(descriptor)}`;
 }
 
 function rawBroadcastFailure(err) {
@@ -173,7 +165,7 @@ function RawTransactionBroadcast({
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const ticker = tickerForCoin(descriptor?.coin);
+    const ticker = tickerForDescriptor(descriptor);
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
     const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
@@ -284,7 +276,7 @@ function RawTransactionBroadcast({
                         <DetailRow
                             key={`${output.scriptPubKeyHex}-${index}`}
                             label={`Output ${index + 1}`}
-                            value={`${formatCoinAmount(output.valueSat, ticker)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
+                            value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
                         />
                     ))}
                     <DetailRow
@@ -474,7 +466,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
-    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const coinTicker = tickerForDescriptor(descriptor);
 
     // PC-51: native-coin protocol fee (BROADCAST is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.

@@ -25,6 +25,13 @@ import {
     formatFiatAmount,
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
+import {
+    smallBalanceBaseUnitsFor,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
+import { defaultRegistry } from '../../registry/index.js';
+
+const chainRegistry = defaultRegistry();
 
 export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
     if (typeof src !== 'string' || src.length === 0) return false;
@@ -551,19 +558,6 @@ export function detectSpamCandidates(rows) {
     return flagged;
 }
 
-/*. Display dust thresholds in each chain's smallest unit. These decide
- * whether a ROW is worth listing, nothing else: they never gate a send, a fee
- * or a change output, so being a little generous here costs the user nothing.
- * Bitcoin's 546 is the familiar relay dust limit; Litecoin's relay floor sits
- * an order of magnitude higher per byte; Dogecoin Core carries an explicit
- * DEFAULT_DUST_LIMIT of 0.01 DOGE. */
-const SMALL_BALANCE_BASE_UNITS = Object.freeze({
-    bitcoin: 546n,
-    litecoin: 5460n,
-    dogecoin: 1000000n,
-});
-const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
-
 /**
  * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
  *
@@ -587,8 +581,10 @@ export function isSmallBalanceRow(row, threshold = 'dust') {
         return q < decimalUnitsToBaseUnits(threshold, row.divisibility);
     }
     if (row.kind === 'native') {
-        const chainThreshold = SMALL_BALANCE_BASE_UNITS[row.coin || coinFromChainId(row.chainId)]
-            ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
+        const descriptor = chainRegistry.get(row.chainId);
+        const chainThreshold = smallBalanceBaseUnitsFor(
+            descriptor || row.coin || coinFromChainId(row.chainId),
+        );
         return q < chainThreshold;
     }
     const div = Number(row.divisibility) || 0;
@@ -860,8 +856,7 @@ function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fia
 }
 
 function shortLabelForCoin(coin) {
-    const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-    return map[coin] || coin.toUpperCase();
+    return tickerForDescriptor({ coin });
 }
 
 const CHAIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };

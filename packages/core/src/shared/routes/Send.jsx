@@ -70,6 +70,12 @@ import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/send
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { contactEntryChain } from '../utils/contactChain.js';
+import {
+    formatNativeBaseUnits,
+    nativeDecimalsFor,
+    nativeUnitScaleFor,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -78,12 +84,13 @@ import { contactEntryChain } from '../utils/contactChain.js';
 // is exact; the submitted transaction already uses the exact decimal string,
 // so this only aligns the gates with what actually gets sent. Returns a
 // non-negative Number of sats, or null when the input is not a plain decimal.
-export function exactSatsFromDecimalString(raw) {
+export function exactSatsFromDecimalString(raw, chain = 'bitcoin') {
     const s = String(raw).trim();
     const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
     if (!m) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    const sats = BigInt(m[1]) * 100000000n + BigInt(frac);
+    const decimals = nativeDecimalsFor(chain);
+    const frac = (m[2] || '').slice(0, decimals).padEnd(decimals, '0');
+    const sats = BigInt(m[1]) * nativeUnitScaleFor(chain) + BigInt(frac || '0');
     // Gate thresholds live far below 2^53; clamp instead of silently losing
     // precision if someone types an absurd amount.
     return sats > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(sats);
@@ -95,23 +102,22 @@ export function exactSatsFromDecimalString(raw) {
 // round-trip is acceptable. Also accepts a bare leading dot ('.5') the way
 // parseFloat did, since this parses user-typed field values. Returns a
 // non-negative BigInt of sats, or null when the input is not a plain decimal.
-export function exactSatsBigIntFromDecimalString(raw) {
+export function exactSatsBigIntFromDecimalString(raw, chain = 'bitcoin') {
     const s = String(raw).trim();
     const m = /^(\d*)(?:\.(\d+))?$/.exec(s);
     if (!m || (!m[1] && !m[2])) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    return BigInt(m[1] || '0') * 100000000n + BigInt(frac);
+    const decimals = nativeDecimalsFor(chain);
+    const frac = (m[2] || '').slice(0, decimals).padEnd(decimals, '0');
+    return BigInt(m[1] || '0') * nativeUnitScaleFor(chain) + BigInt(frac || '0');
 }
 
 // Exact sats -> plain decimal string, never scientific notation. The old
 // Number(x.toFixed(8)).toString() path rendered 1 sat as '1e-8', which the
 // encoder treats as a malformed AMOUNT. Trailing zeros are stripped for a
 // tidy display; negative inputs clamp to '0'.
-export function decimalStringFromSats(sats) {
+export function decimalStringFromSats(sats, chain = 'bitcoin') {
     const clamped = sats < 0n ? 0n : sats;
-    const whole = (clamped / 100000000n).toString();
-    const frac = (clamped % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
+    return formatNativeBaseUnits(clamped, chain) || '0';
 }
 
 // The Max amount for a NON-native (token) balance: the balance string itself, validated
@@ -191,10 +197,9 @@ const chainRegistry = registryLib.defaultRegistry();
 // breaks every "is this the native asset?" check downstream (most
 // visibly the SelectedTokenHero, which falls through to the letter-badge
 // + chain-overlay branch meant for tokens.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(descriptor) {
     if (!descriptor?.coin) return null;
-    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
+    return tickerForDescriptor(descriptor);
 }
 
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
@@ -203,9 +208,9 @@ function utxoKey(utxo) {
     return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
 }
 
-function utxoAmount(utxo) {
+function utxoAmount(utxo, descriptor) {
     try {
-        return decimalStringFromSats(BigInt(utxo?.value ?? 0));
+        return decimalStringFromSats(BigInt(utxo?.value ?? 0), descriptor);
     } catch {
         return String(utxo?.value ?? '0');
     }
@@ -778,7 +783,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
-        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        const amountSats = nativeDecimalsFor(desc) === 8
+            ? exactSatsBigIntFromDecimalString(amount)
+            : exactSatsBigIntFromDecimalString(amount, desc);
         if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
         const novelty = checkRecipientNovelty({
@@ -904,10 +911,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = dustThresholdForCoin(desc?.coin);
         if (!floor) return null;
-        const sats = exactSatsBigIntFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount, desc);
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
-        const minimum = decimalStringFromSats(BigInt(floor));
+        const minimum = decimalStringFromSats(BigInt(floor), desc);
         return `That amount is too small to send. The smallest ${ticker} payment the network will `
             + `carry is ${minimum} ${ticker} (${formatWithThousands(String(floor))} sats), and anything `
             + 'under that is refused by every node, so it can never arrive. Enter at least '
@@ -1015,7 +1022,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }, [amount, amountFiatRate]);
 
     const onSendSmallTest = useCallback(() => {
-        const amtSats = exactSatsBigIntFromDecimalString(amount);
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const amtSats = exactSatsBigIntFromDecimalString(amount, desc);
         if (amtSats == null || amtSats <= 0n) return;
         // 1% of the original (floor division in sats).: the floor is the chain's
         // dust threshold, not one satoshi, because the gate only ever fires on a NATIVE
@@ -1023,13 +1031,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // is a transaction no node relays, so the button that exists to build the user's
         // confidence would have handed them a failure instead. Exact BigInt math keeps
         // the result a plain decimal string ('0.00000001', never '1e-8').
-        const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = BigInt(dustThresholdForCoin(desc?.coin) || 1);
         const onePercent = amtSats / 100n;
         const lifted = onePercent > floor ? onePercent : floor;
         // Never propose a "small test" larger than what the user asked to send.
         const reduced = lifted < amtSats ? lifted : amtSats;
-        const display = decimalStringFromSats(reduced);
+        const display = nativeDecimalsFor(desc) === 8
+            ? decimalStringFromSats(reduced)
+            : decimalStringFromSats(reduced, desc);
         cancelMax();
         setAmount(display);
         setStage('form');
@@ -1446,12 +1455,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         const ticker = nativeTickerFor(descriptor) || '';
         if (selectedUtxos.length === 0) return `0 ${ticker}`.trim();
         if (!isNativeSend) return 'Calculated when composed';
-        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        const amountSats = exactSatsBigIntFromDecimalString(amount, descriptor);
         const feeSats = utxoValueSats({ value: feeEstimate?.sats });
         if (amountSats === null || feeSats === null) return 'Enter an amount to estimate';
         const changeSats = selectedUtxoTotalSats - amountSats - feeSats;
         if (changeSats < 0n) return 'Not enough selected';
-        return `${decimalStringFromSats(changeSats)} ${ticker}`.trim();
+        return `${decimalStringFromSats(changeSats, descriptor)} ${ticker}`.trim();
     }, [amount, descriptor, feeEstimate?.sats, isNativeSend, selectedUtxoTotalSats, selectedUtxos.length]);
 
     // The picked rate converted to the encoder's feePerKb unit (smallest-unit
@@ -1635,7 +1644,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             // Exact string/BigInt math: this string is what gets signed, and a
             // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
             // by whole sats, leaving dust behind or overshooting the balance.
-            const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
+            const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount, descriptor);
             if (balanceSats == null || balanceSats <= 0n) {
                 setMaxBusy(false);
                 return;
@@ -1646,20 +1655,22 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (quoted != null) {
                 maxSats = quoted.maxSats;
             } else if (feeEstimate) {
-                const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
+                const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount, descriptor);
                 if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
             }
             const floor = BigInt(dustThresholdForCoin(descriptor?.coin) || 0);
             const tickerUpper = nativeTickerFor(descriptor) || tick.trim().toUpperCase();
             if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
                 setMaxNote(floor > 0n
-                    ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor)} `
+                    ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
                         + `${tickerUpper} dust minimum, so Max cannot create a payment.`
                     : 'The selected network fee uses the available balance, so Max cannot create a payment.');
                 setMaxBusy(false);
                 return;
             }
-            display = decimalStringFromSats(maxSats);
+            display = nativeDecimalsFor(descriptor) === 8
+                ? decimalStringFromSats(maxSats)
+                : decimalStringFromSats(maxSats, descriptor);
             note = 'Max sends the spendable balance after the selected network fee. '
                 + 'An uneconomical dust input may remain at this address.';
         } else {
@@ -1893,7 +1904,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
-        const sats = exactSatsBigIntFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount, desc);
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
             && sats !== null && sats > 0n;
@@ -2222,7 +2233,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             </p>
             <p className={styles.testSendBody}>
                 {t('send.testGate.body', {
-                    amount: decimalStringFromSats(BigInt(testSendGate.amountSats)),
+                    amount: decimalStringFromSats(BigInt(testSendGate.amountSats), descriptor),
                     ticker: testSendGate.ticker,
                 })}
             </p>
@@ -3330,7 +3341,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                             />
                                             <span className={styles.coinControlValue}>
                                                 <span>
-                                                    {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
+                                                    {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
                                                     {isDust ? (
                                                         <span
                                                             className={styles.coinControlDust}
@@ -3355,7 +3366,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             <div>
                                 <dt>{t('send.advanced.selectedTotal')}</dt>
                                 <dd>
-                                    {decimalStringFromSats(selectedUtxoTotalSats)}{' '}
+                                    {decimalStringFromSats(selectedUtxoTotalSats, descriptor)}{' '}
                                     {nativeTickerFor(descriptor)}
                                 </dd>
                             </div>
