@@ -854,42 +854,34 @@ export function ImportWallet({
                 : lane === 'wif'
                     ? handleWifSubmit
                     : handleSubmit}
+            title={isFreeWallet
+                ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
+                : lane === 'backup'
+                    ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
+                    : lane === 'wif'
+                        ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
+                        : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
+            titleRef={headingRef}
+            description={isFreeWallet
+                ? (isFull
+                    ? t('importWallet.freeWallet.fullSubtitle')
+                    : t('importWallet.freeWallet.subtitle'))
+                : lane === 'backup'
+                    ? (isFull
+                        ? (mode === 'add'
+                            ? t('importWallet.backup.addFullSubtitle')
+                            : t('importWallet.backup.replaceFullSubtitle'))
+                        : (mode === 'add'
+                            ? t('importWallet.backup.addSubtitle')
+                            : t('importWallet.backup.replaceSubtitle')))
+                    : lane === 'wif'
+                        ? t('importWallet.wif.subtitle')
+                        : (isFull
+                            ? t('importWallet.phrase.fullSubtitle')
+                            : t('importWallet.phrase.subtitle'))}
             status={formStatus}
             actions={formActions}
         >
-            <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                    {isFreeWallet
-                        ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
-                        : lane === 'backup'
-                            ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
-                            : lane === 'wif'
-                                ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
-                            : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
-                </h1>
-                <p className={subtitleClass}>
-                    {isFreeWallet
-                        ? (isFull
-                            ? t('importWallet.freeWallet.fullSubtitle')
-                            : t('importWallet.freeWallet.subtitle'))
-                        : lane === 'backup'
-                            ? (isFull
-                                ? (mode === 'add'
-                                    ? t('importWallet.backup.addFullSubtitle')
-                                    // It used to say "the password",
-                                    // singular, one line above three password
-                                    // boxes.
-                                    : t('importWallet.backup.replaceFullSubtitle'))
-                                : (mode === 'add'
-                                    ? t('importWallet.backup.addSubtitle')
-                                    : t('importWallet.backup.replaceSubtitle')))
-                            : lane === 'wif'
-                                ? t('importWallet.wif.subtitle')
-                            : (isFull
-                                ? t('importWallet.phrase.fullSubtitle')
-                                : t('importWallet.phrase.subtitle'))}
-                </p>
-            </header>
             {laneSwitcher}
             {lane === 'backup' ? (
                 <>

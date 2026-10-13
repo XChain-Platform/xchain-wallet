@@ -9,7 +9,10 @@ import balanceSource from '../../../packages/core/src/shared/components/BalanceL
 import homeTabsSource from '../../../packages/core/src/shared/components/HomeTabs.jsx?raw';
 import homeSource from '../../../packages/core/src/shared/routes/Home.jsx?raw';
 import lockedSource from '../../../packages/core/src/shared/routes/Locked.jsx?raw';
+import createWalletSource from '../../../packages/core/src/shared/routes/CreateWallet.jsx?raw';
+import importWalletSource from '../../../packages/core/src/shared/routes/ImportWallet.jsx?raw';
 import onboardingSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
+import carouselSource from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx?raw';
 import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
 const balanceCss = readFileSync(
@@ -73,8 +76,17 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingCss).not.toMatch(/\.heroFull\s*\{[^}]*(?:max-width|margin):/s);
         expect(onboardingCss).not.toMatch(/\.licenseGate\s*\{[^}]*max-width:/s);
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
-        expect(onboardingSource).toContain('<FormPage label="License agreement">');
-        expect(onboardingSource).toContain('<FormPage label="Wallet setup">');
+        expect(onboardingSource).toContain('label="License agreement"');
+        expect(onboardingSource).toContain('label="Wallet setup"');
+        expect(onboardingSource).toContain('title="License agreement"');
+        expect(onboardingSource).toContain('title={branding.PRODUCT_NAME}');
+        expect(onboardingSource.match(/stackedActions/g)).toHaveLength(3);
+        expect(createWalletSource).not.toContain('<header className={headClass}>');
+        expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);
+        expect(importWalletSource).not.toContain('<header className={headClass}>');
+        expect(importWalletSource).toContain('titleRef={headingRef}');
+        expect(carouselSource).toContain('progress={progressTabs}');
+        expect(carouselSource).toContain('actions={navigation}');
         expect(lockedSource).toContain('<FormPage');
         expect(resumeSource).toContain('<FormPage label={title}>');
         expect(resumeSource).not.toMatch(/<button\b/);

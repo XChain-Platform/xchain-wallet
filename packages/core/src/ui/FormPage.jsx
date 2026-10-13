@@ -35,6 +35,14 @@ import styles from './FormPage.module.css';
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
  * @param {import('react').ReactNode} [props.status]    a StatusMessage shown just above the actions
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
+ * @param {import('react').ReactNode} [props.title]     centred page title for onboarding and other focused forms
+ * @param {import('react').ReactNode} [props.description] supporting copy below `title`
+ * @param {import('react').ReactNode} [props.visual]    optional illustration above `title`
+ * @param {import('react').ReactNode} [props.progress]  step indicator in the page's top row
+ * @param {import('react').ReactNode} [props.topAction] action aligned opposite the progress indicator
+ * @param {'h1' | 'h2'} [props.headingAs]               title heading level; defaults to h1
+ * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef]
+ * @param {boolean} [props.stackedActions]              stack equal-width actions instead of sharing a row
  * @param {boolean} [props.sectioned]                   children are FormSections (card per section when wide)
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
@@ -48,6 +56,14 @@ export const FormPage = forwardRef(function FormPage(
         actions,
         status,
         intro,
+        title,
+        description,
+        visual,
+        progress,
+        topAction,
+        headingAs: Heading = 'h1',
+        titleRef,
+        stackedActions = false,
         sectioned = false,
         label,
         noValidate = true,
@@ -66,6 +82,11 @@ export const FormPage = forwardRef(function FormPage(
     const semanticProps = Root === 'form'
         ? { onSubmit, noValidate, 'aria-label': label }
         : { role: 'group', 'aria-label': label };
+    const hasHeader = title != null || description != null || visual != null;
+    const actionClassName = [
+        styles.actions,
+        stackedActions ? styles.stackedActions : null,
+    ].filter(Boolean).join(' ');
     return (
         <Root
             ref={ref}
@@ -74,9 +95,27 @@ export const FormPage = forwardRef(function FormPage(
             {...rest}
         >
             {intro ? <p className={styles.intro}>{intro}</p> : null}
-            <div className={styles.body}>{children}</div>
+            {progress != null || topAction != null ? (
+                <div className={styles.topRow}>
+                    <span aria-hidden="true" />
+                    <div className={styles.progress}>{progress}</div>
+                    <div className={styles.topAction}>{topAction}</div>
+                </div>
+            ) : null}
+            {hasHeader ? (
+                <header className={styles.pageHeader}>
+                    {visual != null ? <div className={styles.visual}>{visual}</div> : null}
+                    {title != null ? (
+                        <Heading ref={titleRef} tabIndex={-1} className={styles.title}>
+                            {title}
+                        </Heading>
+                    ) : null}
+                    {description != null ? <p className={styles.description}>{description}</p> : null}
+                </header>
+            ) : null}
+            {children != null ? <div className={styles.body}>{children}</div> : null}
             {status ? <div className={styles.status}>{status}</div> : null}
-            {actions ? <div className={styles.actions}>{actions}</div> : null}
+            {actions ? <div className={actionClassName}>{actions}</div> : null}
         </Root>
     );
 });
