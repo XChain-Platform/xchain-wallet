@@ -18,8 +18,8 @@
 //      rebrands the title/copy, pre-sets the wallet name to
 //      "FreeWallet", and tightens the word-count validator to 12.
 //   3. MigrateToBip39.jsx exists, exports a single component, runs
-//      through explain → create → submitting → done, reuses
-//      IssueTokenForm CSS, and calls messaging.createWallet.
+//      through setup, phrase backup, verification, persistence, and
+//      sweep review, reuses IssueTokenForm CSS, and adds the wallet.
 //   4. The shared walletAlerts.js list carries the legacy-wallet alert
 //      when the active wallet has format === 'counterwallet-legacy' and
 //      onMigrateToBip39 is supplied; Home and the web menu build from it;
@@ -91,7 +91,7 @@ assert.equal(
     'MigrateToBip39.jsx only exports the component',
 );
 assert.ok(/IssueTokenForm\.module\.css/.test(migrate), 'MigrateToBip39 reuses IssueTokenForm CSS');
-for (const stage of ['explain', 'create', 'submitting', 'backup', 'done']) {
+for (const stage of ['explain', 'create', 'backup', 'verify', 'submitting', 'done']) {
     assert.ok(migrate.includes(`'${stage}'`), `MigrateToBip39 tracks stage "${stage}"`);
 }
 // This wizard runs on a device that ALREADY holds the legacy wallet, so the
@@ -180,5 +180,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 4-stage wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
+    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 verified-backup wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
 );
