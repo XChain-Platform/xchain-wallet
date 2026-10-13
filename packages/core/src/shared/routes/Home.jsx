@@ -1088,6 +1088,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         type="button"
                         className={styles.quickAction}
                         onClick={homeMoreActions[0].onSelect}
+                        aria-label={homeMoreActions[0].label}
                         icon={<span className={styles.quickActionIcon}>{homeMoreActions[0].icon}</span>}
                     >
                         {homeMoreActions[0].label}
