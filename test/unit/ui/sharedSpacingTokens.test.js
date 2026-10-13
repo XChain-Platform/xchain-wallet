@@ -27,6 +27,14 @@ const cardModules = [
     'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
+const tokenCleanupModules = [
+    'ConfirmActionModal.module.css',
+    'ContactsPickerScreen.module.css',
+    'DataTable.module.css',
+    'DemoBanner.module.css',
+    'DerivationPathCrossCheck.module.css',
+    'DraftDiscardButton.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -117,6 +125,25 @@ it('uses spacing tokens for matching shared module margins and paddings', () => 
             readFileSync(file, 'utf8'),
             spacingValues,
         ));
+    }
+
+    expect(violations).toEqual([]);
+});
+
+it('keeps audited component geometry free of tokenizable pixel dimensions', () => {
+    const geometryDeclaration = /(?:^|[;{])\s*((?:(?:margin|padding)(?:-[\w-]+)?|(?:row-|column-)?gap|border-radius|(?:(?:min|max)-)?(?:width|height|block-size|inline-size)|font-size|outline-offset))\s*:\s*([^;}]+)/gm;
+    const violations = [];
+
+    for (const file of tokenCleanupModules) {
+        const css = withoutComments(readFileSync(join(componentsRoot, file), 'utf8'));
+        for (const [, property, value] of css.matchAll(geometryDeclaration)) {
+            const trimmedValue = value.trim();
+            const isClippingBox = ['width', 'height'].includes(property)
+                && trimmedValue === '1px';
+            if (!isClippingBox && /(?<![\w.-])[1-9]\d*px(?![\w-])/.test(value)) {
+                violations.push(`${file}: ${property}: ${trimmedValue}`);
+            }
+        }
     }
 
     expect(violations).toEqual([]);

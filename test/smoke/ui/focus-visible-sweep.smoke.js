@@ -108,7 +108,13 @@ const clippedTargets = [
 
 for (const [path, klass] of clippedTargets) {
     const src = readFileSync(path, 'utf8');
-    const re = new RegExp(`\\.${klass}:focus-visible\\s*\\{[^}]*outline-offset:\\s*-2px`, 's');
+    const inwardOffset = path.endsWith('ContactsPickerScreen.module.css')
+        ? String.raw`calc\(var\(--xc-space-1\) / -2\)`
+        : '-2px';
+    const re = new RegExp(
+        `\\.${klass}:focus-visible\\s*\\{[^}]*outline-offset:\\s*${inwardOffset}`,
+        's',
+    );
     assert.ok(re.test(src), `${path}: .${klass} draws its ring inside the clipped container`);
 }
 
