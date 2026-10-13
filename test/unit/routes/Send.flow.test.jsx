@@ -376,29 +376,81 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('searches contacts and immediately explains a wrong-chain pick', async () => {
+    it('fills a same-chain contact and refuses a wrong-chain contact', async () => {
         const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
         const messaging = mount({
-            contacts: [{
-                id: 'shibe',
-                name: 'Shibe',
-                entries: [{ chain: 'dogecoin', address: doge, label: 'Tips' }],
-            }],
+            contacts: [
+                {
+                    id: 'alice',
+                    name: 'Alice',
+                    entries: [{ chain: 'bitcoin', address: TO, label: 'Main' }],
+                },
+                {
+                    id: 'shibe',
+                    name: 'Shibe',
+                    entries: [{ chain: 'dogecoin', address: doge, label: 'Tips' }],
+                },
+            ],
         });
 
         const to = await screen.findByLabelText(/^To$/);
-        fireEvent.change(to, { target: { value: 'shi' } });
-        fireEvent.mouseDown(screen.getByRole('option', { name: /Shibe/ }));
+        await waitFor(() => expect(messaging.listContacts).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Open address book' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Shibe/ }));
 
-        expect(to).toHaveValue(doge);
+        expect(await screen.findByLabelText(/^To$/)).toHaveValue('');
         expect(screen.getByRole('alert')).toHaveTextContent(
             'This looks like a Dogecoin address, not a Bitcoin address.',
         );
-        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(screen.getByRole('form', { name: 'Send' })).toHaveTextContent(
-            'This looks like a Dogecoin address, not a Bitcoin address.',
-        );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open address book' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Alice/ }));
+
+        expect(await screen.findByRole('combobox', { name: /^To/ })).toHaveValue(TO);
+        expect(screen.queryByText(/not a Bitcoin address/)).toBeNull();
+    });
+
+    it('refreshes contacts edited while Send stays open', async () => {
+        const oldAddress = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
+        const messaging = mount({
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [{ chain: 'bitcoin', address: oldAddress, label: 'Main' }],
+            }],
+        });
+        await screen.findByLabelText(/^To$/);
+        await waitFor(() => expect(messaging.listContacts).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Open address book' }));
+        expect(await screen.findByText('Alice')).toBeInTheDocument();
+        expect(screen.getByText(oldAddress)).toBeInTheDocument();
+
+        messaging.listContacts.mockResolvedValueOnce([{
+            id: 'alice',
+            name: 'Alice updated',
+            entries: [{ chain: 'bitcoin', address: TO, label: 'Main' }],
+        }]);
+        fireEvent.focus(window);
+
+        expect(await screen.findByText('Alice updated')).toBeInTheDocument();
+        expect(screen.queryByText(oldAddress)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Alice updated/ }));
+        expect(await screen.findByRole('combobox', { name: /^To/ })).toHaveValue(TO);
+    });
+
+    it('warns when contacts cannot be refreshed before picking', async () => {
+        const messaging = mount();
+        await screen.findByLabelText(/^To$/);
+        await waitFor(() => expect(messaging.listContacts).toHaveBeenCalledTimes(1));
+        messaging.listContacts.mockRejectedValueOnce(new Error('vault unavailable'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open address book' }));
+
+        expect(await screen.findByText(
+            'Could not refresh contacts. Saved addresses may be out of date.',
+        )).toBeInTheDocument();
+        expect(await screen.findByText('No contacts yet')).toBeInTheDocument();
     });
 
     it('shows recent recipients from a wrapped history response', async () => {
