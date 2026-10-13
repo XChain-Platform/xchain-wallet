@@ -93,7 +93,7 @@ function mount(messaging, props = {}) {
 }
 
 const rowNames = () => within(screen.getByRole('list', { name: 'Contacts' }))
-    .getAllByRole('listitem').map((row) => row.getAttribute('aria-label'));
+    .getAllByRole('listitem').map((row) => within(row).getByRole('button').getAttribute('aria-label'));
 
 describe('ContactsList for one person with many addresses', () => {
     it('lists contacts A to Z whatever order the vault returns', async () => {
