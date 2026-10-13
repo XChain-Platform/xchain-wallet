@@ -197,6 +197,9 @@ export async function exportBackupFile({
         // Persisted records always carry this array. Keeping an unrecognized
         // record intact lets the vault validator report the schema problem.
         if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
         const scopedAccounts = grantedAccounts.filter((id) => accountIds.has(id));
         if (scopedAccounts.length === 0) return [];
         return [{
@@ -817,22 +820,24 @@ function prepareDecodedPayload(decoded) {
         }
         addressScopes.add(addressScopeKey(address));
     }
-    for (const addressId of importedAddressIds) {
-        if (!decoded.addresses.some((address) => address.id === addressId)) {
-            throw new Error(`importBackupFile: imported key references missing address "${addressId}"`);
-        }
-    }
+    // An imported key whose address record is absent is tolerated, as it
+    // always was: the exporter only copies address records that still exist,
+    // so a backup written after an address was removed carries the dangling
+    // reference, and refusing it would make that backup unrestorable.
 
-    for (const pendingTx of decoded.pendingTxs) {
-        if (!addressScopes.has(pendingTxScopeKey(pendingTx))) {
-            throw new Error(
-                `importBackupFile: pending transaction "${pendingTx.id}" belongs to another wallet or network`,
-            );
-        }
-    }
+    // Earlier exporters scoped pending transactions by address text alone, so
+    // a valid older backup can carry one from another chain or network that
+    // shares the text. Drop it rather than refuse the whole restore; it is
+    // still never written.
+    decoded.pendingTxs = decoded.pendingTxs.filter(
+        (pendingTx) => addressScopes.has(pendingTxScopeKey(pendingTx)),
+    );
     decoded.connectedSites = decoded.connectedSites.flatMap((site) => {
         const grantedAccounts = site?.permissions?.accounts;
         if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
         const scopedAccounts = grantedAccounts.filter((accountId) => accountIds.has(accountId));
         if (scopedAccounts.length === 0) return [];
         return [{

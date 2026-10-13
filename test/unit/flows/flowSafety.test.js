@@ -160,6 +160,47 @@ describe('backup wallet and network scope', () => {
         expect(mixedSite.permissions.accounts).toEqual([ownAccount.id, otherAccount.id]);
     });
 
+    it('keeps a wildcard connected site through export and restore', async () => {
+        // An empty account list is the section 43.3 "all accounts" grant: it
+        // names nothing to scope, so the site must ride through unchanged.
+        const wallet = { id: 'wallet-1', name: 'Scoped', importedKeys: [] };
+        const wildcardSite = { id: 'site-wild', permissions: { accounts: [] } };
+        const vault = vaultWith({
+            wallets: [wallet],
+            accounts: [{ id: 'account-1', walletId: wallet.id }],
+            connectedSites: [wildcardSite],
+        });
+
+        await exportBackupFile({
+            vault, walletId: wallet.id, password: 'backup-secret', kdfParams: KDF_PARAMS,
+        });
+        expect(capture.exported.connectedSites).toEqual([wildcardSite]);
+
+        capture.decoded = {
+            payloadVersion: 1,
+            wallet: {
+                schemaVersion: 3, id: 'wallet-1', importedKeys: [],
+                encryptedSeed: '', encryptedPassphrase: null,
+            },
+            accounts: [{ schemaVersion: 2, id: 'account-1', walletId: 'wallet-1' }],
+            addresses: [],
+            contacts: [],
+            connectedSites: [{
+                schemaVersion: 1, id: 'site-wild', origin: 'https://dapp.example',
+                appName: 'dApp', permissions: { chains: [], accounts: [] },
+            }],
+            signers: [],
+            pendingTxs: [],
+            settings: null,
+        };
+        const target = vaultWith();
+        const result = await importBackupFile({
+            vault: target, fileContent: testEnvelope(), password: 'backup-secret',
+        });
+        expect(result.writes.connectedSites).toBe(1);
+        expect(target.connectedSites.put.mock.calls[0][0].id).toBe('site-wild');
+    });
+
     it('rewires connected-site account grants in add mode', () => {
         const payload = {
             wallet: { id: 'wallet-1', importedKeys: [] },
@@ -209,6 +250,52 @@ describe('backup wallet and network scope', () => {
             expect(vault[name].put).not.toHaveBeenCalled();
         }
         expect(vault.settings.put).not.toHaveBeenCalled();
+    });
+
+    it('restores an older backup with a dangling imported key and an off-network pending transaction', async () => {
+        // Shapes an earlier exporter wrote: importedKeys kept a reference to an
+        // address record that no longer existed, and pending transactions were
+        // matched by address text alone, so a same-text testnet row rode along.
+        const ownPending = {
+            schemaVersion: 3, id: 'pending-1', chain: 'bitcoin', network: 'mainnet',
+            fromAddress: 'same-text-address', txid: 'a'.repeat(64), status: 'broadcast',
+        };
+        const offNetworkPending = {
+            ...ownPending, id: 'pending-2', network: 'testnet',
+        };
+        capture.decoded = {
+            payloadVersion: 1,
+            wallet: {
+                schemaVersion: 3,
+                id: 'wallet-1',
+                importedKeys: [{ addressId: 'removed-address' }],
+                encryptedSeed: '',
+                encryptedPassphrase: null,
+            },
+            accounts: [{ schemaVersion: 2, id: 'account-1', walletId: 'wallet-1' }],
+            addresses: [{
+                schemaVersion: 1, id: 'address-1', accountId: 'account-1',
+                chain: 'bitcoin', network: 'mainnet', address: 'same-text-address',
+            }],
+            contacts: [],
+            connectedSites: [],
+            signers: [],
+            pendingTxs: [ownPending, offNetworkPending],
+            settings: null,
+        };
+        const vault = vaultWith();
+
+        const result = await importBackupFile({
+            vault,
+            fileContent: testEnvelope(),
+            password: 'backup-secret',
+        });
+
+        expect(result.walletId).toBe('wallet-1');
+        expect(result.writes.wallets).toBe(1);
+        expect(result.writes.addresses).toBe(1);
+        // The same-text testnet row is dropped, never written.
+        expect(vault.pendingTxs.put.mock.calls.map(([p]) => p.id)).toEqual(['pending-1']);
     });
 });
 
