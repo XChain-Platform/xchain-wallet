@@ -440,6 +440,23 @@ body {
     box-sizing: border-box;
 }
 
+/* Controls and decorative glyphs behave as one touch target instead of
+ * contributing label or icon fragments to a long-press selection. Wallet
+ * data nested in a clickable row opts back into text selection in the
+ * component that renders it. */
+:where(button, [role='button'], [role='tab']),
+:where(svg, [aria-hidden='true']) {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Machine-readable values remain directly selectable wherever they appear,
+ * including inside a control that opens a transaction detail view. */
+:where(code, samp, output, address) {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* Taps activate controls immediately while pan and pinch gestures remain
  * available to the page. ARIA roles cover tappable rows that are not native
  * buttons, and :where() lets a component override this for a gesture surface. */

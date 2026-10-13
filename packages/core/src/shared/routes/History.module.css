@@ -450,6 +450,8 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     overflow-wrap: anywhere;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -504,6 +506,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .rowReceiveLabel {
@@ -1334,6 +1338,8 @@
     max-width: 100%;
     overflow-x: auto;
     white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* Compact history layouts wrap controls and row metadata, while detail keys
