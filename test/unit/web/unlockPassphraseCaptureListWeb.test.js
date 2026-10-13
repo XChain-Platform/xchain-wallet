@@ -18,7 +18,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { populate, vaultClose } = vi.hoisted(() => ({ populate: vi.fn(), vaultClose: vi.fn() }));
+const { populate, vaultClose, deriveAsync } = vi.hoisted(() => ({
+    populate: vi.fn(), vaultClose: vi.fn(), deriveAsync: vi.fn(),
+}));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
@@ -37,7 +39,12 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
     }
     return {
         ...actual,
-        crypto: { ...actual.crypto, deriveMasterKey: () => new Uint8Array(32).fill(5) },
+        crypto: {
+            ...actual.crypto,
+            deriveMasterKeyAsync: (...args) => deriveAsync(...args),
+            // The unlock lane must not block the page on the synchronous KDF.
+            deriveMasterKey: () => { throw new Error('sync KDF on the web unlock path'); },
+        },
         storage: {
             ...actual.storage,
             Vault: class FakeVault {
@@ -79,6 +86,8 @@ function emptySummary(over = {}) {
 beforeEach(async () => {
     populate.mockReset();
     populate.mockResolvedValue(emptySummary());
+    deriveAsync.mockReset();
+    deriveAsync.mockImplementation(async () => new Uint8Array(32).fill(5));
     await lockWalletLocal();
     vaultClose.mockReset();
 });
@@ -100,6 +109,12 @@ describe('unlockWalletLocal: passphraseCaptureNeeded (§3.4)', () => {
     it('returns an empty list when nothing needs capture', async () => {
         const res = await unlockWalletLocal({ password: 'pw' });
         expect(res).toEqual({ unlocked: true, passphraseCaptureNeeded: [] });
+    });
+
+    it('derives the vault key exactly once, through the async KDF', async () => {
+        await unlockWalletLocal({ password: 'pw' });
+        expect(deriveAsync).toHaveBeenCalledTimes(1);
+        expect(deriveAsync).toHaveBeenCalledWith('pw', { algorithm: 'argon2id' });
     });
 
     it('substitutes an empty name rather than dropping a nameless wallet', async () => {
