@@ -20,6 +20,8 @@ const { generateBip39Mnemonic, phrase24 } = vi.hoisted(() => ({
     ].join(' '),
 }));
 
+const css = (path) => readFileSync(resolve(path), 'utf8');
+
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
     return { ...actual, crypto: { ...actual.crypto, generateBip39Mnemonic } };
@@ -103,21 +105,61 @@ describe('CreateWallet security options', () => {
         expect(await screen.findByText(/Enter the BIP39 passphrase, or uncheck the box/)).toBeTruthy();
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
     });
+
+    it('renders phrase display and confirmation actions inside the scrolling screen', async () => {
+        generateBip39Mnemonic.mockReturnValue(phrase24.split(' ').slice(0, 12).join(' '));
+        const { container } = draw();
+        fillPasswords();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+        const main = container.querySelector('main');
+        const phrase = await screen.findByRole('list', { name: 'Recovery phrase' });
+        const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        expect(main).toContainElement(phrase);
+        expect(main).toContainElement(verify);
+
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(verify);
+
+        expect(main).toContainElement(within(main).getByRole('button', { name: 'Back' }));
+        expect(main).toContainElement(within(main).getByRole('button', { name: 'Create wallet' }));
+        expect(screen.getAllByLabelText(/^Word \d+$/)).toHaveLength(3);
+    });
 });
 
 describe('MnemonicGrid narrow layout', () => {
-    it('keeps numbered words inside two shrinkable columns at 360px', () => {
-        const css = readFileSync(
-            resolve('packages/core/src/shared/components/MnemonicGrid.module.css'),
-            'utf8',
-        );
-        const popupRule = css.match(/\.gridPopup\s*\{([^}]*)\}/)?.[1];
-        const cellRule = css.match(/\.cell\s*\{([^}]*)\}/)?.[1];
-        const wordRule = css.match(/\.word\s*\{([^}]*)\}/)?.[1];
+    it('keeps numbered words inside two shrinkable columns at 320px', () => {
+        const gridCss = css('packages/core/src/shared/components/MnemonicGrid.module.css');
+        const popupRule = gridCss.match(/\.gridPopup\s*\{([^}]*)\}/)?.[1];
+        const fullRule = gridCss.match(/\.gridFull\s*\{([^}]*)\}/)?.[1];
+        const cellRule = gridCss.match(/\.cell\s*\{([^}]*)\}/)?.[1];
+        const indexRule = gridCss.match(/\.index\s*\{([^}]*)\}/)?.[1];
+        const wordRule = gridCss.match(/\.word\s*\{([^}]*)\}/)?.[1];
 
         expect(popupRule).toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+        expect(fullRule).toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+        expect(popupRule).toMatch(/width:\s*100%/);
+        expect(fullRule).toMatch(/width:\s*100%/);
         expect(cellRule).toMatch(/min-width:\s*0/);
+        expect(indexRule).toMatch(/flex:\s*0 0 2ch/);
+        expect(indexRule).toMatch(/font-weight:\s*600/);
         expect(wordRule).toMatch(/min-width:\s*0/);
         expect(wordRule).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(gridCss).toMatch(/@media \(max-width:\s*359px\)/);
+    });
+
+    it('keeps onboarding controls contained and compact in short landscape screens', () => {
+        const onboardingCss = css('packages/core/src/shared/routes/Onboarding.module.css');
+        const createCss = css('packages/core/src/shared/routes/CreateWallet.module.css');
+        const importCss = css('packages/core/src/shared/routes/ImportWallet.module.css');
+        const screenCss = css('packages/core/src/ui/Screen.module.css');
+
+        expect(onboardingCss).toMatch(/\.actionsFull\s*\{[^}]*width:\s*100%;/s);
+        expect(onboardingCss).toMatch(/@media \(max-height:\s*520px\)/);
+        expect(createCss).toMatch(/\.wordCountOption\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
+        expect(importCss).toMatch(/\.mnemonicHeader\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        expect(importCss).toMatch(/\.laneTab\s*\{[^}]*min-width:\s*0;/s);
+        expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     });
 });
