@@ -418,24 +418,24 @@
 
 .row {
     position: relative;
-    border: 1px solid var(--xc-border);
+    border: 1px solid var(--xc-control-border);
     background: var(--xc-surface-raised);
     margin: var(--xc-space-1) 0;
 }
 
 .row:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
 }
 
 .row:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
 }
 
 .rowSelected {
-    border-color: var(--xc-accent-primary);
-    background: var(--xc-bg-muted);
+    border-color: var(--xc-control-selected);
+    background: var(--xc-control-bg-hover);
 }
 
 .rowHeader {
