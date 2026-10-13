@@ -63,11 +63,11 @@ export const INPUT = {
     fontFamily: 'inherit',
 };
 
-const ROW_COPY = {
+export const ROW_COPY = {
     display: 'flex',
     flexDirection: 'column',
-    flex: 1,
-    minWidth: 0,
+    flex: '1 1 280px',
+    minWidth: 'min(100%, 280px)',
 };
 const EMBEDDED_ROW = {
     ...ROW,
