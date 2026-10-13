@@ -245,4 +245,42 @@ describe('MarketsList narrow layout', () => {
         await waitFor(() => expect(screen.queryByText('Some marketplace activity could not be loaded.'))
             .toBeNull());
     });
+
+    it('bounds a market response with thousands of rows and expands in place', async () => {
+        const rows = Array.from({ length: 5_000 }, (_, index) => ({
+            tick1: 'BTC',
+            tick2: `TOKEN${String(index).padStart(4, '0')}`,
+            depth: index,
+        }));
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue(rows),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('tab', { name: 'All' }));
+        const list = (await screen.findByText('TOKEN0000')).closest('ul');
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(25));
+        expect(screen.getByText('25 of 5,000 markets shown')).toBeInTheDocument();
+
+        const scroller = document.querySelector('main');
+        scroller.scrollTop = 241;
+        const showMore = screen.getByRole('button', { name: 'Load more markets' });
+        showMore.focus();
+        expect(document.activeElement).toBe(showMore);
+        fireEvent.click(showMore);
+
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(50));
+        expect(scroller.scrollTop).toBe(241);
+    });
 });

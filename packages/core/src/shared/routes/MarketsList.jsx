@@ -445,13 +445,18 @@ export function MarketsList({
                             ))}
                         </ul>
                         {displayMarkets.length > visibleMarketCount ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
-                            >
-                                Load more markets
-                            </Button>
+                            <div className={marketsStyles.pagination} aria-live="polite">
+                                <span className={marketsStyles.paginationCount}>
+                                    {visibleMarketCount.toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
+                                >
+                                    Load more markets
+                                </Button>
+                            </div>
                         ) : null}
                     </div>
                     )}

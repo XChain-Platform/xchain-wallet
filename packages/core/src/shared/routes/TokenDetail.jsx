@@ -50,6 +50,7 @@ import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
+const HOLDER_WINDOW_SIZE = 100;
 
 /**
  * §27.6 token detail page (G071).
@@ -738,6 +739,7 @@ export function TokenDetail({
                                         displayName={displayName || tick}
                                     />
                                     <HoldersPanel
+                                        holderListScope={`${chainId}:${tick}`}
                                         holders={holders}
                                         holdersLoading={holdersLoading}
                                         holdersError={holdersError}
@@ -2312,6 +2314,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
 }
 
 function HoldersPanel({
+    holderListScope,
     holders,
     holdersLoading,
     holdersError,
@@ -2323,6 +2326,14 @@ function HoldersPanel({
     onLoadMore,
     divisibility,
 }) {
+    const [holderWindow, setHolderWindow] = useState(() => ({
+        scope: '',
+        count: HOLDER_WINDOW_SIZE,
+    }));
+    const visibleHolderCount = holderWindow.scope === holderListScope
+        ? holderWindow.count
+        : HOLDER_WINDOW_SIZE;
+
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) {
@@ -2331,6 +2342,17 @@ function HoldersPanel({
     const count = holdersTotal != null && holdersTotal > holders.length
         ? `${holders.length} of ${holdersTotal}`
         : String(holders.length);
+    const renderedHolders = holders.slice(0, visibleHolderCount);
+    const showMoreLoadedHolders = () => {
+        setHolderWindow((current) => ({
+            scope: holderListScope,
+            count: Math.min(
+                holders.length,
+                (current.scope === holderListScope ? current.count : HOLDER_WINDOW_SIZE)
+                    + HOLDER_WINDOW_SIZE,
+            ),
+        }));
+    };
     return (
         <section className={styles.infoCard} aria-label="Holders">
             <SectionHeader title={`Holders (${count})`} />
@@ -2340,7 +2362,7 @@ function HoldersPanel({
                 </div>
             ) : null}
             <ol className={styles.holdersList}>
-                {holders.map((h, i) => (
+                {renderedHolders.map((h, i) => (
                     <li key={holderIdentity(h) || `holder:${i}`} className={styles.holdersRow}>
                         <span className={styles.holdersAddrWrap}>
                             <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
@@ -2364,7 +2386,11 @@ function HoldersPanel({
             {holdersMoreError ? (
                 <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
             ) : null}
-            {holdersHasMore ? (
+            {visibleHolderCount < holders.length ? (
+                <Button type="button" variant="secondary" onClick={showMoreLoadedHolders}>
+                    Show more holders ({Math.min(visibleHolderCount, holders.length).toLocaleString('en-US')} of {holders.length.toLocaleString('en-US')} shown)
+                </Button>
+            ) : holdersHasMore ? (
                 <Button type="button" variant="secondary" loading={holdersLoadingMore} onClick={onLoadMore}>
                     Load more holders
                 </Button>

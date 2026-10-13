@@ -39,6 +39,7 @@ import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const ADDRESS_WINDOW_SIZE = 100;
 
 // D-64: the WIF field's placeholder was a fixed "L1aW…" - a Bitcoin MAINNET
 // key - shown unchanged on every chain, so the only format hint the screen
@@ -182,6 +183,10 @@ export function AddressList({
     const [addrCopied, setAddrCopied] = useState(false);
     const [showHidden, setShowHidden] = useState(false);
     const [visibilitySaving, setVisibilitySaving] = useState(false);
+    const [addressWindow, setAddressWindow] = useState(() => ({
+        scope: '',
+        count: ADDRESS_WINDOW_SIZE,
+    }));
 
     // PC-32: the selected address's current on-chain preferences (consensus
     // fold; protocol defaults when never written). Lazy per selection; a
@@ -655,6 +660,22 @@ export function AddressList({
     const listedRows = rows.filter((row) => (
         row.record?.hidden !== true || (!pickerMode && showHidden)
     ));
+    const addressListScope = [query, network, sourceFilter, showHidden ? 'hidden' : 'visible'].join('\u0000');
+    const visibleAddressCount = addressWindow.scope === addressListScope
+        ? addressWindow.count
+        : ADDRESS_WINDOW_SIZE;
+    const renderedAddressRows = listedRows.slice(0, visibleAddressCount);
+
+    const showMoreAddresses = () => {
+        setAddressWindow((current) => ({
+            scope: addressListScope,
+            count: Math.min(
+                listedRows.length,
+                (current.scope === addressListScope ? current.count : ADDRESS_WINDOW_SIZE)
+                    + ADDRESS_WINDOW_SIZE,
+            ),
+        }));
+    };
 
     // Add addresses is its own page, same pattern as Import address.
     if (showAddModal) {
@@ -1468,8 +1489,9 @@ export function AddressList({
                         : "Try a different search or network filter."}
                 />
             ) : (
+            <>
             <ul className={local.addrList} aria-label="Wallet addresses">
-                {listedRows.map((row) => {
+                {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (
                         <li key={row.key}>
@@ -1521,6 +1543,17 @@ export function AddressList({
                     );
                 })}
             </ul>
+            {visibleAddressCount < listedRows.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {Math.min(visibleAddressCount, listedRows.length).toLocaleString('en-US')} of {listedRows.length.toLocaleString('en-US')} addresses shown
+                    </span>
+                    <Button type="button" variant="secondary" icon={null} onClick={showMoreAddresses}>
+                        Show more addresses
+                    </Button>
+                </div>
+            ) : null}
+            </>
             )}
             {!pickerMode && hiddenRows.length > 0 ? (
                 <button
