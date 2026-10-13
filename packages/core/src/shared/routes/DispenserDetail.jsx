@@ -126,6 +126,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
+    const isDemoWallet = flowsLib.isDemoWallet(walletId);
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -333,7 +335,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         setDispensesLoaded(false);
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
-        const isDemo = flowsLib.isDemoWallet(walletId);
+        const isDemo = isDemoWallet;
         Promise.all([
             isDemo
                 ? Promise.resolve(null)
@@ -460,7 +462,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }
         });
         return () => { cancelled = true; };
-    }, [walletId, chainId, actionIndex, messaging, reloadKey]);
+    }, [walletId, chainId, actionIndex, messaging, reloadKey, isDemoWallet]);
 
     const cancelParams = useMemo(() => ({
         VERSION: '1',
@@ -586,7 +588,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             const now = Date.now();
             setNowMs(now);
             if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
-            if (typeof messaging?.getChainTipBlockTime !== 'function') return;
+            // Demo dispensers are fixtures with no chain to read.
+            if (isDemoWallet || typeof messaging?.getChainTipBlockTime !== 'function') return;
             lastReadMs = now;
             // A failed read keeps the last chain time, which the countdown
             // keeps advancing by local elapsed time.
@@ -597,7 +600,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         tick();
         const timer = setInterval(tick, 60000);
         return () => { stopped = true; clearInterval(timer); };
-    }, [cancelTimestamp, chainId, messaging]);
+    }, [cancelTimestamp, chainId, messaging, isDemoWallet]);
     const closeEta = cancelTimestamp != null
         ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
         : null;
@@ -782,7 +785,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // refusal verdict.
     const readBuyerPolicies = useCallback(async () => {
         const readToken = async (tick) => {
-            if (!tick || typeof messaging.getTokenInfo !== 'function') return null;
+            if (isDemoWallet || !tick || typeof messaging.getTokenInfo !== 'function') return null;
             try {
                 return await messaging.getTokenInfo({ chainId, tick });
             } catch {
@@ -803,7 +806,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             .filter((index) => index != null && String(index) !== '')
             .map(String))];
         const members = new Map();
-        if (typeof messaging.getListByActionIndex === 'function') {
+        if (!isDemoWallet && typeof messaging.getListByActionIndex === 'function') {
             await Promise.all(indexes.map(async (index) => {
                 try {
                     const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index });
@@ -820,7 +823,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             blockMembers: policy.blockList != null
                 ? members.get(String(policy.blockList)) ?? null : null,
         }));
-    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging]);
+    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging, isDemoWallet]);
 
     const [buyerPolicies, setBuyerPolicies] = useState(/** @type {any[]} */ ([]));
     const [eligibilityChecking, setEligibilityChecking] = useState(true);
@@ -1071,7 +1074,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         /** @type {{ idx: string, members: string[] | null } | null} */ (null),
     );
     useEffect(() => {
-        if (!editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
+        if (isDemoWallet || !editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
         let live = true;
         const timer = setTimeout(() => {
             messaging.getListByActionIndex({ chainId, actionIndex: editAllowIdx })
@@ -1079,7 +1082,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 .catch(() => { /* best-effort: no warning beats a wrong one */ });
         }, 400);
         return () => { live = false; clearTimeout(timer); };
-    }, [editAllowIdx, chainId, messaging]);
+    }, [editAllowIdx, chainId, messaging, isDemoWallet]);
     const editAllowSelfWarning = editAllowIdx && editAllowRead?.idx === editAllowIdx
         && ownerOffAllowList({ members: editAllowRead.members, getAddress: dispAddr })
         ? ownerOffAllowListMessage(dispAddr)
@@ -2266,7 +2269,7 @@ function relativeTime(ts) {
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
 // date-time with the zone named, so it reads against the edit field's
 // local-time entry. '' for unparseable input so callers can omit the row.
-function formatUnixDate(ts) {
+export function formatUnixDate(ts) {
     const n = Number(ts);
     if (!n || !Number.isFinite(n)) return '';
     const ms = n < 1e12 ? n * 1000 : n;
@@ -2276,7 +2279,7 @@ function formatUnixDate(ts) {
             hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
         });
     } catch {
-        return new Date(ms).toISOString();
+        return new Date(ms).toUTCString();
     }
 }
 
@@ -2313,11 +2316,14 @@ function capitalize(s) {
 }
 
 // Hour and minute in the viewer's own zone and clock style.
-function formatLocalClock(ms) {
+export function formatLocalClock(ms) {
     try {
         return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     } catch {
-        return new Date(ms).toISOString().slice(11, 16);
+        const date = new Date(ms);
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${hours}:${minutes} UTC`;
     }
 }
 

@@ -28,12 +28,14 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt';
 
-function mountMyTokens({ tokens }) {
+function mountMyTokens({ tokens, error }) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'addr-1', address: ADDRESS }],
         }),
-        getOwnedTokens: vi.fn().mockResolvedValue(tokens),
+        getOwnedTokens: error
+            ? vi.fn().mockRejectedValue(error)
+            : vi.fn().mockResolvedValue(tokens),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -88,6 +90,15 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
             expect(container.textContent).toContain('S18PROBE');
         });
         expect(container.textContent).not.toMatch(/issued/i);
+    });
+
+    it('reports an ownership lookup failure instead of claiming the wallet is empty', async () => {
+        const container = mountMyTokens({ error: new Error('explorer offline') });
+
+        await waitFor(() => {
+            expect(container.textContent).toMatch(/could not load your owned tokens/i);
+        });
+        expect(container.textContent).not.toMatch(/don.t own any tokens yet/i);
     });
 
     it('the command-palette entry does not claim issuance scope', () => {

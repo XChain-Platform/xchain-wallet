@@ -54,6 +54,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         /** @type {Array<{ chainId: string, tick: string, totalSupply: string | null, maxSupply: string | null, description: string | null, locked: boolean, divisibility: number | null, ownerAddress: string }> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
     const [query, setQuery] = useState('');
     // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
     // it also still holds supply of (row.youOwn is a balance check, not an
@@ -62,6 +63,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setTokens(null);
+        setLoadError(null);
+        setTokensError(null);
         if (typeof messaging?.getAddressesByChain !== 'function') {
             setLoadError('Address listing is not available in this shell.');
             return undefined;
@@ -79,7 +84,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        setTokens(null);
+        setTokensError(null);
         if (typeof messaging?.getOwnedTokens !== 'function') {
+            setTokensError('Token ownership lookup is not available in this shell.');
             setTokens([]);
             return undefined;
         }
@@ -92,12 +100,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 if (!address) continue;
                 calls.push(
                     messaging.getOwnedTokens({ chainId, address })
-                        .then((rows) => (Array.isArray(rows) ? rows : []).map((r) => ({
-                            ...r,
-                            chainId,
-                            ownerAddress: address,
-                        })))
-                        .catch(() => []),
+                        .then((rows) => ({
+                            failed: false,
+                            rows: (Array.isArray(rows) ? rows : []).map((r) => ({
+                                ...r,
+                                chainId,
+                                ownerAddress: address,
+                            })),
+                        }))
+                        .catch(() => ({ failed: true, rows: [] })),
                 );
             }
         }
@@ -109,8 +120,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             if (cancelled) return;
             const seen = new Set();
             const merged = [];
+            const failedCount = batches.filter((batch) => batch.failed).length;
             for (const batch of batches) {
-                for (const row of batch) {
+                for (const row of batch.rows) {
                     const key = `${row.chainId}:${row.tick}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -122,6 +134,11 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 const bx = coinFromChainId(b.chainId);
                 return ax.localeCompare(bx) || a.tick.localeCompare(b.tick);
             });
+            if (failedCount > 0) {
+                setTokensError(failedCount === batches.length
+                    ? 'Could not load your owned tokens. Try again.'
+                    : 'Some owned token lists could not be loaded. Results may be incomplete.');
+            }
             setTokens(merged);
         });
         return () => { cancelled = true; };
@@ -141,9 +158,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     }, [tokens, query, mode]);
 
     const isLoading = tokens === null && loadError === null;
-    const isEmpty = tokens !== null && tokens.length === 0;
+    const isEmpty = tokens !== null && tokens.length === 0 && tokensError === null;
     const isFilteredEmpty = tokens !== null && tokens.length > 0
-        && filteredTokens !== null && filteredTokens.length === 0;
+        && filteredTokens !== null && filteredTokens.length === 0 && tokensError === null;
 
     const header = (
         <PageHeader
@@ -204,6 +221,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
                 {loadError ? (
                     <p className={styles.error}>{loadError}</p>
+                ) : null}
+
+                {tokensError ? (
+                    <p className={styles.error} role="alert">{tokensError}</p>
                 ) : null}
 
                 {isLoading ? (
@@ -273,4 +294,3 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         </Screen>
     );
 }
-

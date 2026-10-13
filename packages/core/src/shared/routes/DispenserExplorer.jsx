@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -75,6 +75,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         /** @type {Record<string, { rows: any[], error: string | null }>} */ ({}),
     );
     const [lastQueried, setLastQueried] = useState(/** @type {string | null} */ (null));
+    const searchRequestId = useRef(0);
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => Object.entries(rowsByChain)
         .filter(([cid]) => cid !== '_error')
@@ -85,10 +86,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         event.preventDefault();
         const q = query.trim();
         if (!q) return;
+        const requestId = searchRequestId.current + 1;
+        searchRequestId.current = requestId;
         const tokenError = searchMode === 'token'
             ? tickerReferenceError(q, { noun: 'Token search', allowRef: true })
             : null;
         if (tokenError) {
+            setSearching(false);
             setRowsByChain({ _error: { rows: [], error: tokenError } });
             setLastQueried(q);
             return;
@@ -98,12 +102,18 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         setRowsByChain({});
 
         const targetChains = chainFilter === 'all' ? chains : [chainFilter];
+        if (targetChains.length === 0) {
+            setSearching(false);
+            setRowsByChain({ _error: { rows: [], error: 'No network is available to search yet.' } });
+            setLastQueried(q);
+            return;
+        }
         const fetchOne = searchMode === 'token'
             ? (cid) => messaging.getDispensersForToken({ chainId: cid, token: q })
             : (cid) => messaging.getDispensersForAddress({ chainId: cid, address: q });
 
         Promise.all(targetChains.map((cid) =>
-            fetchOne(cid)
+            Promise.resolve().then(() => fetchOne(cid))
                 .then((resp) => ({ cid, rows: extractRows(resp) }))
                 .catch((err) => {
                     const message = err?.message || String(err);
@@ -119,6 +129,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     return { cid, error: message };
                 })
         )).then((results) => {
+            if (requestId !== searchRequestId.current) return;
             /** @type {Record<string, { rows: any[], error: string | null }>} */
             const next = {};
             for (const r of results) {
@@ -198,12 +209,17 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     autoCorrect="off"
                     spellCheck={false}
                 />
+                {chains.length === 0 ? (
+                    <p className={styles.entryDescription}>
+                        {settings ? 'No chains are available for the active network.' : 'Loading available networks…'}
+                    </p>
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                     <Button
                         type="submit"
                         variant="primary"
                         loading={searching}
-                        disabled={!query.trim()}
+                        disabled={!query.trim() || chains.length === 0}
                     >
                         Search
                     </Button>

@@ -631,7 +631,7 @@ export function LinkForm({ walletId, onBack }) {
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}

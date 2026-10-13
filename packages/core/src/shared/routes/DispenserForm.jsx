@@ -83,6 +83,11 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
+
 // §40.7.1's Mode 1 FIAT dispenser uses the validator oracle (no
 // ORACLE_ADDRESS); Mode 2 uses a user oracle (ORACLE_ADDRESS). For
 // the initial form we expose the optional ORACLE_ADDRESS + FIAT_CODE
@@ -785,7 +790,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const trig = triggerPrice.trim();
         if (payWith === 'token') {
             if (!getTick.trim()) { setFormError('Enter the token buyers pay with.'); return; }
-            if (!/^\d+(\.\d+)?$/.test(getTokenAmount.trim()) || Number(getTokenAmount.trim()) <= 0) {
+            const paymentTickerError = tickerReferenceError(getTick, { noun: 'Payment token' });
+            if (paymentTickerError) { setFormError(paymentTickerError); return; }
+            if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
         } else if (!oracle && !fa && !trig) {
@@ -798,8 +805,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const unix = localInputToUnix(raw);
             if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
         }
-        if (trig && Number(trig) < 0) {
-            setFormError('Trigger price cannot be negative.');
+        if (trig && !isPositiveDecimal(trig)) {
+            setFormError('Trigger price must be a positive number.');
             return;
         }
         if (priceNotes.block) {

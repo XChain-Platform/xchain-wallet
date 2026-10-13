@@ -275,6 +275,7 @@ export function PublishFileForm({ walletId, onBack }) {
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
+        setFileMeta(null);
         const type = file.type || 'application/octet-stream';
         const cap = publicCapFor(file.name, type);
         if (file.size === 0) { setFormError('That file is empty.'); return; }

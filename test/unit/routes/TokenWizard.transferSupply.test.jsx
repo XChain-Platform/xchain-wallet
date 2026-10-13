@@ -20,8 +20,8 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
-const OWNER = 'bc1qownerownerownerownerownerownerowner';
-const HOLDER = 'bc1qholderholderholderholderholderholde';
+const OWNER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const HOLDER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
