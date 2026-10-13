@@ -54,7 +54,13 @@ for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) {
 }
 
 const icons = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'icons', 'index.jsx'), 'utf8');
-assert.match(icons, /var\(--xc-icon-size, var\(--xc-icon-md\)\)/, 'shared icons consume the size scale');
+// Icons mark themselves with data-xc-icon and tokens.css sizes them from the
+// scale. var() must stay out of the SVG width and height attributes: Android
+// WebView 102 ignores it there and draws the icon at 300px.
+assert.match(icons, /'data-xc-icon'/, 'shared icons carry the data-xc-icon marker');
+assert.doesNotMatch(icons, /(?:width|height|size):\s*'var\(/, 'icon size attributes never hold var()');
+const tokensCss = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'tokens.css'), 'utf8');
+assert.match(tokensCss, /svg\[data-xc-icon\]\)\s*\{[^}]*var\(--xc-icon-size, var\(--xc-icon-md\)\)/s, 'shared icons consume the size scale');
 assert.match(icons, /'aria-hidden': 'true'/, 'shared decorative icons stay hidden from assistive technology');
 assert.match(icons, /focusable: 'false'/, 'shared decorative icons cannot take SVG focus');
 

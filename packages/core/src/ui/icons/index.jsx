@@ -36,7 +36,11 @@ import {
     ThumbsDown as LucideThumbsDown,
 } from 'lucide-react';
 
-const ICON_SIZE = 'var(--xc-icon-size, var(--xc-icon-md))';
+// The rendered size comes from the svg[data-xc-icon] rule in tokens.css
+// (--xc-icon-size, default --xc-icon-md). The attributes carry only a plain
+// pixel fallback: Android WebView 102 cannot resolve var() in SVG width and
+// height attributes and draws such icons at 300px.
+const ICON_SIZE = 18;
 
 const STROKE_PROPS = {
     width: ICON_SIZE,
@@ -49,6 +53,7 @@ const STROKE_PROPS = {
     strokeLinejoin: 'round',
     'aria-hidden': 'true',
     focusable: 'false',
+    'data-xc-icon': '',
     style: { display: 'block' },
 };
 
@@ -58,6 +63,7 @@ const LUCIDE_PROPS = {
     strokeWidth: 2,
     'aria-hidden': 'true',
     focusable: 'false',
+    'data-xc-icon': '',
     style: { display: 'block' },
 };
 
@@ -523,6 +529,7 @@ export function FileTypeIcon({ type }) {
             viewBox="0 0 24 24"
             aria-hidden="true"
             focusable="false"
+            data-xc-icon=""
             style={{ display: 'block' }}
         >
             <path
