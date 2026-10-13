@@ -27,6 +27,7 @@ import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { RelativeTime } from './RelativeTime.jsx';
 import tableStyles from './DataTable.module.css';
 
 /**
@@ -209,9 +210,9 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                                     aria-label={`Open transaction ${summary.txHash}`}
                                                     className={tableStyles.cellButton}
                                                 >
-                                                    {summary.timeLabel}
+                                                    <RelativeTime timestamp={summary.timestamp} />
                                                 </button>
-                                            ) : summary.timeLabel}
+                                            ) : <RelativeTime timestamp={summary.timestamp} />}
                                         </td>
                                         <td
                                             className={`${tableStyles.cell} ${tableStyles.numeric}`}
@@ -249,7 +250,7 @@ function summarizeRow(row, tick1, tick2) {
         price: String(parsed.price),
         size: String(parsed.amount),
         side: parsed.side,
-        timeLabel: formatTime(parsed.timestamp),
+        timestamp: parsed.timestamp,
         ownerAddress: row.__owner?.address || null,
         txHash: parsed.txHash ? String(parsed.txHash) : null,
         key: String(parsed.actionIndex ?? parsed.txHash
@@ -260,20 +261,6 @@ function summarizeRow(row, tick1, tick2) {
 function rowTime(row) {
     const ts = historyTimestamp(row);
     return Number.isFinite(ts) ? ts : 0;
-}
-
-function formatTime(unixSeconds) {
-    try {
-        const d = new Date(unixSeconds * 1000);
-        return d.toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '--';
-    }
 }
 
 function extractRows(resp) {

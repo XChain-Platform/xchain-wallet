@@ -14,12 +14,16 @@
 // send. Rows here are shaped as the explorer's token lanes serve them.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const ORACLE = 'bcrt1qoracleoracleoracleoracleoracleoracle';
 const offer = (idx, extra) => ({
@@ -107,6 +111,17 @@ describe('Marketplace on explorer-shaped rows', () => {
         renderMarket();
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sold 2 XCHAIN/)).toBeNull();
+    });
+
+    it('shows recent activity through the shared relative-time display', async () => {
+        const timestamp = DISPENSES[0].timestamp;
+        vi.spyOn(Date, 'now').mockReturnValue(timestamp * 1000 + 5 * 60_000);
+        renderMarket();
+
+        const sale = await screen.findByText('Sold 15 XCHAIN for 0.03 BTC');
+        const time = within(sale.closest('li')).getByText('5 min ago');
+        expect(time.tagName).toBe('TIME');
+        expect(time).toHaveAttribute('title', formatLocalDateTime(timestamp));
     });
 
     it('shows open DEX orders using explorer amount and coin fields', async () => {

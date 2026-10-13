@@ -23,6 +23,10 @@ vi.mock('@xchain-wallet/core/ui', () => ({
 }));
 
 import { TradeHistoryPanel } from '../../../packages/core/src/shared/components/TradeHistoryPanel.jsx';
+import {
+    formatActivityTime,
+    formatLocalDateTime,
+} from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const ADDRESSES = [{ address: 'addr-one' }, { address: 'addr-two' }];
 
@@ -76,6 +80,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
 });
 
 describe('TradeHistoryPanel', () => {
@@ -104,6 +109,26 @@ describe('TradeHistoryPanel', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Open transaction tx-two' }));
         expect(onOpenTx).toHaveBeenCalledWith('tx-two');
+    });
+
+    it('uses the shared recent and absolute time rule with an exact-time tooltip', async () => {
+        const now = new Date('2026-10-13T12:00:00Z').getTime();
+        const recent = Math.floor((now - 5 * 60_000) / 1000);
+        const older = Math.floor((now - 8 * 24 * 60 * 60_000) / 1000);
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        messaging.getMarketHistory = vi.fn(({ address }) => Promise.resolve({
+            rows: [historyRow({
+                timestamp: address === 'addr-one' ? recent : older,
+                tx_hash: address === 'addr-one' ? 'recent-tx' : 'older-tx',
+            })],
+        }));
+
+        renderPanel();
+
+        const recentTime = await screen.findByText('5 min ago');
+        expect(recentTime.tagName).toBe('TIME');
+        expect(recentTime).toHaveAttribute('title', formatLocalDateTime(recent));
+        expect(screen.getByText(formatActivityTime(older, now))).toBeInTheDocument();
     });
 
     it('disables Refresh while a manual reload is pending', async () => {
