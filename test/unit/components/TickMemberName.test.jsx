@@ -60,7 +60,7 @@ describe('TickMemberName', () => {
         const m = fakeMessaging(() => Promise.resolve({ canonicalTick: 'DOGEPEPE' }));
         const { container } = mount('DOGE:^42', m);
         await waitFor(() => expect(container.querySelector('code').textContent).toContain('DOGEPEPE'));
-        expect(m.calls).toEqual([{ chainId: 'dogecoin-testnet', tick: '^42' }]);
+        expect(m.calls).toEqual([{ chainId: 'dogecoin-testnet', tick: '^42', demo: false }]);
         expect(screen.getByTestId('tick-member-coin').textContent).toBe('DOGE');
     });
 
