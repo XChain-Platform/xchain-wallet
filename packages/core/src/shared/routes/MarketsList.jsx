@@ -456,7 +456,7 @@ export function MarketsList({
                             <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                 {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                     <MarketRow
-                                        key={`${m.tick1}::${m.tick2}`}
+                                        key={`${selectedAsset.chainId}::${m.tick1}::${m.tick2}::${idx}`}
                                         chainId={selectedAsset.chainId}
                                         selectedTick={selectedAsset.tick}
                                         tick1={m.tick1}
