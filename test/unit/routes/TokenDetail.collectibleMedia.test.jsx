@@ -71,15 +71,26 @@ function renderDetail(tokenInfo = {}) {
 }
 
 describe('TokenDetail collectible media', () => {
-    it('shows text and ticker fallbacks when published images fail', async () => {
+    it('reserves monograms while token artwork is missing, slow, or broken', async () => {
         renderDetail();
 
+        const initialFallbacks = screen.getAllByText('CO');
+        expect(initialFallbacks).toHaveLength(2);
+
         await waitFor(() => expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(2));
-        for (const image of [...document.querySelectorAll(`img[src="${ICON_URL}"]`)]) {
+        const images = [...document.querySelectorAll(`img[src="${ICON_URL}"]`)];
+        expect(images.every((image) => image.style.visibility === 'hidden')).toBe(true);
+        expect(initialFallbacks.every((fallback) => images.some((image) => image.parentElement === fallback)))
+            .toBe(true);
+
+        for (const image of images) fireEvent.load(image);
+        expect(images.every((image) => image.style.visibility === 'visible')).toBe(true);
+
+        for (const image of images) {
             fireEvent.error(image);
         }
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
-        expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(2);
+        expect(screen.getAllByText('CO')).toHaveLength(2);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
         const media = await screen.findByRole('img', { name: MEDIA_NAME });
@@ -88,6 +99,16 @@ describe('TokenDetail collectible media', () => {
         expect(screen.getByRole('img', { name: `${MEDIA_NAME} unavailable` })).toBeTruthy();
         expect(screen.getByText('Image unavailable')).toBeTruthy();
         expect(screen.getByText(MEDIA_NAME)).toBeTruthy();
+    });
+
+    it('keeps fixed artwork slots when metadata has no logo', async () => {
+        renderDetail({ images: [], imageUrl: null });
+
+        await waitFor(() => expect(screen.getAllByText('CO')).toHaveLength(2));
+        expect(document.querySelector(`img[src="${ICON_URL}"]`)).toBeNull();
+        for (const fallback of screen.getAllByText('CO')) {
+            expect(fallback).toHaveStyle({ position: 'relative', overflow: 'hidden' });
+        }
     });
 
     it('names media links by the action even when an image has no title', async () => {

@@ -323,14 +323,14 @@ export function TokenDetail({
                     {pageTitle}
                 </span>
             )}
-            titleIcon={headerIconUrl ? (
+            titleIcon={(
                 <AssetArtwork
                     src={headerIconUrl}
                     className={styles.headerIcon}
                     fallbackClassName={styles.headerIconFallback}
                     fallbackText={tick}
                 />
-            ) : null}
+            )}
         />
     );
 
@@ -419,25 +419,31 @@ export function TokenDetail({
                     and the hide-balance eye. Big number = primary,
                     small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
-                    {headerIconUrl ? (
-                        <div className={styles.balanceHeroIconWrap}>
-                            <AssetArtwork
-                                src={headerIconUrl}
-                                className={styles.balanceHeroIcon}
-                                fallbackClassName={styles.balanceHeroIconFallback}
-                                fallbackText={tick}
+                    <div className={styles.balanceHeroIconWrap}>
+                        <AssetArtwork
+                            src={headerIconUrl}
+                            className={styles.balanceHeroIcon}
+                            fallbackClassName={styles.balanceHeroIconFallback}
+                            fallbackText={tick}
+                        />
+                        {!isNative && chainId ? (
+                            <img
+                                key={branding.chainIconSmallUrl(chainId)}
+                                src={branding.chainIconSmallUrl(chainId)}
+                                alt=""
+                                aria-hidden="true"
+                                title={descriptor?.displayName || chainId}
+                                className={styles.balanceHeroChainOverlay}
+                                decoding="async"
+                                style={{ visibility: 'hidden' }}
+                                onLoad={(event) => { event.currentTarget.style.visibility = 'visible'; }}
+                                onError={(event) => {
+                                    event.currentTarget.style.visibility = 'hidden';
+                                    event.currentTarget.style.display = 'none';
+                                }}
                             />
-                            {!isNative && chainId ? (
-                                <img
-                                    src={branding.chainIconSmallUrl(chainId)}
-                                    alt=""
-                                    aria-hidden="true"
-                                    title={descriptor?.displayName || chainId}
-                                    className={styles.balanceHeroChainOverlay}
-                                />
-                            ) : null}
-                        </div>
-                    ) : null}
+                        ) : null}
+                    </div>
                     <div className={styles.balanceHeroMain}>
                         <div className={styles.balanceHeroRow}>
                             <span className={styles.balanceHeroLabel}>Total balance</span>
@@ -1624,21 +1630,30 @@ function ImageHero({ img }) {
 
 function AssetArtwork({ src, className, fallbackClassName, fallbackText }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
-    if (failedImageUrl === src) {
-        return (
-            <span className={fallbackClassName} aria-hidden="true">
-                {String(fallbackText || '?').slice(0, 2)}
-            </span>
-        );
-    }
     return (
-        <img
-            src={src}
-            alt=""
+        <span
+            className={fallbackClassName}
             aria-hidden="true"
-            className={className}
-            onError={() => setFailedImageUrl(src)}
-        />
+            style={{ position: 'relative', overflow: 'hidden' }}
+        >
+            {String(fallbackText || '?').slice(0, 2)}
+            {src && failedImageUrl !== src ? (
+                <img
+                    key={src}
+                    src={src}
+                    alt=""
+                    aria-hidden="true"
+                    className={className}
+                    decoding="async"
+                    style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                    onLoad={(event) => { event.currentTarget.style.visibility = 'visible'; }}
+                    onError={(event) => {
+                        event.currentTarget.style.visibility = 'hidden';
+                        setFailedImageUrl(src);
+                    }}
+                />
+            ) : null}
+        </span>
     );
 }
 

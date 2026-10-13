@@ -54,6 +54,15 @@ import styles from './HomeTabs.module.css';
 const BALANCE_SORT_STORAGE_KEY = 'xc:balances:sort';
 const BALANCE_SORT_OPTIONS = new Set(['value', 'name', 'change']);
 
+function showLoadedArtwork(event) {
+    event.currentTarget.style.visibility = 'visible';
+}
+
+function hideFailedArtwork(event) {
+    event.currentTarget.style.visibility = 'hidden';
+    event.currentTarget.style.display = 'none';
+}
+
 function balanceSortStorageKey(walletId) {
     return `${BALANCE_SORT_STORAGE_KEY}:${walletId || 'none'}`;
 }
@@ -895,28 +904,44 @@ const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLoo
                     </span>
                     {isNative && chainIconUrl ? (
                         <img
+                            key={chainIconUrl}
                             src={chainIconUrl}
                             alt=""
                             aria-hidden="true"
                             className={balanceStyles.iconImg}
                             loading="lazy"
                             decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
+                            style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                            onLoad={showLoadedArtwork}
+                            onError={hideFailedArtwork}
                         />
                     ) : tokenImageUrl ? (
                         <img
+                            key={tokenImageUrl}
                             src={tokenImageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.tokenIconSquare}
                             loading="lazy"
                             decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                            onLoad={showLoadedArtwork}
+                            onError={hideFailedArtwork}
                         />
                     ) : null}
                     {!isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
+                        <img
+                            key={chainIconUrl}
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={balanceStyles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ visibility: 'hidden' }}
+                            onLoad={showLoadedArtwork}
+                            onError={hideFailedArtwork}
+                        />
                     ) : null}
                 </div>
                 <div className={styles.demoRowBody}>
@@ -1110,50 +1135,68 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
                             }}
                         >
                             <div className={balanceStyles.iconWrap}>
-                                {!isStake ? (
-                                    <span
-                                        className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action) }}
-                                        aria-hidden="true"
-                                    >
-                                        {(tick || p.action).slice(0, 1).toUpperCase()}
-                                    </span>
-                                ) : null}
+                                <span
+                                    className={balanceStyles.iconLetter}
+                                    style={{ background: tickerColor(tick || p.action) }}
+                                    aria-hidden="true"
+                                >
+                                    {(isStake ? 'X' : (tick || p.action)).slice(0, 1).toUpperCase()}
+                                </span>
                                 {isStake ? (
                                     <img
+                                        key={branding.faviconUrl()}
                                         src={branding.faviconUrl()}
                                         alt=""
-                                    aria-hidden="true"
-                                    className={styles.tokenIconSquare}
-                                    loading="lazy"
-                                    decoding="async"
+                                        aria-hidden="true"
+                                        className={styles.tokenIconSquare}
+                                        loading="lazy"
+                                        decoding="async"
+                                        style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                                        onLoad={showLoadedArtwork}
+                                        onError={hideFailedArtwork}
                                     />
                                 ) : isNativeAsset ? (
                                     chainIconUrl ? (
                                         <img
+                                            key={chainIconUrl}
                                             src={chainIconUrl}
                                             alt=""
                                             aria-hidden="true"
                                             className={balanceStyles.iconImg}
                                             loading="lazy"
                                             decoding="async"
-                                            style={{ position: 'absolute', inset: 0 }}
+                                            style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                                            onLoad={showLoadedArtwork}
+                                            onError={hideFailedArtwork}
                                         />
                                     ) : null
                                 ) : tokenImageUrl ? (
                                     <img
+                                        key={tokenImageUrl}
                                         src={tokenImageUrl}
                                         alt=""
                                         aria-hidden="true"
                                         className={styles.tokenIconSquare}
                                         loading="lazy"
                                         decoding="async"
-                                        style={{ position: 'absolute', inset: 0 }}
-                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                        style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                                        onLoad={showLoadedArtwork}
+                                        onError={hideFailedArtwork}
                                     />
                                 ) : null}
                                 {!isNativeAsset && chainIconUrl ? (
-                                    <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
+                                    <img
+                                        key={chainIconUrl}
+                                        src={chainIconUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className={balanceStyles.chainOverlay}
+                                        loading="lazy"
+                                        decoding="async"
+                                        style={{ visibility: 'hidden' }}
+                                        onLoad={showLoadedArtwork}
+                                        onError={hideFailedArtwork}
+                                    />
                                 ) : null}
                             </div>
                             <div className={styles.demoRowBody}>

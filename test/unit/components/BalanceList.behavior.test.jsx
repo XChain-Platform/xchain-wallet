@@ -4,14 +4,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
     BalanceList,
     buildBalanceRows,
     isSmallBalanceRow,
 } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    clearDemoWalletId();
+});
 
 const row = (tick, overrides = {}) => ({
     chainId: 'bitcoin-mainnet',
@@ -116,19 +123,69 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByRole('button', { name: (name) => name.startsWith(`Open ${displayName} details, `) })).toBeInTheDocument();
     });
 
-    it('keeps a decorative avatar under slow or broken token artwork', () => {
+    it('keeps the shared Home and TokenPicker monogram visible until token artwork loads', () => {
         const imageUrl = 'https://issuer.example/slow.png';
         render(<BalanceList rows={[row('ART', { imageUrl })]} />);
 
         const image = document.querySelector(`img[src="${imageUrl}"]`);
         expect(image).toHaveAttribute('alt', '');
         expect(image).toHaveAttribute('aria-hidden', 'true');
-        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
+        expect(image).toHaveStyle({ position: 'absolute', inset: '0', visibility: 'hidden' });
         expect(screen.getByText('A')).toBeInTheDocument();
 
+        fireEvent.load(image);
+        expect(image).toHaveStyle({ visibility: 'visible' });
+
         fireEvent.error(image);
-        expect(image).toHaveStyle({ display: 'none' });
+        expect(image).toHaveStyle({ display: 'none', visibility: 'hidden' });
         expect(screen.getByText('A')).toBeInTheDocument();
+    });
+
+    it('keeps Home activity artwork and its chain pip hidden until each image loads', async () => {
+        const imageUrl = 'https://issuer.example/activity.png';
+        const walletId = 'demo-artwork-wallet';
+        markDemoWallet(walletId);
+        render(
+            <MessagingProvider shell="web" messaging={{ getSettings: async () => ({}) }}>
+                <HomeTabs
+                    chainRegistry={defaultRegistry()}
+                    balances={{
+                        'bitcoin-mainnet': [{
+                            address: 'bc1qactivity',
+                            balances: {
+                                native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                                tokens: [{ tick: 'EXAMPLE', quantity: '1', divisibility: 8, imageUrl }],
+                            },
+                        }],
+                    }}
+                    walletId={walletId}
+                    networkFilter="all"
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        const artwork = await waitFor(() => {
+            const image = document.querySelector(`img[src="${imageUrl}"]`);
+            expect(image).not.toBeNull();
+            return image;
+        });
+        const iconWrap = artwork.parentElement;
+        const chainPip = [...iconWrap.querySelectorAll('img')].find((image) => image !== artwork);
+        expect(artwork.previousElementSibling).toHaveTextContent('E');
+        expect(artwork).toHaveStyle({ visibility: 'hidden' });
+        expect(chainPip).toHaveStyle({ visibility: 'hidden' });
+
+        fireEvent.load(artwork);
+        fireEvent.load(chainPip);
+        expect(artwork).toHaveStyle({ visibility: 'visible' });
+        expect(chainPip).toHaveStyle({ visibility: 'visible' });
+
+        fireEvent.error(artwork);
+        fireEvent.error(chainPip);
+        expect(artwork).toHaveStyle({ display: 'none', visibility: 'hidden' });
+        expect(chainPip).toHaveStyle({ display: 'none', visibility: 'hidden' });
+        expect(artwork.previousElementSibling).toHaveTextContent('E');
     });
 
     it('does not mount or forward a remote image when metadata privacy is enabled', () => {
