@@ -47,6 +47,7 @@ import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -157,7 +158,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
@@ -188,8 +191,20 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password]
+            .some((value) => String(value || '').trim().length > 0)
+        || divisible
+        || lockSupply
+    ), [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password, divisible, lockSupply]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -579,7 +594,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={leaveGuard.guardedOnBack}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review issue'
                     : `Issue token`}
@@ -588,6 +603,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -605,14 +621,14 @@ export function IssueTokenForm({ walletId, onBack }) {
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={leaveGuard.guardedOnBack}
                 />,
             );
         }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="issuance" unsaved={result.unsaved} />,
+                <QueuedResultPanel onDone={leaveGuard.guardedOnBack} what="issuance" unsaved={result.unsaved} />,
             );
         }
         return wrap(
@@ -627,7 +643,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
                 </div>
             </>,
         );
@@ -794,7 +810,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
-            You have an unfinished issue draft.
+            Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.
             <button
                 type="button"
                 onClick={dismissDraft}
