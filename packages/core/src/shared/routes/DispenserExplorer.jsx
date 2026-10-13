@@ -150,7 +150,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div style={{ maxWidth: 1080, margin: '0 auto', padding: '1rem' }}>{children}</div> : children}
+            {isFull ? <div style={{ padding: '1rem' }}>{children}</div> : children}
         </Screen>
     );
 

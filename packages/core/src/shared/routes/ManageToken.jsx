@@ -19,6 +19,7 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { RANGES as CHART_RANGES } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { extractHolderRows } from '../utils/holderRows.js';
@@ -402,14 +403,18 @@ export function ManageToken({
 
     // Price chart: mirrors Home's PortfolioChart layout: single change
     // line (▲/▼ absolute + percent) over a 40px sparkline plus the
-    // range-pill strip. Sparkline is synthesized off
-    // `assetInfo.marketPrice` (native-coin denominated, per the indexer)
-    // so the line lands at the current market price; range selection
-    // reshuffles the synthesis seed the same way PortfolioChart does.
+    // range-pill strip. No real token price history exists, so the line is
+    // synthesized (off `assetInfo.marketPrice`, native-coin denominated)
+    // for the demo wallet only; a real wallet shows an empty-state message
+    // instead, because the wallet never fabricates a number. Range
+    // selection reshuffles the synthesis seed the same way PortfolioChart
+    // does.
+    const isDemo = isDemoWallet(walletId);
     const [chartRangeId, setChartRangeId] = useState('30d');
     const chartRange = CHART_RANGES.find((r) => r.id === chartRangeId) || CHART_RANGES[2];
     const nativeTick = nativeTickerOf(descriptor);
     const chartSeries = useMemo(() => {
+        if (!isDemo) return null;
         const marketPriceNum = assetInfo?.marketPrice != null
             ? Number(assetInfo.marketPrice)
             : null;
@@ -422,7 +427,7 @@ export function ManageToken({
             chartRange.points,
         );
         return synth.sparkline;
-    }, [assetInfo, chainId, tick, chartRange.id, chartRange.points]);
+    }, [isDemo, assetInfo, chainId, tick, chartRange.id, chartRange.points]);
     const chartChange = useMemo(() => {
         if (!Array.isArray(chartSeries) || chartSeries.length < 2) return { delta: null, pct: null };
         const start = chartSeries[0];
@@ -696,7 +701,9 @@ export function ManageToken({
                             </div>
                         </>
                     ) : (
-                        <p className={styles.chartHint}>No market data yet for this token.</p>
+                        <p className={styles.chartHint} role="status">
+                            {isDemo ? 'No market data yet for this token.' : 'No price history yet'}
+                        </p>
                     )}
                 </section>
 

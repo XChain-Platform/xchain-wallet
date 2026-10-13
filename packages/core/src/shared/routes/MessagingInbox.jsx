@@ -431,7 +431,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {isFull ? <div className={styles.listCard}>{children}</div> : children}
         </Screen>
     );
 
@@ -603,7 +603,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 )}
                 footer={composer}
             >
-                {isFull ? <div className={styles.card}>{threadBody}</div> : threadBody}
+                {isFull ? <div className={styles.listCard}>{threadBody}</div> : threadBody}
             </Screen>
         );
     }

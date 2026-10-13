@@ -39,6 +39,27 @@
     box-shadow: var(--xc-shadow-md);
 }
 
+/* Lists and tables (inbox, signing session, settlement) fill the content
+   area; only genuine forms keep the 560px column of .card. */
+.listCard {
+    width: 100%;
+    margin: var(--xc-space-6) 0 0;
+    padding: var(--xc-space-6);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+    box-sizing: border-box;
+}
+
+/* Left-aligned variant of .hint for text that sits among form rows. */
+.hintLeft {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    text-align: left;
+    margin: 0;
+}
+
 .pickerLabel {
     display: flex;
     flex-direction: column;
