@@ -148,6 +148,57 @@
     margin-top: var(--xc-space-4);
 }
 
+.betActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.betActions > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.betLongText {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.betOddsRow {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.betOddsRow > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.betWagerChoices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-bottom: var(--xc-space-2);
+}
+
+.betOutcomeRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.betOutcomeField {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .feeToggleGap {
     margin-top: var(--xc-space-3);
 }
@@ -192,6 +243,29 @@
 }
 
 @media (max-width: 399px) {
+    .betActions,
+    .betWagerChoices {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        justify-content: stretch;
+        width: 100%;
+    }
+
+    .betActions > *,
+    .betWagerChoices > * {
+        width: 100%;
+    }
+
+    .betOddsRow,
+    .betOutcomeRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .betOutcomeRow > button {
+        width: 100%;
+    }
+
     .detailsList {
         grid-template-columns: minmax(0, 1fr);
     }
