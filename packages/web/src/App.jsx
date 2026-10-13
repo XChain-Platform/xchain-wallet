@@ -3083,7 +3083,7 @@ function AppInner() {
                             style={{
                                 position: 'absolute',
                                 inset: 0,
-                                zIndex: 50,
+                                zIndex: 'var(--xc-z-overlay)',
                                 background: 'var(--xc-bg)',
                                 display: 'flex',
                                 flexDirection: 'column',

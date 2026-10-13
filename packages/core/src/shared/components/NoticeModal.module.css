@@ -7,10 +7,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
+    padding: calc(var(--xc-page-top) + env(safe-area-inset-top, 0px))
+        calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0px))
+        calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0px))
+        calc(var(--xc-page-gutter) + env(safe-area-inset-left, 0px));
 }
 
 .panel {
@@ -56,10 +56,6 @@
 }
 
 @media (orientation: landscape) and (max-height: 480px) {
-    .overlay {
-        padding: var(--xc-space-2);
-    }
-
     .panel {
         max-height: calc(100% - var(--xc-space-2) - var(--xc-space-2));
         padding: var(--xc-space-3);

@@ -113,10 +113,6 @@
     width: 100%;
 }
 
-.unlockActions > button {
-    width: 100%;
-}
-
 .demoExitBlock {
     margin-top: var(--xc-space-4);
     padding-top: var(--xc-space-3);

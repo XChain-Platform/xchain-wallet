@@ -549,6 +549,7 @@ export function Locked({ onUnlocked }) {
                     <Button
                         type="submit"
                         variant="primary"
+                        block
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
@@ -558,6 +559,7 @@ export function Locked({ onUnlocked }) {
                         <Button
                             type="button"
                             variant="secondary"
+                            block
                             onClick={handleBiometric}
                             disabled={busy || isLockedOut}
                         >
