@@ -2478,7 +2478,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    {t('send.success.viewOnExplorer')}
+                                    {t('send.success.viewOnExplorer')} <span aria-hidden="true">↗</span>
                                 </a>
                             ) : null}
                         </div>

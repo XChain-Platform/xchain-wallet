@@ -69,7 +69,7 @@ export const en = {
         'Your transaction is on its way. It will confirm in the next few blocks; you can leave this screen at any time.',
     'send.success.copyTransactionId': 'Copy transaction id',
     'send.success.copy': 'Copy',
-    'send.success.viewOnExplorer': 'View on explorer ↗',
+    'send.success.viewOnExplorer': 'View on explorer',
     'send.success.sendAnother': 'Send another',
     'send.fields.amount': 'Amount',
     'send.fields.to': 'To',
@@ -232,6 +232,8 @@ export const en = {
 
     // --- history --------------------------------------------------
     'history.title': 'History',
+    'history.refresh': 'Refresh history',
+    'history.refreshing': 'Refreshing history',
     'history.showMore': 'Show more history',
     'history.itemsShown': '{shown} of {total} history items shown',
     'history.showMoreGroupEntries': 'Show more group entries ({shown} of {total} shown)',

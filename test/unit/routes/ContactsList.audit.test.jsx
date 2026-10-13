@@ -74,18 +74,18 @@ describe('ContactsList audited behavior', () => {
         const add = await screen.findByRole('button', { name: 'Add contact' });
 
         fireEvent.click(add);
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('dialog')).toHaveTextContent('Discard changes?');
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard and leave' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy());
     });

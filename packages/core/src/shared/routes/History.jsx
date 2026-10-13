@@ -1432,8 +1432,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <button
                     type="button"
                     className={refreshing ? styles.refreshing : undefined}
-                    aria-label={refreshing ? 'Refreshing history' : 'Refresh history'}
-                    title={refreshing ? 'Refreshing history' : 'Refresh history'}
+                    aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
+                    title={refreshing ? t('history.refreshing') : t('history.refresh')}
                     disabled={refreshing || !historyLoaded}
                     onClick={() => {
                         const throttle = pollThrottleRef.current;

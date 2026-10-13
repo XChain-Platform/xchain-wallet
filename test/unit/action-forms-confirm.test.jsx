@@ -1054,7 +1054,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             // The software path carries the action verb, never "Review".
             actionLabel: 'Place buy order',
             fill: (utils) => {
-                setValue(utils, /^Price/, '2');
+                // /^Price/ alone also names the "Price and amount" field group.
+                setValue(utils, /^Price \(/, '2');
                 setValue(utils, /^Size/, '5');
             },
         });

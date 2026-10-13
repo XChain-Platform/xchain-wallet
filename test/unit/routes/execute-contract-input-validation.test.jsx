@@ -96,7 +96,7 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
         expect(await screen.findByRole('heading', { name: 'Review contract call' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(await screen.findByRole('form', { name: 'Call contract' })).toBeInTheDocument();
         expect(screen.getByLabelText('config (json)')).toHaveValue('{"enabled":true}');

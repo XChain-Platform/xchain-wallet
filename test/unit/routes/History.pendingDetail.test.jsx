@@ -253,7 +253,10 @@ describe('History offers replacement only where it can still work', () => {
         // that this shell cannot execute.
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
         const region = await openRow(view, 'not-seen');
-        expect(within(region).queryByRole('group', { name: 'Action options' })).toBeNull();
+        // The More menu still opens (Copy receipt applies to every entry),
+        // but it must not offer a replacement this shell cannot run.
+        fireEvent.click(within(region).getByText('More'));
+        expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });

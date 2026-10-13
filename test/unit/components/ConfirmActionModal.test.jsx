@@ -320,14 +320,14 @@ describe('ConfirmActionModal', () => {
     it('the header back arrow rejects in the ready phase', () => {
         const onReject = vi.fn();
         render(<ConfirmActionModal {...base({ onReject })} />);
-        fireEvent.click(screen.getByLabelText('Back'));
+        fireEvent.click(screen.getByLabelText('Back to previous screen'));
         expect(onReject).toHaveBeenCalledOnce();
     });
 
     it('the header back arrow is inert once signing has begun', () => {
         const onReject = vi.fn();
         render(<ConfirmActionModal {...base({ onReject, phase: 'signing' })} />);
-        const back = screen.getByLabelText('Back');
+        const back = screen.getByLabelText('Back to previous screen');
         expect(back.disabled).toBe(true);
         fireEvent.click(back);
         expect(onReject).not.toHaveBeenCalled();

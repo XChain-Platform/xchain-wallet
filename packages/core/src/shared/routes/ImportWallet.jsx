@@ -577,7 +577,7 @@ export function ImportWallet({
                 : backupWalletPassword.length === 0
                     ? `Enter the ${RESTORE_PASSWORD_LABELS.wallet.toLowerCase()} to continue.`
                     : backupDevicePassword.length === 0
-                        ? `Enter the ${RESTORE_PASSWORD_LABELS.device.toLowerCase()} to continue.`
+                        ? `Enter the ${restoreDeviceLabel(mode).toLowerCase()} to continue.`
                         : null
         : mnemonic.trim().length === 0
             ? 'Enter a recovery phrase to continue.'

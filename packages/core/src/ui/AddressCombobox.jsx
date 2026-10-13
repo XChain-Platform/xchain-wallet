@@ -199,6 +199,23 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 }}
                 {...rest}
             />
+            {IconComponent ? (
+                <button
+                    type="button"
+                    className={styles.iconButton}
+                    onClick={() => {
+                        close();
+                        onIconClick?.();
+                    }}
+                    disabled={disabled}
+                    aria-label={iconLabel || defaultLabel}
+                    title={iconLabel || defaultLabel}
+                >
+                    <IconComponent />
+                </button>
+            ) : null}
+            {/* After the in-field icon button so focus follows the visual order:
+                field, its trailing icon, then the paste control below it. */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
                 <ClipboardPasteButton
                     disabled={disabled}
@@ -217,21 +234,6 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     }}
                 />
             </div>
-            {IconComponent ? (
-                <button
-                    type="button"
-                    className={styles.iconButton}
-                    onClick={() => {
-                        close();
-                        onIconClick?.();
-                    }}
-                    disabled={disabled}
-                    aria-label={iconLabel || defaultLabel}
-                    title={iconLabel || defaultLabel}
-                >
-                    <IconComponent />
-                </button>
-            ) : null}
             {showDropdown ? (
                 <ul
                     id={listboxId}

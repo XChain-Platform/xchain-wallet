@@ -73,6 +73,9 @@ describe('DispenserForm numeric validation', () => {
         const give = utils.getByLabelText(/^Give amount/);
         give.focus();
 
+        // Each amount field carries its own paste control under it.
+        await user.tab();
+        expect(document.activeElement).toHaveAccessibleName('Paste from clipboard');
         await user.tab();
         const escrow = utils.getByLabelText(/^Escrow amount/);
         expect(document.activeElement).toBe(escrow);

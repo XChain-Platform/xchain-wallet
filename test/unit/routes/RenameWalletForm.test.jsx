@@ -181,7 +181,7 @@ describe('RenameWalletForm submission', () => {
         const { props } = mount();
         const input = screen.getByLabelText('Wallet name');
         const save = screen.getByRole('button', { name: 'Save' });
-        const back = screen.getByRole('button', { name: 'Back' });
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
         await waitFor(() => expect(save.disabled).toBe(false));
 
         fireEvent.click(save);
