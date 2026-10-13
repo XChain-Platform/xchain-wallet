@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -565,31 +565,16 @@ export function TokenPicker({
                 anyway would offer a choice the action cannot honour, and
                 the segments would appear dead because the pinned prop wins
                 over the local state they set. */}
-            <div
-                className={styles.kindSegments}
-                role="tablist"
+            <Tabs
+                items={KIND_OPTIONS}
+                value={kindFilter || 'all'}
+                onChange={setKindFilter}
                 aria-label="Asset kind"
                 hidden={kindLocked}
-                style={kindLocked ? { display: 'none' } : undefined}
-            >
-                {KIND_OPTIONS.map((opt) => {
-                    const active = (kindFilter || 'all') === opt.id;
-                    return (
-                        <Button
-                            key={opt.id}
-                            type="button"
-                            icon={null}
-                            role="tab"
-                            tabIndex={active ? 0 : -1}
-                            aria-selected={active}
-                            className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
-                            onClick={() => setKindFilter(opt.id)}
-                        >
-                            {opt.label}
-                        </Button>
-                    );
-                })}
-            </div>
+                style={kindLocked
+                    ? { display: 'none' }
+                    : { flex: '0 0 auto', width: 'auto' }}
+            />
         </>
     );
 

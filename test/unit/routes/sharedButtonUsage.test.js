@@ -56,6 +56,21 @@ const listRowRoutes = [
 ];
 
 describe('shared route button usage', () => {
+    it.each([
+        'ImportWallet',
+        'MarketsList',
+        'TokenDetail',
+        'TokenPicker',
+    ])('%s uses the shared Tabs component', (routeName) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        expect(source).toMatch(/import\s+\{[^}]*\bTabs\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(source).toMatch(/<Tabs\b/);
+    });
+
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -112,7 +127,7 @@ describe('shared route button usage', () => {
         ['SellOwnershipForm', ['Button', 'Input'], 0],
         ['Settings', ['Button', 'Input'], 1],
         ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
-        ['TokenPicker', ['Button', 'Input'], 0],
+        ['TokenPicker', ['Button', 'Input', 'Tabs'], 0],
         ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
         ['WalletPicker', ['Button', 'ListRow'], 0],
     ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
@@ -258,8 +273,8 @@ describe('trade form style guide primitives', () => {
             /import\s+\{\s*ClipboardPasteButton\s*\}\s+from\s+'\.\.\/\.\.\/ui\/ClipboardPasteButton\.jsx'/,
         );
         expect(importSource).not.toMatch(/<textarea\b|<select\b/);
-        expect(importSource.match(/<button\b/g)).toHaveLength(3);
-        expect(importSource.match(/role="tab"/g)).toHaveLength(3);
+        expect(importSource).toMatch(/<Tabs\b/);
+        expect(importSource).not.toMatch(/<button\b/);
         expect(createSource).not.toMatch(/<button\b|<textarea\b|<select\b/);
     });
 
@@ -275,8 +290,8 @@ describe('trade form style guide primitives', () => {
 
         expect(markets).toMatch(/<Input\b/);
         expect(markets).toMatch(/<Button\b/);
-        expect(markets.match(/<button\b/g)).toHaveLength(1);
-        expect(markets).toMatch(/<button[\s\S]*?role="tab"/);
+        expect(markets).toMatch(/<Tabs\b/);
+        expect(markets).not.toMatch(/<button\b/);
 
         for (const component of ['AddressField', 'Input', 'Select', 'Textarea', 'Button', 'EmptyState', 'SectionHeader']) {
             expect(contacts).toContain(`<${component}`);
