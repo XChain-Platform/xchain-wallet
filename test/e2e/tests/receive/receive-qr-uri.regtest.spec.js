@@ -107,30 +107,23 @@ function parsePaymentUri(raw) {
     };
 }
 
+/** Opens Receive on this run's venue chain and returns its address. */
+async function openVenueReceive(page) {
+    await createWallet(page, { password: PASSWORD });
+    await switchToRegtest(page, PASSWORD);
+    // Receive follows the wallet's active chain, so use its real picker path.
+    const ownAddress = await readReceiveAddress(page);
+    expect(ownAddress,
+        `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
+        .toMatch(REGTEST_ADDRESS_RE);
+    return ownAddress;
+}
+
 test.describe('Receive: the request the payer actually scans', () => {
     test.setTimeout(600_000);
 
-    let ownAddress;
-
-    test.beforeEach(async ({ page }) => {
-        await createWallet(page, { password: PASSWORD });
-        await switchToRegtest(page, PASSWORD);
-        // NO `selectVenueChain` HERE: the Receive screen carries no "Network"
-        // picker at all - it follows the wallet's ACTIVE chain - so the venue
-        // helper throws "no Network chain picker on this screen". It does NOT
-        // follow that this spec is stuck on whichever chain the wallet opens
-        // on, which is what an earlier refusal here assumed.
-        // `readReceiveAddress` drives the REAL path a user takes: the picker
-        // behind the field's icon, filtered by network, first address of that
-        // chain. On Litecoin the old code failed here on its own message while
-        // the address it wanted was two clicks away.
-        ownAddress = await readReceiveAddress(page);
-        expect(ownAddress,
-            `Receive never reached a ${REGTEST_COIN} address even through its own picker`)
-            .toMatch(REGTEST_ADDRESS_RE);
-    });
-
     test('the QR encodes the address on screen, and the amount and fee the form was given', async ({ page }) => {
+        const ownAddress = await openVenueReceive(page);
         await test.step('bare request: the code carries THIS address and nothing invented', async () => {
             const raw = await expectQr(page, (v) => v.startsWith(`${URI_SCHEME}:`),
                 `the Receive QR never decoded to a ${URI_SCHEME}: URI`);

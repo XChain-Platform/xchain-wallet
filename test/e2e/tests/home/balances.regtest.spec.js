@@ -226,8 +226,31 @@ async function receiveAddressFor(page, chain) {
     return field.inputValue();
 }
 
+/** Builds one funded Home state and returns its chain facts. */
+async function openFundedHome(page) {
+    const priceGap = await priceFamilyRefusal();
+    test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
+    const coinUsd = await venueCoinUsdPrice();
+
+    await createWallet(page, { password: PASSWORD });
+    await switchToRegtest(page, PASSWORD);
+
+    const address = await receiveAddressFor(page, VENUE_CHAIN);
+    expect(
+        Number(await chainConfirmed(VENUE_CHAIN.coin, address)),
+        `fresh wallet address ${address} already holds coin`,
+    ).toBe(0);
+
+    await fundAddress(address, FUNDING_DOGE);
+    // Balances are fetched per chain on mount, so remount after funding.
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+    return { address, coinUsd };
+}
+
 test.describe('Home balances against the chain', () => {
-    // The config's 420s default is not enough for what the hook below does, and
+    // The config's 420s default is not enough for what the setup below does, and
     // the failure it produces is the least legible one this suite can produce.
     // Every test here pays for a full onboarding (Argon2id), a network switch, a
     // per-chain receive-address walk, a funding that waits on a real block, and a
@@ -235,59 +258,12 @@ test.describe('Home balances against the chain', () => {
     // 7 minutes on 2026-09-02, against a body that then took 22 seconds. Worse,
     // the fiat test below is `test.fail()`: an assertion failure there is the
     // expected outcome, but a TIMEOUT is not, so a slow venue turns the pinned
-    // defect into a red with a message about a hook. Sized like the rest of the
+    // defect into a red with a message about setup. Sized like the rest of the
     // chain-bound specs in this suite rather than to a measurement.
     test.setTimeout(900_000);
 
-    /** @type {string} */ let address;
-    /** @type {number} */ let coinUsd;
-
-    test.beforeEach(async ({ page }) => {
-        // This venue answers its whole oracle-price family with HTTP
-        // 500 (no co-located hub DB configured for this coin), so the finalized
-        // round every test here prices against cannot be read at all. The guard
-        // lives in the HOOK rather than in the bodies because `venueCoinUsdPrice`
-        // is called right below, so a body-level skip never got a turn. A
-        // conditional skip rather than a fixme: it runs itself again the day the
-        // checkpoint DB is configured.
-        //
-        // It takes the `test.fail()` fiat pin below with it, and that is the
-        // honest outcome rather than a loss: an expected-failure that "passes"
-        // because the venue will not serve a price proves nothing about the
-        // Home fiat defect it was written to pin.
-        const priceGap = await priceFamilyRefusal();
-        test.skip(!!priceGap, `the venue refuses the oracle-price family here. ${priceGap}`);
-        // Read the venue's price BEFORE any UI work. The fiat test below is
-        // pinned `test.fail()`, and an expected-failure absorbs a setup failure
-        // silently; doing this here means a venue with no oracle round reds the
-        // two unpinned tests loudly instead of hiding inside the pinned one.
-        coinUsd = await venueCoinUsdPrice();
-
-        await createWallet(page, { password: PASSWORD });
-        await switchToRegtest(page, PASSWORD);
-
-        address = await receiveAddressFor(page, VENUE_CHAIN);
-
-        // "Equals what we paid in" is only an identity on an address that held
-        // nothing first. Assert that rather than assume it: HD derivation is
-        // seeded randomly per wallet, but a collision with a funded address
-        // would silently turn every figure below into an approximation.
-        expect(
-            Number(await chainConfirmed(VENUE_CHAIN.coin, address)),
-            `fresh wallet address ${address} already holds coin`,
-        ).toBe(0);
-
-        await fundAddress(address, FUNDING_DOGE);
-
-        // Balances are fetched per chain on mount; a reload is the cheapest way
-        // to make the freshly-confirmed UTXO visible without reaching into app
-        // internals.
-        await page.reload();
-        await unlockAfterReload(page, PASSWORD);
-        await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
-    });
-
     test('the funded coin row states the chain\'s balance, to the satoshi', async ({ page }) => {
+        const { address } = await openFundedHome(page);
         // The chain's own record, and the money that went in. Neither number
         // comes from the wallet.
         const onChain = await chainConfirmed(VENUE_CHAIN.coin, address);
@@ -318,6 +294,7 @@ test.describe('Home balances against the chain', () => {
     });
 
     test('every activated chain\'s row reports that chain, not another', async ({ page }) => {
+        await openFundedHome(page);
         // The multi-coin residual: three chains on one screen, each row proved
         // against ITS OWN chain's explorer, using the address the wallet itself
         // hands out for that chain. A row summing the wrong chain's address, or
@@ -369,7 +346,7 @@ test.describe('Home balances against the chain', () => {
     //
     //   * The venue DOES price this coin. `venueCoinUsdPrice()` above reads a
     //     finalized DOGE/USD round off the same public endpoint
-    //     `flows/priceLookup.js` uses, and the beforeEach fails if it is absent.
+    //     `flows/priceLookup.js` uses, and setup fails if it is absent.
     //   * The hero is `sumFiatValue(rows)` over `buildBalanceRows`, which takes
     //     each row's rate from `balances.native.fiatRate` /
     //     `balances.tokens[].fiatRate`. NOTHING on the real balance path ever
@@ -388,6 +365,7 @@ test.describe('Home balances against the chain', () => {
     // published rate) so this becomes the acceptance test for the fix rather
     // than a description of the bug.
     test.fail('the fiat total is derived from the balance and the published price', async ({ page }) => {
+        const { address, coinUsd } = await openFundedHome(page);
         const onChain = Number(await chainConfirmed(VENUE_CHAIN.coin, address));
         const expectedUsd = onChain * coinUsd;
         // `formatFiat`'s shape: 2 decimals, thousands-grouped.

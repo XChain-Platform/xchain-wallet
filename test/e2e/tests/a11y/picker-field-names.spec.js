@@ -35,7 +35,7 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 const PASSWORD = 'a11y-picker-names';
 
 /** Opens a route through the command palette, by clicking its row. */
-async function gotoPalette(page, title) {
+async function gotoPalette(page, title, heading = title, form = heading) {
     // The palette is modal, and a route rendered by the PREVIOUS call may still
     // be settling. Address the palette's own combobox by its dialog rather than
     // taking the first combobox on the page, or a form's own select is matched
@@ -51,6 +51,12 @@ async function gotoPalette(page, title) {
     await expect(row, `no palette command matching "${title}"`).toBeVisible();
     await row.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: heading, exact: true }),
+        `the ${title} route did not finish navigating`)
+        .toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('form', { name: form, exact: true }),
+        `the ${title} route did not finish loading`)
+        .toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -68,9 +74,6 @@ async function pickers(page) {
 /** The same, but returns [] on a screen that mounts none. */
 async function pickersIfAny(page) {
     const buttons = page.locator('button[aria-haspopup="listbox"]');
-    // Let the route paint before concluding there are none; the count is read
-    // after a settle rather than immediately, or a slow mount reads as absence.
-    await page.waitForTimeout(500);
     if (await buttons.count() === 0) return [];
     return readNames(buttons);
 }
@@ -120,11 +123,17 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         // Titles are the palette's OWN strings; "Sign message" is not one of
         // them ("Sign a message" is), and a wrong title fails as "no palette
         // command matching", not as a picker problem.
-        const routes = ['Cross-chain swap', 'Airdrop', 'Sign a message', 'Verify a signature', 'Send'];
+        const routes = [
+            ['Cross-chain swap', 'Cross-chain swap', 'Cross-chain swap'],
+            ['Airdrop', 'Airdrop tokens', 'Token airdrop'],
+            ['Sign a message', 'Sign message', 'Sign message'],
+            ['Verify a signature', 'Verify signature', 'Verify signature'],
+            ['Send', 'Send', 'Send'],
+        ];
         const checked = [];
 
-        for (const route of routes) {
-            await gotoPalette(page, route);
+        for (const [route, heading, form] of routes) {
+            await gotoPalette(page, route, heading, form);
             for (const { name } of await pickersIfAny(page)) {
                 checked.push(`${route}: ${name}`);
                 // The contract: "<field>: <selection>". A name with no colon is

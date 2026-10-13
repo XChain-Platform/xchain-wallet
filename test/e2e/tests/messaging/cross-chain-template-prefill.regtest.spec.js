@@ -56,6 +56,7 @@ async function waitForBroadcastTxid(txids, index, timeoutMs = 120_000) {
 // Exact role names, not getByLabel: a label query substring-matches, so
 // 'Action' also picks up the composer's "+ Add action" button.
 const rowField = (scope, role, name) => scope.getByRole(role, { name, exact: true });
+const composerRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
 async function gotoCrossChainTemplates(page) {
     await page.getByRole('button', { name: 'Open menu' }).click();
@@ -120,21 +121,22 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByText('Compose any number of independent actions'))
                 .toBeVisible({ timeout: 30_000 });
             await expect(rowField(main, 'combobox', 'Action')).toHaveCount(3);
-            await expect(rowField(main, 'combobox', 'Action').nth(0)).toHaveValue('ISSUE');
-            await expect(rowField(main, 'combobox', 'Action').nth(1)).toHaveValue('ISSUE');
-            await expect(rowField(main, 'combobox', 'Action').nth(2)).toHaveValue('LINK');
-            await expect(rowField(main, 'textbox', 'Params (JSON object)').nth(0)).toHaveValue(/"TICK": "BRIDGEME"/);
-            await expect(rowField(main, 'textbox', 'Params (JSON object)').nth(2))
+            const rows = [1, 2, 3].map((number) => composerRow(main, number));
+            await expect(rowField(rows[0], 'combobox', 'Action')).toHaveValue('ISSUE');
+            await expect(rowField(rows[1], 'combobox', 'Action')).toHaveValue('ISSUE');
+            await expect(rowField(rows[2], 'combobox', 'Action')).toHaveValue('LINK');
+            await expect(rowField(rows[0], 'textbox', 'Params (JSON object)')).toHaveValue(/"TICK": "BRIDGEME"/);
+            await expect(rowField(rows[2], 'textbox', 'Params (JSON object)'))
                 .toHaveValue(/<ISSUE action_index from row 1>/);
 
-            for (let i = 0; i < 3; i += 1) {
-                await rowField(main, 'combobox', 'Chain').nth(i).selectOption(REGTEST_CHAIN_ID);
-                expect(await rowField(main, 'combobox', 'From address').nth(i)
+            for (const row of rows) {
+                await rowField(row, 'combobox', 'Chain').selectOption(REGTEST_CHAIN_ID);
+                expect(await rowField(row, 'combobox', 'From address')
                     .evaluate((el) => el.options[el.selectedIndex]?.text || ''))
                     .toBe(source);
             }
 
-            await rowField(main, 'textbox', 'Params (JSON object)').nth(0).fill(JSON.stringify({
+            await rowField(rows[0], 'textbox', 'Params (JSON object)').fill(JSON.stringify({
                 VERSION: '0',
                 TICK: TICK_ONE,
                 MAX_SUPPLY: '1000',
@@ -142,7 +144,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
                 DECIMALS: '0',
                 DESCRIPTION: `template row one ${STAMP}`,
             }));
-            await rowField(main, 'textbox', 'Params (JSON object)').nth(1).fill(JSON.stringify({
+            await rowField(rows[1], 'textbox', 'Params (JSON object)').fill(JSON.stringify({
                 VERSION: '0',
                 TICK: TICK_TWO,
                 MAX_SUPPLY: '2000',
@@ -150,7 +152,7 @@ test.describe(`cross-chain template prefill on ${REGTEST_CHAIN_LABEL}`, () => {
                 DECIMALS: '0',
                 DESCRIPTION: `template row two ${STAMP}`,
             }));
-            await rowField(main, 'textbox', 'Params (JSON object)').nth(2).fill(JSON.stringify({
+            await rowField(rows[2], 'textbox', 'Params (JSON object)').fill(JSON.stringify({
                 VERSION: '0',
                 COIN1: REGTEST_TICKER,
                 COIN1_ACTION_INDEX: String(firstSetupAction.action_index),
