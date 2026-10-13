@@ -1,6 +1,7 @@
 .chip {
     box-sizing: border-box;
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     height: var(--xc-control-h-sm);

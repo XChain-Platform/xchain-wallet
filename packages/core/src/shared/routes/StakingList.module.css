@@ -31,6 +31,7 @@
 /* Per-row unclaimed-reward indicator (§42.7.4: claimable rewards stay
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {
+    flex-shrink: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-success);
     font-weight: 600;
@@ -48,6 +49,7 @@
 
 .row {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
@@ -163,6 +165,7 @@
 /* Status chip on the row's trailing edge; tinted per state. */
 .status {
     flex: 0 0 auto;
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
@@ -239,6 +242,12 @@
     background: var(--xc-surface-raised);
 }
 
+.claimable > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 @media not all and (min-width: 400px) {
     .row {
         display: grid;
@@ -258,6 +267,13 @@
         min-width: 0;
     }
 
+    .name,
+    .subtitle {
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+
     .amount,
     .duration {
         max-width: 100%;
@@ -267,9 +283,7 @@
     }
 
     .rewardChip {
-        max-width: 100%;
-        white-space: normal;
-        overflow-wrap: anywhere;
+        white-space: nowrap;
     }
 
     .claimable {

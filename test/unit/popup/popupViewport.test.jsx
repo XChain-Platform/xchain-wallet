@@ -146,9 +146,10 @@ describe('extension popup main screens at 360x600', () => {
         expect(css.home).toMatch(/\.quickAction\s*\{[\s\S]*?min-width:\s*0/);
     });
 
-    it('allows 360px action labels to wrap instead of clipping', () => {
+    it('keeps 360px action labels on one line without flex shrinking', () => {
         expect(css.button).toMatch(
-            /@media \(max-width:\s*360px\)\s*\{[\s\S]*?\.btn\s*\{[\s\S]*?white-space:\s*normal;[\s\S]*?\.label\s*\{[\s\S]*?overflow:\s*visible;[\s\S]*?overflow-wrap:\s*anywhere;/,
+            /\.btn\s*\{[^}]*flex-shrink:\s*0[^}]*white-space:\s*nowrap/s,
         );
+        expect(css.button).toMatch(/\.label\s*\{[^}]*white-space:\s*nowrap/s);
     });
 });
