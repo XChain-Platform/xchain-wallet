@@ -21,4 +21,9 @@ export const CONSOLE_ERROR_ALLOWLIST = [
         test: 'throws when used outside MessagingProvider',
         message: /^The above error occurred in the <TestComponent> component:/,
     },
+    {
+        file: 'test/unit/components/MarketChart.fallback.test.jsx',
+        test: 'shows user-facing fallback copy with a valid theme token',
+        message: /^\[MarketChart\] init failed: Error: \[vitest\] There was an error when mocking a module/,
+    },
 ];
