@@ -47,11 +47,13 @@ const styleGuideRowRoutes = [
     'GovernancePolls',
 ];
 
-const nativeRowButtonRoutes = new Set([
+const listRowRoutes = [
+    'ContactsList',
     'CoSignerAccountList',
-    'CoinpayForm',
     'GovernancePolls',
-]);
+    'MyBets',
+    'MyLists',
+];
 
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
@@ -129,7 +131,7 @@ describe('shared route button usage', () => {
         }
     });
 
-    it.each(styleGuideRowRoutes)('%s uses kit controls except documented row buttons', (routeName) => {
+    it.each(styleGuideRowRoutes)('%s uses kit controls instead of native form controls', (routeName) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
             'utf8',
@@ -137,12 +139,23 @@ describe('shared route button usage', () => {
 
         expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
         const nativeButtons = source.match(/<button\b/g) || [];
-        if (nativeRowButtonRoutes.has(routeName)) {
+        if (routeName === 'CoinpayForm') {
             expect(nativeButtons).toHaveLength(1);
             expect(source).toMatch(/native row button keeps the whole .* card as one target/);
         } else {
             expect(nativeButtons).toHaveLength(0);
         }
+    });
+
+    it.each(listRowRoutes)('%s uses the shared ListRow for interactive rows', (routeName) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        expect(source).toMatch(/import\s+\{[^}]*\bListRow\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(source).toMatch(/<ListRow\b/);
+        expect(source).not.toMatch(/<button\b/);
     });
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {

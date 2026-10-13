@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -313,22 +313,26 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                     <EmptyState title="No matching lists" body="Try a different search or network filter." titleAs="p" />
                 )
             ) : (
-                <div className={local.list} role="list">
-                    {visibleRows.map((row) => (
-                        <ListRow
+                <ul className={local.list} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {visibleRows.map((row, index) => (
+                        <li
                             key={`${row.chainId}:${row.action_index}`}
-                            row={row}
-                            onSelect={() => onOpenList(row.chainId, String(row.action_index))}
-                        />
+                            style={{ borderTop: index === 0 ? 'none' : '1px solid var(--xc-border)' }}
+                        >
+                            <MyListRow
+                                row={row}
+                                onSelect={() => onOpenList(row.chainId, String(row.action_index))}
+                            />
+                        </li>
                     ))}
-                </div>
+                </ul>
             )}
         </>,
         toolbar,
     );
 }
 
-function ListRow({ row, onSelect }) {
+function MyListRow({ row, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const isTick = String(row.type) === '1';
     const isFork = row.list_action_index != null && row.list_action_index !== '';
@@ -339,44 +343,37 @@ function ListRow({ row, onSelect }) {
     const label = listLabel(index, row.name, kind);
     const ariaLabel = `Open ${listLabel(index, row.name, kind.toLowerCase())}`;
     return (
-        /* List entries stay native buttons because each control is the complete clickable row. */
-        <button
+        <ListRow
             type="button"
             className={local.row}
-            role="listitem"
             onClick={onSelect}
             aria-label={ariaLabel}
-        >
-            <div className={local.iconWrap}>
-                <span className={local.iconLetter} aria-hidden="true">
-                    {isTick ? <Icon.TokenIcon /> : <Icon.AddressIcon />}
+            leading={(
+                <span className={local.iconWrap}>
+                    <span className={local.iconLetter} aria-hidden="true">
+                        {isTick ? <Icon.TokenIcon /> : <Icon.AddressIcon />}
+                    </span>
+                    {chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={chainRegistry.get(row.chainId)?.displayName}
+                            className={local.chainOverlay}
+                        />
+                    ) : null}
                 </span>
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>
-                    {label}
-                </div>
-                <div className={local.subtitle}>
-                    {isFork
-                        ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
-                        : 'Created list'}
-                </div>
-            </div>
-            <div className={local.trailing}>
+            )}
+            title={<span className={local.name}>{label}</span>}
+            subtitle={isFork
+                ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
+                : 'Created list'}
+            trailing={(
                 <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
                     {valid ? 'Valid' : status}
                 </span>
-            </div>
-        </button>
+            )}
+        />
     );
 }
 

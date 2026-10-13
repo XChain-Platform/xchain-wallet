@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
@@ -231,43 +231,37 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
         // the index alone where it is not. The index is always
         // shown: it is what the wager actually carries.
         const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
-        const body = (
+        const subtitle = (
             <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <strong>Market #{String(b.feed_action_index)}</strong>
-                    <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                        {statusLabel(b.bet_status)}
-                    </span>
-                </div>
-                <div className={`${styles.hint} ${styles.betLongText}`}>
+                <span className={`${styles.hint} ${styles.betLongText}`} style={{ display: 'block' }}>
                     {b.bet_status === 'invalid'
                         // "staked 100 XCHAIN" is false on a rejected bet: the amount is
                         // what the transaction ASKED for, and no stake was ever taken.
                         // The fees were, which is the part worth saying.
                         ? <>Would have backed {backed} for {String(b.amount)} {b.tick || ''} · nothing was staked, but the fees were spent</>
                         : <>Backed {backed} · staked {String(b.amount)} {b.tick || ''}</>}
-                </div>
+                </span>
                 {/* Payouts credit the address that PLACED the bet, so name it:
                     a sweep does not move a bet escrow or its winnings. */}
-                <div className={`${styles.hint} ${styles.betLongText}`}>from {b.owner}</div>
+                <span className={`${styles.hint} ${styles.betLongText}`} style={{ display: 'block' }}>from {b.owner}</span>
                 {b.bet_status !== 'open' && b.settled_block !== undefined && b.settled_block !== null ? (
-                    <div className={styles.hint}>Settled in block {String(b.settled_block)}</div>
+                    <span className={styles.hint} style={{ display: 'block' }}>Settled in block {String(b.settled_block)}</span>
                 ) : null}
             </>
         );
-        return clickable ? (
-            // A raw button keeps the entire list card as one clickable row.
-            <button
+        return (
+            <ListRow
                 key={`${b.chainId}:${b.action_index}`}
-                type="button"
-                onClick={() => onOpenMarket(b.chainId, b.feed_action_index)}
+                onClick={clickable ? () => onOpenMarket(b.chainId, b.feed_action_index) : undefined}
                 className={styles.listCard}
-                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-            >
-                {body}
-            </button>
-        ) : (
-            <div key={`${b.chainId}:${b.action_index}`} className={styles.listCard}>{body}</div>
+                title={`Market #${String(b.feed_action_index)}`}
+                subtitle={subtitle}
+                trailing={(
+                    <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                        {statusLabel(b.bet_status)}
+                    </span>
+                )}
+            />
         );
     };
 
