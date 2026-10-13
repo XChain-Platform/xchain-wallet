@@ -48,4 +48,16 @@ describe('iOS native privacy boundaries', () => {
             /UIApplication\.didEnterBackgroundNotification[\s\S]*?closedItself\(open, \.interrupted\)/,
         );
     });
+
+    it('contains root overscroll inside the themed WKWebView document', () => {
+        const controller = read('packages/mobile/ios/App/App/MainViewController.swift');
+        const didLoad = controller.match(
+            /override func capacitorDidLoad\(\) \{([\s\S]*?)\n    \}/,
+        );
+
+        expect(didLoad).not.toBeNull();
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.bounces = false/);
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.alwaysBounceVertical = false/);
+        expect(didLoad[1]).toMatch(/webView\?\.scrollView\.alwaysBounceHorizontal = false/);
+    });
 });

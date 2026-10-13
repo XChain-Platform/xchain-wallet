@@ -3,7 +3,8 @@
  */
 .toast {
     position: fixed;
-    inset-inline: var(--xc-space-4);
+    inset-inline-start: calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
+    inset-inline-end: calc(var(--xc-space-4) + env(safe-area-inset-right, 0px));
     max-width: 28rem;
     margin-inline: auto;
     bottom: calc(
