@@ -36,6 +36,9 @@ import { defineConfig, devices } from '@playwright/test';
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
 
 const budget = timeoutBudget();
+const LG_K51_TAG = /@lg-k51/;
+const LG_K51_CHROME_102_UA = 'Mozilla/5.0 (Linux; Android 12; LM-K500) '
+    + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36';
 // Named in the run's own output, so a red run is self-describing: the
 // budget it had is the first thing you need to know when deciding whether
 // a timeout was pressure or a genuine hang.
