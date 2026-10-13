@@ -26,7 +26,12 @@
     gap: var(--xc-space-2);
     z-index: 9999;
     pointer-events: none;
-    width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
+    width: min(28rem, calc(
+        100vw
+        - env(safe-area-inset-left, 0px)
+        - env(safe-area-inset-right, 0px)
+        - 2 * var(--xc-space-4)
+    ));
 }
 
 /* The fitted viewport height follows an overlay keyboard on iOS. Android
