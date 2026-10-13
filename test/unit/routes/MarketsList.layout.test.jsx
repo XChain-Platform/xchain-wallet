@@ -13,6 +13,68 @@ import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketA
 afterEach(() => cleanup());
 
 describe('MarketsList narrow layout', () => {
+    it('matches market-row height and marks the results region busy on first load', () => {
+        const messaging = {
+            getMarkets: vi.fn(() => new Promise(() => {})),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const region = screen.getByRole('region', { name: 'Markets results' });
+        expect(region).toHaveAttribute('aria-busy', 'true');
+        const skeletonRows = screen.getByRole('status', { name: 'Loading markets' })
+            .querySelectorAll('[style*="height: 60px"]');
+        expect(skeletonRows).toHaveLength(5);
+    });
+
+    it('keeps cached rows visible instead of showing a skeleton during refresh', async () => {
+        const refresh = new Promise(() => {});
+        const messaging = {
+            getMarkets: vi.fn()
+                .mockResolvedValueOnce([{ tick1: 'BTC', tick2: 'AAA', depth: 1 }])
+                .mockImplementationOnce(() => refresh),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        await screen.findByText('AAA');
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(messaging.getMarkets).toHaveBeenCalledTimes(2));
+        expect(screen.getByText('AAA')).toBeInTheDocument();
+        expect(screen.queryByRole('status', { name: 'Loading markets' })).toBeNull();
+        expect(screen.getByRole('region', { name: 'Markets results' }))
+            .toHaveAttribute('aria-busy', 'true');
+    });
+
     it('allows the search and multi-button filter toolbar to wrap', async () => {
         const messaging = {
             getMarkets: vi.fn().mockResolvedValue([]),

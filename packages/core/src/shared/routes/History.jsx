@@ -1479,8 +1479,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (!addressesByChain) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label={t('history.loading')}>
-                    <Skeleton.List rows={5} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={5} rowHeight={88} avatar={false} />
                 </div>
             </ListPage>,
         );
@@ -1672,8 +1672,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             {!historyLoaded || loadingChains.size > 0 ? (
-                <div role="status" aria-label={t('history.loading')}>
-                    <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={Math.max(3, loadingChains.size)} rowHeight={88} avatar={false} />
                 </div>
             ) : null}
 
