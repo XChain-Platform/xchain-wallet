@@ -13,6 +13,19 @@ import styles from './Input.module.css';
 import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 
+export const HIDDEN_PASTE_MESSAGE = 'Pasted text contains hidden characters. Check it and try again.';
+
+const FIELD_PASTE_EDGE = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
+const FIELD_PASTE_HIDDEN = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+
+/** Strip paste artifacts at the edges and refuse hidden characters in the value. */
+export function inspectFieldPaste(value) {
+    const normalized = String(value ?? '').replace(FIELD_PASTE_EDGE, '');
+    return FIELD_PASTE_HIDDEN.test(normalized)
+        ? { ok: false, value: normalized, error: HIDDEN_PASTE_MESSAGE }
+        : { ok: true, value: normalized, error: null };
+}
+
 /**
  * Controlled text input with label, hint, and error slots. Pass-through
  * props land on the underlying `<input>` so callers can wire `value`,
@@ -36,6 +49,7 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
+ * @property {boolean} [pasteGuard] guards address-style text fields; decimal and number fields are guarded automatically.
  * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
@@ -63,6 +77,8 @@ export const Input = forwardRef(function Input(
         onKeyUp,
         onFocus,
         onBlur,
+        onPaste,
+        pasteGuard = false,
         required = false,
         onInvalid,
         'aria-invalid': externalInvalid,
@@ -85,8 +101,9 @@ export const Input = forwardRef(function Input(
         && Object.is(dismissedError.key, errorKey);
     const isDateOrTime = type === 'date' || type === 'datetime-local' || type === 'time';
     const [dateError, setDateError] = useState(null);
+    const [pasteError, setPasteError] = useState(null);
     const callerError = error && !errorIsDismissed ? error : null;
-    const visibleError = dateError || callerError;
+    const visibleError = pasteError || dateError || callerError;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
@@ -104,6 +121,11 @@ export const Input = forwardRef(function Input(
         url: 'url',
     }[type]);
     const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
+    const shouldGuardPaste = pasteGuard
+        || resolvedInputMode === 'decimal'
+        || type === 'number'
+        || /address/i.test(typeof label === 'string' ? label : '')
+        || /address/i.test(String(rest['aria-label'] || ''));
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -154,8 +176,51 @@ export const Input = forwardRef(function Input(
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
         if (isDateOrTime) setDateError(null);
+        setPasteError(null);
         if (error) setDismissedError({ message: error, key: errorKey });
         onChange?.(event);
+    };
+    const handlePaste = (event) => {
+        if (!shouldGuardPaste) {
+            onPaste?.(event);
+            return;
+        }
+        const pasted = event.clipboardData?.getData?.('text');
+        if (typeof pasted !== 'string') {
+            onPaste?.(event);
+            return;
+        }
+        const inspected = inspectFieldPaste(pasted);
+        if (!inspected.ok) {
+            event.preventDefault();
+            setPasteError(inspected.error);
+            return;
+        }
+        setPasteError(null);
+        const normalizedEvent = pasted === inspected.value ? event : {
+            clipboardData: { getData: () => inspected.value },
+            currentTarget: event.currentTarget,
+            target: event.target,
+            defaultPrevented: false,
+            preventDefault() {
+                this.defaultPrevented = true;
+                event.preventDefault();
+            },
+        };
+        onPaste?.(normalizedEvent);
+        if (normalizedEvent.defaultPrevented || pasted === inspected.value) return;
+
+        const input = event.currentTarget;
+        const current = String(value ?? input.value ?? '');
+        const start = input.selectionStart ?? current.length;
+        const end = input.selectionEnd ?? start;
+        const nextValue = `${current.slice(0, start)}${inspected.value}${current.slice(end)}`;
+        const syntheticTarget = {
+            value: nextValue,
+            selectionStart: start + inspected.value.length,
+        };
+        event.preventDefault();
+        handleChange({ target: syntheticTarget, currentTarget: syntheticTarget });
     };
     const handleInvalid = (event) => {
         if (isDateOrTime) {
@@ -194,6 +259,7 @@ export const Input = forwardRef(function Input(
                 onKeyUp={handleKeyUp}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                onPaste={handlePaste}
                 onInvalid={handleInvalid}
                 {...rest}
             />
