@@ -351,8 +351,8 @@ export class NotificationService {
                 if (flags.incomingPending === false) break;
                 const incoming = transferText(data, addr.address);
                 plan = incoming
-                    ? { kind: 'incoming-pending', title: `${incoming} incoming`, body: `${incoming} to your ${addr.label} address is pending, waiting for a block.` }
-                    : { kind: 'incoming-pending', title: `Incoming on ${addr.label}`, body: `A payment to your ${addr.label} address is pending, waiting for a block.` };
+                    ? { kind: 'incoming-pending', title: `${incoming} pending`, body: `Payment to your ${addr.label} address is waiting for confirmation.` }
+                    : { kind: 'incoming-pending', title: 'Payment pending', body: `A payment to your ${addr.label} address is waiting for confirmation.` };
                 break;
             }
             case 'NEW_ACTION': {
@@ -367,8 +367,8 @@ export class NotificationService {
                     if (!flags.txConfirmations) break;
                     const sent = transferText(data);
                     plan = sent
-                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${sent} transaction on ${addr.label} was confirmed.` }
-                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
+                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${addr.label} transaction is confirmed.` }
+                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your ${addr.label} transaction is confirmed.` };
                 } else if (isInboundFor(addr.address, data)) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
@@ -384,8 +384,8 @@ export class NotificationService {
                         if (!flags.incomingReceipts) break;
                         const received = transferText(data, addr.address);
                         plan = received
-                            ? { kind: 'incoming-receipt', title: `Received ${received}`, body: `Your ${addr.label} address received ${received}.` }
-                            : { kind: 'incoming-receipt', title: `Received on ${addr.label}`, body: `Your ${addr.label} address received a transaction.` };
+                            ? { kind: 'incoming-receipt', title: `${received} received`, body: `Payment arrived at your ${addr.label} address.` }
+                            : { kind: 'incoming-receipt', title: 'Payment received', body: `A payment arrived at your ${addr.label} address.` };
                     }
                 }
                 break;
@@ -398,14 +398,14 @@ export class NotificationService {
                 break;
             case 'DISPENSE':
                 if (flags.dispenserFills) {
-                    plan = { kind: 'dispenser-fill', title: 'Dispenser used', body: `Someone bought from your dispenser on ${addr.label}.` };
+                    plan = { kind: 'dispenser-fill', title: 'Dispenser sale', body: `Someone bought from your dispenser on ${addr.label}.` };
                 }
                 break;
             case 'COINPAY_REQUIRED':
                 // BTCPAY-style obligation. No dedicated v1 toggle; gate under
                 // incomingReceipts (it's an inbound-settlement prompt).
                 if (flags.incomingReceipts) {
-                    plan = { kind: 'coinpay-required', title: 'Payment required', body: `A coin payment is required to complete your swap on ${addr.label}.` };
+                    plan = { kind: 'coinpay-required', title: 'CoinPay payment required', body: `Complete the payment for your swap on ${addr.label}.` };
                 }
                 break;
             // priceAlerts has no client event source in v1 (no alert-threshold

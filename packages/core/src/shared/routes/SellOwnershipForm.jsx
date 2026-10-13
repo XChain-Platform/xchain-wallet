@@ -700,7 +700,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             />
 
             <Input
-                label="Expires after (blocks, optional)"
+                label="Expires after (blocks) (optional)"
                 hint="Leave blank for no expiry. The order stays open until matched or cancelled."
                 type="text"
                 inputMode="numeric"

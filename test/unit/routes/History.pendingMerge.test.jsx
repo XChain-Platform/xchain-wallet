@@ -15,7 +15,7 @@
 // discard every row that arrived without an action index. A pending row has no
 // action index by definition, so all three had to change together.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -116,6 +116,8 @@ function staleConfirmedRecord() {
     };
 }
 
+// The saved-history cache outlives a render, so each case starts empty.
+beforeEach(() => { localStorage.clear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('History shows unconfirmed transactions', () => {

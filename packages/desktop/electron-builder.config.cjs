@@ -701,6 +701,11 @@ const config = {
         // `darkModeSupport` uses the system theme; we do this already
         // via tokens.css so the native window chrome matches.
         darkModeSupport: true,
+        // QrScanner opens the camera through getUserMedia. macOS requires
+        // this text in Info.plist before it presents the consent prompt.
+        extendInfo: {
+            NSCameraUsageDescription: 'Scan QR codes for wallet addresses and transactions.',
+        },
         // Hardened runtime is required for notarization. Entitlements
         // live alongside the config in build/entitlements.mac.plist.
         hardenedRuntime: true,
