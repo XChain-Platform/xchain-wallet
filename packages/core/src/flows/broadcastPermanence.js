@@ -73,6 +73,7 @@ const PERMANENT_PATTERNS = [
     // in its mempool); submitWithSigner and the queue lanes check isAlreadyOnNetworkRejection first.
     /txn-already-known/i,
     /txn-already-in-mempool/i,
+    /already\s+in\s+(?:the\s+)?block\s*chain/i,
     // A conflict with an UNconfirmed tx may still clear, so it stays transient.
     orderedSubstringMatcher('conflict', 'confirmed', { secondStartsWord: true }),
     /already\s+spent/i,
@@ -141,7 +142,8 @@ export function classifyBroadcastFailure(err) {
  * @returns {boolean}
  */
 export function isAlreadyOnNetworkRejection(err) {
-    return /txn-already-known|txn-already-in-mempool/i.test(extractReason(err));
+    return /txn-already-known|txn-already-in-mempool|already\s+in\s+(?:the\s+)?block\s*chain/i
+        .test(extractReason(err));
 }
 
 // Pull the most specific reject string out of the error shape. A
@@ -149,22 +151,28 @@ export function isAlreadyOnNetworkRejection(err) {
 // carry a structured `rejectReason`; fall back to the message.
 function extractReason(err) {
     if (err == null) return '';
-    if (typeof err === 'string') return err;
     const parts = [];
-    if (err.rejectReason) parts.push(String(err.rejectReason));
-    if (err.code) parts.push(String(err.code));
-    if (err.cause) {
-        const c = err.cause;
-        if (typeof c === 'string') parts.push(c);
-        else {
-            if (c.code) parts.push(String(c.code));
-            if (c.message) parts.push(String(c.message));
-            // Node RPC errors nest the reject string under response.data.error.
-            const nested = c.response && c.response.data && c.response.data.error;
-            if (nested) parts.push(typeof nested === 'string' ? nested : JSON.stringify(nested));
+    const pending = [err];
+    const seen = new Set();
+    while (pending.length > 0 && seen.size < 16) {
+        const value = pending.shift();
+        if (value == null) continue;
+        if (typeof value !== 'object') {
+            try { parts.push(String(value)); } catch { /* ignore unreadable values */ }
+            continue;
         }
+        if (seen.has(value)) continue;
+        seen.add(value);
+        for (const key of ['rejectReason', 'code', 'message']) {
+            try { if (value[key] != null) parts.push(String(value[key])); } catch { /* ignore unreadable fields */ }
+        }
+        try { if (value.cause != null) pending.push(value.cause); } catch { /* ignore unreadable causes */ }
+        // Node RPC errors nest the reject string under response.data.error.
+        try {
+            const nested = value.response?.data?.error;
+            if (nested != null) pending.push(nested);
+        } catch { /* ignore unreadable responses */ }
     }
-    if (err.message) parts.push(String(err.message));
     return parts.join(' ');
 }
 
