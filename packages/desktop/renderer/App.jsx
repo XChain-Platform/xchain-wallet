@@ -173,7 +173,6 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { pairTrezorSigner } from './signerFactories/trezorFactory.js';
 import { pairLedgerSigner } from './signerFactories/ledgerFactory.js';
@@ -2542,11 +2541,6 @@ function AppInner() {
                     }
                     header={
                         <>
-                            {/* row 142: outside the activeWalletId branch on
-                                purpose. An update offer must reach a user who has
-                                no wallet open yet, and the banner renders nothing
-                                until main says an update exists. */}
-                            <DesktopUpdateBanner />
                             {activeWalletId ? (
                                 <>
                                     {/* Cluster J FOLLOWUP 2: DemoBanner persists across every

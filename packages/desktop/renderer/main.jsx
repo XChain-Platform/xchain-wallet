@@ -21,6 +21,7 @@ import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
+import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 
 // §9.7 / G007: hot-swap the renderer realm's chain registry with the
 // hub batch main verified at boot. The renderer CSP pins connect-src
@@ -53,4 +54,13 @@ if (!container) {
 // there, because neither can proxy its own traffic.
 setShellCapabilities({ socksProxy: true });
 
-createRoot(container).render(<App />);
+createRoot(container).render(
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100dvh)' }}>
+        {/* The application menu is available before unlock, so update check
+            results stay mounted above every renderer state. */}
+        <DesktopUpdateBanner />
+        <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
+            <App />
+        </div>
+    </div>,
+);
