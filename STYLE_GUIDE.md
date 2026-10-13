@@ -29,7 +29,7 @@ One rule on every platform (phone, extension popup, desktop app, browser), decid
 - **Long forms** are split into `<FormSection>`s inside `<FormPage sectioned>`: bare sections divided by their heading when narrow, a stack of section cards when wide.
 - **The action row** (`actions`) sits at the end of the form, after the last field or the last section card, and wraps. Each button grows to share the row, so a lone button is full width; put the primary action last so it lands on the right. Errors go in `status`, just above the actions.
 
-The breakpoint is a viewport media query, not a container query (the Android WebView 102 the app ships to has no container queries) and not the shell: the old `isFull ? <div className={styles.card}>` pattern, chosen from `screenVariantFor(shell)`, put a card on a phone browser and is superseded. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
+The breakpoint is a viewport media query, not a container query. Chrome 102, the oldest Android WebView engine we support, has no container queries. Do not choose the layout from the shell: a phone browser gets the narrow form and a wide desktop window gets the card. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
 
 ### Viewport width scale
 
@@ -48,9 +48,9 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 
 The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
 
-### The list rule: fluid, with a readable maximum
+### The list rule: full width to the scrollbar
 
-`<ListPage>` content fills the available width on phones, split view and tablet portrait, then stops at a centred 48rem maximum so rows remain easy to scan. Screen reserves the scrollbar gutter, so content never runs under it. Lists remain wider than the 560px form column to leave room for tables and card grids. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+`<ListPage>` fills the Screen scroll body from the left page gutter to the reserved scrollbar gutter. Do not wrap it in a card or add a centered maximum width: lists, tables and card grids use all available content width. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
 
 ### Props
 
@@ -138,6 +138,18 @@ Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-thr
 ```
 
 Use `md` for normal inputs. Do not duplicate the `lg` font, padding, or height with inline styles.
+
+### Required and optional fields
+
+Mark optional fields, not required fields. Required fields use their plain label, while every optional field ends with the exact suffix `(optional)`. Do not mix this with `(required)` markers, and keep units outside the marker: `Feed fee (%) (optional)`, not `Feed fee (optional, %)`.
+
+`Input`, `Select`, and `Textarea` expose the matching requirement through `aria-required`. A plain string label is required by default. Use the `optional` prop when a field is optional, especially when its base label is translated or dynamic; the component appends the suffix and sets `aria-required="false"`. Existing literal labels ending in `(optional)` receive the same accessibility state. The native `required` prop remains available when browser constraint validation is appropriate.
+
+```jsx
+<Input label="Account name" />
+<Input label={t('send.memo')} optional />
+<Select label="Network" value={chainId}>…</Select>
+```
 
 ## Amount field (with USD / coin swap)
 
@@ -257,11 +269,15 @@ The icon set lives in `packages/core/src/ui/icons/`. Most action icons are lucid
 | Settings | `GearIcon` | hand-rolled |
 | Lock / Unlock | `LockIcon` / `UnlockIcon` | hand-rolled |
 
-**Adding a new icon**: import the lucide source at the top of `icons/index.jsx`, wrap it in a thin export that passes `LUCIDE_PROPS` (matches the wallet's 18×18 size + stroke). Don't pull the icon directly at call sites; keep the indirection so we can swap one glyph for another without touching every route.
+**Adding a new icon**: import the lucide source at the top of `icons/index.jsx`, wrap it in a thin export that passes `LUCIDE_PROPS`, and include `data-xc-icon`. Don't pull the icon directly at call sites; keep the indirection so we can swap one glyph for another without touching every route.
 
-## Spacing + typography tokens
+Shared icons are sized by the `svg[data-xc-icon]` rule in `tokens.css`. A component selects a named size by setting `--xc-icon-size`; the rule defaults to `--xc-icon-md`. Keep literal pixel fallbacks in SVG `width`, `height`, or Lucide `size` props. Never put `var()` in an SVG sizing attribute because Chrome 102 can render the icon at its 300px default instead.
+
+## Design tokens
 
 Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating its raw value in component styles, so theme and accessibility overrides apply uniformly.
+
+### Spacing and typography
 
 | Token | Value | Use for |
 |---|---|---|
@@ -279,6 +295,28 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 | `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
 | `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
 
+### Icon sizes, radii, shadows and stacking
+
+| Token | Value |
+|---|---|
+| `--xc-icon-xs` | 14px |
+| `--xc-icon-sm` | 16px |
+| `--xc-icon-md` | 18px |
+| `--xc-icon-lg` | 20px |
+| `--xc-icon-xl` | 24px |
+| `--xc-radius-sm` | 4px |
+| `--xc-radius-md` | 8px |
+| `--xc-radius-lg` | 12px |
+| `--xc-radius-pill` | 9999px |
+| `--xc-shadow-sm` | 0 1px 2px rgba(15, 23, 42, 0.06) |
+| `--xc-shadow-md` | 0 4px 12px rgba(15, 23, 42, 0.08) |
+| `--xc-z-base` | 1 |
+| `--xc-z-sticky` | 20 |
+| `--xc-z-dropdown` | 50 |
+| `--xc-z-overlay` | 60 |
+| `--xc-z-modal` | 1000 |
+| `--xc-z-toast` | 9999 |
+
 ## Colors
 
 Same source: `tokens.css`. Highlights:
@@ -291,9 +329,22 @@ Same source: `tokens.css`. Highlights:
 | `--xc-surface` / `--xc-surface-raised` | card backgrounds |
 | `--xc-bg-muted` | hover backgrounds |
 | `--xc-border` / `--xc-border-strong` | hairlines |
-| `--xc-danger` / `--xc-warning` | error / warning states |
+| `--xc-danger`, `--xc-danger-fg`, `--xc-danger-bg`, `--xc-danger-text`, `--xc-on-danger` | danger actions, glyphs, tinted panels, panel text and text on danger fills |
+| `--xc-info`, `--xc-info-bg`, `--xc-info-text` | informational accents, tinted panels and panel text |
+| `--xc-warning`, `--xc-warning-bg`, `--xc-warning-text` | warning accents, tinted panels and panel text |
+| `--xc-success`, `--xc-success-fill`, `--xc-success-bg`, `--xc-on-success` | success glyphs, fills, tinted panels and text on success fills |
 
 Do not hard-code interface colors in components. Use tokens, or `color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%)` for a derived hover tint; that pattern is in the existing `.back:hover` rule and survives theme swaps. Token definitions, encoded image data, and data-driven semantic palettes are the places where literal color values belong.
+
+## UI copy
+
+Use sentence case for page titles, headings, buttons, menu items, field labels and status messages. Preserve the normal spelling of proper nouns, tickers and initialisms.
+
+In user-facing copy, say **recovery phrase**, not seed phrase or mnemonic, and **network fee**, not transaction fee, miner fee or gas fee. Protocol-specific fees remain distinct from the network fee.
+
+## Browser baseline
+
+Chrome 102 is the oldest supported Android WebView engine. CSS and SVG must keep working there: use viewport media queries instead of container queries, guard newer viewport units with `@supports`, and never use `var()` in SVG sizing attributes.
 
 ## Asset selectors (tap to repick)
 

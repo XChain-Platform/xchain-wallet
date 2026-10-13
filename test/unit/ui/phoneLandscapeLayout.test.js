@@ -25,7 +25,7 @@ describe('phone landscape layout', () => {
         expect(appHeader).toContain(landscapeQuery);
         expect(appHeader).toMatch(/\.bar\s*\{[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-2\);/);
         expect(bottomBar).toContain(landscapeQuery);
-        expect(bottomBar).toMatch(/\.bar\s*\{\s*height: 44px;/);
+        expect(bottomBar).toMatch(/\.bar\s*\{\s*min-height: 2\.75rem;/);
         expect(bottomBar).toMatch(/\.tab\s*\{[\s\S]*?min-height: var\(--xc-tap-min\);/);
         expect(leftNav).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?padding-bottom: calc\(44px/);
         expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.header,[\s\S]*?padding: var\(--xc-space-1\) var\(--xc-space-3\);/);

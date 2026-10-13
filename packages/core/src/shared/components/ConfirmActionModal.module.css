@@ -204,16 +204,16 @@
     min-width: 0;
 }
 
-/* The shared Button defaults to an ellipsis. Confirmation verbs include the
-   reviewed action, so this surface wraps the complete label instead. */
-.footer button,
-.footer button > span:last-child {
+/* The final action stays fully visible because its amount can exceed the
+   single-line width of a 320px screen. */
+.footer > button {
+    block-size: auto;
     white-space: normal;
-    overflow-wrap: anywhere;
 }
 
-.footer button > span:last-child {
-    overflow: visible;
+.footer > button > span:last-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
     text-overflow: clip;
 }
 

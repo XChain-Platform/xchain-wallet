@@ -4,15 +4,17 @@
 // ConfirmActionModal render + interaction contract (§5.1-5.2).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
 });
 
@@ -40,6 +42,14 @@ function base(overrides = {}) {
 
 describe('ConfirmActionModal', () => {
 
+    it('has no serious axe violations in its open state', async () => {
+        const { container } = render(<ConfirmActionModal {...base({
+            credentials: <label>Password<input type="password" /></label>,
+        })} />);
+
+        await expectNoSeriousAxeViolations(container);
+    });
+
     it('renders nothing when phase is idle', () => {
         const { container } = render(<ConfirmActionModal {...base({ phase: 'idle' })} />);
         expect(container.firstChild).toBeNull();
@@ -51,8 +61,61 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
         expect(screen.getByTestId('preflight-panel')).toBeTruthy();
         expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe('Approve Send 5 JDOG to bc1qxyz');
+            .toBe('Send 5 JDOG');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
+        expect(screen.queryByTestId('contract-call-warning')).toBeNull();
+    });
+
+    it('uses a short warning only when approving a contract call', () => {
+        render(<ConfirmActionModal {...base({
+            decoded: { summary: 'Call contract #21', details: [], warnings: [] },
+        })} />);
+
+        expect(screen.getByTestId('contract-call-warning')).toHaveTextContent(
+            'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.',
+        );
+    });
+
+    it('names amount-free actions and updates when the reviewed amount changes', () => {
+        const { rerender } = render(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Send 0.5 BTC to bc1qxyz',
+                details: [
+                    { label: 'Token', value: 'BTC' },
+                    { label: 'Amount', value: '0.5' },
+                ],
+                warnings: [],
+            },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Send 0\.5 BTC$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Send 12345678901234567890.12345678 BTC to bc1qxyz',
+                details: [
+                    { label: 'Token', value: 'BTC' },
+                    { label: 'Amount', value: '12345678901234567890.12345678' },
+                ],
+                warnings: [],
+            },
+        })} />);
+        expect(screen.getByTestId('confirm-approve'))
+            .toHaveTextContent(/^Send 12,345,678,901,234,567,890\.12345678 BTC$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Create dispenser on Bitcoin: lock 10 TOKEN', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Create dispenser$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Cancel order on Bitcoin (#17)', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Cancel order$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Publish 123.45 to feed 700', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Publish 123\.45$/);
     });
 
     it('orders and labels the review as recipient, amount, fee, then total', () => {
@@ -93,7 +156,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('action-intent').querySelector('p').textContent)
             .toBe(`Send ${expected} JDOG to bc1qxyz`);
         expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe(`Approve Send ${expected} JDOG to bc1qxyz`);
+            .toBe(`Send ${expected} JDOG`);
     });
 
     it('shows an exact total for a native payment without adding unlike units', () => {
@@ -225,7 +288,7 @@ describe('ConfirmActionModal', () => {
             .toHaveTextContent(`Network fee: 0.000025 BTC (${fiatValue})`);
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeVisible();
-        expect(approve).toHaveTextContent(`Approve ${displayedSummary}`);
+        expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
 
         const intentCss = readFileSync(
             'packages/core/src/shared/components/ActionIntentSummary.module.css',
@@ -243,7 +306,10 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
         expect(modalCss).toMatch(/\.page\s*\{[^}]*container-type:\s*inline-size/s);
         expect(modalCss).toMatch(/\.credentials dd\s*\{[^}]*white-space:\s*pre-wrap/s);
-        expect(modalCss).toMatch(/\.footer button > span:last-child\s*\{[^}]*overflow:\s*visible[^}]*text-overflow:\s*clip/s);
+        expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
+        expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
+        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
         expect(modalCss).toMatch(/@container \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
@@ -326,6 +392,13 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
     });
 
+    it('replaces internal error identifiers with plain copy', () => {
+        render(<ConfirmActionModal {...base({ error: 'SDKEncoderError: INSUFFICIENT_FUNDS' })} />);
+        const text = screen.getByTestId('confirm-error').textContent;
+        expect(text).toMatch(/wallet service returned no explanation/i);
+        expect(text).not.toMatch(/SDKEncoderError|INSUFFICIENT_FUNDS/);
+    });
+
     it('explains when a failed request carries no diagnostic message', () => {
         render(<ConfirmActionModal {...base({ error: {} })} />);
         expect(screen.getByTestId('confirm-error').textContent)
@@ -360,6 +433,19 @@ describe('ConfirmActionModal', () => {
     it('Reject is disabled during signing (post-signature exit lockout)', () => {
         render(<ConfirmActionModal {...base({ phase: 'signing' })} />);
         expect(screen.getByTestId('confirm-reject').disabled).toBe(true);
+    });
+
+    it('shows elapsed signing time and a safe next step after the timeout', () => {
+        vi.useFakeTimers();
+        render(<ConfirmActionModal {...base({ phase: 'signing' })} />);
+
+        expect(screen.queryByTestId('confirm-signing-elapsed')).toBeNull();
+        act(() => vi.advanceTimersByTime(3_000));
+        expect(screen.getByTestId('confirm-signing-elapsed')).toHaveTextContent('3 seconds');
+
+        act(() => vi.advanceTimersByTime(57_000));
+        expect(screen.getByTestId('confirm-signing-timeout')).toHaveTextContent(/check History/i);
+        expect(screen.getByTestId('confirm-reject')).toBeDisabled();
     });
 
     it('a non-overridable error keeps Approve disabled with no ack checkbox', () => {

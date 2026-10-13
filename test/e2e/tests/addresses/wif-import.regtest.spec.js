@@ -166,7 +166,7 @@ async function gotoPalette(page, title) {
 async function gotoAddressList(page) {
     const filters = page.getByRole('tablist', { name: 'Filter by address type' });
     for (let i = 0; i < 3 && await filters.count() === 0; i++) {
-        const back = page.getByRole('button', { name: 'Back', exact: true });
+        const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
         else await gotoPalette(page, 'Addresses');
         await filters.or(page.getByRole('status', { name: 'Loading addresses' })).first()
