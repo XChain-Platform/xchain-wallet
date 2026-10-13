@@ -144,7 +144,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 return;
             }
             if (got !== expected) {
-                setQuizError(`Word #${p} doesn't match. Double-check your written copy.`);
+                setQuizError(`Word ${p} does not match your written copy.`);
                 return;
             }
         }
@@ -183,7 +183,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
             setStage('ads-notice');
         } catch (err) {
-            setPersistError(err?.message || 'Failed to create wallet.');
+            setPersistError(err?.message || 'Could not create the wallet.');
             setStage('verify');
         }
     }
@@ -236,8 +236,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 <span className={styles.persistingSpinner} aria-hidden="true" />
                 <h1 className={titleClass}>Creating your wallet</h1>
                 <p className={subtitleClass}>
-                    Encrypting your wallet with your password. On some phones this
-                    takes a minute or two. Keep the app open until it finishes.
+                    XChain Platform is encrypting your wallet with your password.
+                    This can take a minute on some devices. Keep the app open.
                 </p>
             </div>
         );
@@ -292,8 +292,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? "Type the words at the positions below. We'll check them against the phrase you just wrote down. There's no second chance to copy it after this step."
-                            : 'Type the words at these positions to confirm.'}
+                            ? 'Enter the requested words from the recovery phrase you wrote down.'
+                            : 'Enter the requested words to confirm your recovery phrase.'}
                     </p>
                 </header>
                 <ol className={styles.quizList}>
@@ -350,8 +350,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
-                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
+                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. Keep the phrase private. You can use it to restore your wallet on a new device.`
+                            : `Write these ${wordCount} words on paper and store your recovery phrase safely.`}
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
@@ -364,9 +364,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     which is what the wallet has always told users to do, and
                     what MnemonicGrid already said this UI did. */}
                 <p className={styles.copyHint}>
-                    Write these words on paper. They cannot be copied: a
-                    clipboard is readable by other apps and, on a phone, is
-                    often synced to your other devices.
+                    Copying is disabled to keep your recovery phrase out of
+                    shared clipboards.
                 </p>
                 <label className={styles.confirmRow}>
                     <input
@@ -376,9 +375,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         disabled={stage === 'persisting'}
                     />
                     <span>
-                        {isFull
-                            ? 'I have written down my recovery phrase and stored it safely.'
-                            : "I've saved my recovery phrase."}
+                        I have saved my recovery phrase safely.
                     </span>
                 </label>
             </FormPage>
@@ -430,8 +427,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 </h1>
                 <p className={subtitleClass}>
                     {isFull
-                        ? "Your password encrypts the wallet on this device. It can't be recovered. If you forget it, use the recovery phrase on the next screen to restore access."
-                        : 'Your password encrypts the wallet on this device.'}
+                        ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
+                        : 'Your password encrypts this wallet on this device.'}
                 </p>
             </header>
             <Input

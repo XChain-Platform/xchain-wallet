@@ -222,7 +222,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             setMnemonic(null);
             setStage('done');
         } catch (err) {
-            setError(err?.message || 'Failed to create BIP39 wallet.');
+            setError(err?.message || 'Could not create the BIP39 wallet.');
             setStage('verify');
         }
     }
@@ -255,8 +255,8 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             title={{
                 explain: 'Upgrade recovery phrase',
                 create: 'Set up new wallet',
-                backup: 'Back up new phrase',
-                verify: 'Verify new phrase',
+                backup: 'Back up recovery phrase',
+                verify: 'Verify recovery phrase',
                 submitting: 'Creating new wallet',
                 done: 'BIP39 wallet created',
             }[stage]}
@@ -271,25 +271,21 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     if (stage === 'explain') {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Why migrate?</h2>
+                <h2 className={styles.successTitle}>Upgrade to a BIP39 recovery phrase</h2>
                 <p style={explainParagraphStyle}>
-                    Your current wallet uses the legacy 12-word recovery format
-                    from Counterwallet and FreeWallet. BIP39 is a widely
-                    supported recovery-phrase standard and gives this wallet
-                    separate addresses for each supported network.
+                    Your current wallet uses the legacy 12-word Counterwallet
+                    recovery format. BIP39 is widely supported and gives your
+                    wallet separate addresses for each supported chain.
                 </p>
                 <p style={explainParagraphStyle}>
-                    This process creates a separate BIP39 wallet. It does not
-                    convert, delete, or automatically move anything from your
-                    legacy wallet. You will see and verify the new recovery
-                    phrase before the new wallet is saved or any sweep can be
-                    opened.
+                    XChain Platform creates a separate BIP39 wallet and leaves
+                    your legacy wallet unchanged. You will back up and verify
+                    the new recovery phrase before the wallet is saved.
                 </p>
                 <p style={explainParagraphStyle}>
-                    Afterward, you can review a sweep for each legacy address.
-                    Sweeps move tokens and token ownerships, not native coin
-                    balances such as BTC, LTC, or DOGE. Send native coins
-                    separately, and leave enough behind to pay network fees.
+                    Afterward, you can review each sweep. Sweeps move tokens and
+                    token ownerships, but not BTC, LTC, or DOGE balances. Move
+                    those balances separately and keep enough for network fees.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack} icon={<Icon.BackIcon />}>Not now</Button>
@@ -320,10 +316,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             >
                 <h2 className={styles.successTitle}>Write down your recovery phrase</h2>
                 <p style={explainParagraphStyle}>
-                    These 12 words are the only way to restore your new BIP39
-                    wallet. Write them down on paper and store them safely.
-                    Never save them in email, cloud storage, or a photo. Anyone
-                    who has these words can spend your funds.
+                    These 12 words are your new recovery phrase. Write them on
+                    paper, store them safely, and keep them private. You can use
+                    the phrase to restore your BIP39 wallet on another device.
                 </p>
                 {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
                 <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>
@@ -393,9 +388,9 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 <div role="status" aria-live="polite">
                     <h2 className={styles.successTitle}>Creating your new wallet</h2>
                     <p style={explainParagraphStyle}>
-                        Encrypting the new BIP39 wallet with your password. This
-                        can take a minute on some devices. Keep the app open.
-                        Your legacy wallet remains unchanged.
+                        XChain Platform is encrypting the new BIP39 wallet with
+                        your password. This can take a minute on some devices.
+                        Keep the app open. Your legacy wallet stays unchanged.
                     </p>
                 </div>
             </FormPage>,
@@ -407,7 +402,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             <ListPage>
                 <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
                 <p style={explainParagraphStyle}>
-                    Your new phrase is verified and the new wallet is saved.
+                    Your new recovery phrase is verified and the wallet is saved.
                     Your legacy wallet is unchanged, and nothing moves until
                     you review and submit a sweep. Each sweep can move token
                     balances and token ownerships, and checks that gated-content
@@ -527,7 +522,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             <p style={explainParagraphStyle}>
                 This password encrypts only the new wallet on this device. Your
-                legacy wallet password is not needed. Next, you will write down
+                legacy wallet password is not needed. Next, you will save
                 and verify a new recovery phrase before the wallet is created.
             </p>
         </FormPage>,

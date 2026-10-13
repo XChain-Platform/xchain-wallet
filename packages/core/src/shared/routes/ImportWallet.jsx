@@ -268,7 +268,7 @@ export function ImportWallet({
             return;
         }
         setBackupScanning(false);
-        setError('That QR is not a backup pointer. Use the recovery-phrase lane for a seed or key QR.');
+        setError('That QR code is not a backup pointer. Use Recovery phrase for a recovery phrase or private-key QR code.');
     }
 
     function clearBackupPointer() {
@@ -439,7 +439,7 @@ export function ImportWallet({
         if (busy) return;
         const trimmed = normalizePhraseEntry(mnemonic);
         if (trimmed.length === 0) {
-            setError('Recovery phrase is required.');
+            setError('Enter a recovery phrase.');
             return;
         }
         const wordCount = trimmed.split(' ').length;
@@ -500,7 +500,7 @@ export function ImportWallet({
                 showRestoredLabels(result?.labelSync);
             }
         } catch (err) {
-            setError(userFacingMessage(err, 'Failed to import wallet.'));
+            setError(userFacingMessage(err, 'Could not import the wallet.'));
             setBusy(false);
         }
     }
@@ -650,22 +650,22 @@ export function ImportWallet({
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
-                            ? 'Paste your 12-word FreeWallet recovery phrase. We detect BIP39 or the legacy Counterwallet/FreeWallet format automatically so the correct address derivation is used.'
-                            : 'Paste your 12-word FreeWallet recovery phrase. Its format is detected automatically.')
+                            ? 'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.'
+                            : 'Enter your 12-word FreeWallet recovery phrase.')
                         : lane === 'backup'
                             ? (isFull
                                 ? (mode === 'add'
-                                    ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
+                                    ? 'Restore an encrypted backup as a new wallet. Your existing wallets stay in place.'
                                     // It used to say "the password",
                                     // singular, one line above three password
                                     // boxes.
-                                    : 'Pick a `.xchain-wallet` file you exported from this app, then fill in the three passwords a restore needs.')
+                                    : 'Choose a `.xchain-wallet` backup. Then enter its file, wallet, and device passwords.')
                                 : (mode === 'add'
-                                    ? 'Restore as a new wallet (won\'t replace your existing one).'
-                                    : 'Pick a backup file, then fill in the three passwords below.'))
+                                    ? 'Restore as a new wallet. Your existing wallets stay in place.'
+                                    : 'Choose a backup file, then enter the three passwords below.'))
                             : (isFull
-                                ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word recovery phrase. The format is detected automatically.'
-                                : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
+                                ? 'Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.'
+                                : 'Enter a recovery phrase with 12, 15, 18, 21, or 24 words.')}
                 </p>
             </header>
             {laneSwitcher}
@@ -844,7 +844,7 @@ export function ImportWallet({
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
-                    <QrScanner onFrame={handleQrFrame} alt="Recovery-phrase QR scanner" />
+                    <QrScanner onFrame={handleQrFrame} alt="Recovery phrase QR scanner" />
                 </div>
             ) : null}
             <div
@@ -923,7 +923,7 @@ export function ImportWallet({
                 label="Password"
                 hint={
                     isFull
-                        ? `At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the wallet on this device.`
+                        ? `At least ${MIN_PASSWORD_LENGTH} characters. Encrypts this wallet on this device.`
                         : `At least ${MIN_PASSWORD_LENGTH} characters.`
                 }
                 value={password}
@@ -960,7 +960,7 @@ export function ImportWallet({
                         <span>This wallet uses a BIP39 passphrase</span>
                         <InfoTip
                             aria="BIP39 passphrase help"
-                            label="The optional 25th word that derives a different wallet from the same recovery phrase. Required to land on the same addresses as the original software wallet. You enter it once here; the wallet stores it, protected by your password, and will not ask for it again on this device. Hardware wallets (Trezor / Ledger) handle passphrases on the device itself; pair a hardware wallet via Add Account → Hardware Signer instead."
+                            label="A BIP39 passphrase creates a different wallet from the same recovery phrase. Enter the exact passphrase from the original wallet. XChain Platform stores it on this device, protected by your password, and does not ask for it again here. Hardware wallets handle passphrases on the device. Use Add Account > Hardware Signer to pair one."
                         />
                     </label>
                     {showPassphrase ? (

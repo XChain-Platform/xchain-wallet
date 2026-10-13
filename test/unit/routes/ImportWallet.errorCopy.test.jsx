@@ -46,7 +46,7 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
         const importMnemonic = vi.fn().mockRejectedValue(new Error('importMnemonic: mnemonic is required'));
         await submitWith(importMnemonic);
 
-        await screen.findByText('Failed to import wallet.');
+        await screen.findByText('Could not import the wallet.');
         expect(screen.queryByText(/importMnemonic:/)).toBeNull();
     });
 
@@ -56,7 +56,7 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
         await submitWith(importMnemonic);
 
         await screen.findByText(written);
-        expect(screen.queryByText('Failed to import wallet.')).toBeNull();
+        expect(screen.queryByText('Could not import the wallet.')).toBeNull();
     });
 });
 
@@ -64,7 +64,7 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
 // record, so the BIP39 passphrase InfoTip must say so rather than
 // implying the user will be asked for it again.
 describe('the BIP39 passphrase InfoTip on import describes storage, not re-entry', () => {
-    it('says the wallet stores the passphrase and will not ask again on this device', () => {
+    it('says XChain Platform stores the passphrase on this device', () => {
         render(
             <MessagingProvider shell="web" messaging={{}}>
                 <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />
@@ -72,7 +72,7 @@ describe('the BIP39 passphrase InfoTip on import describes storage, not re-entry
         );
         fireEvent.click(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent(
-            'the wallet stores it, protected by your password, and will not ask for it again on this device',
+            'XChain Platform stores it on this device, protected by your password',
         );
     });
 });
