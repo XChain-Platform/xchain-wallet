@@ -37,6 +37,7 @@
 /* Single-line technical values stay intact and scroll within their control.
    This keeps long hex and JSON arguments from widening the screen. */
 .monospaceInput {
+    composes: scrollArea from '../../ui/Screen.module.css';
     min-width: 0;
     max-width: 100%;
     font-family: var(--xc-font-mono);
@@ -53,6 +54,7 @@
 }
 
 .codeSource {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: block;
     width: 100%;
     min-width: 0;

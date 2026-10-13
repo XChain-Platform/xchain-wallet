@@ -40,43 +40,47 @@
     background: var(--xc-surface-raised);
 }
 
-.body {
-    flex: 1 1 auto;
-    min-height: 0;
-    padding: var(--xc-page-top) var(--xc-page-gutter);
-    overflow-y: auto;
-    overflow-x: hidden;
-    scroll-padding-block: var(--xc-space-3);
+.scrollArea {
     /* Content ends at the scrollbar and never runs under it, and a screen
        that scrolls is as wide as one that does not. */
     scrollbar-gutter: stable;
 }
 
-/* macOS draws overlay scrollbars that take no space, so the gutter above
-   reserves nothing there and full-width lists ran under the bar (desktop
-   app, 2026-10-12). A styled scrollbar always takes layout space. Only on
-   a mouse or trackpad: touch screens keep their thin transient indicator.
+/* The WebKit rules are the Chrome 102-safe path and make overlay scrollbars
+   consume their own narrow lane. Touch screens keep their transient indicator.
    No standard scrollbar-width / scrollbar-color here, since Chromium 121+
    ignores these ::-webkit-scrollbar rules wherever those are set. */
 @media (hover: hover) and (pointer: fine) {
-    .body::-webkit-scrollbar {
+    .scrollArea::-webkit-scrollbar {
         width: 10px;
+        height: 10px;
     }
 
-    .body::-webkit-scrollbar-track {
+    .scrollArea::-webkit-scrollbar-track {
         background: transparent;
     }
 
-    .body::-webkit-scrollbar-thumb {
+    .scrollArea::-webkit-scrollbar-thumb {
         background: var(--xc-border-strong);
         border: 2px solid transparent;
         border-radius: 5px;
         background-clip: padding-box;
     }
 
-    .body::-webkit-scrollbar-thumb:hover {
+    .scrollArea::-webkit-scrollbar-thumb:hover {
         background-color: var(--xc-text-muted);
     }
+}
+
+.body {
+    composes: scrollArea;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--xc-page-top) var(--xc-page-gutter);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-padding-block: var(--xc-space-3);
+    scrollbar-gutter: stable;
 }
 
 /* Keep the screen's last row clear of the iOS home indicator. Whichever of

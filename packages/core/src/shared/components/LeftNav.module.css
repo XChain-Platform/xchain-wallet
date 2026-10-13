@@ -90,6 +90,7 @@
    the header row. They are the part that can grow, so the cap lives here
    rather than on .header. */
 .notices {
+    composes: scrollArea from '../../ui/Screen.module.css';
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -174,6 +175,7 @@
 }
 
 .nav {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -186,7 +188,6 @@
     padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-color: var(--xc-border) var(--xc-surface-raised);
 }
 
 .nav > .brand,

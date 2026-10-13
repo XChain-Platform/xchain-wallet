@@ -156,6 +156,7 @@
 /* §5.5 message variant: the full signed text, verbatim. It wraps and
    long messages scroll vertically inside their own labelled box. */
 .messageText {
+    composes: scrollArea from '../../ui/Screen.module.css';
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-bg-muted);

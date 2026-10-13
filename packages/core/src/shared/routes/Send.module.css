@@ -344,6 +344,7 @@
 }
 
 .coinControlRows {
+    composes: scrollArea from '../../ui/Screen.module.css';
     max-height: 18rem;
     margin-top: var(--xc-space-2);
     overflow-y: auto;
