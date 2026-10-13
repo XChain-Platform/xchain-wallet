@@ -87,6 +87,7 @@ export function PriceAlertForm({
     );
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState(/** @type {string|null} */ (null));
+    const unavailableChain = chainId && !MAINNET_PRICE_CHAINS.includes(chainId) ? chainId : null;
 
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
@@ -132,6 +133,11 @@ export function PriceAlertForm({
                         onChange={(e) => setChainId(e.target.value)}
                         style={FIELD}
                     >
+                        {unavailableChain ? (
+                            <option value={unavailableChain}>
+                                {coinLabelForChain(unavailableChain)} (unavailable)
+                            </option>
+                        ) : null}
                         {MAINNET_PRICE_CHAINS.map((c) => (
                             <option key={c} value={c}>{coinLabelForChain(c)}</option>
                         ))}

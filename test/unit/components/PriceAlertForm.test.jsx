@@ -101,4 +101,15 @@ describe('PriceAlertForm', () => {
             fiatCurrency: 'eur',
         }));
     });
+
+    it('keeps an unavailable coin visible while editing an existing alert', () => {
+        render(<PriceAlertForm
+            initialAlert={{ chainId: 'retired-mainnet', direction: 'above', targetFiat: 10 }}
+            onCreate={vi.fn()}
+        />);
+
+        const coin = screen.getByLabelText('Coin');
+        expect(coin.value).toBe('retired-mainnet');
+        expect(screen.getByRole('option', { name: 'Retired (unavailable)' })).toBeTruthy();
+    });
 });

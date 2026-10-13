@@ -272,15 +272,17 @@ describe('PriceAlertWatcher', () => {
         expect(notify).toHaveBeenCalledTimes(1);
     });
 
-    it('re-fires after the alert is re-armed (new watcher session)', async () => {
+    it('re-fires after the alert is re-armed in the same watcher session', async () => {
         const alerts = [armedAlert()];
         const { watcher, notify } = makeWatcher({ alerts, price: 71000 });
         await watcher.pollOnce();
         expect(notify).toHaveBeenCalledTimes(1);
-        // operator re-arms; a fresh poll in a NEW session should fire again
+
         alerts[0].status = 'armed';
-        const second = makeWatcher({ alerts, price: 71000 });
-        await second.watcher.pollOnce();
-        expect(second.notify).toHaveBeenCalledTimes(1);
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
+
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
     });
 });
