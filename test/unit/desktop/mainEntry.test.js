@@ -28,7 +28,9 @@ const electron = vi.hoisted(() => {
     const webRequest = { onHeadersReceived: vi.fn() };
     class BrowserWindow {
         static instances = [];
-        static fromWebContents = vi.fn(() => ownerWindow);
+        static fromWebContents = vi.fn((contents) => (
+            BrowserWindow.instances.find((win) => win.webContents === contents) ?? ownerWindow
+        ));
 
         constructor(options) {
             browserWindowOptions.push(options);
@@ -38,8 +40,12 @@ const electron = vi.hoisted(() => {
             this.once = vi.fn();
             this.on = vi.fn();
             this.isDestroyed = vi.fn(() => false);
+            this.isMinimized = vi.fn(() => false);
             this.isVisible = vi.fn(() => true);
             this.hide = vi.fn();
+            this.restore = vi.fn();
+            this.show = vi.fn();
+            this.focus = vi.fn();
             this.getNormalBounds = vi.fn(() => state.normalBounds);
             BrowserWindow.instances.push(this);
         }
@@ -301,6 +307,62 @@ describe('desktop main entry point', () => {
         protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(event);
 
         expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+    });
+
+    it('lets only the selected primary window claim a parked deep link', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const selected = electron.BrowserWindow.instances[0];
+        const sibling = main.createWindow();
+        const detached = main.createWindow({ initialView: 'history' });
+        const link = {
+            scheme: 'dogecoin',
+            raw: 'dogecoin:DRecipient?amount=3',
+            parsed: { address: 'DRecipient', amount: '3' },
+        };
+        protocol.pickDeepLinkTarget.mockReturnValue(selected);
+        protocol.deepLinkSlot.take.mockReturnValue(link);
+        protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(link);
+        const takePending = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain:deep-link-take')[1];
+        const invokeFrom = (win) => takePending({
+            sender: win.webContents,
+            senderFrame: { url: appIndex },
+        });
+
+        await expect(invokeFrom(sibling)).resolves.toBeNull();
+        await expect(invokeFrom(detached)).resolves.toBeNull();
+        expect(protocol.deepLinkSlot.take).not.toHaveBeenCalled();
+        await expect(invokeFrom(selected)).resolves.toEqual(link);
+        expect(protocol.deepLinkSlot.take).toHaveBeenCalledOnce();
+    });
+
+    it('returns a committed message result when a sibling closes during notification', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        const main = await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const sender = electron.BrowserWindow.instances[0];
+        const closingSibling = main.createWindow();
+        closingSibling.webContents.send.mockImplementation(() => {
+            throw new Error('Object has been destroyed');
+        });
+        const response = { ok: true, result: { walletId: 'wallet-2' } };
+        runtime.handleIpcMessage.mockResolvedValue(response);
+        const handleMessage = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain-wallet:message')[1];
+
+        await expect(handleMessage({
+            sender: sender.webContents,
+            senderFrame: { url: appIndex },
+        }, {
+            type: 'wallet.setActive',
+            request: { walletId: 'wallet-2' },
+        })).resolves.toEqual(response);
+        expect(closingSibling.webContents.send).toHaveBeenCalledWith(
+            'xchain:state-changed',
+            { kind: 'active-wallet', walletId: 'wallet-2' },
+        );
     });
 
     it('restores, shows, and focuses the Electron window receiving a link', async () => {
