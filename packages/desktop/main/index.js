@@ -128,6 +128,8 @@ let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
 let windowBoundsStore = /** @type {FileWindowBoundsStore | null} */ (null);
 let rememberedWindowBounds = /** @type {{ x?: number, y?: number, width: number, height: number } | null} */ (null);
 let windowBoundsSaveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
+let isQuitting = false;
+let canCreateWindows = false;
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
@@ -282,6 +284,49 @@ function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
 }
 
+function windowToReveal() {
+    const live = liveWindows();
+    return pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w))
+        ?? live[live.length - 1]
+        ?? null;
+}
+
+/**
+ * Reveal and focus an existing window after an OS-level activation.
+ *
+ * @param {BrowserWindow | null} win
+ * @returns {boolean}
+ */
+export function revealWindow(win) {
+    if (!win || win.isDestroyed()) return false;
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+    return true;
+}
+
+function hasVisibleWindow() {
+    return liveWindows().some((win) => win.isVisible());
+}
+
+/**
+ * Apply the native close-button convention without interfering with an
+ * explicit application quit.
+ *
+ * @param {BrowserWindow} win
+ * @param {{ preventDefault: () => void }} event
+ * @param {{ platform?: string, quitting?: boolean }} [options]
+ * @returns {boolean} true when the close becomes a hide
+ */
+export function applyWindowCloseConvention(win, event, options = {}) {
+    const platform = options.platform ?? process.platform;
+    const quitting = options.quitting ?? isQuitting;
+    if (platform !== 'darwin' || quitting) return false;
+    event.preventDefault();
+    win.hide();
+    return true;
+}
+
 function broadcastToWindows(channel, payload, excludedContents = null) {
     for (const w of liveWindows()) {
         if (w.webContents === excludedContents) continue;
@@ -298,9 +343,18 @@ function forwardDeepLink(event) {
     if (live.length === 0) return;
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
     // Only detached windows are open: a fresh window claims the link on mount
-    if (!target) { createWindow(); return; }
+    if (!target) {
+        if (canCreateWindows) void openWindowAfterIdleCheck();
+        return;
+    }
+    if (!target.isVisible()) {
+        void restoreWindowAfterIdleCheck().then(() => {
+            if (!target.isDestroyed()) target.webContents.send('xchain:uri', event);
+        });
+        return;
+    }
     target.webContents.send('xchain:uri', event);
-    if (!target.isFocused()) target.focus();
+    revealWindow(target);
 }
 
 // The real SDK, adapted once at load. The extension and the web shell start
@@ -448,9 +502,12 @@ function createWindow(opts = {}) {
     });
     win.on('move', () => { rememberWindowBounds(win); });
     win.on('resize', () => { rememberWindowBounds(win); });
-    win.on('close', () => {
+    win.on('close', (event) => {
         rememberWindowBounds(win);
         void flushWindowBounds();
+        if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
+            startWindowlessIdleLock();
+        }
     });
     win.on('closed', () => { windows.delete(win); });
 
@@ -535,7 +592,7 @@ function requestUpdateCheck({ visible = false } = {}) {
 function startWindowlessIdleLock() {
     if (windowlessIdleTimer) return;
     windowlessIdleTimer = setInterval(() => {
-        if (!runtime || BrowserWindow.getAllWindows().length > 0) return;
+        if (!runtime || hasVisibleWindow()) return;
         void enforceIdleAutoLock(runtime).then((res) => {
             if (res.locked) console.info(`[xchain] auto-lock: windowless session locked (${res.reason})`);
         });
@@ -550,8 +607,30 @@ function stopWindowlessIdleLock() {
     windowlessIdleTimer = null;
 }
 
+function runWindowlessIdleGate(action, logAction) {
+    if (reopenInFlight) return reopenInFlight;
+    reopenInFlight = (async () => {
+        try {
+            if (runtime) {
+                const res = await enforceIdleAutoLock(runtime);
+                if (res.locked) console.info(`[xchain] auto-lock: ${logAction} window locked (${res.reason})`);
+            }
+        } catch (err) {
+            // Cannot decide, so it costs a password prompt rather than an unlock.
+            console.error(`[xchain] auto-lock check before ${logAction} failed:`, err);
+            if (runtime) {
+                tearDownHost(runtime);
+                try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
+            }
+        }
+        action();
+    })().finally(() => { reopenInFlight = null; });
+    return reopenInFlight;
+}
+
 /**
- * Open a window from the dock or File > New Window. With no window live, the
+ * Open a window from File > New Window or for a deep link with no primary
+ * window. With no window visible, the
  * idle check runs and is awaited BEFORE the renderer exists, because its
  * first message and its mount-time report both re-stamp the idle clock.
  * Two quick clicks share one check and open one window.
@@ -559,28 +638,32 @@ function stopWindowlessIdleLock() {
  * @returns {Promise<void>}
  */
 function openWindowAfterIdleCheck() {
-    if (BrowserWindow.getAllWindows().length > 0) {
+    if (hasVisibleWindow()) {
         createWindow();
         return Promise.resolve();
     }
-    if (reopenInFlight) return reopenInFlight;
-    reopenInFlight = (async () => {
-        try {
-            if (runtime) {
-                const res = await enforceIdleAutoLock(runtime);
-                if (res.locked) console.info(`[xchain] auto-lock: reopened window locked (${res.reason})`);
-            }
-        } catch (err) {
-            // Cannot decide, so it costs a password prompt rather than an unlock.
-            console.error('[xchain] auto-lock check before reopening failed:', err);
-            if (runtime) {
-                tearDownHost(runtime);
-                try { await runtime.sessionBackend.clear(); } catch { /* logged by the check */ }
-            }
-        }
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    })().finally(() => { reopenInFlight = null; });
-    return reopenInFlight;
+    return runWindowlessIdleGate(() => {
+        if (!hasVisibleWindow()) createWindow();
+    }, 'reopening');
+}
+
+/**
+ * Raise a hidden window after applying the same idle gate used to create a
+ * window from a windowless application state.
+ *
+ * @returns {Promise<void>}
+ */
+function restoreWindowAfterIdleCheck() {
+    const existing = windowToReveal();
+    if (existing?.isVisible()) {
+        revealWindow(existing);
+        return Promise.resolve();
+    }
+    return runWindowlessIdleGate(() => {
+        const target = windowToReveal();
+        if (target) revealWindow(target);
+        else createWindow();
+    }, 'restoring');
 }
 
 /**
@@ -697,7 +780,12 @@ app.on('web-contents-created', (_event, contents) => {
     hardenWebContents(contents);
 });
 
-const deepLinkCtx = attachDeepLinkHandlers(app, { onDeepLink: forwardDeepLink });
+const deepLinkCtx = attachDeepLinkHandlers(app, {
+    onDeepLink: forwardDeepLink,
+    onSecondInstance: () => {
+        if (canCreateWindows) void restoreWindowAfterIdleCheck();
+    },
+});
 if (!deepLinkCtx.gotLock) {
     // Another instance is already running. Quit cleanly; the running
     // instance will pick up our URL from `second-instance`.
@@ -932,10 +1020,11 @@ app.whenReady().then(async () => {
     // before opening the primary window so the accelerator is live the
     // moment the renderer focuses.
     buildApplicationMenu();
+    canCreateWindows = true;
     createWindow();
 
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) void openWindowAfterIdleCheck();
+        void restoreWindowAfterIdleCheck();
     });
 });
 
@@ -951,6 +1040,7 @@ app.on('before-quit', () => {
     // cases where a GC'd buffer might otherwise linger until
     // reallocation. The session-backend ciphertext stays on disk; the
     // next launch reuses it via the keychain.
+    isQuitting = true;
     stopWindowlessIdleLock();
     void flushWindowBounds();
     if (runtime) tearDownHost(runtime);

@@ -133,6 +133,7 @@ describe('desktop main entry point', () => {
         expect(protocol.attachDeepLinkHandlers).toHaveBeenCalledOnce();
         expect(protocol.attachDeepLinkHandlers.mock.calls[0][0]).toBe(electron.app);
         expect(protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink).toBeTypeOf('function');
+        expect(protocol.attachDeepLinkHandlers.mock.calls[0][1].onSecondInstance).toBeTypeOf('function');
         expect(electron.app.whenReady).toHaveBeenCalledOnce();
         expect(electron.app.quit).not.toHaveBeenCalled();
     });
@@ -143,6 +144,36 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
 
         expect(electron.app.quit).toHaveBeenCalledOnce();
+    });
+
+    it('hides on macOS close, permits an explicit quit, and reveals hidden windows', async () => {
+        const { applyWindowCloseConvention, revealWindow } = await import('../../../packages/desktop/main/index.js');
+        const event = { preventDefault: vi.fn() };
+        const win = {
+            hide: vi.fn(),
+            show: vi.fn(),
+            focus: vi.fn(),
+            restore: vi.fn(),
+            isDestroyed: vi.fn(() => false),
+            isMinimized: vi.fn(() => true),
+            isVisible: vi.fn(() => false),
+        };
+
+        expect(applyWindowCloseConvention(win, event, { platform: 'darwin', quitting: false })).toBe(true);
+        expect(event.preventDefault).toHaveBeenCalledOnce();
+        expect(win.hide).toHaveBeenCalledOnce();
+
+        event.preventDefault.mockClear();
+        win.hide.mockClear();
+        expect(applyWindowCloseConvention(win, event, { platform: 'darwin', quitting: true })).toBe(false);
+        expect(applyWindowCloseConvention(win, event, { platform: 'win32', quitting: false })).toBe(false);
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(win.hide).not.toHaveBeenCalled();
+
+        expect(revealWindow(win)).toBe(true);
+        expect(win.restore).toHaveBeenCalledOnce();
+        expect(win.show).toHaveBeenCalledOnce();
+        expect(win.focus).toHaveBeenCalledOnce();
     });
 
     it('hardens every Electron webContents and opens external links outside the wallet', async () => {
