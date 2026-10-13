@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { DetailCard, EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -36,10 +37,7 @@ describe('History usability', () => {
             timestamp,
             raw: {},
         };
-        const expected = new Intl.DateTimeFormat('en-US', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-        }).format(new Date(timestamp * 1000));
+        const expected = formatLocalDateTime(timestamp);
 
         render(provider(
             messaging,

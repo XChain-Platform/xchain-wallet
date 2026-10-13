@@ -23,7 +23,7 @@ describe('market/coinpayExpiry coinpayExpiryText', () => {
         const locale = vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('Jul 8, 2025, 7:00 AM PDT');
         const out = coinpayExpiryText(1751983200);
         expect(out).toBe('Jul 8, 2025, 7:00 AM PDT');
-        expect(locale).toHaveBeenCalledWith(undefined, expect.objectContaining({ timeZoneName: 'short' }));
+        expect(locale).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeZoneName: 'short' }));
         // Must NOT be interpreted as (or look like) a bare block height.
         expect(out).not.toMatch(/^\d+$/);
         expect(out).not.toMatch(/^\d{4}-\d{2}-\d{2}T/);

@@ -37,6 +37,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
@@ -135,9 +136,7 @@ function fmtDate(unixSec) {
     // Protocol expirations are Unix seconds. A current millisecond timestamp
     // otherwise renders as a plausible date tens of thousands of years away.
     if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
-    const date = new Date(n * 1000);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleString();
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {

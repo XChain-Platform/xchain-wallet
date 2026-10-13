@@ -28,7 +28,7 @@ describe('shared date and time formatting', () => {
 
         expect(text).toBe('Jul 8, 2025, 7:00 AM PDT');
         expect(text).not.toMatch(/^\d{4}-\d{2}-\d{2}T/);
-        expect(locale).toHaveBeenCalledWith(undefined, expect.objectContaining({ timeZoneName: 'short' }));
+        expect(locale).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeZoneName: 'short' }));
     });
 
     it('falls back to a labelled UTC value when locale formatting is unavailable', () => {

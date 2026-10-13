@@ -778,7 +778,7 @@ export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
     }
     if (numberFormat !== 'trim') return formatAtomicAmount(quantityStr, divisibility);
     const plain = formatAmount(quantityStr, divisibility, 'plain');
-    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/.$/, '') : plain;
+    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/\.$/, '') : plain;
     return formatDecimalAmount(trimmed);
 }
 
