@@ -15,6 +15,8 @@
 // has its own preferences about how to bundle/polyfill it. Shells pass
 // in an SDKFactory; core just calls it.
 
+import { installExplorerRateLimit, sharedExplorerLimiter } from './explorerRateLimit.js';
+
 /**
  * @typedef {Object} SDKConstructorOpts
  * @property {string} network           chainId, e.g. 'bitcoin-mainnet'
@@ -117,8 +119,13 @@ export class SDKRegistry {
      * @param {{ timeout?: number, retry?: { maxRetries?: number, baseDelay?: number,
      *           maxDelay?: number, retryAfterMaxDelay?: number } }} [opts.networkOptions]
      *        overrides for DEFAULT_SDK_NETWORK_OPTIONS (merged shallowly)
+     * @param {import('./explorerRateLimit.js').HostRateLimiter|null} [opts.rateLimiter]
+     *        explorer request gate; the process-wide one by default, null turns it off
      */
-    constructor({ chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {} }) {
+    constructor({
+        chainRegistry, sdkFactory, endpointOverrides = {}, networkOptions = {},
+        rateLimiter = sharedExplorerLimiter,
+    }) {
         if (!chainRegistry) throw new Error('SDKRegistry: chainRegistry is required');
         if (typeof sdkFactory !== 'function') {
             throw new Error('SDKRegistry: sdkFactory must be a function');
@@ -138,6 +145,7 @@ export class SDKRegistry {
         };
         /** @type {Map<string, XChainSDKLike>} */
         this._instances = new Map();
+        this._rateLimiter = rateLimiter;
     }
 
     /**
@@ -243,7 +251,7 @@ export class SDKRegistry {
         const d = this._chainRegistry.get(chainId);
         if (!d) throw new UnknownChainError(chainId);
         const over = this._endpointOverrides[chainId] ?? {};
-        return this._sdkFactory({
+        const sdk = this._sdkFactory({
             network: chainId,
             explorerUrl: overrideUrl(over.explorerUrl) ?? joinEndpoint(d.explorer),
             encoderUrl: overrideUrl(over.encoderUrl) ?? joinEndpoint(d.encoder),
@@ -254,6 +262,8 @@ export class SDKRegistry {
             retry: this._networkOptions.retry,
             ...(this._networkOptions.pool ? { pool: this._networkOptions.pool } : {}),
         });
+        // Every chain's explorer traffic shares one per-host gate (429 waits, pacing, coalescing).
+        return this._rateLimiter ? installExplorerRateLimit(sdk, this._rateLimiter) : sdk;
     }
 
     /**

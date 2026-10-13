@@ -49,6 +49,7 @@ export const SDK_DEEP_PATHS = {
     endpoints: ['src/utils/endpoints.js', 'src/endpoints.js'],
     formats: ['src/protocol/formats.js', 'src/formats.js'],
     formatSelector: ['src/formatSelector.js'],
+    explorerClient: ['src/clients/explorer.js'],
     gatedFile: ['src/gatedFile.js'],
     musig2: ['src/musig2.js'],
     networks: ['src/networks.js'],
