@@ -35,6 +35,7 @@ import {
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -812,18 +813,30 @@ export function ImportWallet({
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                     Recovery phrase
                 </label>
-                <button
-                    type="button"
-                    className={styles.scanButton}
-                    onClick={() => {
-                        setScanning((s) => !s);
-                        if (error) setError(null);
-                    }}
-                    disabled={busy}
-                    aria-pressed={scanning}
-                >
-                    {scanning ? 'Cancel scan' : 'Scan QR'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <ClipboardPasteButton
+                        disabled={busy}
+                        label="Paste recovery phrase from clipboard"
+                        onPaste={(text) => {
+                            const normalized = normalizePhraseEntry(text);
+                            setMnemonic(normalized);
+                            setMnemonicCursor(normalized.length);
+                            if (error) setError(null);
+                        }}
+                    />
+                    <button
+                        type="button"
+                        className={styles.scanButton}
+                        onClick={() => {
+                            setScanning((s) => !s);
+                            if (error) setError(null);
+                        }}
+                        disabled={busy}
+                        aria-pressed={scanning}
+                    >
+                        {scanning ? 'Cancel scan' : 'Scan QR'}
+                    </button>
+                </div>
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
