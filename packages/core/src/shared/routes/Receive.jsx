@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -39,6 +39,7 @@ import {
     indexAfterNonCommaCount,
 } from '../utils/amountFormat.js';
 import { pickDefaultChainId } from '../chainSelection.js';
+import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,11 +53,29 @@ function nativeTickerFor(descriptor) {
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
 }
 
+function newestAddressOfType(addresses, addressType) {
+    let newest = null;
+    let newestIndex = -1;
+    for (const candidate of addresses || []) {
+        if (candidate?.addressType !== addressType) continue;
+        if (!['hd', 'trezor', 'ledger'].includes(candidate.source || 'hd')) continue;
+        const parts = typeof candidate.derivationPath === 'string'
+            ? candidate.derivationPath.split('/')
+            : [];
+        if (parts.length < 2 || parts[parts.length - 2] !== '0') continue;
+        const index = Number(parts[parts.length - 1]);
+        if (Number.isInteger(index) && index >= 0 && index > newestIndex) {
+            newest = candidate;
+            newestIndex = index;
+        }
+    }
+    return newest;
+}
+
 /**
  * Receive view: pick a chain, show the newest persisted HD address as
  * a BIP21-encoded QR, copy-to-clipboard, and optionally derive a fresh
- * next-index address (prompts password, because seed decryption runs
- * Argon2id on each derivation per §26).
+ * next-index address through the host's unlocked signer session.
  *
  * Chain picker options are filtered to the chains this wallet has at
  * least one address on; a later piece may add "add a chain" when the
@@ -90,14 +109,19 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         /** @type {string | null} */ (prefill?.chainId || null),
     );
     const [address, setAddress] = useState(/** @type {any | null} */ (null));
+    const [addressType, setAddressType] = useState('');
     // Receive-address picker: the QR icon on the Address field opens the
     // wallet's own address list for the active chain; picking one becomes
     // the address the QR / request encodes. A chain switch re-runs the
     // newest-address effect and resets the pick, which is the right
     // default for a new chain.
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
-    const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
+    const [renderedQr, setRenderedQr] = useState(
+        /** @type {{ uri: string, dataUrl: string } | null} */ (null),
+    );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [generating, setGenerating] = useState(false);
+    const [generateError, setGenerateError] = useState(/** @type {string | null} */ (null));
 
     // "the account holds no address anywhere" is a state, not an
     // error. It used to render as a red alert string and nothing else, so
@@ -173,6 +197,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     useEffect(() => {
         if (!activeChainId) return undefined;
         let cancelled = false;
+        setAddress(null);
+        setAddressType('');
+        setLoadError(null);
         (async () => {
             try {
                 const newest = await messaging.getNewestAddress(
@@ -180,7 +207,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     activeChainId,
                     accountId,
                 );
-                if (!cancelled) setAddress(newest);
+                if (!cancelled) {
+                    setAddress(newest);
+                    const nextDescriptor = chainRegistry.get(activeChainId);
+                    setAddressType(newest?.addressType || nextDescriptor?.defaultAddressType || '');
+                }
             } catch (err) {
                 if (!cancelled) {
                     setLoadError(err?.message || 'Failed to load address.');
@@ -305,6 +336,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // re-renders. Token tick seeds from a non-native ReceivePicker prefill
     // so the QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
+    const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
     const [reqTick, setReqTick] = useState(() => {
         if (!prefill?.tick || !prefill?.chainId) return '';
         const desc = chainRegistry.get(prefill.chainId);
@@ -343,7 +375,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
         const stripped = String(rawValue).replace(/,/g, '');
-        if (stripped !== '' && !/^\d+(?:\.\d{0,8})?$/.test(stripped)) return;
+        if (stripped !== '' && !/^\d+(?:\.\d{0,8})?$/.test(stripped)) {
+            const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
+            setAmountError(fraction.length > 8
+                ? 'Amount can have at most 8 decimal places.'
+                : 'Enter the amount as a plain decimal number.');
+            return;
+        }
+        setAmountError(null);
         if (amountInputMode === 'fiat') {
             setFiatAmount(stripped);
             if (!fiatRate) {
@@ -428,7 +467,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     useEffect(() => {
         if (!qrUri) {
-            setQrDataUrl(null);
+            setRenderedQr(null);
             return undefined;
         }
         let cancelled = false;
@@ -438,10 +477,52 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             width: 512,
             color: { dark: '#0F172A', light: '#FFFFFF' },
         })
-            .then((dataUrl) => { if (!cancelled) setQrDataUrl(dataUrl); })
-            .catch(() => { if (!cancelled) setQrDataUrl(null); });
+            .then((dataUrl) => {
+                if (!cancelled) setRenderedQr({ uri: qrUri, dataUrl });
+            })
+            .catch(() => { if (!cancelled) setRenderedQr(null); });
         return () => { cancelled = true; };
     }, [qrUri]);
+
+    const qrDataUrl = renderedQr?.uri === qrUri ? renderedQr.dataUrl : null;
+
+    const changeAddressType = useCallback((nextType) => {
+        setAddressType(nextType);
+        setGenerateError(null);
+        setAddress(newestAddressOfType(chainsByWallet?.[activeChainId] || [], nextType));
+    }, [chainsByWallet, activeChainId]);
+
+    const generateNewAddress = useCallback(async () => {
+        if (!activeChainId || !addressType || generating) return;
+        if (typeof messaging.generateReceiveAddress !== 'function') {
+            setGenerateError('This app cannot generate a new receive address.');
+            return;
+        }
+        setGenerating(true);
+        setGenerateError(null);
+        try {
+            const generated = await messaging.generateReceiveAddress({
+                walletId,
+                accountId,
+                chainId: activeChainId,
+                addressType,
+            });
+            setAddress(generated);
+            setAddressType(generated?.addressType || addressType);
+            setChainsByWallet((current) => {
+                const chainAddresses = current?.[activeChainId] || [];
+                const withoutDuplicate = chainAddresses.filter((item) => item.id !== generated?.id);
+                return {
+                    ...(current || {}),
+                    [activeChainId]: [...withoutDuplicate, generated],
+                };
+            });
+        } catch (err) {
+            setGenerateError(err?.message || 'Could not generate a new receive address.');
+        } finally {
+            setGenerating(false);
+        }
+    }, [activeChainId, addressType, generating, messaging, walletId, accountId]);
 
     // QR image actions. The Copy button writes the rendered PNG to the
     // clipboard as an image (not as text) so the user can paste it into
@@ -583,6 +664,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 chainId={activeChainId}
                 onPick={(a) => {
                     setAddress(a);
+                    setAddressType(a?.addressType || addressType);
                     setAddressPickerOpen(false);
                 }}
                 onBack={() => setAddressPickerOpen(false)}
@@ -617,6 +699,44 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 />
             ) : null}
 
+            {descriptor?.addressTypes?.length > 1 ? (
+                <Select
+                    label="Address type"
+                    value={addressType}
+                    onChange={(event) => changeAddressType(event.target.value)}
+                    disabled={generating || !addressType}
+                >
+                    {descriptor.addressTypes.map((type) => (
+                        <option key={type} value={type}>{addressTypeLabel(type)}</option>
+                    ))}
+                </Select>
+            ) : null}
+
+            {descriptor && addressType ? (
+                <div className={styles.generateAddressAction}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={generateNewAddress}
+                        loading={generating}
+                        disabled={generating}
+                        icon={<Icon.PlusIcon />}
+                    >
+                        Generate new address
+                    </Button>
+                </div>
+            ) : null}
+
+            {generateError ? (
+                <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
+            ) : null}
+
+            {!address && descriptor && addressType && !generating && !generateError ? (
+                <StatusMessage variant="status">
+                    No {addressTypeLabel(addressType)} address exists yet. Generate one to receive with this type.
+                </StatusMessage>
+            ) : null}
+
             {address && qrDataUrl ? (
                 <div className={styles.qrBox}>
                     <img
@@ -635,7 +755,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {address ? (
                 <AddressField
-                    label="Address"
+                    label={address.label || 'Address'}
                     icon="addresses"
                     value={address.address}
                     readOnly
@@ -682,6 +802,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         toggleAmountInputMode={toggleAmountInputMode}
                         inputRef={amountInputRef}
                     />
+                    {amountError ? (
+                        <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
+                    ) : null}
                     <FeeSelector
                         label="Network fee"
                         coinTicker={nativeTickerFor(descriptor)}

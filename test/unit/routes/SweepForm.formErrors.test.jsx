@@ -52,15 +52,25 @@ const SOURCE = Object.freeze({
 // format gate and reaches the later branches.
 const OTHER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 
-async function mountSweep() {
+const EMPTY_PREVIEW = Object.freeze({
+    balances: { rows: [], error: null },
+    ownerships: { rows: [], error: null },
+    orders: { rows: [], error: null },
+    swaps: { rows: [], error: null },
+    dispensers: { rows: [], error: null },
+    gatedTicks: { rows: [], error: null, partial: false },
+});
+
+async function mountSweep({ walletMode = 'full', sweepPreview } = {}) {
+    const onBack = vi.fn();
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
         signerReady: () => Promise.resolve({ ready: true }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({ walletMode }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
-        sweepPreview: () => Promise.resolve({ rows: [], gatedTicks: { rows: [] } }),
+        sweepPreview: sweepPreview || (() => Promise.resolve(EMPTY_PREVIEW)),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -73,7 +83,7 @@ async function mountSweep() {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(SweepForm, { walletId: 'w', onBack() {} }),
+            React.createElement(SweepForm, { walletId: 'w', onBack }),
         ),
     );
 
@@ -85,6 +95,7 @@ async function mountSweep() {
         category: (text) => Array.from(container.querySelectorAll('label'))
             .find((l) => l.textContent.includes(text))
             ?.querySelector('input[type="checkbox"]'),
+        button: (label) => container.querySelector(`button[aria-label="${label}"]`),
         /** Text of every rendered alert, joined. Cheap and dump-free. */
         alerts: () => Array.from(container.querySelectorAll('[role="alert"]'))
             .map((n) => n.textContent).join(' | '),
@@ -119,7 +130,7 @@ async function mountSweep() {
         expect(q.submit()).toBeTruthy();
         expect(q.submit().disabled).toBe(false);
     });
-    return q;
+    return { ...q, onBack };
 }
 
 async function mountGatedSweep() {
@@ -264,6 +275,56 @@ describe('SweepForm gated key details', () => {
         await waitFor(() => {
             expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing');
             expect(container.textContent).toContain(missingHash);
+        });
+    });
+});
+
+describe('SweepForm preview and navigation states', () => {
+    it('shows a clear empty state after every selected preview category resolves empty', async () => {
+        const q = await mountSweep();
+
+        await waitFor(() => {
+            expect(q.container.textContent).toContain(
+                'Nothing is currently shown in the selected categories.',
+            );
+        });
+    });
+
+    it('does not expose a balance lookup failure message', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => Promise.reject(new Error('upstream host secret detail')),
+        });
+
+        await waitFor(() => {
+            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).not.toContain('upstream host secret detail');
+        });
+    });
+
+    it('opens the wallet address picker for the destination', async () => {
+        const q = await mountSweep();
+
+        fireEvent.click(q.button('Choose destination address'));
+
+        await waitFor(() => {
+            expect(q.container.textContent).toContain('Destination address');
+            expect(q.container.querySelector('input[aria-label="Search addresses"]')).toBeTruthy();
+        });
+    });
+
+    it('returns from watcher review to the populated form without leaving the route', async () => {
+        const q = await mountSweep({ walletMode: 'watcher' });
+        fireEvent.change(q.destination(), { target: { value: OTHER } });
+        fireEvent.click(q.submit());
+
+        await waitFor(() => {
+            expect(q.container.textContent).toContain('Review sweep');
+        });
+        fireEvent.click(q.button('Back'));
+
+        await waitFor(() => {
+            expect(q.destination()?.value).toBe(OTHER);
+            expect(q.onBack).not.toHaveBeenCalled();
         });
     });
 });

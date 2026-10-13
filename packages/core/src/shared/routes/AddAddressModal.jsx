@@ -48,7 +48,7 @@ const MAX_ADDRESSES = 25;
  * @param {string} [props.accountId]              active account; new addresses are scoped to it
  * @param {string[]} props.chainIds the chains the account is already on; the coin options are these UNION the chains active on the current network
  * @param {() => void} props.onClose
- * @param {(count: number) => void} [props.onGenerated]   called after a successful batch
+ * @param {(count: number) => void} [props.onGenerated]   called with the number persisted, including a partial batch
  */
 // Users recognize address formats by their leading characters, not by
 // script-type names, so each Type option carries a "starts with ..."
@@ -162,6 +162,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         setBusy(true);
         setError(null);
         setDone(0);
+        let generated = 0;
         try {
             const generate = purpose === 'dispenser'
                 ? messaging.generateDispenserAddress
@@ -174,11 +175,15 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     accountId,
                     addressType: effectiveAddressType,
                 });
-                setDone(i + 1);
+                generated = i + 1;
+                setDone(generated);
             }
-            onGenerated?.(n);
+            onGenerated?.(generated);
             onClose();
         } catch (err) {
+            // A completed iteration is already in the vault, so refresh the
+            // parent list even though the modal stays open for the error.
+            if (generated > 0) onGenerated?.(generated);
             setError(
                 err?.message
                 || 'Could not generate addresses. Make sure the wallet is unlocked (or your hardware device is connected).',

@@ -79,12 +79,16 @@ function detail(actionIndex, status, giveRemaining) {
     };
 }
 
-function harness({ orders = [], cancels = [], details = {} } = {}) {
+function harness({ orders = [], cancels = [], details = {}, ordersError = null, cancelsError = null } = {}) {
     const calls = [];
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
-        getOrdersForAddress: () => Promise.resolve({ data: orders }),
-        getOrderCancelsForAddress: () => Promise.resolve({ data: cancels }),
+        getOrdersForAddress: () => ordersError
+            ? Promise.reject(ordersError)
+            : Promise.resolve({ data: orders }),
+        getOrderCancelsForAddress: () => cancelsError
+            ? Promise.reject(cancelsError)
+            : Promise.resolve({ data: cancels }),
         getOrderDetail: (args) => {
             calls.push({ method: 'getOrderDetail', args });
             const d = details[String(args.actionIndex)];
@@ -171,6 +175,25 @@ describe('MyOrdersView: cancel rows', () => {
 });
 
 describe('MyOrdersView: fills', () => {
+    it('shows a load error instead of a false empty state when the order feed fails', async () => {
+        const { messaging } = harness({ ordersError: new Error('Order explorer unavailable') });
+        const utils = await open(messaging);
+
+        expect(utils.getByText('Order explorer unavailable')).toBeTruthy();
+        expect(utils.queryByText('No orders yet')).toBeNull();
+    });
+
+    it('does not offer cancel when the cancellation status feed fails', async () => {
+        const { messaging } = harness({
+            orders: [orderRow(702)],
+            cancelsError: new Error('Cancel status unavailable'),
+        });
+        const utils = await open(messaging);
+
+        expect(utils.getByText('Cancel status unavailable')).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
     it('files a fully filled order under Closed as Filled with no Edit or Cancel', async () => {
         const { messaging } = harness({
             orders: [orderRow(665)],
@@ -252,6 +275,25 @@ describe('MyOrdersView: fills', () => {
         expect(openList).not.toBeNull();
         expect(within(rowFor(openList, 720)).getByText('Open')).toBeTruthy();
         expect(within(rowFor(openList, 721)).getByText('Open')).toBeTruthy();
+    });
+
+    it('does not render a millisecond value as an expiration thousands of years away', async () => {
+        const { messaging } = harness({
+            orders: [orderRow(730)],
+            details: {
+                730: {
+                    state: {
+                        status: 'open',
+                        give_remaining: '500',
+                        expiration: String(Date.now()),
+                    },
+                },
+            },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 730);
+
+        expect(within(row).queryByText(/^Expires /)).toBeNull();
     });
 });
 

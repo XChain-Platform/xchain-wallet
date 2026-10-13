@@ -119,7 +119,7 @@ describe('operator publisher feed field selection', () => {
         await openPublisher();
 
         expect(screen.getByLabelText('Feed reference number')).toHaveValue('700');
-        expect(screen.getByText(/^v3/)).toBeTruthy();
+        expect(screen.getByText(/^Format version: 3/)).toBeTruthy();
     });
 
     it('skips an invalid newest feed-create in favor of the newest valid one', async () => {

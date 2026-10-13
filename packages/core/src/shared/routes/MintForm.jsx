@@ -28,7 +28,7 @@ import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
     mintHeadroom, exceedsHeadroom, mintWindowState, mintWindowMessage, mintLockMessage,
 } from '../utils/mintHeadroom.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -373,6 +373,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Amount must be a positive number.');
+            return;
+        }
+        // Keep the amount within the token's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: tokenInfo?.divisibility,
+            tick: ticker,
+        });
+        if (precisionError) {
+            setFormError(precisionError);
             return;
         }
         // Stop an over-mint here rather than three screens later.

@@ -23,9 +23,10 @@ import { useMessaging } from '../useMessaging.js';
  * omits the Account row until there is something to name.
  *
  * @param {string | null | undefined} walletId
+ * @param {unknown} [refreshKey]   refetch when an account mutation changes this value
  * @returns {Array<{ id: string, index: number, name?: string }>}
  */
-export function useAccountList(walletId) {
+export function useAccountList(walletId, refreshKey) {
     const { messaging } = useMessaging();
     const [accounts, setAccounts] = useState(
         /** @type {Array<{ id: string, index: number, name?: string }>} */ ([]),
@@ -50,7 +51,7 @@ export function useAccountList(walletId) {
             })
             .catch(() => { if (!cancelled) setAccounts([]); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, refreshKey]);
 
     return accounts;
 }

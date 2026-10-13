@@ -37,13 +37,14 @@ import { SignerSelectForm } from './SignerSelectForm.jsx';
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {() => void} props.onCreated   refresh callers' account list and return to home
+ * @param {(account: any) => void} props.onCreated   activate the new account and leave the form
  */
 export function AddAccountForm({ walletId, onBack, onCreated }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState('Account');
+    const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     // null = software (implicit); string = HW SignerRecord id. The
@@ -58,7 +59,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     useEffect(() => {
         setTimeout(() => nameRef.current?.focus(), 0);
     }, []);
-    // Default the name to "Account N+1" once we know the current count.
+    // Default the name from the highest derivation index once the list resolves.
     // If the user types something before the fetch returns, leave their
     // edit alone.
 
@@ -67,8 +68,14 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         if (typeof messaging.listAccounts !== 'function') return undefined;
         messaging.listAccounts(walletId)
             .then((list) => {
-                if (cancelled || userEditedRef.current) return;
-                const next = (Array.isArray(list) ? list.length : 0) + 1;
+                if (cancelled) return;
+                const resolved = Array.isArray(list) ? list : [];
+                setAccounts(resolved);
+                if (userEditedRef.current) return;
+                const next = resolved.reduce(
+                    (highest, account) => Math.max(highest, Number.isInteger(account?.index) ? account.index : -1),
+                    -1,
+                ) + 2;
                 setName(`Account ${next}`);
             })
             .catch(() => { /* keep default name */ });
@@ -78,8 +85,14 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy) return;
-        if (name.trim().length === 0) {
+        const trimmed = name.trim();
+        if (trimmed.length === 0) {
             setError('Account name is required.');
+            return;
+        }
+        if (accounts.some((account) => account?.name?.trim().toLocaleLowerCase()
+            === trimmed.toLocaleLowerCase())) {
+            setError(`An account named "${trimmed}" already exists.`);
             return;
         }
         if (typeof messaging.createAccount !== 'function') {
@@ -89,12 +102,12 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         setError(null);
         setBusy(true);
         try {
-            await messaging.createAccount({
+            const result = await messaging.createAccount({
                 walletId,
-                name: name.trim(),
+                name: trimmed,
                 signerId: signerId || undefined,
             });
-            onCreated();
+            onCreated(result?.account);
         } catch (err) {
             setError(err?.message || 'Failed to add account.');
             setBusy(false);
@@ -140,6 +153,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                         if (error) setError(null);
                     }}
                     autoComplete="off"
+                    disabled={busy}
                     error={error || undefined}
                 />
             </FormPage>

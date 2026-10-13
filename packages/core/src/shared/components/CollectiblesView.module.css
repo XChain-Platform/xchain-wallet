@@ -6,24 +6,38 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
     gap: var(--xc-space-3);
     align-items: stretch;
 }
 
 .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
+    position: relative;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
+    height: 100%;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.cardContent {
+    appearance: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: var(--xc-space-2);
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    box-sizing: border-box;
     text-align: start;
     color: inherit;
     font: inherit;
-    height: 100%;
-    box-sizing: border-box;
 }
 
 .cardClickable {
@@ -35,7 +49,7 @@
     border-color: var(--xc-border-strong);
 }
 
-.cardClickable:focus-visible {
+.cardClickable .cardContent:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
 }
@@ -93,9 +107,11 @@
 .pinBtn,
 .hideBtn {
     position: absolute;
-    top: 6px;
-    width: 24px;
-    height: 24px;
+    top: calc(var(--xc-space-2) + 6px);
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -108,20 +124,26 @@
     line-height: 1;
 }
 
-.pinBtn { right: 6px; }
-.hideBtn { right: 36px; }
+.pinBtn { inset-inline-end: calc(var(--xc-space-2) + 6px); }
+.hideBtn { inset-inline-end: calc(var(--xc-space-2) + 40px); }
 
 .pinBtn:hover,
 .hideBtn:hover {
     background: rgba(0, 0, 0, 0.7);
 }
 
+.pinBtn:focus-visible,
+.hideBtn:focus-visible {
+    outline: 2px solid #FFFFFF;
+    outline-offset: 2px;
+}
+
 .pinBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+    color: var(--xc-accent-text, #f5b400);
 }
 
 .hideBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+    color: var(--xc-accent-text, #f5b400);
 }
 
 .meta {
@@ -132,9 +154,13 @@
 .name {
     font-weight: 600;
     color: var(--xc-text);
+    display: -webkit-box;
+    min-height: 2.4em;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .subtitle {
@@ -160,4 +186,10 @@
 .hiddenToggle:hover {
     color: var(--xc-text);
     background: var(--xc-bg-muted);
+}
+
+@media (min-width: 48rem) {
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 12rem));
+    }
 }

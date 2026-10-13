@@ -335,7 +335,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     type="submit"
                     variant="primary"
                     loading={lane.composing}
-                    disabled={sdkSupported !== true || !fromAddress || !pickState.canReview || lane.composing}
+                    disabled={sdkSupported !== true || !fromAddress || pickState.overLimit || lane.composing}
                 >
                     Review
                 </Button>

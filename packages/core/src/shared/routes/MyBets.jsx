@@ -95,7 +95,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
             const results = await Promise.all(pairs.map((p) => messaging
                 .bets({ chainId: p.chainId, query: p.address, type: 'address', opts: { limit: 100 } })
                 .then((r) => ({ p, bets: extractRows(r) }))
-                .catch(() => ({ p, bets: [] }))));
+                .catch(() => ({ p, bets: [], failed: true }))));
 
             // One address can appear on several chains, and a chain query returns
             // only that chain's rows, so dedupe on chain + action_index.
@@ -117,6 +117,12 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                 if (ao !== bo) return ao - bo;
                 return Number(b.action_index || 0) - Number(a.action_index || 0);
             });
+            const failures = results.filter((r) => r.failed).length;
+            if (failures > 0) {
+                setError(failures === results.length
+                    ? 'Could not load bets for any of your addresses.'
+                    : `Could not load bets for ${failures} of your addresses. The list may be incomplete.`);
+            }
             setRows(all);
         } catch (err) {
             setError(err?.message || 'Failed to load bets.');
@@ -179,7 +185,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
         </Screen>
     );
 
-    if (error) {
+    if (error && (!rows || rows.length === 0)) {
         return wrap(
             <>
                 <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
@@ -200,6 +206,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
 
     return wrap(
         <>
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             <p className={styles.hint}>
                 {rows.length} bet{rows.length === 1 ? '' : 's'} across all of your addresses
                 {openCount ? `, ${openCount} still waiting on a result` : ''}.

@@ -55,9 +55,12 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
 
     const [chainsWithAddresses, setChainsWithAddresses] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
+        setLoading(true);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -65,12 +68,16 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
                 setChainsWithAddresses(chains);
-                if (chains.length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate addresses on at least two chains before launching a cross-chain template.');
+                if (chains.length < 2) {
+                    setLoadError('Cross-chain templates need addresses on at least two chains. Use Receive on another chain first.');
                 }
+                setLoading(false);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+                if (!cancelled) {
+                    setLoadError(err?.message || 'Failed to load wallet.');
+                    setLoading(false);
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -111,7 +118,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         onLaunch(prefill);
     };
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             title="Cross-chain templates"
@@ -123,12 +130,14 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         </Screen>
     );
 
+    if (loading) return wrap(<p className={styles.entryDescription}>Loading templates…</p>);
+
     if (loadError) {
-        if (chainsWithAddresses.length === 0 && loadError.startsWith('No addresses yet.')) {
+        if (chainsWithAddresses.length < 2 && loadError.startsWith('Cross-chain templates need')) {
             return wrap(
                 <EmptyState
-                    title="Not enough addresses"
-                    body="Cross-chain templates require addresses on at least two chains."
+                    title="Two chains required"
+                    body="Use Receive to generate an address on another chain before launching a cross-chain template."
                 />,
             );
         }

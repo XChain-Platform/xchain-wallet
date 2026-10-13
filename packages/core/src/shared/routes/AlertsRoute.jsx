@@ -28,15 +28,16 @@ export function AlertsRoute({ onBack, alerts = [] }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const header = <PageHeader onBack={onBack} title="Alerts" />;
+    const visibleAlerts = Array.isArray(alerts) ? alerts : [];
 
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
-                {alerts.length === 0 ? (
-                    <EmptyState title="No alerts" body="You&apos;re all caught up." />
+                {visibleAlerts.length === 0 ? (
+                    <EmptyState title="No alerts" body="You're all caught up." />
                 ) : (
                     <ul className={styles.list} role="list">
-                        {alerts.map((a) => (
+                        {visibleAlerts.map((a) => (
                             <li key={a.id} className={`${styles.alert} ${styles[a.severity] || styles.info}`}>
                                 <div className={styles.alertHead}>
                                     <span className={styles.alertTitle}>{a.title}</span>

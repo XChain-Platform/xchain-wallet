@@ -95,6 +95,11 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
 
     useEffect(() => {
         let cancelled = false;
+        setChainId(null);
+        setNoChain(false);
+        setBetChains([]);
+        setRows(null);
+        setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;

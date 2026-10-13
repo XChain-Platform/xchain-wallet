@@ -196,14 +196,15 @@ describe('OracleRecord (P8)', () => {
         expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
-    it('keeps the record on screen when the market listing fails', async () => {
+    it('keeps the record and does not claim there are no markets when the listing fails', async () => {
         const { messaging } = harness({
             betFeeds: () => Promise.reject(new Error('explorer down')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         const body = text(utils);
         expect(body).toMatch(/Markets opened/);
-        expect(body).toMatch(/No markets yet/i);
+        expect(body).toMatch(/Could not load this address's markets/i);
+        expect(body).not.toMatch(/No markets from this address/i);
         expect(body).not.toMatch(/explorer down/);
     });
 

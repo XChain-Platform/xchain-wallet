@@ -132,8 +132,12 @@ export function collectCancelledKeys(results) {
 
 function fmtDate(unixSec) {
     const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    const date = new Date(n * 1000);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString();
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -205,9 +209,9 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getSwapCancelsForAddress === 'function'
-                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
 

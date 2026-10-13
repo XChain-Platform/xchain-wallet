@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { AddressText, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -22,6 +22,7 @@ import {
 } from '../../flows/stakingDashboard.js';
 import { latestFeedCreateForAddress } from '../../flows/broadcastQueries.js';
 import dashStyles from './ActionsMenu.module.css';
+import styles from './OperatorDashboard.module.css';
 import { OperatorPublisherMode } from '../components/OperatorPublisherMode.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -58,36 +59,77 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const [broadcasts, setBroadcasts] = useState(/** @type {Section} */ (empty()));
     const [validators, setValidators] = useState(/** @type {Section} */ (empty()));
     const [height, setHeight] = useState(/** @type {number | null} */ (null));
+    const [latestFeed, setLatestFeed] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const refreshRef = useRef(/** @type {() => void} */ (() => {}));
 
     useEffect(() => {
         let cancelled = false;
-        function bind(setter, p) {
-            p.then((r) => {
+        let inFlight = false;
+
+        function bind(setter, request, background) {
+            return Promise.resolve().then(request).then((r) => {
                 if (cancelled) return;
                 setter({ loading: false, rows: extractRows(r), error: null });
             }).catch((err) => {
                 if (cancelled) return;
-                setter({ loading: false, rows: [], error: err?.message || String(err) });
+                setter((current) => ({
+                    loading: false,
+                    rows: background ? current.rows : [],
+                    error: err?.message || String(err),
+                }));
             });
         }
-        if (isDemoWallet(walletId)) {
-            setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
-        } else {
-            bind(setStakes, messaging.getStakesForAddress({ chainId, address }));
+
+        async function load(background) {
+            if (inFlight) return;
+            inFlight = true;
+            if (background) {
+                setRefreshing(true);
+            } else {
+                setStakes(empty());
+                setDelegations(empty());
+                setRewards(empty());
+                setRewardClaims(empty());
+                setBroadcasts(empty());
+                setValidators(empty());
+                setHeight(null);
+                setLatestFeed(null);
+            }
+
+            const tasks = [];
+            if (isDemoWallet(walletId)) {
+                setStakes({ loading: false, rows: synthesizeDemoStaking(chainId).stakes, error: null });
+            } else {
+                tasks.push(bind(setStakes, () => messaging.getStakesForAddress({ chainId, address }), background));
+            }
+            tasks.push(bind(setDelegations, () => messaging.getDelegationsForAddress({ chainId, address }), background));
+            tasks.push(bind(setRewards, () => messaging.getRewardsForAddress({ chainId, address }), background));
+            tasks.push(bind(setRewardClaims, () => messaging.getRewardClaimsForAddress({ chainId, address }), background));
+            tasks.push(bind(setBroadcasts, () => messaging.getBroadcastsForAddress({ chainId, address }), background));
+            tasks.push(bind(setValidators, () => messaging.getValidatorsForChain({ chainId }), background));
+            if (typeof messaging.getIndexerWatermark === 'function') {
+                tasks.push(Promise.resolve().then(() => messaging.getIndexerWatermark({ chainId }))
+                    .then((result) => {
+                        if (!cancelled) setHeight(Number.isFinite(result?.watermark) ? result.watermark : null);
+                    })
+                    .catch(() => { if (!cancelled && !background) setHeight(null); }));
+            }
+            tasks.push(latestFeedCreateForAddress({ messaging, chainId, address })
+                .then((feed) => { if (!cancelled) setLatestFeed(feed); })
+                .catch(() => { if (!cancelled && !background) setLatestFeed(null); }));
+            await Promise.allSettled(tasks);
+            inFlight = false;
+            if (!cancelled) setRefreshing(false);
         }
-        bind(setDelegations, messaging.getDelegationsForAddress({ chainId, address }));
-        bind(setRewards, messaging.getRewardsForAddress({ chainId, address }));
-        bind(setRewardClaims, messaging.getRewardClaimsForAddress({ chainId, address }));
-        bind(setBroadcasts, messaging.getBroadcastsForAddress({ chainId, address }));
-        bind(setValidators, messaging.getValidatorsForChain({ chainId }));
-        if (typeof messaging.getIndexerWatermark === 'function') {
-            messaging.getIndexerWatermark({ chainId })
-                .then((result) => {
-                    if (!cancelled) setHeight(Number.isFinite(result?.watermark) ? result.watermark : null);
-                })
-                .catch(() => { if (!cancelled) setHeight(null); });
-        }
-        return () => { cancelled = true; };
+
+        refreshRef.current = () => { load(true); };
+        load(false);
+        const timer = setInterval(() => load(true), 30_000);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
     }, [walletId, chainId, address, messaging]);
 
     const activeStakes = useMemo(
@@ -106,18 +148,6 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
             return vk === pk;
         }) || null;
     }, [validators.rows, activePubkey]);
-
-    // The latest v2 feed-create is looked up page by page: a busy publisher's
-    // newest one can fall past the first page of broadcasts.
-    const [latestFeed, setLatestFeed] = useState(null);
-    useEffect(() => {
-        let cancelled = false;
-        setLatestFeed(null);
-        latestFeedCreateForAddress({ messaging, chainId, address })
-            .then((feed) => { if (!cancelled) setLatestFeed(feed); })
-            .catch(() => { if (!cancelled) setLatestFeed(null); });
-        return () => { cancelled = true; };
-    }, [chainId, address, messaging]);
 
     const { pending, lifetime } = useMemo(
         () => splitRewards(rewards.rows, rewardClaims.rows),
@@ -143,8 +173,12 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
-                <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <ListPage toolbar={(
+                <Button type="button" variant="ghost" disabled={refreshing} onClick={() => refreshRef.current()}>
+                    {refreshing ? 'Refreshing metrics…' : 'Refresh metrics'}
+                </Button>
+            )}>
+                <header className={styles.identity}>
                     {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : <span>{chainId}</span>}
                     <AddressText address={address} />
                 </header>
@@ -153,10 +187,10 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     <p className={dashStyles.entryDescription}>Loading operator metrics…</p>
                 ) : null}
 
-                <Section title="Staking status" loading={stakes.loading} error={stakes.error}>
+                <Section title="Staking status" loading={stakes.loading} error={stakes.error} showContentOnError={!!primaryStake}>
                     {primaryStake ? (
-                        <ul style={{ margin: 0, paddingLeft: '1rem' }}>
-                            <li>Amount: {totalStake ?? formatAmount(primaryStake)} XCP</li>
+                        <ul className={styles.metricList}>
+                            <li>Total amount staked: {totalStake ?? formatAmount(primaryStake)} XCP</li>
                             {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK ? (
                                 <li>Activation block: {primaryStake.activation_block || primaryStake.ACTIVATION_BLOCK}</li>
                             ) : null}
@@ -170,30 +204,30 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     )}
                 </Section>
 
-                <Section title="Delegation chain" loading={delegations.loading} error={delegations.error}>
+                <Section title="Delegation chain" loading={delegations.loading} error={delegations.error} showContentOnError={delegations.rows.length > 0}>
                     {delegations.rows.length === 0 ? (
                         <EmptyState title="No delegations yet" body="Signing-key delegations appear here." titleAs="h3" />
                     ) : (
-                        <ul style={{ margin: 0, paddingLeft: '1rem', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        <ul className={`${styles.metricList} ${styles.keyList}`}>
                             {delegations.rows.slice(0, 10).map((d, i) => (
                                 <li key={i}>
-                                    {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)}
-                                    {' '}@ block {d.block_index || '?'}
-                                    {' '}· {stakingRowState(d, height)}
+                                    Signing key: {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)};
+                                    {' '}recorded at block {d.block_index || 'unknown'};
+                                    {' '}status: {plainWords(stakingRowState(d, height))}
                                 </li>
                             ))}
                         </ul>
                     )}
                 </Section>
 
-                <Section title="Validator performance" loading={validators.loading} error={validators.error}>
+                <Section title="Validator performance" loading={validators.loading} error={validators.error} showContentOnError={!!ownValidator}>
                     {ownValidator ? (
-                        <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+                        <ul className={styles.metricList}>
                             {ownValidator.uptime !== undefined ? <li>Uptime: {String(ownValidator.uptime)}</li> : null}
-                            {ownValidator.score !== undefined ? <li>Score: {String(ownValidator.score)}</li> : null}
-                            {ownValidator.votes !== undefined ? <li>Votes: {String(ownValidator.votes)}</li> : null}
-                            {ownValidator.missed !== undefined ? <li>Missed: {String(ownValidator.missed)}</li> : null}
-                            {ownValidator.last_seen_block ? <li>Last seen: block {ownValidator.last_seen_block}</li> : null}
+                            {ownValidator.score !== undefined ? <li>Validator score: {String(ownValidator.score)}</li> : null}
+                            {ownValidator.votes !== undefined ? <li>Votes recorded: {String(ownValidator.votes)}</li> : null}
+                            {ownValidator.missed !== undefined ? <li>Missed validations: {String(ownValidator.missed)}</li> : null}
+                            {ownValidator.last_seen_block ? <li>Last seen at block: {ownValidator.last_seen_block}</li> : null}
                         </ul>
                     ) : activePubkey ? (
                         <EmptyState
@@ -214,23 +248,24 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     title="Rewards trajectory"
                     loading={rewards.loading || rewardClaims.loading}
                     error={rewards.error || rewardClaims.error}
+                    showContentOnError={rewards.rows.length > 0 || rewardClaims.rows.length > 0}
                 >
                     <p className={dashStyles.entryDescription} style={{ margin: 0 }}>
-                        <strong>Pending:</strong> {pending} XCP · <strong>Lifetime:</strong> {lifetime} XCP
+                        <strong>Unclaimed rewards:</strong> {pending} XCP; <strong>Total rewards earned:</strong> {lifetime} XCP
                     </p>
                     {recentRewards.length > 0 ? (
-                        <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1rem' }}>
+                        <ul className={styles.metricList}>
                             {recentRewards.map((r, i) => (
                                 <li key={i} className={dashStyles.entryDescription}>
-                                    {formatRewardAmount(r)} XCP at block {r.block_index || '?'}
-                                    {r.status ? ` · ${r.status}` : ''}
+                                    Reward amount: {formatRewardAmount(r)} XCP; earned at block {r.block_index || 'unknown'}
+                                    {r.status ? `; status: ${plainWords(r.status)}` : ''}
                                 </li>
                             ))}
                         </ul>
                     ) : null}
                 </Section>
 
-                <Section title="Publishing activity" loading={broadcasts.loading} error={broadcasts.error}>
+                <Section title="Publishing activity" loading={broadcasts.loading} error={broadcasts.error} showContentOnError={recentBroadcasts.length > 0}>
                     {recentBroadcasts.length === 0 ? (
                         <EmptyState
                             title="No published feed values"
@@ -238,18 +273,18 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                             titleAs="h3"
                         />
                     ) : (
-                        <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+                        <ul className={styles.metricList}>
                             {recentBroadcasts.map((b, i) => (
-                                <li key={i} className={dashStyles.entryDescription}>
-                                    v{String(b.action_format ?? b.ACTION_FORMAT ?? '?')}
-                                    {' · '}
+                                <li key={i} className={`${dashStyles.entryDescription} ${styles.activityItem}`}>
+                                    Format version: {String(b.action_format ?? b.ACTION_FORMAT ?? 'unknown')};
+                                    {' '}
                                     {b.message || b.MESSAGE
-                                        ? <span title={String(b.message || b.MESSAGE)}>"{truncate(b.message || b.MESSAGE, 32)}"</span>
+                                        ? <span title={String(b.message || b.MESSAGE)}>Message: "{truncate(b.message || b.MESSAGE, 32)}"</span>
                                         : (b.broadcast_action_index || b.BROADCAST_ACTION_INDEX
-                                            ? <>feed #{b.broadcast_action_index || b.BROADCAST_ACTION_INDEX}</>
-                                            : '(none)')}
-                                    {(b.value !== undefined && b.value !== null) ? <> · value: {String(b.value)}</> : null}
-                                    {' · block '}{b.block_index || '?'}
+                                            ? <>Feed reference number: {b.broadcast_action_index || b.BROADCAST_ACTION_INDEX}</>
+                                            : 'Message or feed reference: none')}
+                                    {(b.value !== undefined && b.value !== null) ? <>; published value: {String(b.value)}</> : null}
+                                    {'; published at block: '}{b.block_index || 'unknown'}
                                 </li>
                             ))}
                         </ul>
@@ -271,18 +306,23 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 }
 
 /**
- * @param {{ title: string, loading: boolean, error: string | null, children: React.ReactNode }} props
+ * @param {{ title: string, loading: boolean, error: string | null, showContentOnError?: boolean, children: React.ReactNode }} props
  */
-function Section({ title, loading, error, children }) {
+function Section({ title, loading, error, showContentOnError = false, children }) {
     return (
         <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', paddingTop: 'var(--xc-space-2)', borderTop: '1px solid var(--xc-border)' }}>
             <SectionHeader title={title} />
             {loading ? (
                 <p className={dashStyles.entryDescription}>Loading…</p>
-            ) : error ? (
-                <StatusMessage variant="error" className={dashStyles.entryDescription}>Couldn't load: {error}</StatusMessage>
             ) : (
-                children
+                <>
+                    {error ? (
+                        <StatusMessage variant="error" className={dashStyles.entryDescription}>
+                            {showContentOnError ? "Couldn't refresh this section" : "Couldn't load this section"}: {error}
+                        </StatusMessage>
+                    ) : null}
+                    {!error || showContentOnError ? children : null}
+                </>
             )}
         </section>
     );
@@ -317,4 +357,9 @@ function shortPubkey(pk) {
 function truncate(s, n) {
     const str = String(s || '');
     return str.length > n ? str.slice(0, n) + '…' : str;
+}
+
+function plainWords(value) {
+    const words = String(value || 'unknown').trim().replace(/[_-]+/g, ' ').toLowerCase();
+    return words.charAt(0).toUpperCase() + words.slice(1);
 }

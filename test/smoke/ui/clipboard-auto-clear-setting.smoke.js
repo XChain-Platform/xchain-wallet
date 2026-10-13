@@ -70,18 +70,18 @@ assert.ok(!/CLIPBOARD_AUTO_CLEAR_/.test(psBody),
 assert.ok(/Change-address rotation/.test(psBody) && /Form draft retention/.test(psBody),
     'the surrounding Privacy rows survive the removal');
 
-// --- 3. The consumer is gone too, and stays gone ------------------------
+// --- 3. Private-key copies use the fixed sensitive clipboard policy -------
 //
-// ViewPrivateKey used to read this setting and clear the clipboard on its
-// timer. (operator decision, 2026-08-01) made key material
-// uncopyable on every shell, so the Copy button that timer served is gone and
-// with it the only reader of this value. If a copy path ever returns here,
-// this assertion fires and whoever adds it has to decide, deliberately,
-// whether the setting comes back with it.
+// The settings control stays absent. Private-key copies use the shared
+// sensitive clipboard TTL so native expiry and the browser clear agree.
 const vpk = readFileSync(join(routes, 'ViewPrivateKey.jsx'), 'utf8');
 assert.ok(!/clipboardAutoClearSeconds/.test(vpk),
-    'ViewPrivateKey no longer reads the setting (removed its Copy button)');
+    'ViewPrivateKey does not promise a configurable clipboard timeout');
 assert.ok(!/navigator\.clipboard/.test(vpk),
-    'ViewPrivateKey writes no clipboard at all');
+    'ViewPrivateKey never writes directly to the browser clipboard');
+assert.ok(/<CopyButton[\s\S]*?sensitive/.test(vpk),
+    'ViewPrivateKey marks private-key copies sensitive');
+assert.ok(/SENSITIVE_CLIP_TTL_SECONDS/.test(vpk) && /clearClipboard\(\)/.test(vpk),
+    'ViewPrivateKey clears sensitive copies at the shared TTL');
 
-console.log('clipboard-auto-clear-setting smoke OK (schema field retained for compatibility; the control is gone and its consumer )');
+console.log('clipboard-auto-clear-setting smoke OK (schema field retained; private-key copy uses fixed sensitive expiry)');
