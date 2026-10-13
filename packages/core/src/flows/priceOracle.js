@@ -32,7 +32,8 @@
 // network access. In production the host wraps it with the global
 // fetch from the browser / SW.
 
-const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+import { COINGECKO_API_BASE } from '../branding/branding.js';
+
 const SPOT_TTL_MS = 5 * 60 * 1000;
 const SPARKLINE_TTL_MS = 60 * 60 * 1000;
 
@@ -137,7 +138,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         let spotErr = null;
         try {
             const idsParam = stale.map((s) => s.coingeckoId).join(',');
-            const url = `${COINGECKO_BASE}/simple/price?ids=${encodeURIComponent(idsParam)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_market_cap=true&include_24hr_change=true`;
+            const url = `${COINGECKO_API_BASE}/simple/price?ids=${encodeURIComponent(idsParam)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_market_cap=true&include_24hr_change=true`;
             const resp = await fetch(url);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
@@ -173,7 +174,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
                 const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
                 if (cached?.sparkline) return;
                 try {
-                    const url = `${COINGECKO_BASE}/coins/${encodeURIComponent(lk.coingeckoId)}/market_chart?vs_currency=${encodeURIComponent(vsCurrency)}&days=7`;
+                    const url = `${COINGECKO_API_BASE}/coins/${encodeURIComponent(lk.coingeckoId)}/market_chart?vs_currency=${encodeURIComponent(vsCurrency)}&days=7`;
                     const resp = await fetch(url);
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     const data = await resp.json();

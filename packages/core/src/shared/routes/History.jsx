@@ -2842,14 +2842,14 @@ function explorerLinksFor(entry, settings) {
         links.push({
             id: 'mempool',
             label: 'Mempool',
-            iconImg: 'https://mempool.space/resources/favicons/favicon.ico',
-            url: `https://mempool.space/${mempoolPath}tx/${txHash}`,
+            iconImg: branding.EXTERNAL_EXPLORERS.mempool.iconUrl,
+            url: `${branding.EXTERNAL_EXPLORERS.mempool.baseUrl}/${mempoolPath}tx/${txHash}`,
         });
         links.push({
             id: 'blockstream',
             label: 'Blockstream',
-            iconImg: 'https://blockstream.info/favicon.ico',
-            url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
+            iconImg: branding.EXTERNAL_EXPLORERS.blockstream.iconUrl,
+            url: `${branding.EXTERNAL_EXPLORERS.blockstream.baseUrl}/${blockstreamPath}tx/${txHash}`,
         });
     } else if (coin === 'litecoin') {
         // LitecoinSpace mirrors mempool.space's URL scheme (it's a
@@ -2859,15 +2859,15 @@ function explorerLinksFor(entry, settings) {
         links.push({
             id: 'litecoinspace',
             label: 'LitecoinSpace',
-            iconImg: 'https://litecoinspace.org/favicon.ico',
-            url: `https://litecoinspace.org/${litecoinSpacePath}tx/${txHash}`,
+            iconImg: branding.EXTERNAL_EXPLORERS.litecoinSpace.iconUrl,
+            url: `${branding.EXTERNAL_EXPLORERS.litecoinSpace.baseUrl}/${litecoinSpacePath}tx/${txHash}`,
         });
         if (network === 'mainnet') {
             links.push({
                 id: 'blockchair',
                 label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/litecoin/transaction/${txHash}`,
+                iconImg: branding.EXTERNAL_EXPLORERS.blockchair.iconUrl,
+                url: `${branding.EXTERNAL_EXPLORERS.blockchair.baseUrl}/litecoin/transaction/${txHash}`,
             });
         }
     } else if (coin === 'dogecoin') {
@@ -2877,14 +2877,14 @@ function explorerLinksFor(entry, settings) {
             links.push({
                 id: 'blockchair',
                 label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/dogecoin/transaction/${txHash}`,
+                iconImg: branding.EXTERNAL_EXPLORERS.blockchair.iconUrl,
+                url: `${branding.EXTERNAL_EXPLORERS.blockchair.baseUrl}/dogecoin/transaction/${txHash}`,
             });
             links.push({
                 id: 'blockcypher',
                 label: 'BlockCypher',
-                iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
-                url: `https://live.blockcypher.com/doge/tx/${txHash}`,
+                iconImg: branding.EXTERNAL_EXPLORERS.blockcypher.iconUrl,
+                url: `${branding.EXTERNAL_EXPLORERS.blockcypher.baseUrl}/doge/tx/${txHash}`,
             });
         }
     }
