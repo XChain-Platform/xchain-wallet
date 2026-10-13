@@ -37,34 +37,85 @@
 // row is precise where an ADDRESS_UPDATE balance snapshot is not (it can't
 // tell a send from a receive).
 //
-// One transaction, at most one "you received something" (§5 M3.3): the
-// pending sighting and the confirmation of the same tx_hash are two frames
-// about one event, so whichever is delivered first marks the (address,
-// tx_hash) pair in `_announced` and the other is suppressed. The 30s replay
-// dedup below cannot do this: it is keyed by kind and expires long before a
-// block lands. A suppressed delivery (quiet hours, toggle off) does NOT mark
-// the pair, so the user still hears about the confirmation when it arrives.
+// One transaction, at most one fund notification (§5 M3.3): pending and
+// confirmed receipt frames describe one event, and a multi-action send can
+// emit several confirmed rows. The first delivered row marks the (chain,
+// tx_hash) pair in `_announced` and its siblings are suppressed. The 30s
+// replay dedup below cannot do this: it is keyed by kind and expires long
+// before a block lands. A suppressed delivery (quiet hours, toggle off) does
+// NOT mark the pair, so a later eligible frame can still notify the user.
 //
-// Privacy (§46.4): notification text carries no keys and no precise balances.
-// Only the chain name and the event kind are included. (Amount/token inclusion
-// gated by the `notifications.showAmounts` preference is a follow-up; bodies
-// stay generic for now.)
+// Privacy (§46.4): notification text carries no keys or counterparties. SEND
+// notifications name the amount and asset from the validated wire tuple so
+// the user can identify the transfer without opening the wallet.
 
 import { isWithinQuietHours } from './quietHours.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
-// How long an announced (address, tx_hash) pair suppresses its twin. A
+// How long an announced (chain, tx_hash) pair suppresses its twin. A
 // mempool sighting is normally confirmed within minutes; an hour covers a
 // congested chain without keeping the map growing for the session's life.
 const ANNOUNCED_TTL_MS = 60 * 60_000;
 const ANNOUNCED_CAP = 500;
 const SUB_WARN_THRESHOLD = 20; // explorer caps a connection at 25 subscriptions
 
-/** The kinds that mean "you received something" and must not double up per tx. */
-const RECEIVED_KINDS = new Set(['incoming-pending', 'incoming-receipt']);
+/** Fund movement kinds that must not double up per transaction. */
+const TX_DEDUP_KINDS = new Set(['incoming-pending', 'incoming-receipt', 'tx-confirmed']);
 
 const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
+
+// Mirrors the SDK SEND layouts. Exact tuple pairing matters for v1-v3: an
+// amount from one output must never be shown beside another output's asset.
+const SEND_LAYOUTS = {
+    0: { count: 6, outputs: [{ tick: 2, amount: 3, destination: 4 }] },
+    1: { count: 8, outputs: [{ tick: 2, amount: 3, destination: 4 }, { tick: 2, amount: 5, destination: 6 }] },
+    2: { count: 9, outputs: [{ tick: 2, amount: 3, destination: 4 }, { tick: 5, amount: 6, destination: 7 }] },
+    3: { count: 10, outputs: [{ tick: 2, amount: 3, destination: 4 }, { tick: 6, amount: 7, destination: 8 }] },
+};
+
+function isPositiveWireAmount(value) {
+    const text = String(value ?? '');
+    return /^\d+(?:\.\d+)?$/.test(text) && /[1-9]/.test(text);
+}
+
+/**
+ * Amount and asset labels carried by a valid SEND frame. When `address` is
+ * supplied, only outputs paying that address are returned.
+ *
+ * @param {any} data
+ * @param {string | null} [address]
+ * @returns {string[]}
+ */
+function transferLabels(data, address = null) {
+    const raw = data && typeof data.data === 'string' ? data.data : null;
+    if (raw) {
+        const parts = raw.normalize('NFC').split('|');
+        if (String(parts[0] || '').trim().toUpperCase() === 'SEND') {
+            const layout = SEND_LAYOUTS[Number(String(parts[1] || '').trim())];
+            if (layout && parts.length === layout.count) {
+                const labels = [];
+                for (const output of layout.outputs) {
+                    const amount = parts[output.amount];
+                    const tick = String(parts[output.tick] || '').trim().toUpperCase();
+                    const destination = String(parts[output.destination] || '');
+                    if (!isPositiveWireAmount(amount) || !tick) return [];
+                    if (address === null || destination === address) labels.push(`${amount} ${tick}`);
+                }
+                return labels;
+            }
+        }
+    }
+
+    const amount = data?.amount ?? data?.AMOUNT ?? data?.quantity ?? data?.QUANTITY;
+    const tick = String(data?.tick ?? data?.TICK ?? data?.asset ?? '').trim().toUpperCase();
+    return isPositiveWireAmount(amount) && tick ? [`${amount} ${tick}`] : [];
+}
+
+function transferText(data, address = null) {
+    const labels = transferLabels(data, address);
+    return labels.length > 0 ? labels.join(' and ') : null;
+}
 
 /**
  * Whether a frame's parties name `address` as a RECIPIENT. The sender is
@@ -92,8 +143,8 @@ export class NotificationService {
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
      *   read the live Settings record; re-read per event so toggling a flag off
      *   takes effect immediately, no resubscribe
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
-     *   the shell-specific delivery adapter
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
+     *   the shell-specific delivery adapter; false means no visible surface delivered
      * @param {() => Promise<Set<string> | string[]>} [deps.getPendingTxids]
      *   optional: txids the wallet broadcast and is awaiting (status 'broadcast').
      *   When provided, tx-confirmed only fires for txs we actually sent.
@@ -142,7 +193,7 @@ export class NotificationService {
         this._conns = new Map();
         /** @type {Map<string, number>} dedup key -> expiry ms */
         this._recent = new Map();
-        /** @type {Map<string, number>} `${address}:${tx_hash}` already announced as received -> expiry ms */
+        /** @type {Map<string, number>} `${chainId}:${tx_hash}` already announced -> expiry ms */
         this._announced = new Map();
     }
 
@@ -299,7 +350,10 @@ export class NotificationService {
                 // ruling I-35a) so an older settings record is not silent.
                 if (!isInboundFor(addr.address, data)) break;
                 if (flags.incomingPending === false) break;
-                plan = { kind: 'incoming-pending', title: `Incoming on ${addr.label}`, body: `A payment to your ${addr.label} address is pending, waiting for a block.` };
+                const incoming = transferText(data, addr.address);
+                plan = incoming
+                    ? { kind: 'incoming-pending', title: `${incoming} incoming`, body: `${incoming} to your ${addr.label} address is pending, waiting for a block.` }
+                    : { kind: 'incoming-pending', title: `Incoming on ${addr.label}`, body: `A payment to your ${addr.label} address is pending, waiting for a block.` };
                 break;
             }
             case 'NEW_ACTION': {
@@ -312,7 +366,10 @@ export class NotificationService {
                     // left here is whether to TELL the user.
                     if (!confirmedOwnSend) break; // a stranger's transaction: never notify
                     if (!flags.txConfirmations) break;
-                    plan = { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
+                    const sent = transferText(data);
+                    plan = sent
+                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${sent} transaction on ${addr.label} was confirmed.` }
+                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your transaction on ${addr.label} was confirmed.` };
                 } else if (isInboundFor(addr.address, data)) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
@@ -326,7 +383,10 @@ export class NotificationService {
                         plan = { kind: 'incoming-message', title: 'New message', body: `You received a message on ${addr.label}.` };
                     } else {
                         if (!flags.incomingReceipts) break;
-                        plan = { kind: 'incoming-receipt', title: `Received on ${addr.label}`, body: `Your ${addr.label} address received a transaction.` };
+                        const received = transferText(data, addr.address);
+                        plan = received
+                            ? { kind: 'incoming-receipt', title: `Received ${received}`, body: `Your ${addr.label} address received ${received}.` }
+                            : { kind: 'incoming-receipt', title: `Received on ${addr.label}`, body: `Your ${addr.label} address received a transaction.` };
                     }
                 }
                 break;
@@ -376,11 +436,12 @@ export class NotificationService {
                 : String(msg.timestamp || this._now());
         if (this._isDuplicate(`${plan.kind}:${addr.address}:${ident}`)) return;
 
-        const receivedKey = RECEIVED_KINDS.has(plan.kind) && txHash ? `${addr.address}:${txHash}` : null;
-        if (receivedKey && this._wasAnnounced(receivedKey)) return;
+        const transactionKey = TX_DEDUP_KINDS.has(plan.kind) && txHash ? `${addr.chainId}:${txHash}` : null;
+        if (transactionKey && this._wasAnnounced(transactionKey)) return;
 
+        let delivered = true;
         try {
-            await this._notify({
+            delivered = await this._notify({
                 kind: plan.kind,
                 title: plan.title,
                 body: plan.body,
@@ -394,13 +455,14 @@ export class NotificationService {
             });
         } catch (e) {
             this._log.error('NotificationService: notify adapter threw', e);
+            delivered = false;
         }
-        // Marked after delivery, not before: a delivery the adapter refused is
-        // not one the user heard, and the confirmation should still get its turn.
-        if (receivedKey) this._markAnnounced(receivedKey);
+        // A false return lets an adapter report that permission or host state
+        // refused every visible delivery surface.
+        if (transactionKey && delivered !== false) this._markAnnounced(transactionKey);
     }
 
-    /** Whether this (address, tx_hash) pair was already announced as received within the TTL. */
+    /** Whether this (chain, tx_hash) pair was already announced as received within the TTL. */
     _wasAnnounced(key) {
         const exp = this._announced.get(key);
         if (exp == null) return false;

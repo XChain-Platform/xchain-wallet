@@ -96,12 +96,14 @@ export async function createDemoWallet({
         activeChainIds,
         kdfParams: makeFreshKdfParams(DEMO_KDF_OVERRIDES),
     });
+    const demoWallet = { ...created.wallet, origin: 'demo' };
+    await vault.wallets.put(demoWallet);
 
     return {
         vault,
         password,
         mnemonic: created.mnemonic,
-        wallet: created.wallet,
+        wallet: demoWallet,
         account: created.account,
         addresses: created.addresses,
     };

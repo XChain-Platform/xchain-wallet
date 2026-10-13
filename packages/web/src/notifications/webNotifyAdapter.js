@@ -83,15 +83,18 @@ function tabVisible() {
 }
 
 /**
- * @returns {((n: { kind: string, title: string, body: string, sound?: { id: string, file: string } | null }) => void) & { playSound: (soundId: string) => boolean }}
+ * @returns {((n: { kind: string, title: string, body: string, sound?: { id: string, file: string } | null }) => boolean) & { playSound: (soundId: string) => boolean }}
  */
 export function createWebNotifyAdapter() {
     function notify({ kind, title, body, sound }) {
+        const visible = tabVisible();
+        let inAppDelivered = false;
         // In-app channel: always dispatched; the React listener decides
         // whether to show it (it only toasts when the tab is focused).
         try {
             if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
                 window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { kind, title, body } }));
+                inAppDelivered = visible;
             }
         } catch {
             // Non-DOM environment (e.g. a Node smoke run); nothing to do.
@@ -99,9 +102,10 @@ export function createWebNotifyAdapter() {
 
         // Sound: the in-app path only, so it accompanies the toast and never
         // an OS notification (which has the system's sound) or nothing at all.
-        if (sound && tabVisible()) playFile(sound);
+        if (sound && visible) playFile(sound);
 
         // OS channel: only when backgrounded and permission is granted.
+        let osDelivered = false;
         try {
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden'
@@ -109,10 +113,12 @@ export function createWebNotifyAdapter() {
                 && Notification.permission === 'granted') {
                 // eslint-disable-next-line no-new
                 new Notification(title, { body });
+                osDelivered = true;
             }
         } catch {
             // Permission revoked mid-session / unsupported; silently skip.
         }
+        return inAppDelivered || osDelivered;
     }
 
     /**

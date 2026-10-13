@@ -20,6 +20,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../../../packages/core/src/notifications/NotificationService.js';
+import { getActiveAddresses } from '../../../packages/core/src/notifications/getActiveAddresses.js';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -41,16 +42,16 @@ function makeSdk() {
     };
 }
 
-function harness({ settings: settingsOverride, now = 1_000_000 } = {}) {
+function harness({ settings: settingsOverride, now = 1_000_000, addresses, notifyResult } = {}) {
     const settings = {
         notifications: { txConfirmations: true, incomingReceipts: true, messages: true, dispenserFills: true, orderFills: true, priceAlerts: true },
         ...settingsOverride,
     };
     const sdk = makeSdk();
-    const notify = vi.fn(async () => {});
+    const notify = vi.fn(async () => notifyResult);
     let clock = now;
     const svc = new NotificationService({
-        getActiveAddresses: async () => [{ address: OURS, chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' }],
+        getActiveAddresses: async () => addresses || [{ address: OURS, chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' }],
         getSdkForChain: () => sdk,
         getSettings: async () => settings,
         notify,
@@ -64,7 +65,7 @@ function pendingFrame(over = {}) {
     return {
         type: 'MEMPOOL_ACTION',
         timestamp: Date.now(),
-        data: { tx_hash: TX, source: STRANGER, action: 'SEND', data: `SEND|2|XCHAIN|5|${OURS}`, first_seen: 1_700_000_000, destinations: [OURS], ...over },
+        data: { tx_hash: TX, source: STRANGER, action: 'SEND', data: `SEND|0|XCHAIN|5|${OURS}|`, first_seen: 1_700_000_000, destinations: [OURS], ...over },
     };
 }
 
@@ -73,7 +74,7 @@ function confirmedFrame(over = {}) {
     return {
         type: 'NEW_ACTION',
         timestamp: Date.now(),
-        data: { action_index: 77, tx_hash: TX, source: STRANGER, action: 'SEND', destinations: [OURS], ...over },
+        data: { action_index: 77, tx_hash: TX, source: STRANGER, action: 'SEND', data: `SEND|0|XCHAIN|5|${OURS}|`, destinations: [OURS], ...over },
     };
 }
 
@@ -92,8 +93,8 @@ describe('NotificationService: incoming-pending', () => {
         const n = h.notify.mock.calls[0][0];
         expect(n.kind).toBe('incoming-pending');
         expect(n.data).toMatchObject({ address: OURS, type: 'MEMPOOL_ACTION', txHash: TX.toLowerCase() });
-        // Privacy (§46.4): no amount, no counterparty in what the OS shows.
-        expect(`${n.title} ${n.body}`).not.toMatch(/5|XCHAIN|addrStranger/);
+        expect(`${n.title} ${n.body}`).toMatch(/5 XCHAIN/);
+        expect(`${n.title} ${n.body}`).not.toMatch(/addrStranger/);
         expect(`${n.title} ${n.body}`).toMatch(/pending/i);
     });
 
@@ -144,6 +145,17 @@ describe('NotificationService: incoming-pending', () => {
         h.sdk.emit(OURS, { ...pendingFrame({ tx_hash: TX.toUpperCase() }), timestamp: Date.now() + 5_000 });
         await flush();
         expect(h.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('pairs the amount and asset with the output that pays the watched address', async () => {
+        const h = await started();
+        h.sdk.emit(OURS, pendingFrame({
+            data: `SEND|2|OTHER|99|addrElse|OURSCOIN|7|${OURS}|`,
+        }));
+        await flush();
+        const copy = `${h.notify.mock.calls[0][0].title} ${h.notify.mock.calls[0][0].body}`;
+        expect(copy).toMatch(/7 OURSCOIN/);
+        expect(copy).not.toMatch(/99 OTHER/);
     });
 
     it('quiet hours suppress the pending notice without marking it announced, so the confirmation still speaks', async () => {
@@ -197,6 +209,36 @@ describe('NotificationService: one "received" announcement per transaction', () 
         expect(h.notify).toHaveBeenCalledTimes(2);
     });
 
+    it('deduplicates the same transaction across two watched addresses', async () => {
+        const second = 'addrBTC2';
+        const h = await started({ addresses: [
+            { address: OURS, chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+            { address: second, chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+        ] });
+        h.sdk.emit(OURS, pendingFrame());
+        await flush();
+        h.advance(60_000);
+        h.sdk.emit(second, confirmedFrame({
+            data: `SEND|0|XCHAIN|5|${second}|`,
+            destinations: [second],
+        }));
+        await flush();
+        expect(h.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not mark a permission-refused delivery as announced', async () => {
+        const h = await started({ notifyResult: false });
+        h.notify.mockResolvedValueOnce(false).mockResolvedValue(true);
+        h.sdk.emit(OURS, pendingFrame());
+        await flush();
+        h.sdk.emit(OURS, confirmedFrame());
+        await flush();
+        expect(h.notify.mock.calls.map((call) => call[0].kind)).toEqual([
+            'incoming-pending',
+            'incoming-receipt',
+        ]);
+    });
+
     it('forgets an announcement after an hour, so a very late confirmation is not swallowed forever', async () => {
         const h = await started();
         h.sdk.emit(OURS, pendingFrame());
@@ -236,6 +278,7 @@ describe('NotificationService: confirmed-side recipients read destinations[]', (
         await flush();
         expect(h.notify).toHaveBeenCalledTimes(1);
         expect(h.notify.mock.calls[0][0]).toMatchObject({ kind: 'incoming-receipt', data: { txHash: TX.toLowerCase() } });
+        expect(`${h.notify.mock.calls[0][0].title} ${h.notify.mock.calls[0][0].body}`).toMatch(/5 XCHAIN/);
     });
 
     it('still honours the retired singular field from an older explorer', async () => {
@@ -251,5 +294,72 @@ describe('NotificationService: confirmed-side recipients read destinations[]', (
         h.sdk.emit(OURS, confirmedFrame({ destinations: ['addrElse', OURS, 'addrThird'] }));
         await flush();
         expect(h.notify).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('NotificationService: confirmation wording', () => {
+    it('names the amount and asset in an outgoing SEND confirmation', async () => {
+        const h = await started();
+        h.sdk.emit(OURS, {
+            type: 'NEW_ACTION',
+            data: {
+                action_index: 88,
+                tx_hash: 'sent123',
+                source: OURS,
+                action: 'SEND',
+                data: 'SEND|0|PEPE|12.5|addrElse|',
+            },
+        });
+        await flush();
+        expect(h.notify).toHaveBeenCalledTimes(1);
+        const notification = h.notify.mock.calls[0][0];
+        expect(notification.kind).toBe('tx-confirmed');
+        expect(`${notification.title} ${notification.body}`).toMatch(/12\.5 PEPE/);
+    });
+
+    it('announces only once when one transaction confirms multiple action rows', async () => {
+        const h = await started();
+        const frame = (actionIndex, data) => ({
+            type: 'NEW_ACTION',
+            data: {
+                action_index: actionIndex,
+                tx_hash: 'multi-action-tx',
+                source: OURS,
+                action: 'SEND',
+                data,
+            },
+        });
+        h.sdk.emit(OURS, frame(88, 'SEND|0|PEPE|12.5|addrElse|'));
+        await flush();
+        h.sdk.emit(OURS, frame(89, 'SEND|0|XCHAIN|2|addrThird|'));
+        await flush();
+        expect(h.notify).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('getActiveAddresses: demo wallet exclusion', () => {
+    it('returns real-wallet addresses and excludes demo-owned addresses', async () => {
+        const vault = {
+            addresses: { list: async () => [
+                { accountId: 'account-real', address: 'real', chain: 'bitcoin', network: 'mainnet' },
+                { accountId: 'account-demo', address: 'demo', chain: 'bitcoin', network: 'mainnet' },
+            ] },
+            accounts: { list: async () => [
+                { id: 'account-real', walletId: 'wallet-real' },
+                { id: 'account-demo', walletId: 'wallet-demo' },
+            ] },
+            wallets: { list: async () => [
+                { id: 'wallet-real', origin: 'created' },
+                { id: 'wallet-demo', origin: 'demo' },
+            ] },
+        };
+        const registry = {
+            chainIdFor: () => 'bitcoin-mainnet',
+            descriptorFor: () => ({ displayName: 'Bitcoin' }),
+        };
+
+        await expect(getActiveAddresses(vault, registry)).resolves.toEqual([
+            { address: 'real', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' },
+        ]);
     });
 });
