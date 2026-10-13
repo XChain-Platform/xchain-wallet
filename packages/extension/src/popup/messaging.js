@@ -13,7 +13,7 @@
 // so callers don't need to build envelopes by hand.
 
 import { getRecentShellErrors } from './errorCapture.js';
-import { sendMessage } from '../shared/chromeMessaging.js';
+import { RUNTIME_MESSAGE_TIMEOUT_MS, sendMessage } from '../shared/chromeMessaging.js';
 
 export { sendMessage };
 
@@ -25,7 +25,11 @@ export { sendMessage };
  * @returns {Promise<{ hasWallet: boolean, hasSession: boolean, state: 'no-wallet' | 'locked' | 'unlocked' }>}
  */
 export function getSessionStatus() {
-    return /** @type {any} */ (sendMessage('session.status'));
+    return /** @type {any} */ (sendMessage(
+        'session.status',
+        undefined,
+        { timeoutMs: RUNTIME_MESSAGE_TIMEOUT_MS },
+    ));
 }
 
 /**

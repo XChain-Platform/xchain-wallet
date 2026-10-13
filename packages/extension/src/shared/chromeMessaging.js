@@ -28,26 +28,71 @@
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
 import { hydrateEnvelopeError } from '../background/MessageHost.js';
 
+export const RUNTIME_MESSAGE_TIMEOUT_MS = 4_000;
+
+function runtimeTransportError(message, code) {
+    const error = new Error(message);
+    error.name = 'RuntimeConnectionError';
+    error.code = code;
+    return error;
+}
+
 /**
  * @param {string} type
  * @param {unknown} [request]
+ * @param {{ timeoutMs?: number }} [options]
  * @returns {Promise<unknown>}
  */
-export function sendMessage(type, request) {
+export function sendMessage(type, request, { timeoutMs = 0 } = {}) {
     return new Promise((resolve, reject) => {
         const runtime = globalThis.chrome?.runtime;
         if (!runtime?.sendMessage) {
-            reject(new Error('chrome.runtime.sendMessage unavailable'));
+            reject(runtimeTransportError(
+                'chrome.runtime.sendMessage unavailable',
+                'RUNTIME_UNAVAILABLE',
+            ));
             return;
         }
-        runtime.sendMessage({ type, request }, (response) => {
+
+        let settled = false;
+        const settle = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            if (timeout) clearTimeout(timeout);
+            callback(value);
+        };
+        const timeout = timeoutMs > 0
+            ? setTimeout(() => {
+                settle(
+                    reject,
+                    runtimeTransportError(
+                        `background did not respond to "${type}"`,
+                        'RUNTIME_TIMEOUT',
+                    ),
+                );
+            }, timeoutMs)
+            : null;
+
+        const handleResponse = (response) => {
             const lastErr = runtime.lastError;
             if (lastErr) {
-                reject(new Error(lastErr.message || 'runtime error'));
+                settle(
+                    reject,
+                    runtimeTransportError(
+                        lastErr.message || 'runtime connection failed',
+                        'RUNTIME_DISCONNECTED',
+                    ),
+                );
                 return;
             }
             if (!response || typeof response !== 'object') {
-                reject(new Error(`no response for "${type}"`));
+                settle(
+                    reject,
+                    runtimeTransportError(
+                        `no response for "${type}"`,
+                        'RUNTIME_NO_RESPONSE',
+                    ),
+                );
                 return;
             }
             if (response.ok) {
@@ -55,10 +100,22 @@ export function sendMessage(type, request) {
                     const req = /** @type {any} */ (request);
                     invalidateTokenInfoForAction(req?.chainId, req);
                 }
-                resolve(response.result);
+                settle(resolve, response.result);
                 return;
             }
-            reject(hydrateEnvelopeError(response.error));
-        });
+            settle(reject, hydrateEnvelopeError(response.error));
+        };
+
+        try {
+            runtime.sendMessage({ type, request }, handleResponse);
+        } catch (error) {
+            settle(
+                reject,
+                runtimeTransportError(
+                    error?.message || 'runtime connection failed',
+                    'RUNTIME_DISCONNECTED',
+                ),
+            );
+        }
     });
 }

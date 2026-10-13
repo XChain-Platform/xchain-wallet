@@ -10,3 +10,29 @@ body,
     max-width: 100%;
     min-width: 0;
 }
+
+.popup-background-connection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--xc-space-3);
+    min-height: 100%;
+    padding: var(--xc-space-5);
+    box-sizing: border-box;
+    color: var(--xc-text);
+}
+
+.popup-background-connection h1,
+.popup-background-connection p {
+    margin: 0;
+}
+
+.popup-background-connection h1 {
+    font-size: var(--xc-text-lg);
+}
+
+.popup-background-connection p {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+}
