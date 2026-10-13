@@ -65,11 +65,13 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             const results = await Promise.all(addresses.map((addr) =>
                 messaging.getMarketHistory({
                     chainId, tick1, tick2, address: addr.address,
-                }).then((resp) => ({ addr, rows: extractRows(resp) }))
-                  .catch(() => ({ addr, rows: [] }))
+                }).then((resp) => ({ addr, rows: extractRows(resp), error: null }))
+                  .catch((error) => ({ addr, rows: [], error }))
             ));
+            const successes = results.filter(({ error }) => !error);
+            if (successes.length === 0) throw results[0].error;
             const flat = [];
-            for (const { addr, rows: addrRows } of results) {
+            for (const { addr, rows: addrRows } of successes) {
                 for (const row of addrRows) flat.push({ ...row, __owner: addr });
             }
             flat.sort((a, b) => rowTime(b) - rowTime(a));
