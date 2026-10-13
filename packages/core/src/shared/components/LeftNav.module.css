@@ -282,14 +282,16 @@
 /* Unread/attention count pill pinned to the right of a nav row. */
 .badge {
     flex: 0 0 auto;
-    min-width: 1.1rem;
-    padding: 0 0.35rem;
-    border-radius: var(--xc-radius-pill);
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.25rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -421,10 +423,8 @@
     position: absolute;
     top: 2px;
     inset-inline-end: 6px;
-    min-width: 0.9rem;
-    padding: 0 0.25rem;
-    font-size: 9px;
-    line-height: 0.9rem;
+    min-width: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
 }
 
 .layout[data-xc-tier='rail'] .divider {

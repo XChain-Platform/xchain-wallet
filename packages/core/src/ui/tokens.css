@@ -104,6 +104,19 @@
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
+    /* Badges use one geometry scale regardless of semantic tone or theme. */
+    --xc-badge-height-sm: 24px;
+    --xc-badge-height-md: 32px;
+    --xc-badge-radius: var(--xc-radius-pill);
+    --xc-badge-font-size-sm: var(--xc-text-xs);
+    --xc-badge-font-size-md: var(--xc-text-sm);
+    --xc-badge-font-weight: 700;
+    --xc-badge-icon-size-sm: var(--xc-icon-sm);
+    --xc-badge-icon-size-md: var(--xc-icon-xl);
+    --xc-badge-gap: var(--xc-space-1);
+    --xc-badge-padding-inline-sm: var(--xc-space-2);
+    --xc-badge-padding-inline-md: var(--xc-space-3);
+
     /* Text controls share one visual scale across native and custom fields. */
     --xc-control-h-sm: 32px;
     --xc-control-h-md: 40px;
@@ -184,6 +197,15 @@
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
     --xc-success-fill: #146F34;
+    --xc-badge-multisig-classic-bg: #FEF3C7;
+    --xc-badge-multisig-classic-fg: #78350F;
+    --xc-badge-multisig-classic-border: #D97706;
+    --xc-badge-multisig-segwit-bg: #DBEAFE;
+    --xc-badge-multisig-segwit-fg: #1E3A8A;
+    --xc-badge-multisig-segwit-border: #3B82F6;
+    --xc-badge-multisig-taproot-bg: #EDE9FE;
+    --xc-badge-multisig-taproot-fg: #4C1D95;
+    --xc-badge-multisig-taproot-border: #8B5CF6;
     --xc-focus-ring: #0F172A;
     /* Saturation communicates inactivity without alpha-compositing control
      * borders below the non-text contrast floor. */
@@ -296,6 +318,15 @@
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
         --xc-success-fill: #4ADE80;
+        --xc-badge-multisig-classic-bg: #3A260B;
+        --xc-badge-multisig-classic-fg: #FDE68A;
+        --xc-badge-multisig-classic-border: #F59E0B;
+        --xc-badge-multisig-segwit-bg: #0D2A4A;
+        --xc-badge-multisig-segwit-fg: #BFDBFE;
+        --xc-badge-multisig-segwit-border: #60A5FA;
+        --xc-badge-multisig-taproot-bg: #2E2350;
+        --xc-badge-multisig-taproot-fg: #DDD6FE;
+        --xc-badge-multisig-taproot-border: #A78BFA;
         --xc-focus-ring: #FFFFFF;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -326,6 +357,15 @@
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
     --xc-success-fill: #4ADE80;
+    --xc-badge-multisig-classic-bg: #3A260B;
+    --xc-badge-multisig-classic-fg: #FDE68A;
+    --xc-badge-multisig-classic-border: #F59E0B;
+    --xc-badge-multisig-segwit-bg: #0D2A4A;
+    --xc-badge-multisig-segwit-fg: #BFDBFE;
+    --xc-badge-multisig-segwit-border: #60A5FA;
+    --xc-badge-multisig-taproot-bg: #2E2350;
+    --xc-badge-multisig-taproot-fg: #DDD6FE;
+    --xc-badge-multisig-taproot-border: #A78BFA;
     --xc-focus-ring: #FFFFFF;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
