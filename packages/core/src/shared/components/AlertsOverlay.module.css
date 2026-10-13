@@ -13,7 +13,8 @@
 
 .panel {
     width: 100%;
-    max-width: 380px;
+    max-width: min(380px, 100%);
+    min-width: 0;
     min-height: 0;
     background: var(--xc-surface);
     color: var(--xc-text);
@@ -108,6 +109,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -118,6 +122,8 @@
     border-inline-start: 4px solid var(--xc-text-muted);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-3);
+    max-width: 100%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -129,15 +135,20 @@
 
 .alertHead {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .alertTitle {
+    flex: 1 1 12rem;
+    min-width: 0;
     font-weight: 700;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
 }
 
 .severity {
@@ -152,7 +163,9 @@
 .critical .severity { color: var(--xc-danger-text); }
 
 .alertMessage {
+    min-width: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }

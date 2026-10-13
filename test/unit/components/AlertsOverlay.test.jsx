@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/ui/backStack.js', () => ({
     useBackHandler: () => {},
@@ -17,6 +17,7 @@ vi.mock('../../../packages/core/src/shared/utils/focusTrap.js', () => ({
 }));
 
 vi.mock('@xchain-wallet/core/ui', () => ({
+    Button: ({ children, onClick }) => <button type="button" onClick={onClick}>{children}</button>,
     Icon: { XIcon: () => <span aria-hidden="true">x</span> },
 }));
 
@@ -27,6 +28,9 @@ const overlayCss = readFileSync(
     'packages/core/src/shared/components/AlertsOverlay.module.css',
     'utf8',
 );
+const ruleBody = (selector) => overlayCss.match(
+    new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`),
+)?.[1] ?? '';
 
 afterEach(cleanup);
 
@@ -57,5 +61,46 @@ describe('AlertsOverlay', () => {
         expect(overlayCss).toMatch(
             /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.panel\s*\{\s*animation:\s*none/,
         );
+    });
+
+    it('keeps long rows and every action reachable in a 320px overlay', () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        const onClose = vi.fn();
+        const actions = [
+            { label: 'Mark read', onSelect: vi.fn() },
+            { label: 'Clear', onSelect: vi.fn() },
+            { label: 'Open', onSelect: vi.fn() },
+        ];
+        const longText = 'alert-content-without-break-opportunities-'.repeat(12);
+        const alerts = actions.map((action, index) => ({
+            id: `narrow-${index}`,
+            severity: index === 0 ? 'critical' : index === 1 ? 'warning' : 'info',
+            title: `${longText}${index}`,
+            message: `${longText}${index}`,
+            action,
+        }));
+
+        try {
+            render(<AlertsOverlay alerts={alerts} onClose={onClose} />);
+
+            expect(window.innerWidth).toBe(320);
+            expect(screen.getAllByRole('listitem')).toHaveLength(3);
+            for (const action of actions) {
+                fireEvent.click(screen.getByRole('button', { name: action.label }));
+                expect(action.onSelect).toHaveBeenCalledTimes(1);
+            }
+            expect(onClose).toHaveBeenCalledTimes(3);
+            expect(ruleBody('panel')).toMatch(/max-width:\s*min\(380px, 100%\)/);
+            expect(ruleBody('panel')).toMatch(/min-width:\s*0/);
+            expect(ruleBody('list')).toMatch(/max-width:\s*100%[\s\S]*min-width:\s*0/);
+            expect(ruleBody('alert')).toMatch(/max-width:\s*100%[\s\S]*min-width:\s*0/);
+            expect(ruleBody('alertHead')).toMatch(/flex-wrap:\s*wrap[\s\S]*min-width:\s*0/);
+            expect(ruleBody('alertTitle')).toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+            expect(ruleBody('alertMessage')).toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+            expect(ruleBody('body')).toMatch(/overflow-y:\s*auto/);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
     });
 });
