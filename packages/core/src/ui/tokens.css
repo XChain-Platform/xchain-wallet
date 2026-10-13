@@ -489,6 +489,14 @@ body {
     user-select: none;
 }
 
+/* Shared icons size from --xc-icon-size here, at zero specificity so a
+ * component rule still wins. The SVG attributes hold only a pixel fallback,
+ * since older Android WebViews ignore var() in width and height attributes. */
+:where(svg[data-xc-icon]) {
+    width: var(--xc-icon-size, var(--xc-icon-md));
+    height: var(--xc-icon-size, var(--xc-icon-md));
+}
+
 /* Machine-readable values remain directly selectable wherever they appear,
  * including inside a control that opens a transaction detail view. */
 :where(code, samp, output, address) {

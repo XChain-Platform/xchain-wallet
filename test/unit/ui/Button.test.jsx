@@ -59,8 +59,13 @@ describe('<Button>', () => {
         const icon = screen.getByRole('button').querySelector('svg');
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
-        expect(icon).toHaveAttribute('width', 'var(--xc-icon-size, var(--xc-icon-md))');
-        expect(icon).toHaveAttribute('height', 'var(--xc-icon-size, var(--xc-icon-md))');
+        // Attributes hold a plain pixel fallback; var() there renders at 300px
+        // on Android WebView 102. The size scale comes from the tokens.css rule.
+        expect(icon).toHaveAttribute('width', '18');
+        expect(icon).toHaveAttribute('height', '18');
+        expect(icon).toHaveAttribute('data-xc-icon');
+        expect(readFileSync('packages/core/src/ui/tokens.css', 'utf8'))
+            .toMatch(/svg\[data-xc-icon\]\)\s*\{[^}]*width:\s*var\(--xc-icon-size,\s*var\(--xc-icon-md\)\)/s);
         expect(icon).toHaveAttribute('aria-hidden', 'true');
         expect(icon).toHaveAttribute('focusable', 'false');
         expect(css).toMatch(/\.sm\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-sm\)/s);
