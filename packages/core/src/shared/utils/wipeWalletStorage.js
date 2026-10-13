@@ -18,6 +18,32 @@ export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
 /** Prefix of the queue's pruned-wallet ledger, one key per walletId; the wipe sweeps the whole range. */
 export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
 
+/** Renderer records that belong to the erased vault rather than to the app installation. */
+const WALLET_LOCAL_STORAGE_KEYS = Object.freeze([
+    'xchain-wallet:biometric',
+    'xc:activeWallet',
+    'xc:backupVerifiedAt',
+    'xc:backupReminderDismissedUntil',
+    'xc:demoWalletId',
+    'xc:demoWalletCreatedAt',
+    'xc:demoWalletTtlMs',
+    'xc:demoWalletPassword',
+    'xc:envelopeCommits',
+]);
+
+/** Renderer key families scoped to a wallet or one of its accounts. */
+const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
+    'xc:activeAccount:',
+    'xc:lastView:',
+    'xc:msgRead:',
+    'xc:msgUnread:',
+    'xc:msgRequestDeclined:',
+    'xc:formdraft:',
+    'xc:chainFilter:',
+    'xc:contacts:sort:',
+    'xc:historyGroupingMode:',
+]);
+
 /**
  * Nuke every store that answers "a wallet already exists on this
  * device", across all three shells.
@@ -53,6 +79,10 @@ export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
  *     injected stores): the signing freeze and the configured duress password.
  *     Both belong to the erased wallet, so a successful wipe removes them and
  *     a failed shell wipe keeps them guarding the wallet that survived.
+ *   - localStorage wallet-scoped UI records: biometric enrollment, active
+ *     wallet/account ids, backup state, demo credentials, pending envelope
+ *     recovery, route memory, messaging state, drafts and list preferences.
+ *     These records must not outlive the wallet ids or secrets they describe.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
  * shell keeps its vault blob, kdfParams meta, cached session key, unlock
@@ -88,11 +118,27 @@ export async function wipeWalletStorage() {
     try {
         globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
     } catch { /* ignore */ }
+    removeLocalStorageKeys(WALLET_LOCAL_STORAGE_KEYS);
     sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
+    for (const prefix of WALLET_LOCAL_STORAGE_PREFIXES) sweepLocalStoragePrefix(prefix);
     // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
     clearLockoutState();
     clearPanicModeState();
     clearDuressPassphrase();
+}
+
+/**
+ * Remove a fixed set of localStorage keys without making wipe success depend
+ * on a renderer preference store being available.
+ *
+ * @param {readonly string[]} keys
+ */
+function removeLocalStorageKeys(keys) {
+    try {
+        const store = globalThis.localStorage;
+        if (!store) return;
+        for (const key of keys) store.removeItem(key);
+    } catch { /* ignore */ }
 }
 
 /**

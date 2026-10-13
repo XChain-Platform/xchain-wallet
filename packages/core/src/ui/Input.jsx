@@ -10,6 +10,7 @@
 
 import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 
 /**
@@ -25,7 +26,9 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * Date-time fields (`type="datetime-local"`) always carry a line naming the
  * device time zone the value is read in, plus the entered moment in UTC,
  * because the browser control shows no zone and every expiration and
- * deadline form parses it as local time.
+ * deadline form parses it as local time. Date, date-time, and time fields
+ * retain their native picker and report required, malformed, min, max, and
+ * step validity errors through the same accessible error slot.
  *
  * @typedef {object} InputOwnProps
  * @property {string} [label]
@@ -33,6 +36,7 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
+ * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
 export const Input = forwardRef(function Input(
@@ -42,6 +46,7 @@ export const Input = forwardRef(function Input(
         error,
         errorKey,
         id,
+        optional = false,
         size = 'md',
         type = 'text',
         value,
@@ -58,18 +63,30 @@ export const Input = forwardRef(function Input(
         onKeyUp,
         onFocus,
         onBlur,
+        required = false,
+        onInvalid,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
+        'aria-required': externalRequired,
         ...rest
     },
     ref,
 ) {
     const autoId = useId();
     const inputId = id || autoId;
+    const requirement = resolveFieldRequirement({
+        label,
+        optional,
+        required,
+        ariaRequired: externalRequired,
+    });
     const [dismissedError, setDismissedError] = useState(null);
     const errorIsDismissed = dismissedError !== null && dismissedError.message === error
         && Object.is(dismissedError.key, errorKey);
-    const visibleError = error && !errorIsDismissed ? error : null;
+    const isDateOrTime = type === 'date' || type === 'datetime-local' || type === 'time';
+    const [dateError, setDateError] = useState(null);
+    const callerError = error && !errorIsDismissed ? error : null;
+    const visibleError = dateError || callerError;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
@@ -131,19 +148,28 @@ export const Input = forwardRef(function Input(
     };
     const handleBlur = (event) => {
         if (isPassword) setFocused(false);
+        if (isDateOrTime) setDateError(dateValidationMessage(event.currentTarget));
         onBlur?.(event);
     };
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
+        if (isDateOrTime) setDateError(null);
         if (error) setDismissedError({ message: error, key: errorKey });
         onChange?.(event);
+    };
+    const handleInvalid = (event) => {
+        if (isDateOrTime) {
+            setDateError(dateValidationMessage(event.currentTarget));
+            event.preventDefault();
+        }
+        onInvalid?.(event);
     };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={inputId} className={styles.label}>
-                    {label}
+                    {requirement.label}
                 </label>
             ) : null}
             <input
@@ -158,6 +184,8 @@ export const Input = forwardRef(function Input(
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                aria-required={requirement.ariaRequired}
+                required={required}
                 value={value}
                 defaultValue={defaultValue}
                 maxLength={maxLength}
@@ -166,6 +194,7 @@ export const Input = forwardRef(function Input(
                 onKeyUp={handleKeyUp}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                onInvalid={handleInvalid}
                 {...rest}
             />
             {hint && !visibleError ? (
@@ -195,3 +224,24 @@ export const Input = forwardRef(function Input(
         </div>
     );
 });
+
+function dateValidationMessage(input) {
+    const { validity, type } = input;
+    if (!validity || validity.valid) return null;
+
+    const valueName = type === 'time' ? 'time' : type === 'date' ? 'date' : 'date and time';
+    if (validity.valueMissing) return `Choose a ${valueName}.`;
+    if (validity.badInput || validity.typeMismatch) return `Enter a complete, valid ${valueName}.`;
+    if (validity.rangeUnderflow) {
+        return `Choose a ${valueName} on or after ${readableDateConstraint(input.min)}.`;
+    }
+    if (validity.rangeOverflow) {
+        return `Choose a ${valueName} on or before ${readableDateConstraint(input.max)}.`;
+    }
+    if (validity.stepMismatch) return `Choose a ${valueName} that matches the allowed interval.`;
+    return `Enter a valid ${valueName}.`;
+}
+
+function readableDateConstraint(value) {
+    return String(value || '').replace('T', ' at ');
+}

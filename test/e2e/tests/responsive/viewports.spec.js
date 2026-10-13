@@ -168,7 +168,7 @@ test.describe('responsive: one interface at every width', () => {
         await test.step('More sheet', async () => {
             await page.getByRole('navigation', { name: 'Bottom navigation' })
                 .getByRole('button', { name: 'More', exact: true }).click();
-            await expect(page.getByRole('dialog', { name: 'More navigation' })).toBeVisible();
+            await expect(page.getByRole('dialog', { name: 'More', exact: true })).toBeVisible();
             await expectTappable(page, 'More sheet at 360px');
             await page.keyboard.press('Escape');
         });

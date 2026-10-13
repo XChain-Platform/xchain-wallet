@@ -157,7 +157,7 @@ export function AmountFieldSection() {
 />`}
             </Markup>
 
-            <LiveExample label="Standard (md): the default size, matching the To / From / Token fields. Max button, USD equivalent + swap toggle underneath, balance on the right. Click the ⇄ toggle to flip to USD entry; click Max to fill the balance.">
+            <LiveExample label="Standard (md): the default size, matching the To / From / Token fields. Max button, USD equivalent + swap toggle underneath, balance on the right. Select the ⇄ toggle to flip to USD entry; select Max to fill the balance.">
                 <AmountField
                     amount={amount}
                     fiatAmount={fiatAmount}
