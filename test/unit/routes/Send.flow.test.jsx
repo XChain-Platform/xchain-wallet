@@ -244,7 +244,7 @@ describe('Send flow with mocked messaging', () => {
         );
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            "Couldn't load wallet addresses. Check your connection and try again.",
+            "Couldn't load addresses. Check your connection and try again.",
         );
         expect(document.body).not.toHaveTextContent('SDKHubError');
         expect(document.body).not.toHaveTextContent('status code 503');
