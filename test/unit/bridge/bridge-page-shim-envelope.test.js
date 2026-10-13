@@ -236,12 +236,37 @@ describe('what the reference dApp sees through the real provider', () => {
         expect(result.message).toMatch(/invalid response envelope/);
     });
 
+    it('rejects a successful response envelope with no result field', async () => {
+        relayOverride = (data) => reply(data.id, { ok: true });
+        const result = await provider.connect();
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('INTERNAL_ERROR');
+        expect(result.message).toMatch(/invalid response envelope/);
+    });
+
     it('accepts responses only from the current window origin', async () => {
         relayOverride = (data) => {
             window.dispatchEvent(new MessageEvent('message', {
                 data: { source: 'xchain-inject-response', id: data.id, ok: true, result: ['wrong'] },
                 origin: 'https://attacker.example',
                 source: window,
+            }));
+            reply(data.id, { ok: true, result: ['right'] });
+        };
+        await expect(provider.getAccounts()).resolves.toEqual(['right']);
+    });
+
+    it('accepts responses only from the current window source', async () => {
+        relayOverride = (data) => {
+            window.dispatchEvent(new MessageEvent('message', {
+                data: {
+                    source: 'xchain-inject-response',
+                    id: data.id,
+                    ok: true,
+                    result: ['wrong'],
+                },
+                origin: window.location.origin,
+                source: null,
             }));
             reply(data.id, { ok: true, result: ['right'] });
         };

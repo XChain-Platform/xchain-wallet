@@ -164,6 +164,8 @@
                 if (
                     !isRecord(response)
                     || typeof response.ok !== 'boolean'
+                    || (response.ok === true
+                        && !Object.prototype.hasOwnProperty.call(response, 'result'))
                     || (response.ok === false && !isBridgeError(response.error))
                 ) {
                     refuse('NO_RESPONSE: invalid response from background');
