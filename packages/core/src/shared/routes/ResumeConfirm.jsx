@@ -38,8 +38,22 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
+import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { copyText } from '../clipboard.js';
+import styles from './ResumeConfirm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+function explorerTxUrl(descriptor, txid) {
+    const base = descriptor?.explorer?.defaultUrl;
+    if (!base || !txid) return null;
+    const port = Number(descriptor.explorer.defaultPort);
+    const standardPort = port === 80 || port === 443 || !Number.isFinite(port);
+    const origin = standardPort ? base : `${base}:${port}`;
+    const code = explorerCoinCode(descriptor);
+    return `${origin.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
+}
 
 /**
  * @param {object} props
@@ -59,6 +73,8 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const passwordRef = useRef('');
     const [error, setError] = useState(/** @type {string | null} */(null));
     const [result, setResult] = useState(/** @type {any} */(null));
+    const [copied, setCopied] = useState('');
+    const [copyError, setCopyError] = useState(/** @type {string | null} */(null));
     const startedRef = useRef(false);
 
     const composed = session?.composed || {};
@@ -73,6 +89,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     // is a confirm that can only end in a failed unlock.
     const fromAddress = session?.dispatch?.base?.from || session?.request?.from || null;
     const hw = isHwSource(fromAddress);
+
+    const copyValue = useCallback(async (label, value) => {
+        const { ok } = await copyText(value);
+        if (!ok) {
+            setCopyError('Copy failed: clipboard unavailable.');
+            return;
+        }
+        setCopyError(null);
+        setCopied(label);
+    }, []);
 
     const start = useCallback(async () => {
         try {
@@ -172,17 +198,112 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         );
     }
 
+    const txid = result?.txid || result?.broadcast?.txid || '';
+    const base = session?.dispatch?.base || session?.request || {};
+    const sourceValue = base?.from?.address || base?.from || fromAddress?.address || '';
+    const destinationValue = base?.to || base?.destination || '';
+    const sourceAddress = typeof sourceValue === 'string' ? sourceValue : '';
+    const destinationAddress = typeof destinationValue === 'string' ? destinationValue : '';
+    const actionCode = composed?.action || String(composed?.actionString || '').split('|')[0];
+    const statusLabel = result?.queued
+        ? 'Signed, waiting to broadcast'
+        : txid ? 'Pending confirmation' : 'Submitted';
+    const title = result?.queued
+        ? 'Waiting to broadcast'
+        : txid ? 'Broadcast pending'
+        : result ? 'Submitted'
+        : 'Unfinished transaction';
+    const explorerUrl = explorerTxUrl(descriptor, txid);
+
     return (
-        <Screen variant={variant} title={result ? 'Sent' : 'Unfinished transaction'}>
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-            {result ? (
-                <p data-testid="resume-confirm-sent" style={{ overflowWrap: 'anywhere' }}>
-                    Sent.{result.txid || result.broadcast?.txid
-                        ? ` Transaction ${result.txid || result.broadcast?.txid}`
-                        : ''}
-                </p>
-            ) : null}
-            <Button onClick={() => (result ? onDone?.(result) : onCancel?.())}>Back</Button>
+        <Screen variant={variant}>
+            <div className={styles.page}>
+                <h1 className={styles.title}>{title}</h1>
+                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+                {result ? (
+                    <section
+                        className={styles.resultCard}
+                        data-testid="resume-confirm-sent"
+                        role="status"
+                        aria-live="polite"
+                        style={{ overflowWrap: 'anywhere' }}
+                    >
+                        <dl className={styles.details}>
+                            <div className={styles.detailRow}>
+                                <dt>Status</dt>
+                                <dd>{statusLabel}</dd>
+                            </div>
+                            {actionCode ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Action</dt>
+                                    <dd>{actionDisplayLabel(actionCode)}</dd>
+                                </div>
+                            ) : null}
+                            {descriptor || chainId ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Network</dt>
+                                    <dd>{descriptor?.displayName || chainId}</dd>
+                                </div>
+                            ) : null}
+                            {sourceAddress ? (
+                                <div className={styles.detailRow}>
+                                    <dt>From</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{sourceAddress}</code>
+                                        <button
+                                            type="button"
+                                            className={styles.copyButton}
+                                            onClick={() => copyValue('from', sourceAddress)}
+                                            aria-label="Copy from address"
+                                        >
+                                            {copied === 'from' ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {destinationAddress ? (
+                                <div className={styles.detailRow}>
+                                    <dt>To</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{destinationAddress}</code>
+                                        <button
+                                            type="button"
+                                            className={styles.copyButton}
+                                            onClick={() => copyValue('to', destinationAddress)}
+                                            aria-label="Copy to address"
+                                        >
+                                            {copied === 'to' ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {txid ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Transaction ID</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{txid}</code>
+                                        <button
+                                            type="button"
+                                            className={styles.copyButton}
+                                            onClick={() => copyValue('txid', txid)}
+                                            aria-label="Copy transaction ID"
+                                        >
+                                            {copied === 'txid' ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                        {explorerUrl && !result?.queued ? (
+                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                                View on explorer ↗
+                            </a>
+                        ) : null}
+                    </section>
+                ) : null}
+                <Button onClick={() => (result ? onDone?.(result) : onCancel?.())}>Back</Button>
+            </div>
         </Screen>
     );
 }

@@ -2307,6 +2307,52 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
     );
 }
 
+const DETAIL_FIELD_LABELS = Object.freeze({
+    action: 'Action',
+    action_index: 'Action number',
+    address: 'Wallet address',
+    block_index: 'Block',
+    chain: 'Chain',
+    chain_id: 'Chain',
+    destination: 'To',
+    source: 'From',
+    time: 'Time',
+    timestamp: 'Time',
+    tx_hash: 'Transaction ID',
+});
+
+/** Turn a protocol field name into the label shown in the Details table. */
+function detailFieldLabel(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
+    if (DETAIL_FIELD_LABELS[normalized]) return DETAIL_FIELD_LABELS[normalized];
+    const words = normalized.replace(/_+/g, ' ').trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Field';
+}
+
+/** Translate wire enum values while leaving identifiers and free text intact. */
+function detailValue(value, key) {
+    if (typeof value !== 'string') return value;
+    const normalizedKey = String(key || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+    if (!/(^|_)(status|state|side|direction|type)$/.test(normalizedKey)) return value;
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) return value;
+    const words = value.toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function copyLabelForDetailField(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    if (/(^|_)(tx_hash|txid|transaction_id)$/.test(normalized)) return 'Copy transaction ID';
+    if (normalized === 'source' || normalized === 'from') return 'Copy from address';
+    if (normalized === 'destination' || normalized === 'to') return 'Copy to address';
+    if (normalized.includes('address')) return `Copy ${detailFieldLabel(key).toLowerCase()}`;
+    return null;
+}
+
 function CopyIconButton({ value, label = 'Copy to clipboard' }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
@@ -2346,13 +2392,13 @@ function fullDetailRows(entry, balancesHidden = false) {
     const rows = [];
     const raw = entry.raw || {};
 
-    if (entry.action) rows.push(['action', entry.action]);
+    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
     if (entry.actionIndex) {
-        rows.push(['index', (
+        rows.push(['Action number', (
             <CopyableValue
                 display={Number(entry.actionIndex).toLocaleString('en-US')}
                 fullValue={String(entry.actionIndex)}
-                ariaLabel="Copy index"
+                ariaLabel="Copy action number"
             />
         )]);
     }
@@ -2360,38 +2406,38 @@ function fullDetailRows(entry, balancesHidden = false) {
     // chain family and network kind read separately.
     if (entry.chainId) {
         const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        if (coin) rows.push(['chain', coin]);
-        rows.push(['network', network]);
+        if (coin) rows.push(['Chain', capitalize(coin)]);
+        rows.push(['Network', capitalize(network)]);
     }
-    if (entry.blockIndex) rows.push(['block_index', Number(entry.blockIndex).toLocaleString('en-US')]);
-    else if (entry.blockIndex === 0) rows.push(['block_index', 'pending']);
+    if (entry.blockIndex) rows.push(['Block', Number(entry.blockIndex).toLocaleString('en-US')]);
+    else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
-        rows.push(['time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
     }
     if (entry.txHash) {
-        rows.push(['tx_hash', (
+        rows.push(['Transaction ID', (
             <CopyableValue
-                display={shortenAddress(entry.txHash)}
+                display={entry.txHash}
                 fullValue={entry.txHash}
-                ariaLabel="Copy tx hash"
+                ariaLabel="Copy transaction ID"
             />
         )]);
     }
     if (entry.source) {
-        rows.push(['source', (
+        rows.push(['From', (
             <CopyableValue
-                display={shortenAddress(entry.source)}
+                display={entry.source}
                 fullValue={entry.source}
-                ariaLabel="Copy source address"
+                ariaLabel="Copy from address"
             />
         )]);
     }
     if (entry.address) {
-        rows.push(['address', (
+        rows.push(['Wallet address', (
             <CopyableValue
-                display={shortenAddress(entry.address)}
+                display={entry.address}
                 fullValue={entry.address}
-                ariaLabel="Copy address"
+                ariaLabel="Copy wallet address"
             />
         )]);
     }
@@ -2430,9 +2476,16 @@ function fullDetailRows(entry, balancesHidden = false) {
         else if (typeof v === 'object') {
             try { display = JSON.stringify(v); } catch { display = String(v); }
         } else {
-            display = String(v);
+            display = detailValue(String(v), k);
         }
-        rows.push([k, display]);
+        const copyLabel = copyLabelForDetailField(k);
+        rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
+            <CopyableValue
+                display={display}
+                fullValue={String(v ?? '')}
+                ariaLabel={copyLabel}
+            />
+        ) : display]);
     }
 
     return rows;
