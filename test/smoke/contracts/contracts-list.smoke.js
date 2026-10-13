@@ -113,8 +113,7 @@ assert.ok(
     'ContractsList must not re-pin a hard-coded VM_COIN or select chains byCoin; ask the registry',
 );
 assert.ok(
-    /useChainIdsWithAction\('DEPLOY'\)/.test(listSrc)
-        || /supportedActions\)\s*&&\s*d\.supportedActions\.includes\('DEPLOY'\)/.test(listSrc),
+    /useChainIdsWithAction\('DEPLOY'\)/.test(listSrc),
     'ContractsList derives its chain list from descriptors advertising DEPLOY',
 );
 assert.ok(

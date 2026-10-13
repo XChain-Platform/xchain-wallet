@@ -60,8 +60,7 @@ assert.ok(/Multisig receive/.test(route),
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/\bonAddresses\b/.test(home),
     'Home accepts an onAddresses nav prop');
-assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home)
-    || /disabled=\{!onAddresses\}[\s\S]*?onClick=\{onAddresses\}/.test(home),
+assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home),
     'Home renders an Addresses button wired to onAddresses');
 assert.ok(/Addresses/.test(home),
     'Home surfaces the "Addresses" button label');

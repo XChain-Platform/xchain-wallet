@@ -89,6 +89,8 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
         await screen.findByLabelText('Publish chain');
+        expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
+            .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
         const action = screen.getByRole('button', { name: 'Publish' });
 
         expect(action).toBeEnabled();

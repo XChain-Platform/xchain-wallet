@@ -107,7 +107,7 @@ assert.ok(
     + 'cannot receive an update offer at all',
 );
 assert.ok(
-    /ipcRenderer\.on\('xchain:updater'/.test(preload) || /ipcRenderer\.on\(UPDATER_EVENT_CHANNEL/.test(preload),
+    /ipcRenderer\.on\(UPDATER_EVENT_CHANNEL/.test(preload),
     'preload subscribes to the updater event channel main broadcasts on',
 );
 {

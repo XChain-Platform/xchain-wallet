@@ -49,8 +49,7 @@ assert.ok(/settings\?\.hiddenTokens/.test(sectionSrc),
 
 // --- 2. Pinned section: reorder + unpin write through update() --------
 
-assert.ok(/function movePin\(idx, delta\)/.test(sectionSrc) ||
-    /const movePin = useCallback\(\(idx, delta\)/.test(sectionSrc),
+assert.ok(/const movePin = useCallback\(\(idx, delta\)/.test(sectionSrc),
     'movePin handler accepts (idx, delta) for ↑ / ↓ reorder');
 assert.ok(/writePinned\(next\)/.test(sectionSrc),
     'movePin writes the reordered array via writePinned');
@@ -71,8 +70,7 @@ assert.ok(/disabled=\{idx === pinned\.length - 1\}/.test(sectionSrc),
 
 assert.ok(/update\(\{ hiddenTokens: next \}\)/.test(sectionSrc),
     'hidden writes go through update({ hiddenTokens })');
-assert.ok(/const unhide = useCallback\(\(key\)/.test(sectionSrc) ||
-    /function unhide\(key\)/.test(sectionSrc),
+assert.ok(/const unhide = useCallback\(\(key\)/.test(sectionSrc),
     'per-row unhide handler exists');
 assert.ok(/const unhideAll = useCallback/.test(sectionSrc),
     'unhideAll handler exists');

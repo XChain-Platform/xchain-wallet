@@ -57,11 +57,9 @@ assert.ok(/paramsText\.split\('\|'\)/.test(formSrc),
     'ExecuteContractForm splits pipe-delimited params into an array');
 assert.ok(/PARAMS\b/.test(formSrc), 'ExecuteContractForm composes a PARAMS field');
 
-// HW branch + wrong-password distinguished.
-// §20 Cluster X Step 20: ternary refactored into if/else cascade.
+// HW branch + wrong-password distinguished. Watcher mode wins before signing.
 assert.ok(
-    /isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc)
-        || /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
+    /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
     'ExecuteContractForm branches HW vs software signing',
 );
 assert.ok(/InvalidPasswordError/.test(formSrc),
