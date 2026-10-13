@@ -46,6 +46,25 @@ describe('BalanceList rows', () => {
         expect(screen.getByText('€40,000.00')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
     });
+
+    it('shows no fiat for an unpriced token and labels a DEX-priced token', () => {
+        const rows = [
+            {
+                kind: 'token', chainId: 'bitcoin-mainnet', tick: 'UNKNOWN', quantity: '2',
+                divisibility: 0, fiatRate: null, displayName: 'Unknown token',
+            },
+            {
+                kind: 'token', chainId: 'bitcoin-mainnet', tick: 'MARKET', quantity: '2',
+                divisibility: 0, fiatRate: 0.02, fiatRateSource: 'market', displayName: 'Market token',
+            },
+        ];
+        render(<BalanceList rows={rows} />);
+
+        const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
+        const market = document.querySelector('[data-balance-key="bitcoin-mainnet:MARKET"]');
+        expect(unknown.textContent).not.toContain('$');
+        expect(market.textContent).toContain('$0.04 · DEX price');
+    });
 });
 
 describe('empty list views', () => {

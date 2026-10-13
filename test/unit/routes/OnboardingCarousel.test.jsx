@@ -20,11 +20,18 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx';
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+
+const carouselCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/OnboardingCarousel.module.css'),
+    'utf8',
+);
 
 const FRAMES = [
     { id: 'a', title: 'Frame A title', body: 'Body A' },
@@ -61,6 +68,10 @@ afterEach(() => {
 });
 
 describe('OnboardingCarousel: paginated (default motion)', () => {
+    it('keeps inactive panels hidden when the frame display rule applies', () => {
+        expect(carouselCss).toMatch(/\.frame\[hidden\]\s*\{\s*display:\s*none;/);
+    });
+
     it('shows the first frame and steps forward through Next to Get started', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();

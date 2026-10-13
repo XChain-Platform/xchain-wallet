@@ -458,6 +458,7 @@ export function Locked({ onUnlocked }) {
             <Input
                 ref={inputRef}
                 type="password"
+                name="password"
                 label="Password"
                 value={password}
                 onChange={(e) => {

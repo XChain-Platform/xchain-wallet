@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -72,6 +72,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -111,6 +112,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -120,7 +122,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (stage === 'password') {
@@ -457,19 +459,38 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
     if (sweepAddrs.length === 0) {
         return wrap(
             <ListPage>
-                <EmptyState title="This account has no addresses that can receive messages yet. Use Receive to generate one first." />
+                <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
             </ListPage>,
         );
     }
@@ -478,10 +499,26 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // effect above advances it to the inbox (or the password prompt) the
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(<ListPage><p className={styles.hint}>Opening inbox…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
-    if (stage === 'password' || stage === 'submitting') {
+    if (stage === 'submitting') {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
+    }
+
+    if (stage === 'password') {
         return wrap(
             <FormPage
                 label="Unlock messaging inbox"
@@ -529,7 +566,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
-                <EmptyState title="No messages in this conversation." />
+                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
             ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {threadItems.map((item) => {
@@ -642,6 +679,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={local.search}
                         placeholder="Search"
                         value={query}
@@ -697,7 +736,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     onAction={onCompose ? () => onCompose() : undefined}
                 />
             ) : visibleConversations.length === 0 ? (
-                <EmptyState title="No conversations match the current filter." />
+                <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
                 <div className={local.convCard}>
                     <ul className={local.convList} aria-label="Conversations">
@@ -819,6 +858,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
         <form className={local.composer} onSubmit={handleSubmit}>
             <input
                 type="text"
+                enterKeyHint="go"
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}

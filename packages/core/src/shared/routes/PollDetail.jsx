@@ -73,6 +73,27 @@ function statusLabel(status) {
     return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+function votePollRef(vote) {
+    return vote?.poll_index ?? vote?.poll_action_index ?? vote?.poll_ref;
+}
+
+function latestBallotRows(rows, address) {
+    const matching = rows.filter((row) => String(row?.source ?? '') === String(address));
+    if (!matching.length) return [];
+    const latestAction = matching.reduce((latest, row) => {
+        const actionIndex = Number(row?.action_index);
+        return Number.isFinite(actionIndex) ? Math.max(latest, actionIndex) : latest;
+    }, Number.NEGATIVE_INFINITY);
+    if (!Number.isFinite(latestAction)) return matching;
+    return matching.filter((row) => Number(row?.action_index) === latestAction);
+}
+
+function ballotRowText(row, options, isSplit) {
+    const option = Number(row?.choice ?? row?.option_index);
+    const label = Number.isInteger(option) ? `${option}: ${options[option] ?? ''}` : 'Unknown option';
+    return isSplit ? `${label} (${String(row?.share ?? '0')} share)` : label;
+}
+
 /**
  * VOTE poll detail: the poll definition, its frozen per-option results (once
  * finalized), and, while the poll is open, an inline cast-ballot form (VOTE v1).
@@ -93,10 +114,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     const [poll, setPoll] = useState(/** @type {any | null} */ (null));
     const [results, setResults] = useState(/** @type {any[] | null} */ (null));
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [walletVotes, setWalletVotes] = useState(/** @type {any[] | null} */ (null));
+    const [voteLoadError, setVoteLoadError] = useState(false);
 
     // Ballot editor state. Approval: Set of chosen option indices. Split: map of
     // option index -> share string.
@@ -113,23 +137,50 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
-        setPoll(null); setResults(null); setLoadError(null);
-        Promise.all([
-            messaging.governancePoll({ chainId, pollIndex }),
-            messaging.governancePollResults({ chainId, pollIndex }).catch(() => null),
-        ])
-            .then(([p, r]) => {
+        let firstLoad = true;
+        setPoll(null); setResults(null); setCurrentHeight(null); setLoadError(null);
+        async function refreshPoll() {
+            try {
+                const [p, heightResponse] = await Promise.all([
+                    messaging.governancePoll({ chainId, pollIndex }),
+                    typeof messaging.getIndexerWatermark === 'function'
+                        ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                        : Promise.resolve(null),
+                ]);
                 if (cancelled) return;
                 const loadedPoll = extractPoll(p);
                 if (!loadedPoll) {
-                    setLoadError('Poll not found.');
+                    if (firstLoad) setLoadError('Poll not found.');
                     return;
                 }
+                const height = heightResponse?.watermark == null || heightResponse.watermark === ''
+                    ? null
+                    : Number(heightResponse.watermark);
+                const usableHeight = Number.isFinite(height) ? height : null;
                 setPoll(loadedPoll);
-                setResults(extractRows(r));
-            })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load poll.'); });
-        return () => { cancelled = true; };
+                setCurrentHeight(usableHeight);
+                setLoadError(null);
+
+                const endBlock = loadedPoll.end_block == null || loadedPoll.end_block === ''
+                    ? Number.NaN
+                    : Number(loadedPoll.end_block);
+                const terminal = loadedPoll.poll_status && loadedPoll.poll_status !== 'open';
+                const closeReached = Number.isFinite(endBlock) && usableHeight !== null && usableHeight > endBlock;
+                if (terminal || closeReached) {
+                    const r = await messaging.governancePollResults({ chainId, pollIndex }).catch(() => null);
+                    if (!cancelled) setResults(extractRows(r));
+                } else {
+                    setResults(null);
+                }
+            } catch (err) {
+                if (!cancelled && firstLoad) setLoadError(err?.message || 'Failed to load poll.');
+            } finally {
+                firstLoad = false;
+            }
+        }
+        refreshPoll();
+        const refreshTimer = setInterval(refreshPoll, 30_000);
+        return () => { cancelled = true; clearInterval(refreshTimer); };
     }, [chainId, pollIndex, messaging]);
 
     useEffect(() => {
@@ -146,6 +197,28 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             .catch(() => { /* address load is best-effort; voting requires it, guarded at submit */ });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
+
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        let cancelled = false;
+        const addresses = addressesByChain[chainId] || [];
+        setWalletVotes(null);
+        setVoteLoadError(false);
+        Promise.all(addresses.map(async ({ address }) => {
+            const response = await messaging.governanceVotes({ chainId, query: address, type: 'address' });
+            return extractRows(response)
+                .filter((row) => String(votePollRef(row)) === String(pollIndex))
+                .map((row) => ({ ...row, source: row?.source || address }));
+        }))
+            .then((rows) => { if (!cancelled) setWalletVotes(rows.flat()); })
+            .catch(() => {
+                if (!cancelled) {
+                    setWalletVotes([]);
+                    setVoteLoadError(true);
+                }
+            });
+        return () => { cancelled = true; };
+    }, [addressesByChain, chainId, pollIndex, messaging]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -190,7 +263,41 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
     const isSplit = poll?.tally_mode === 'split';
     const maxSel = Number(poll?.max_selections) || 1;
-    const isOpen = !poll?.poll_status || poll.poll_status === 'open';
+    const pollReportsOpen = !poll?.poll_status || poll.poll_status === 'open';
+    const endBlock = poll?.end_block == null || poll.end_block === '' ? Number.NaN : Number(poll.end_block);
+    const hasCountdown = Number.isFinite(endBlock) && currentHeight !== null;
+    const blocksRemaining = hasCountdown ? endBlock - currentHeight : null;
+    const isOpen = pollReportsOpen && (blocksRemaining === null || blocksRemaining >= 0);
+    const walletBallots = useMemo(() => {
+        if (!walletVotes || !addressesByChain) return [];
+        return (addressesByChain[chainId] || []).map(({ address }) => ({
+            address,
+            rows: latestBallotRows(walletVotes, address),
+        })).filter(({ rows }) => rows.length > 0);
+    }, [addressesByChain, chainId, walletVotes]);
+    const sourceBallot = useMemo(
+        () => (fromAddress && walletVotes ? latestBallotRows(walletVotes, fromAddress.address) : []),
+        [fromAddress, walletVotes],
+    );
+    const initializedEditorRef = useRef('');
+
+    useEffect(() => {
+        if (!poll || !fromAddress || walletVotes === null) return;
+        const editorKey = `${chainId}:${String(pollIndex)}:${fromAddress.id}`;
+        if (initializedEditorRef.current === editorKey) return;
+        initializedEditorRef.current = editorKey;
+        if (isSplit) {
+            setSplitShares(Object.fromEntries(sourceBallot.map((row) => [
+                Number(row.choice ?? row.option_index), String(row.share ?? ''),
+            ])));
+            setApprovalChoices(new Set());
+        } else {
+            setApprovalChoices(new Set(sourceBallot
+                .map((row) => Number(row.choice ?? row.option_index))
+                .filter(Number.isInteger)));
+            setSplitShares({});
+        }
+    }, [chainId, fromAddress, isSplit, poll, pollIndex, sourceBallot, walletVotes]);
 
     function toggleApproval(i) {
         setApprovalChoices((prev) => {
@@ -368,6 +475,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
+        const submittedBallot = buildBallot();
+        const submittedChoice = isSplit
+            ? submittedBallot.map((entry) => `${entry.option}: ${options[entry.option] ?? ''} (${entry.share} share)`).join(' · ')
+            : submittedBallot.map((option) => `${option}: ${options[option] ?? ''}`).join(' · ');
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
@@ -381,6 +492,8 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             <ListPage>
                 <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
                 <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Your choice</dt>
+                    <dd className={styles.detailsValue}>{submittedChoice}</dd>
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
@@ -397,11 +510,21 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
             {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}
             <dt className={styles.detailsLabel}>Status</dt>
-            <dd className={styles.detailsValue}>{statusLabel(poll.poll_status)}</dd>
+            <dd className={styles.detailsValue}>{pollReportsOpen && blocksRemaining !== null && blocksRemaining < 0
+                ? 'Awaiting finalization'
+                : statusLabel(poll.poll_status)}</dd>
             <dt className={styles.detailsLabel}>Mode</dt>
             <dd className={styles.detailsValue}>{poll.tally_mode || 'approval'} / {poll.weight_mode || 'balance'}</dd>
             <dt className={styles.detailsLabel}>Closes at block</dt>
             <dd className={styles.detailsValue}>{String(poll.end_block ?? 'n/a')}</dd>
+            {blocksRemaining !== null ? (
+                <>
+                    <dt className={styles.detailsLabel}>Voting window</dt>
+                    <dd className={styles.detailsValue}>{blocksRemaining > 0
+                        ? `${blocksRemaining} block${blocksRemaining === 1 ? '' : 's'} remaining`
+                        : blocksRemaining === 0 ? 'Final voting block' : 'Voting closed'}</dd>
+                </>
+            ) : null}
             {poll.poll_status === 'finalized' ? (
                 <>
                     <dt className={styles.detailsLabel}>Winning option</dt>
@@ -409,6 +532,30 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 </>
             ) : null}
         </dl>
+    );
+
+    const voteReceipt = (
+        <div style={{ marginTop: '0.75rem' }}>
+            <SectionHeader title="Your vote" />
+            {walletVotes === null ? (
+                <p className={styles.hint}>Loading your ballot…</p>
+            ) : walletBallots.length ? (
+                walletBallots.map(({ address, rows }) => (
+                    <dl className={styles.detailsList} key={address}>
+                        <dt className={styles.detailsLabel}>Address</dt>
+                        <dd className={styles.detailsValue}><AddressText address={address} /></dd>
+                        <dt className={styles.detailsLabel}>Choice</dt>
+                        <dd className={styles.detailsValue}>{rows.map((row) => ballotRowText(row, options, isSplit)).join(' · ')}</dd>
+                    </dl>
+                ))
+            ) : (
+                <p className={styles.hint}>{voteLoadError
+                    ? 'Your ballot could not be loaded.'
+                    : 'No direct ballot from this wallet.'}</p>
+            )}
+            <p className={styles.hint}>A direct ballot overrides any standing {poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.</p>
+            {isOpen && sourceBallot.length ? <p className={styles.hint}>You can change this address's vote until the poll closes. The latest confirmed ballot replaces its earlier ballot.</p> : null}
+        </div>
     );
 
     // Frozen results are unavailable while voting is open and can be absent
@@ -431,7 +578,9 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 </table>
             ) : (
                 <p className={styles.hint}>
-                    {isOpen ? 'Final results appear after voting closes.' : 'No finalized results are available.'}
+                    {isOpen
+                        ? 'Final results appear after voting closes.'
+                        : pollReportsOpen ? 'Final results are being finalized.' : 'No finalized results are available.'}
                 </p>
             )}
         </div>
@@ -524,13 +673,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     return wrap(
         <ListPage>
             {pollInfo}
+            {voteReceipt}
             {resultsBlock}
             {isOpen ? (
                 <FormPage
-                    label="Cast ballot"
+                    label={sourceBallot.length ? 'Change ballot' : 'Cast ballot'}
                     onSubmit={handleReview}
                     status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>Vote</Button>}
+                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>

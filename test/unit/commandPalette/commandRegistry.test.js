@@ -51,6 +51,16 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('wizard');
     });
 
+    it('routes Marketplace when the DEX surface is available', () => {
+        const navigate = vi.fn();
+        const commands = buildCommands({ navigate, hasDexSurface: true });
+        findById(commands, 'nav-marketplace').run();
+        expect(navigate).toHaveBeenCalledWith('market-activity');
+
+        expect(findById(buildCommands({ navigate, hasDexSurface: false }), 'nav-marketplace'))
+            .toBeUndefined();
+    });
+
     it('ranks the direct destination first for common palette searches', () => {
         const commands = [
             ...buildCommands({ navigate() {} }),

@@ -926,7 +926,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             onChange={(e) => setAbiParam(i, e.target.value)}
                             error={abiParamValues[i] ? abiArgumentErrors[i] || undefined : undefined}
                             autoComplete="off"
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
                             spellCheck={false}
                         />
@@ -943,7 +943,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         value={method}
                         onChange={(e) => { setMethod(e.target.value); setFormError(null); }}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
@@ -953,7 +953,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         value={paramsText}
                         onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />

@@ -248,8 +248,9 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                     : 'No feed found for this address. Enter its reference number, or create a feed first.'}
                 value={feedActionIndex}
                 onChange={(event) => onFeedActionIndex(event.target.value)}
+                inputMode="numeric"
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 spellCheck={false}
             />
             <Input
@@ -257,6 +258,7 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                 hint="The feed value to publish. The previous value clears on success; the next value is one keystroke away."
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
+                inputMode="decimal"
                 autoComplete="off"
             />
             {!fromAddress ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}
