@@ -7,27 +7,58 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const electron = vi.hoisted(() => {
     const appListeners = new Map();
+    const browserWindowOptions = [];
     const isolatedSession = { partition: 'trezor-connect-isolated' };
+    const state = {
+        userDataDir: '/tmp/xchain-main-entry-test',
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    };
+    class BrowserWindow {
+        constructor(options) {
+            browserWindowOptions.push(options);
+            this.webContents = { send: vi.fn() };
+            this.loadFile = vi.fn();
+            this.once = vi.fn();
+            this.on = vi.fn();
+        }
+
+        isDestroyed() { return false; }
+
+        static getAllWindows() { return []; }
+
+        static getFocusedWindow() { return null; }
+    }
     return {
         appListeners,
+        browserWindowOptions,
         isolatedSession,
+        state,
         app: {
             isPackaged: true,
+            getPath: vi.fn(() => state.userDataDir),
+            getVersion: vi.fn(() => 'test-version'),
             on: vi.fn((name, listener) => { appListeners.set(name, listener); }),
             quit: vi.fn(),
+            setAboutPanelOptions: vi.fn(),
             showAboutPanel: vi.fn(),
             whenReady: vi.fn(() => new Promise(() => {})),
         },
-        BrowserWindow: class BrowserWindow {},
-        Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
+        BrowserWindow,
+        Menu: { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() },
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
+        screen: {
+            getAllDisplays: vi.fn(() => [{ workArea: state.workArea }]),
+            getPrimaryDisplay: vi.fn(() => ({ workArea: state.workArea })),
+        },
         session: {
             defaultSession: {},
             fromPartition: vi.fn(() => isolatedSession),
@@ -50,9 +81,20 @@ const permissions = vi.hoisted(() => ({
     observeHidFrames: vi.fn(),
 }));
 
+const runtime = vi.hoisted(() => ({
+    instance: { sessionBackend: { clear: vi.fn(async () => {}) } },
+    createRuntime: vi.fn(),
+    enforceIdleAutoLock: vi.fn(),
+    enforceLaunchAutoLock: vi.fn(),
+    ensureHost: vi.fn(),
+    handleIpcMessage: vi.fn(),
+    tearDownHost: vi.fn(),
+    wipeRuntimeStores: vi.fn(),
+}));
+
 vi.mock('electron', () => electron);
 vi.mock('@xchain-wallet/core', () => ({
-    registry: {},
+    registry: { defaultRegistry: vi.fn(() => ({})) },
     sdk: {
         adaptXChainSDK: vi.fn(() => vi.fn()),
         SDKRegistry: class SDKRegistry {},
@@ -88,17 +130,15 @@ vi.mock('../../../packages/desktop/main/protocol.js', () => protocol);
 vi.mock('../../../packages/desktop/main/signerBridgeListener.js', () => ({
     attachSignerBridgeListener: vi.fn(),
 }));
-vi.mock('../../../packages/desktop/main/updater.js', () => ({ attachUpdater: vi.fn() }));
-vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
-vi.mock('../../../packages/desktop/main/runtime.js', () => ({
-    createRuntime: vi.fn(),
-    enforceIdleAutoLock: vi.fn(),
-    enforceLaunchAutoLock: vi.fn(),
-    ensureHost: vi.fn(),
-    handleIpcMessage: vi.fn(),
-    tearDownHost: vi.fn(),
-    wipeRuntimeStores: vi.fn(),
+vi.mock('../../../packages/desktop/main/updater.js', () => ({
+    attachUpdater: vi.fn(async () => ({
+        checkForUpdates: vi.fn(),
+        downloadAndInstall: vi.fn(),
+        isActive: false,
+    })),
 }));
+vi.mock('../../../packages/desktop/main/torRouting.js', () => ({ applyTorRouting: vi.fn() }));
+vi.mock('../../../packages/desktop/main/runtime.js', () => runtime);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appIndex = pathToFileURL(join(
@@ -113,12 +153,23 @@ const appIndex = pathToFileURL(join(
     'index.html',
 )).href;
 
+const tempDirs = [];
+
 beforeEach(() => {
     electron.appListeners.clear();
+    electron.browserWindowOptions.length = 0;
+    electron.state.userDataDir = '/tmp/xchain-main-entry-test';
+    electron.state.workArea = { x: 0, y: 0, width: 1920, height: 1080 };
     electron.app.isPackaged = true;
     vi.clearAllMocks();
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
+    runtime.createRuntime.mockReturnValue(runtime.instance);
+    runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
     vi.resetModules();
+});
+
+afterEach(() => {
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe('desktop main entry point', () => {
@@ -144,6 +195,48 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
 
         expect(electron.app.quit).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+        {
+            label: 'at the desktop default on a large display',
+            workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+            expected: { width: 1024, height: 768 },
+        },
+        {
+            label: 'clamped to a smaller primary work area',
+            workArea: { x: 0, y: 0, width: 900, height: 700 },
+            expected: { width: 900, height: 700 },
+        },
+    ])('opens the first window $label', async ({ workArea, expected }) => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        electron.state.userDataDir = userDataDir;
+        electron.state.workArea = workArea;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject({
+            ...expected,
+            minWidth: 640,
+            minHeight: 600,
+        });
+    });
+
+    it('honors persisted window bounds instead of the first-launch size', async () => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        const savedBounds = { x: 80, y: 60, width: 1180, height: 820 };
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
     });
 
     it('hides on macOS close, permits an explicit quit, and reveals hidden windows', async () => {
