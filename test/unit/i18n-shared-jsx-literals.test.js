@@ -19,6 +19,13 @@ const sources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const newlyLocalizedRoutes = [
+    'Loading.jsx',
+    'MarketView.jsx',
+    'MultisigCosignerShare.jsx',
+    'OnboardingCarousel.jsx',
+];
+
 describe('shared route localization', () => {
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
@@ -40,5 +47,9 @@ describe('shared route localization', () => {
 
         expect(violations).toEqual([]);
         expect(missingKeys).toEqual([]);
+        for (const route of newlyLocalizedRoutes) {
+            const source = Object.entries(sources).find(([file]) => file.endsWith(`/${route}`))?.[1];
+            expect(source, `${route} must remain localized`).toMatch(/\bt\s*\(/);
+        }
     });
 });

@@ -120,8 +120,19 @@ function backControls(code) {
     traverse(ast, {
         JSXElement(path) {
             const label = path.node.children
-                .filter((c) => c.type === 'JSXText')
-                .map((c) => c.value.trim())
+                .map((child) => {
+                    if (child.type === 'JSXText') return child.value.trim();
+                    const expression = child.type === 'JSXExpressionContainer'
+                        ? child.expression
+                        : null;
+                    const key = expression?.type === 'CallExpression'
+                        && expression.callee?.type === 'Identifier'
+                        && expression.callee.name === 't'
+                        && ['Literal', 'StringLiteral'].includes(expression.arguments[0]?.type)
+                        ? expression.arguments[0].value
+                        : null;
+                    return key === 'common.back' ? 'Back' : '';
+                })
                 .filter(Boolean)
                 .join(' ')
                 .trim();

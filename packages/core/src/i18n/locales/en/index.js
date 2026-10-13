@@ -45,6 +45,51 @@ export const en = {
     'common.loading': 'Loading…',
     'common.password': 'Password',
 
+    'loading.error.title': 'The wallet could not start',
+    'loading.error.body':
+        'Something stopped the wallet from opening. Your wallet data has not been changed.',
+    'loading.error.recovery':
+        'Choose Try again. If the wallet still does not open, contact support before clearing any wallet data.',
+
+    'onboarding.carousel.getStarted': 'Get started',
+    'onboarding.carousel.skip': 'Skip',
+    'onboarding.carousel.steps': 'Onboarding steps',
+    'onboarding.carousel.stepLabel': 'Step {current} of {count}: {title}',
+    'onboarding.carousel.next': 'Next',
+
+    'market.reversePair': 'Reverse pair to {pair}',
+    'market.reverseTitle': 'Reverse to {pair}',
+    'market.stats.high24h': '24h high',
+    'market.stats.low24h': '24h low',
+    'market.stats.volume24h': '24h vol',
+    'market.notFound.title': 'Market not found',
+    'market.notFound.body': 'It may have been closed or not indexed yet.',
+    'market.summary': 'Market summary',
+    'market.loading': 'Loading market',
+    'market.panels': 'Market panels',
+
+    'multisig.share.title': 'Share this wallet as a cosigner',
+    'multisig.share.instructions':
+        'Give these values to the person creating the multisig. In their wallet they add a cosigner with origin "External xpub" and paste each one into the field of the same name. They are public keys: they show the shared address but cannot spend from it.',
+    'multisig.share.availability':
+        'Only software-seed addresses can be shared here. A watch-only address has no signing key, and a hardware address must be exported using the hardware device or its companion wallet.',
+    'multisig.share.address': 'Address to share',
+    'multisig.share.selectAddress': 'Select address',
+    'multisig.share.payload': 'Share payload',
+    'multisig.share.payloadHint': 'The QR code and text contain the same public cosigner fields.',
+    'multisig.share.qrAlt': 'QR code for multisig cosigner share payload',
+    'multisig.share.payloadAriaLabel': 'Cosigner share payload',
+    'multisig.share.copyPayload': 'Copy cosigner share payload',
+    'multisig.share.xpub': 'xpub',
+    'multisig.share.account': 'Account {path}',
+    'multisig.share.publicKey': 'Public key',
+    'multisig.share.masterFingerprint': 'Master fingerprint',
+    'multisig.share.derivationPath': 'Derivation path',
+    'multisig.share.identityCheck':
+        'Identity check: before funding the multisig, compare the master fingerprint and derivation path with the cosigner over a separate trusted channel. For a hardware signer, confirm its fingerprint on the device itself.',
+    'multisig.share.copyField': 'Copy {label}',
+    'multisig.share.unavailable': 'Not available from this signer',
+
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
 
