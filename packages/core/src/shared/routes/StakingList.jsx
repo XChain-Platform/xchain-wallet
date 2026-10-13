@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -85,7 +85,6 @@ const VALIDATOR_COIN = 'bitcoin';
 export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // Chains whose protocol accepts the contract-staking lane, i.e. every
     // chain the registry advertises STAKE on (put STAKE into the
@@ -368,11 +367,11 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             ) : undefined}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
+            <ListPage toolbar={toolbar}>
                 {children}
-            </div>
+            </ListPage>
         </Screen>
     );
 
@@ -384,30 +383,32 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     }
     if (chainsWithAddresses.length === 0) {
         return wrap(
-            <p className={styles.entryDescription}>
-                No addresses yet on a chain that supports staking. Use Receive
-                to generate one first. Staking into a contract works on Bitcoin,
-                Litecoin and Dogecoin; validator staking is Bitcoin-only.
-            </p>,
+            <EmptyState
+                title="No addresses yet on a chain that supports staking. Use Receive to generate one first. Staking into a contract works on Bitcoin, Litecoin and Dogecoin; validator staking is Bitcoin-only."
+                titleAs="p"
+            />,
         );
     }
 
+    const toolbar = (
+        <>
+            <input
+                type="search"
+                className={local.search}
+                placeholder="Search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-label="Search staking positions"
+            />
+            <NetworkFilterDropdown value={network} onChange={setNetwork} />
+        </>
+    );
+
     return wrap(
         <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search staking positions"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
             {Number(claimable.unclaimed) > 0 ? (
                 <div className={local.claimable} role="status">
                     <div>
@@ -434,11 +435,12 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>
-                    {allRows.length === 0
+                <EmptyState
+                    title={allRows.length === 0
                         ? 'Nothing staked yet. Use the + button to create your first stake.'
                         : 'No staking positions match the current filter.'}
-                </p>
+                    titleAs="p"
+                />
             ) : (
                 <div className={local.list} role="list">
                     {visibleRows.map((row) => (
@@ -456,6 +458,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             )}
         </>,
+        toolbar,
     );
 }
 

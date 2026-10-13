@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
@@ -91,7 +91,6 @@ export function ContractDetail({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const descriptor = chainRegistry.get(chainId);
 
     const [contract, setContract] = useState(/** @type {any} */ (null));
@@ -190,31 +189,33 @@ export function ContractDetail({
     if (contractError) {
         return (
             <Screen variant={variant} header={header}>
-                <StatusMessage variant="error" className={styles.entryDescription}>{contractError}</StatusMessage>
+                <ListPage>
+                    <StatusMessage variant="error" className={styles.entryDescription}>{contractError}</StatusMessage>
+                </ListPage>
             </Screen>
         );
     }
     if (!contract) {
         return (
             <Screen variant={variant} header={header}>
-                <p className={styles.entryDescription}>Loading contract…</p>
+                <ListPage>
+                    <p className={styles.entryDescription}>Loading contract…</p>
+                </ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
+            <ListPage>
                 <section>
-                    <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                        <h2 style={{ fontSize: '1rem', margin: 0 }}>{heading}</h2>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
-                    </header>
+                    <SectionHeader
+                        title={heading}
+                        description={description}
+                        trailing={descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
+                    />
                     {/* 512 bytes: this is the one surface wide enough for it, so
                         the list rows carry the name and version alone. */}
-                    {description ? (
-                        <p className={styles.entryDescription} style={{ marginTop: 0 }}>{description}</p>
-                    ) : null}
                     <dl className={styles.entryDescription} style={{ margin: 0 }}>
                         {contractAddress ? (
                             <div><strong>Address:</strong> {contractAddress}</div>
@@ -297,9 +298,10 @@ export function ContractDetail({
                             {executionsError}
                         </StatusMessage>
                     ) : executions.length === 0 ? (
-                        <p className={styles.entryDescription}>
-                            No contract calls recorded against this contract yet.
-                        </p>
+                        <EmptyState
+                            title="No contract calls recorded against this contract yet."
+                            titleAs="p"
+                        />
                     ) : (
                         <>
                             {executions.map((row, i) => (
@@ -371,9 +373,7 @@ export function ContractDetail({
                         an upcoming release. Viewing is available now.
                     </p>
                 ) : null}
-            </div>
-            <div className={styles.actions}>
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -381,10 +381,7 @@ export function ContractDetail({
 function Section({ title, rightSlot, children }) {
     return (
         <section style={{ marginBottom: '1rem' }}>
-            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <h2 style={{ fontSize: '1rem', margin: '0.5rem 0' }}>{title}</h2>
-                {rightSlot}
-            </header>
+            <SectionHeader title={title} trailing={rightSlot} />
             {children}
         </section>
     );
@@ -393,7 +390,7 @@ function Section({ title, rightSlot, children }) {
 function StateTable({ state }) {
     const entries = toKeyValueEntries(state);
     if (entries.length === 0) {
-        return <p className={styles.entryDescription}>No state keys set yet.</p>;
+        return <EmptyState title="No state keys set yet." titleAs="p" />;
     }
     return (
         <table style={{ width: '100%', fontSize: '0.85rem' }}>
@@ -415,7 +412,7 @@ function StateTable({ state }) {
 function BalancesTable({ balances }) {
     const rows = contractBalanceRows(balances);
     if (rows.length === 0) {
-        return <p className={styles.entryDescription}>Contract holds no tokens.</p>;
+        return <EmptyState title="Contract holds no tokens." titleAs="p" />;
     }
     return (
         <table style={{ width: '100%', fontSize: '0.85rem' }}>

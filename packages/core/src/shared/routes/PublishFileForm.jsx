@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -79,7 +79,6 @@ export function PublishFileForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { isWatcherMode } = useWalletMode();
 
     const [mode, setMode] = useState(/** @type {'public' | 'gated'} */ ('public'));
@@ -501,7 +500,7 @@ export function PublishFileForm({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -591,10 +590,39 @@ export function PublishFileForm({ walletId, onBack }) {
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
-                    Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
-                </p>
+            <FormPage
+                label="Review publish"
+                onSubmit={handleSubmit}
+                intro={(
+                    <>
+                        Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
+                    </>
+                )}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign and publish'}
+                        </Button>
+                    </>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -638,29 +666,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign and publish'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -671,12 +677,31 @@ export function PublishFileForm({ walletId, onBack }) {
     const capHint = publicCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream');
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.summary}>
-                Store a file on the chain itself: publicly readable, or
-                encrypted so only holders of your token can open it.
-            </p>
-
+        <FormPage
+            label="Publish file"
+            onSubmit={handleReview}
+            intro={(
+                <>
+                    Store a file on the chain itself: publicly readable, or
+                    encrypted so only holders of your token can open it.
+                </>
+            )}
+            status={mode === 'public' && formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={mode === 'public' ? (
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Publish file' : 'Review publish'}
+                </Button>
+            ) : null}
+        >
             <div role="radiogroup" aria-label="Publish mode">
                 <label className={styles.checkRow}>
                     <input
@@ -844,24 +869,8 @@ export function PublishFileForm({ walletId, onBack }) {
                         {...nativeFee.toggleProps}
                         coinTicker={descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : ''}
                     />
-
-                    {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-                    ) : null}
-                    <div className={styles.actions}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={actionConfirm.composing}
-                            disabled={actionConfirm.composing}
-                        >
-                            {actionConfirm.composing
-                                ? 'Preparing review…'
-                                : singleEncode ? 'Publish file' : 'Review publish'}
-                        </Button>
-                    </div>
                 </>
             )}
-        </form>,
+        </FormPage>,
     );
 }

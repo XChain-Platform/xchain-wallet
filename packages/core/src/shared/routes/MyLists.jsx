@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -48,7 +48,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -203,12 +202,12 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
 
     // Every state of the screen carries the secondary actions, as the
     // header did before they moved out of it.
-    const wrap = (children) => (
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
+            <ListPage toolbar={toolbar}>
                 {secondaryActions}
                 {children}
-            </div>
+            </ListPage>
         </Screen>
     );
 
@@ -220,28 +219,32 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     }
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
-            <p className={styles.entryDescription}>
-                No addresses on any chain yet. Use Receive to generate one first, or Create list to publish your first.
-            </p>,
+            <EmptyState
+                title="No addresses on any chain yet. Use Receive to generate one first, or Create list to publish your first."
+                titleAs="p"
+            />,
         );
     }
 
+    const toolbar = (
+        <>
+            <input
+                type="search"
+                className={local.search}
+                placeholder="Search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-label="Search lists"
+            />
+            <NetworkFilterDropdown value={network} onChange={setNetwork} />
+        </>
+    );
+
     return wrap(
         <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search lists"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
             {loadErrors.length > 0 ? (
                 <StatusMessage variant="error" className={styles.entryDescription}>
                     {/* Names the chains only: the raw fetch error carries API paths and
@@ -252,11 +255,12 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>
-                    {allRows.length === 0
+                <EmptyState
+                    title={allRows.length === 0
                         ? 'No lists published yet. Use Create list to publish your first (an address list for airdrops, or a token list for a project roster or gate).'
                         : 'No lists match the current filter.'}
-                </p>
+                    titleAs="p"
+                />
             ) : (
                 <div className={local.list} role="list">
                     {visibleRows.map((row) => (
@@ -269,6 +273,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                 </div>
             )}
         </>,
+        toolbar,
     );
 }
 

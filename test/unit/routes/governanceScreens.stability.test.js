@@ -49,13 +49,16 @@ describe('governance screen narrow layout', () => {
         'OracleConsole.jsx',
         'BetFeedDetail.jsx',
         'OracleRecord.jsx',
-        'ContractDetail.jsx',
     ])('%s wraps every space-between user-data row', (file) => {
         const rows = route(file).split('\n').filter((line) => (
             line.includes("display: 'flex'") && line.includes("justifyContent: 'space-between'")
         ));
         expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
+    });
+
+    it('uses the wrapping section header template for contract detail groups', () => {
+        expect(route('ContractDetail.jsx')).toContain('<SectionHeader');
     });
 
     it('keeps contract row text inside a shrinkable column', () => {
