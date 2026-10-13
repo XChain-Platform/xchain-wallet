@@ -759,6 +759,8 @@ app.whenReady().then(async () => {
     let lastUpdaterEvent = null;
     try {
         const { checkForUpdates, downloadAndInstall, isActive } = await attachUpdater({
+            isPackaged: app.isPackaged,
+            resourcesPath: process.resourcesPath,
             onEvent: (event) => {
                 if (updateCheckVisible) event.userInitiated = true;
                 lastUpdaterEvent = event;

@@ -76,7 +76,7 @@
 // accidentally trying to self-update against the prod URL.
 
 import { rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -390,6 +390,10 @@ export function selectUpdater(mod, {
  * @param {Object} opts
  * @param {() => Promise<any>} [opts.loader]  dynamic-import `electron-updater`; injectable for tests
  * @param {(event: UpdaterEvent) => void} opts.onEvent   forwards updater events (the caller typically relays to the renderer)
+ * @param {boolean} [opts.isPackaged]  whether Electron is running a packaged application
+ * @param {string|null} [opts.resourcesPath]  packaged Resources directory; null leaves config detection to the caller
+ * @param {(path: string) => boolean} [opts.updateConfigExists]  injectable filesystem check for tests
+ * @param {(message: string) => void} [opts.log]  informational logger
  * @param {Object} [opts.select]  overrides for `selectUpdater` (platform/env/resourcesPath/readFile); tests only
  * @param {string|null} [opts.pointerName]  the channel pointer to anchor against; tests only
  * @param {string|null} [opts.laneName]  the release lane this install belongs to; tests only
@@ -398,6 +402,10 @@ export function selectUpdater(mod, {
 export async function attachUpdater({
     loader = defaultLoader,
     onEvent,
+    isPackaged = true,
+    resourcesPath = null,
+    updateConfigExists = existsSync,
+    log = console.info,
     feedBaseUrl = resolveFeedBaseUrl(),
     fetchImpl,
     pinned,
@@ -407,6 +415,20 @@ export async function attachUpdater({
 }) {
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
+    }
+
+    // Source runs and unpacked bundles have no update metadata for
+    // electron-updater to read. Stop before loading it or registering its
+    // error listener, so a missing app-update.yml remains a build property
+    // rather than a user-facing update failure.
+    const configPath = resourcesPath ? join(resourcesPath, 'app-update.yml') : null;
+    if (!isPackaged || (configPath && !updateConfigExists(configPath))) {
+        log('[xchain] updater skipped: this build has no update configuration');
+        return {
+            isActive: false,
+            async checkForUpdates() { /* no update configuration */ },
+            async downloadAndInstall() { /* no update configuration */ },
+        };
     }
 
     // STORE BUILDS MUST NOT SELF-UPDATE (§13 macOS, §15 Windows).
