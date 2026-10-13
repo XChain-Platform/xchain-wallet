@@ -32,6 +32,10 @@ import {
     buildEditFeedListsParams,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
+import {
+    createErrorRingBuffer,
+    installShellErrorCapture,
+} from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -1006,6 +1010,10 @@ export function createBackgroundHost(deps) {
     // ledger with chrome.storage.session makes the reservations survive that
     // restart; the store returns null outside an extension (Node tests, web
     // and desktop shells), where the ledger stays in-memory.
+    // Crash hook: uncaught errors and rejections feed the dump's recent_errors.
+    const errorBuffer = createErrorRingBuffer();
+    installShellErrorCapture(globalThis, errorBuffer);
+
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
@@ -1700,7 +1708,7 @@ export function createBackgroundHost(deps) {
     // button on About panel, etc.) so users can paste it into a bug
     // report. No secrets included: this passes the diagnosticDump flow's
     // own redaction.
-    host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+    host.register('diagnostic.dump', async (req, { vault, chainRegistry }) => {
         // §50 / Cluster L FOLLOWUP 4: fill env / build / signers so the
         // dump tells support which shell + build + paired devices were
         // running. The shell-supplied callback contributes env + build
@@ -1752,6 +1760,12 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
+            // Shell-side crashes arrive with the request; merge them with the
+            // background's own buffer, oldest first (the dump keeps the tail).
+            recentErrors: [
+                ...(Array.isArray(req?.recentErrors) ? req.recentErrors : []),
+                ...errorBuffer.list(),
+            ],
             recentLogs,
         });
     });

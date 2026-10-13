@@ -12,6 +12,7 @@
 // wrapper. Each helper documents the exact message type + request shape
 // so callers don't need to build envelopes by hand.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import { sendMessage } from '../shared/chromeMessaging.js';
 
 export { sendMessage };
@@ -819,7 +820,7 @@ export function activateChainRequest(opts) {
  * counts + recent errors.
  */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**
