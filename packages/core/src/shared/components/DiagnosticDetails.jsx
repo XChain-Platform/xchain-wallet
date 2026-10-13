@@ -3,8 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { redactDiagnosticText } from '../utils/diagnosticText.js';
+
+const MAX_VISIBLE_ITEMS = 200;
+
 /**
- * Show a compact diagnostic count with every underlying subject and message.
+ * Show a compact diagnostic count with a bounded list of subjects and messages.
  * Strings are accepted for findings that have no separate subject.
  *
  * @param {object} props
@@ -14,21 +18,29 @@
  */
 export function DiagnosticDetails({ summary, items, className }) {
     if (!Array.isArray(items) || items.length === 0) return null;
+    const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
+    const safeSummary = redactDiagnosticText(summary);
     return (
         <details className={className}>
-            <summary>{summary}</summary>
+            <summary>{safeSummary}</summary>
             <ul>
-                {items.map((item, index) => {
+                {visibleItems.map((item, index) => {
                     const finding = typeof item === 'string' ? { message: item } : item;
+                    const subject = redactDiagnosticText(finding?.subject);
+                    const message = redactDiagnosticText(finding?.message);
+                    const location = redactDiagnosticText(finding?.location);
                     return (
-                        <li key={`${finding.subject || finding.location || finding.message}-${index}`}>
-                            {finding.subject ? <><strong>{finding.subject}</strong>: </> : null}
-                            {finding.message}
-                            {finding.location ? <> <span>({finding.location})</span></> : null}
+                        <li key={`${subject || location || message}-${index}`}>
+                            {subject ? <><strong>{subject}</strong>: </> : null}
+                            {message}
+                            {location ? <> <span>({location})</span></> : null}
                         </li>
                     );
                 })}
             </ul>
+            {items.length > visibleItems.length ? (
+                <p>Showing the first {visibleItems.length} of {items.length} findings.</p>
+            ) : null}
         </details>
     );
 }

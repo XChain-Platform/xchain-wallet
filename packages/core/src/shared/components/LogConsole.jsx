@@ -24,9 +24,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
+import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
+const MAX_VISIBLE_ENTRIES = 200;
+const SAFE_ENTRY_CACHE = new WeakMap();
+
+function safeEntry(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const cached = SAFE_ENTRY_CACHE.get(entry);
+    if (cached) return cached;
+    const safe = {
+        ...entry,
+        source: redactDiagnosticText(entry.source),
+        message: redactDiagnosticText(entry.message),
+    };
+    SAFE_ENTRY_CACHE.set(entry, safe);
+    return safe;
+}
 
 const PANEL = {
     display: 'flex',
@@ -129,9 +145,11 @@ export function LogConsole() {
         return unsubscribe;
     }, []);
 
+    const safeEntries = useMemo(() => allEntries.map(safeEntry), [allEntries]);
+
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
-        return allEntries.filter((e) => {
+        return safeEntries.filter((e) => {
             if (!enabledLevels.has(e.level)) return false;
             if (!q) return true;
             return (
@@ -139,7 +157,8 @@ export function LogConsole() {
                 || e.source.toLowerCase().includes(q)
             );
         });
-    }, [allEntries, enabledLevels, search]);
+    }, [enabledLevels, safeEntries, search]);
+    const visible = filtered.slice(-MAX_VISIBLE_ENTRIES);
 
     const toggleLevel = (level) => {
         setEnabledLevels((prev) => {
@@ -156,7 +175,7 @@ export function LogConsole() {
     };
 
     const onCopy = async () => {
-        const text = filtered.map(
+        const text = safeEntries.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
         const { ok } = await copyText(text);
@@ -208,13 +227,14 @@ export function LogConsole() {
                     type="button"
                     onClick={onCopy}
                     style={ACTION_BTN}
-                    aria-label="Copy filtered log entries"
+                    aria-label="Copy all log entries"
+                    title="Copy filtered log entries plus entries hidden by the active filters"
                 >
                     {copyState === 'copied'
                         ? 'Copied'
                         : copyState === 'failed'
                             ? 'Copy failed: clipboard unavailable'
-                            : 'Copy'}
+                            : 'Copy all'}
                 </button>
                 <button type="button" onClick={onClear} style={ACTION_BTN} aria-label="Clear log buffer">
                     Clear
@@ -231,7 +251,7 @@ export function LogConsole() {
                         No log entries yet. Trigger an action and recent console output will appear here.
                     </div>
                 ) : (
-                    filtered.map((e) => (
+                    visible.map((e) => (
                         <div key={e.id} style={ROW}>
                             <span style={{ color: 'var(--xc-text-muted)' }}>{formatTime(e.timestamp)}</span>
                             <span style={{ color: LEVEL_COLORS[e.level] || 'var(--xc-text)', fontWeight: 600 }}>
@@ -246,7 +266,7 @@ export function LogConsole() {
                 )}
             </div>
             <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                Showing {filtered.length} of {allEntries.length} entries.
+                Showing {visible.length} of {filtered.length} matching entries ({allEntries.length} total).
             </div>
         </div>
     );
