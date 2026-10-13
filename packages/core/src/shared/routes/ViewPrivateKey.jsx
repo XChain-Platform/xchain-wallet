@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -57,12 +57,27 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     const [revealed, setRevealed] = useState(false);
     const [wif, setWif] = useState(/** @type {{ addressId: string, value: string } | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const exportRequestRef = useRef(0);
     const clipboardAutoClearSeconds = configureClipboardAutoClear(
         settings?.privacy?.clipboardAutoClearSeconds,
     );
 
     const sourceInfo = useMemo(() => classifySource(address), [address]);
     const currentWif = wif?.addressId === address.id ? wif.value : null;
+
+    const clearSensitiveState = useCallback(() => {
+        exportRequestRef.current += 1;
+        setStage('warning');
+        setPassword('');
+        setSubmitError(null);
+        setRevealed(false);
+        setWif(null);
+    }, []);
+
+    const leaveScreen = useCallback(() => {
+        clearSensitiveState();
+        onBack();
+    }, [clearSensitiveState, onBack]);
 
     useEffect(() => {
         if (stage !== 'password') return undefined;
@@ -85,16 +100,24 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     }, [revealed]);
 
     useEffect(() => {
-        setStage('warning');
-        setPassword('');
-        setSubmitError(null);
-        setRevealed(false);
-        setWif(null);
-    }, [walletId, address.id]);
+        clearSensitiveState();
+    }, [walletId, address.id, clearSensitiveState]);
+
+    useEffect(() => {
+        // The shell emits this event as an unlocked session becomes active.
+        // Clearing before that session paints prevents a key exported by the
+        // previous session from becoming revealable after a lock cycle.
+        window.addEventListener('xc:session-changed', clearSensitiveState);
+        return () => {
+            window.removeEventListener('xc:session-changed', clearSensitiveState);
+            exportRequestRef.current += 1;
+        };
+    }, [clearSensitiveState]);
 
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting' || password.length === 0) return;
+        const requestId = ++exportRequestRef.current;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -103,11 +126,13 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 password,
                 addressId: address.id,
             });
+            if (exportRequestRef.current !== requestId) return;
             setPassword('');
             setWif({ addressId: address.id, value: res.wif });
             setRevealed(false);
             setStage('revealed');
         } catch (err) {
+            if (exportRequestRef.current !== requestId) return;
             const name = err?.name;
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError'
                 || name === 'AeadAuthError') {
@@ -123,7 +148,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={leaveScreen}
             title="Show private key"
             titleIcon={<Icon.LockIcon />}
         />
@@ -154,7 +179,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     </dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Close</Button>
+                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -168,7 +193,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     private key is stored here and nothing can be signed from it.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Close</Button>
+                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -306,7 +331,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </span>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={onBack}>Done</Button>
+                <Button variant="primary" onClick={leaveScreen}>Done</Button>
             </div>
         </>,
     );
