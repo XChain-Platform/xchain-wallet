@@ -21,7 +21,7 @@
         max-width: 100%;
     }
 
-    @supports selector(:has(*)) {
+    @supports selector(:has(a)) {
         .page div:has(> select),
         .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])),
         .page div:has(> button),
