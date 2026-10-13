@@ -223,7 +223,7 @@ describe('Receive QR copy and share toasts', () => {
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 }),
             ));
-            const address = await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
+            const address = await screen.findByRole('textbox', { name: 'Daily deposits' });
             expect(address.readOnly).toBe(true);
             expect(address.style.userSelect).toBe('text');
         } finally {
@@ -250,7 +250,7 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', {
-            name: 'Copy payment link for receive address',
+            name: 'Daily deposits',
         })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });

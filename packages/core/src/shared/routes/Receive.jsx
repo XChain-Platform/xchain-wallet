@@ -882,8 +882,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {address ? (
                 <AddressField
+                    // The visible label is the accessible name; the hint says a tap
+                    // copies the address. A name about a payment link went stale when
+                    // the tap stopped copying one.
                     label={address.label || 'Address'}
-                    aria-label="Copy payment link for receive address"
                     icon="addresses"
                     value={address.address}
                     readOnly
