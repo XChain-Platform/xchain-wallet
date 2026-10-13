@@ -233,6 +233,7 @@ export function StakeDetail({
     );
     const primaryStake = latestEffectiveStakingRow(activeStakes, height);
     const primaryDelegation = latestEffectiveStakingRow(delegations, height);
+    const delegatedKey = primaryDelegation?.signing_pubkey || primaryDelegation?.SIGNING_PUBKEY || '';
     const totalValidatorStaked = useMemo(
         () => sumStakingAmounts(activeStakes),
         [activeStakes],
@@ -320,8 +321,8 @@ export function StakeDetail({
                     <>
                         <dt className={styles.detailsLabel}>Delegated key</dt>
                         <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
-                            {primaryDelegation
-                                ? <><code>{primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY}</code>{primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}</>
+                            {delegatedKey
+                                ? <><code>{delegatedKey}</code>{primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}</>
                                 : 'None'}
                         </dd>
                         <dt className={styles.detailsLabel}>Pending rewards</dt>
@@ -520,11 +521,11 @@ export function StakeDetail({
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
                             <div className={local.eventRow}>
                                 <span className={local.eventAmount}>
-                                    {fmt(r.amount ?? r.reward ?? '0')} XCHAIN
+                                    {fmt(r.amount ?? r.reward)} XCHAIN
                                 </span>
-                                <span className={local.eventMeta}>{r.status || ''}</span>
+                                <span className={local.eventMeta}>{detailText(r.status)}</span>
                                 <span className={local.eventWhen}>
-                                    {r.block_index ? `block ${fmt(r.block_index)}` : ''}
+                                    {r.block_index ? `block ${fmt(r.block_index)}` : '-'}
                                 </span>
                             </div>
                         </li>
@@ -563,9 +564,9 @@ export function StakeDetail({
                             {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
                                     <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(s.amount)} {s.tick}</span>
+                                        <span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>
                                         <span className={local.eventMeta}>
-                                            key <code>{s.signing_pubkey || '(none)'}</code>
+                                            key <code>{s.signing_pubkey || 'None'}</code>
                                         </span>
                                         <span className={local.eventWhen}>staked</span>
                                     </div>
@@ -574,9 +575,9 @@ export function StakeDetail({
                             {pendingContractUnstakes.map((u, i) => (
                                 <li key={`u:${String(u.action_index ?? i)}:${i}`}>
                                     <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(u.amount)} {u.tick}</span>
+                                        <span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>
                                         <span className={local.eventMeta}>
-                                            releasing, slashable until block {fmt(u.cooldown_end_block ?? '?')}
+                                            releasing, slashable until block {fmt(u.cooldown_end_block)}
                                         </span>
                                         <span className={local.eventWhen}>cooldown</span>
                                     </div>
@@ -594,12 +595,12 @@ export function StakeDetail({
                         {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
                             <div className={local.eventRow}>
-                                <span className={local.slashAmount}>-{fmt(ev.amount)} {ev.tick}</span>
+                                <span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>
                                 <span className={local.eventMeta}>
-                                    to <AddressText address={String(ev.destination_address || ev.destination || '?')} truncate={false} />
+                                    to <AddressText address={detailText(ev.destination_address || ev.destination)} truncate={false} />
                                 </span>
                                 <span className={local.eventWhen}>
-                                    {ev.block_index ? `block ${fmt(ev.block_index)}` : ''}
+                                    {ev.block_index ? `block ${fmt(ev.block_index)}` : '-'}
                                 </span>
                             </div>
                         </li>
@@ -652,8 +653,15 @@ export function StakeDetail({
 // Comma-grouped display number; non-numeric input passes through
 // unchanged (formatWithThousands only groups plain digit strings).
 function fmt(value) {
-    if (value == null || value === '') return '?';
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    if (/^(?:undefined|null|nan)$/i.test(String(value).trim())) return '-';
     return formatWithThousands(String(value));
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 function extractRows(resp) {

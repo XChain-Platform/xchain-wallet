@@ -72,8 +72,14 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
-import { formatDecimalAmount } from '../utils/amountFormat.js';
-import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { transactionReceiptText } from '../utils/transactionReceipt.js';
+import {
+    formatDecimalAmount,
+    formatDisplayAmount,
+    formatHistoryAmount,
+} from '../utils/amountFormat.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { Settings } from './Settings.jsx';
 import {
@@ -393,6 +399,24 @@ function pendingAmountAnnotation(entry) {
     return { direction: entry.pending.direction ?? null, outputs };
 }
 
+function historyAmountDirection(entry) {
+    const pendingDirection = entry?.pending?.direction;
+    if (pendingDirection === 'in' || pendingDirection === 'out') return pendingDirection;
+    const source = String(entry?.raw?.source ?? entry?.raw?.SOURCE ?? entry?.source ?? '');
+    const address = String(entry?.address ?? '');
+    if (!source || !address) return null;
+    return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
+}
+
+function settledAmountAnnotation(entry) {
+    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    const raw = entry.raw || {};
+    const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    const tick = raw.tick ?? raw.TICK ?? raw.token;
+    if (amount == null || !tick) return null;
+    return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
+}
+
 /**
  * History route: §23 unified timeline + §23.5 cross-chain thread
  * rendering.
@@ -446,6 +470,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const historyLoadedRef = useRef(false);
+    historyLoadedRef.current = historyLoaded;
+    const [refreshing, setRefreshing] = useState(false);
     const [addressesReload, setAddressesReload] = useState(0);
     const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
@@ -513,6 +540,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setEntries([]);
         setHistoryFetchedAt(null);
         setLoadingChains(new Set());
+        setRefreshing(false);
         setLoadError(null);
         setIndexerWatermarkByChainId({});
         setMultisigAddress(null);
@@ -679,6 +707,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries([]);
             setHistoryLoaded(true);
             setHistoryFetchedAt(null);
+            setRefreshing(false);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
             // `succeed()`: no read happened, so the window must not move.
@@ -697,6 +726,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const throttle = pollThrottleRef.current;
         throttle.reset();
         throttle.start();
+        setRefreshing(true);
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
@@ -706,6 +736,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // isn't an empty wasteland during the demo. Real history rows
         // arrive once the user exits demo mode + funds the wallet.
         const isDemo = flowsLib.isDemoWallet(walletId);
+        const optionalRows = (promise) => promise
+            .then((response) => extractRows(response))
+            .catch((err) => {
+                // An initial load can still show confirmed rows when an older
+                // explorer lacks an optional channel. A refresh keeps every
+                // shown row when any channel fails, because an empty fallback
+                // is indistinguishable from pending activity disappearing.
+                if (historyLoadedRef.current) throw err;
+                return [];
+            });
 
         const tasks = [];
         for (const cid of chainsToLoad) {
@@ -724,23 +764,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r)),
-                        messaging.getLinksForAddress({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                        optionalRows(messaging.getLinksForAddress({ chainId: cid, address: a.address })),
                         // M2.1: both pending sources. Each degrades to [] on
-                        // its own, so an explorer without the unconfirmed
-                        // surface still shows our own broadcast sends, and a
-                        // shell whose messaging predates these channels shows
-                        // confirmed history exactly as it did before.
+                        // the initial load, so an explorer without the
+                        // unconfirmed surface still shows confirmed history.
+                        // Refresh failures preserve the complete shown list.
                         typeof messaging.getAddressMempool === 'function'
                             ? messaging.getAddressMempool({ chainId: cid, address: a.address })
                                 .then((r) => ({ rows: extractRows(r), ok: true }))
-                                .catch(() => ({ rows: [], ok: false }))
+                                .catch((err) => {
+                                    // A refresh keeps every shown row when the read fails.
+                                    if (historyLoadedRef.current) throw err;
+                                    return { rows: [], ok: false };
+                                })
                             : Promise.resolve({ rows: [], ok: false }),
                         typeof messaging.getPendingTxsForAddress === 'function'
-                            ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
+                            ? optionalRows(messaging.getPendingTxsForAddress({ chainId: cid, address: a.address }))
                             : Promise.resolve([]),
                     ]).then(([history, links, mempoolRead, pendingTxs]) => (
                         {
@@ -916,12 +955,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
             setHistoryLoaded(true);
-        }).catch(() => {
+            setRefreshing(false);
+        }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
-            setHistoryLoaded(true);
-            setLoadError('Could not load history. Try again.');
+            setRefreshing(false);
+            if (historyLoadedRef.current) {
+                showToast({
+                    message: humanizeError(err, 'refresh history').message,
+                    variant: 'error',
+                });
+            } else {
+                setHistoryLoaded(true);
+                setLoadError('Could not load history. Try again.');
+            }
         });
 
         return () => { cancelled = true; };
@@ -1401,6 +1449,25 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onBack={onBack}
             backLabel={t('common.backToHome')}
             title={t('history.title')}
+            trailing={(
+                <button
+                    type="button"
+                    className={refreshing ? styles.refreshing : undefined}
+                    aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
+                    title={refreshing ? t('history.refreshing') : t('history.refresh')}
+                    disabled={refreshing || !historyLoaded}
+                    onClick={() => {
+                        const throttle = pollThrottleRef.current;
+                        if (throttle.isInFlight()) return;
+                        throttle.reset();
+                        throttle.start();
+                        setRefreshing(true);
+                        setRefreshTick((n) => n + 1);
+                    }}
+                >
+                    <Icon.RefreshIcon />
+                </button>
+            )}
         />
     );
     const wrap = (children) => (
@@ -1456,8 +1523,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (!addressesByChain) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label={t('history.loading')}>
-                    <Skeleton.List rows={5} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={5} rowHeight={88} avatar={false} />
                 </div>
             </ListPage>,
         );
@@ -1681,8 +1748,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             {!historyLoaded || loadingChains.size > 0 ? (
-                <div role="status" aria-label={t('history.loading')}>
-                    <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={Math.max(3, loadingChains.size)} rowHeight={88} avatar={false} />
                 </div>
             ) : null}
 
@@ -2069,30 +2136,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             onClick: () => runRbf('cancel'),
         });
     }
-    // Universal option: every entry can have a sharable link copied,
-    // so the menu is never empty (DeFi rows, in particular, hit this
-    // path since they don't have a peer or replaceable state).
-    const shareUrl = explorerPageUrl({
-        chainId: entry?.chainId,
-        kind: 'action',
-        value: entry?.actionIndex,
-        settings,
+    // Receipt sharing is deliberately narrower than the detail payload. The
+    // user opts into these six public transaction facts, never addresses,
+    // memos, contact data, wallet identifiers, or arbitrary raw fields.
+    const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'copy-receipt',
+        label: 'Copy receipt',
+        icon: <Icon.CopyIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const { ok } = await copyText(receipt);
+            showToast({
+                message: ok ? 'Transaction receipt copied.' : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'default' : 'error',
+            });
+        },
     });
-    if (shareUrl) {
-        moreOptions.push({
-            id: 'copy-link',
-            label: 'Copy action link',
-            icon: <Icon.CopyIcon />,
-            onClick: async () => {
-                setMoreOpen(false);
-                const { ok } = await copyText(shareUrl);
-                showToast({
-                    message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'default' : 'error',
-                });
-            },
-        });
-    }
 
     async function handleSaveContact(event) {
         event.preventDefault();
@@ -2184,7 +2244,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             ) : (
                                 <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
                             )}
-                            <span>{link.label}</span>
+                            <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
@@ -2349,12 +2409,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         </div>
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
-                                <h4 className={styles.detailSectionHeading}>
+                                <h2 className={styles.detailSectionHeading}>
                                     {t('history.detail.peerHeading', {
                                         ticker: entry.link.peerCoinTicker,
                                         index: entry.link.peerActionIndex,
                                     })}
-                                </h4>
+                                </h2>
                                 {peer?.loading ? (
                                     <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
                                 ) : peer?.error ? (
@@ -2462,7 +2522,9 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
     const meta = entry?.pending || null;
     const failure = failed ? failedReasonOf(meta?.error) : null;
     const desc = describePendingAction(entry);
-    const amountOf = (value) => (balancesHidden ? '•••••' : value);
+    const amountOf = (value) => (balancesHidden
+        ? '•••••'
+        : formatHistoryAmount(value, historyAmountDirection(entry)));
 
     return (
         <section
@@ -2516,12 +2578,16 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
 
             {meta?.firstSeenMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.firstSeen', { when: formatRelativeTime(meta.firstSeenMs) })}
+                    <RelativeTime timestamp={meta.firstSeenMs}>
+                        {(when) => t('pending.detail.firstSeen', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.broadcastAtMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.broadcastAt', { when: formatRelativeTime(meta.broadcastAtMs) })}
+                    <RelativeTime timestamp={meta.broadcastAtMs}>
+                        {(when) => t('pending.detail.broadcastAt', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.replaced && meta.replacementTxHash ? (
@@ -2536,7 +2602,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 promise under this heading: "not reported yet" would say
                 more data is coming, and none is. */}
             {settled && desc.kind === 'none' ? null : (
-                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+                <h2 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h2>
             )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
@@ -2608,7 +2674,9 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     if (nativeAmount != null) {
         rows.push(['Amount', (
             <span>
-                {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
+                {balancesHidden
+                    ? '•••••'
+                    : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
                         {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
@@ -2770,7 +2838,7 @@ function fullDetailRows(entry, balancesHidden = false) {
     if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
     else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
-        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+        rows.push(['Time', <RelativeTime timestamp={entry.timestamp} />]);
     }
     if (entry.txHash) {
         rows.push(['Transaction ID', (
@@ -2821,20 +2889,29 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (skipKeys.has(k)) continue;
         const v = raw[k];
         let display;
-        if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
+        if (isEmptyDetailValue(v)) {
+            display = '-';
+        } else if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
         } else if (isRemovedAccessListValue(k, v)) {
             display = 'none';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
-        } else if (v === null || v === undefined) display = '-';
-        else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
+        } else if (AMOUNT_KEY_RE.test(k) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v))) {
+            const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
+                && /^(amount|quantity)$/i.test(k);
+            display = isPrimarySendAmount
+                ? formatHistoryAmount(v, historyAmountDirection(entry))
+                : formatDisplayAmount(v);
+        } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
         else if (typeof v === 'object') {
             try { display = JSON.stringify(v); } catch { display = String(v); }
-        } else {
+        } else if (typeof v === 'string') {
             display = detailValue(String(v), k);
+        } else {
+            display = String(v);
         }
         const copyLabel = copyLabelForDetailField(k);
         rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
@@ -2847,6 +2924,11 @@ function fullDetailRows(entry, balancesHidden = false) {
     }
 
     return rows;
+}
+
+function isEmptyDetailValue(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
+    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
 }
 
 function isRemovedAccessListValue(key, value) {
@@ -3328,7 +3410,9 @@ function PendingAmountLabel({ entry }) {
     if (!annotation) return null;
     const amounts = annotation.outputs
         .map((o) => t('pending.amount.entry', {
-            amount: balancesHidden ? '•••••' : o.amount,
+            amount: balancesHidden
+                ? '•••••'
+                : formatHistoryAmount(o.amount, annotation.direction),
             tick: o.tick,
         }))
         .join(t('pending.amount.separator'));
@@ -3383,6 +3467,7 @@ function contractRowLabel(entry) {
 
 export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
     const d = chainRegistry.get(entry.chainId);
+    const settledAmount = settledAmountAnnotation(entry);
     const receiveLabel = entry.receiveLabel
         && classifyEntryAction(entry, walletAddresses) === 'receive'
         ? entry.receiveLabel
@@ -3434,6 +3519,14 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                             <span>{t('history.row.block', {
                                 block: formatDecimalAmount(entry.blockIndex),
                             })}</span>
+                            {settledAmount ? (
+                                <span
+                                    className={styles.pendingAmount}
+                                    data-history-amount={settledAmount.direction || 'unknown'}
+                                >
+                                    {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+                                </span>
+                            ) : null}
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
                                     {t('history.row.confirmations', {
@@ -3449,12 +3542,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span
+                        <RelativeTime
                             className={styles.rowRelativeTime}
-                            title={formatTimestamp(entry.timestamp)}
-                        >
-                            {formatRelativeTime(entry.timestamp)}
-                        </span>
+                            timestamp={entry.timestamp}
+                        />
                     ) : null}
                 </span>
             </button>
@@ -3519,9 +3610,9 @@ function GroupCard({ item, expanded, onToggle }) {
             <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? (
-                    <span title={formatTimestamp(newest.timestamp)}>
-                        {t('history.group.latest', { when: formatRelativeTime(newest.timestamp) })}
-                    </span>
+                    <RelativeTime timestamp={newest.timestamp}>
+                        {(when) => t('history.group.latest', { when })}
+                    </RelativeTime>
                 ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />

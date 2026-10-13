@@ -436,6 +436,11 @@ export default defineConfig({
         port: 4173,
         host: '0.0.0.0',
         allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
+        // frame-ancestors is ignored in a meta policy, so the production-like
+        // server supplies that directive as a response header. Keep this
+        // separate from the HTML policy: SRI adds the generated import-map
+        // hash to the meta policy after Vite has emitted the page.
+        headers: { 'Content-Security-Policy': "frame-ancestors 'none'" },
     },
     plugins: [
         polyfillShimResolver,

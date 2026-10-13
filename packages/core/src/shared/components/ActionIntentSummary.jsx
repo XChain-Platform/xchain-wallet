@@ -18,7 +18,13 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
+import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
+
+function reviewDetailValue(detail) {
+    if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
+    return formatDisplayAmount(detail?.value);
+}
 
 /**
  * @param {object} props
@@ -41,7 +47,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                     {decoded.details.map((d, i) => (
                         <div key={`${d.label}-${i}`} className={styles.row}>
                             <dt>{d.label}</dt>
-                            <dd>{d.value}</dd>
+                            <dd>{reviewDetailValue(d)}</dd>
                         </div>
                     ))}
                 </dl>

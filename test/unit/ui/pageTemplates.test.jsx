@@ -192,6 +192,14 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
         expect(card).toMatch(/padding:\s*var\(--xc-space-6\)/);
     });
 
+    it('keeps the card inside the pane at the 600px tablet boundary', () => {
+        const base = ruleBody(baseLayer(text), '.form');
+        const tokens = css('tokens.css');
+        expect(base).toMatch(/width:\s*100%/);
+        expect(base).toMatch(/min-width:\s*0/);
+        expect(tokens).toMatch(/\*,\s*\*::before,\s*\*::after\s*\{\s*box-sizing:\s*border-box/s);
+    });
+
     it('stacks one card per section for a sectioned form when wide', () => {
         const card = ruleBody(wide, '.sectioned .section');
         expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
@@ -268,12 +276,13 @@ describe('<ListPage>', () => {
     });
 });
 
-describe('ListPage.module.css: full width at every viewport', () => {
+describe('ListPage.module.css: readable list width', () => {
     const text = css('ListPage.module.css');
 
-    it('fills the content width and never caps it', () => {
+    it('fills narrow panes and caps wide panes at a centred readable measure', () => {
         expect(ruleBody(text, '.page')).toMatch(/width:\s*100%/);
-        expect(text).not.toMatch(/max-width:\s*\d+(px|rem|em|ch)/);
+        expect(ruleBody(text, '.page')).toMatch(/max-width:\s*48rem/);
+        expect(ruleBody(text, '.page')).toMatch(/margin-inline:\s*auto/);
         expect(text).not.toMatch(/@media|@container/);
     });
 

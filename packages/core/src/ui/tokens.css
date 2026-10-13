@@ -10,6 +10,25 @@
  *     import '@xchain-wallet/core/ui/tokens.css';
  */
 
+/* The fallback paints immediately while Inter loads. Its overrides align
+ * Arial's line box with Inter so the swap does not move surrounding UI. */
+@font-face {
+    font-family: 'XChain Sans';
+    src: url('./fonts/InterVariable.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'XChain Sans Fallback';
+    src: local('Arial');
+    size-adjust: 107.4%;
+    ascent-override: 90.2%;
+    descent-override: 22.48%;
+    line-gap-override: 0%;
+}
+
 :root {
     /* Spacing - 4px grid */
     --xc-space-1: 4px;
@@ -20,8 +39,8 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
-    /* Typography - system fonts by default per §5.4 */
-    --xc-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    /* Typography - platform fonts remain available when the web font fails. */
+    --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     --xc-text-xs: 0.6875rem;
     --xc-text-sm: 0.8125rem;
@@ -29,6 +48,13 @@
     --xc-text-lg: 1rem;
     --xc-text-xl: 1.25rem;
     --xc-text-2xl: 1.5rem;
+
+    /* Icon sizes use one named scale across controls and navigation rows. */
+    --xc-icon-xs: 14px;
+    --xc-icon-sm: 16px;
+    --xc-icon-md: 18px;
+    --xc-icon-lg: 20px;
+    --xc-icon-xl: 24px;
 
     /* Minimum interactive target (responsive-first, slice 2).
      *
@@ -105,6 +131,9 @@
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
+    --xc-info: #1A7BAC;
+    --xc-info-bg: rgba(26, 123, 172, 0.10);
+    --xc-info-text: #134B6E;
     /* Darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
     --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
@@ -115,8 +144,8 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    /* The translucent ring clears 3:1 after compositing on every surface. */
-    --xc-focus-ring: rgba(26, 123, 172, 0.80);
+    --xc-success-fill: #146F34;
+    --xc-focus-ring: #0F172A;
     /* Saturation communicates inactivity without blending labels and borders
      * into their backgrounds. */
     --xc-disabled-opacity: 1;
@@ -194,6 +223,9 @@
         --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
         --xc-danger-text: #FCA5A5;
+        --xc-info: #4AA8D8;
+        --xc-info-bg: rgba(74, 168, 216, 0.14);
+        --xc-info-text: #7DD3FC;
         --xc-warning-bg: rgba(252, 211, 77, 0.14);
         --xc-warning-text: #FCD34D;
         --xc-success-bg: rgba(74, 222, 128, 0.14);
@@ -201,7 +233,8 @@
         --xc-danger-fg: #F87171;
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
-        --xc-focus-ring: rgba(74, 168, 216, 0.75);
+        --xc-success-fill: #4ADE80;
+        --xc-focus-ring: #FFFFFF;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     }
@@ -220,6 +253,9 @@
     --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
     --xc-danger-text: #FCA5A5;
+    --xc-info: #4AA8D8;
+    --xc-info-bg: rgba(74, 168, 216, 0.14);
+    --xc-info-text: #7DD3FC;
     --xc-warning-bg: rgba(252, 211, 77, 0.14);
     --xc-warning-text: #FCD34D;
     --xc-success-bg: rgba(74, 222, 128, 0.14);
@@ -227,7 +263,8 @@
     --xc-danger-fg: #F87171;
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
-    --xc-focus-ring: rgba(74, 168, 216, 0.75);
+    --xc-success-fill: #4ADE80;
+    --xc-focus-ring: #FFFFFF;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
@@ -298,8 +335,11 @@
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
         --xc-danger: #B91C1C;
+        --xc-info: #134B6E;
+        --xc-info-text: #134B6E;
         --xc-warning: #92400E;
         --xc-success: #166534;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #134B6E;
         --xc-accent-primary-hover: #0B304A;
         --xc-focus-ring: rgba(15, 23, 42, 0.85);
@@ -318,8 +358,11 @@
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
             --xc-danger: #FCA5A5;
+            --xc-info: #93C5FD;
+            --xc-info-text: #93C5FD;
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
+            --xc-success-fill: #166534;
             --xc-accent-primary: #93C5FD;
             --xc-accent-text: #93C5FD;
             --xc-danger-fg: #FCA5A5;
@@ -341,8 +384,11 @@
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
         --xc-danger: #FCA5A5;
+        --xc-info: #93C5FD;
+        --xc-info-text: #93C5FD;
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #93C5FD;
         --xc-accent-text: #93C5FD;
         --xc-danger-fg: #FCA5A5;
@@ -369,9 +415,21 @@
         --xc-accent-primary-hover: VisitedText;
         --xc-on-accent: Canvas;
         --xc-danger: Mark;
+        --xc-danger-bg: Canvas;
+        --xc-danger-text: Mark;
+        --xc-info: LinkText;
+        --xc-info-bg: Canvas;
+        --xc-info-text: LinkText;
+        --xc-warning: Mark;
+        --xc-warning-bg: Canvas;
+        --xc-warning-text: Mark;
+        --xc-success: LinkText;
+        --xc-success-bg: Canvas;
+        --xc-success-fill: LinkText;
         --xc-accent-text: LinkText;
         --xc-danger-fg: Mark;
         --xc-on-danger: MarkText;
+        --xc-on-success: Canvas;
         --xc-focus-ring: Highlight;
     }
 }
@@ -421,6 +479,50 @@ body {
     box-sizing: border-box;
 }
 
+/* Controls and decorative glyphs behave as one touch target instead of
+ * contributing label or icon fragments to a long-press selection. Wallet
+ * data nested in a clickable row opts back into text selection in the
+ * component that renders it. */
+:where(button, [role='button'], [role='tab']),
+:where(svg, [aria-hidden='true']) {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Machine-readable values remain directly selectable wherever they appear,
+ * including inside a control that opens a transaction detail view. */
+:where(code, samp, output, address) {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Taps activate controls immediately while pan and pinch gestures remain
+ * available to the page. ARIA roles cover tappable rows that are not native
+ * buttons, and :where() lets a component override this for a gesture surface. */
+:where(
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'],
+    a[href],
+    [role='button'],
+    [role='link'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='option'],
+    summary,
+    label
+) {
+    touch-action: manipulation;
+}
+
+/* A dialog can place its scrollport on the panel, body, list, or viewer.
+ * Applying containment through the subtree keeps every such scroll boundary
+ * from chaining into the page behind it. */
+:where([role='dialog'], [role='dialog'] *) {
+    overscroll-behavior: contain;
+}
+
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
@@ -431,19 +533,15 @@ fieldset {
     min-width: 0;
 }
 
-/* iOS WebKit zooms the whole page in when a form control under 16px takes
- * focus, and the zoom stays after the keyboard closes: the layout runs off
- * the right edge and the shell can be dragged sideways. Every Input is 14px
- * (--xc-text-md), so tapping Send's From field zoomed an iPhone 17 Pro
- * simulator by 1.14 (2026-10-12). The 16px floor is the documented way to
- * stop it without disabling pinch zoom. -webkit-touch-callout exists only in
- * iOS WebKit, so Android, desktop and macOS Safari keep their sizes. The
- * !important outranks the module classes and inline styles that set 14px. */
-@supports (-webkit-touch-callout: none) {
+/* iOS WebKit zooms the page when a focused form control renders below 16px.
+ * Keep narrow layouts at that floor without disabling pinch zoom or changing
+ * the compact control sizes on desktop. !important also covers module and
+ * inline font declarations on shared form controls. */
+@media (max-width: 599px) {
     input:not([type='checkbox']):not([type='radio']):not([type='range']),
     select,
     textarea {
-        font-size: 16px !important;
+        font-size: 1rem !important;
     }
 }
 
@@ -464,13 +562,33 @@ fieldset {
     max-width: 100%;
 }
 
-/* A control with no focus style of its own drew the WebView's default ring,
- * orange on Android, beside the app's blue on every styled field (the Scan
- * paste box and Contacts' sort, LG K51, 2026-10-12). This base ring has zero
- * specificity, so a component's own :focus or :focus-visible rule still wins. */
-:where(input, select, textarea, button):focus-visible {
-    outline: 2px solid var(--xc-accent-primary);
-    outline-offset: 2px;
+/* Keep one theme-aware keyboard indicator on native controls, links, and
+ * custom controls. The important declarations preserve this accessibility
+ * invariant when a component resets the browser outline, and draw the ring
+ * inward so rounded list and card containers cannot clip it. */
+:where(
+    a[href],
+    area[href],
+    audio[controls],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    video[controls],
+    [role='button'],
+    [role='link'],
+    [role='menuitem'],
+    [role='option'],
+    [role='tab'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [tabindex]:not([tabindex='-1']),
+    [contenteditable]:not([contenteditable='false'])
+):focus-visible {
+    outline: 2px solid var(--xc-focus-ring) !important;
+    outline-offset: -2px !important;
 }
 
 /* Disabled controls retain the contrast of their semantic color pairs.

@@ -34,6 +34,7 @@ describe('Settings while settings are loading', () => {
         expect(screen.getByText('Keyboard')).toBeTruthy();
         expect(screen.getByText('Network')).toBeTruthy();
         expect(document.body.textContent).not.toContain('raw PSBT inspector');
+        expect(screen.getByRole('searchbox').closest('[data-settings-layout="responsive"]')).toBeTruthy();
     });
 
     it('shows the active account and opens its account picker', () => {
@@ -81,5 +82,6 @@ describe('Settings while settings are loading', () => {
 
         expect(screen.queryByLabelText('Confirm wallet name')).toBeNull();
         expect(screen.getByText('Beta')).toBeTruthy();
+        expect(screen.getByText('Beta').closest('[data-settings-layout="responsive"]')).toBeTruthy();
     });
 });

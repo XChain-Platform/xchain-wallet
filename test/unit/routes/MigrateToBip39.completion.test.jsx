@@ -121,7 +121,7 @@ describe('MigrateToBip39 safety and completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create BIP39 wallet' }));
 
         expect(await screen.findByText('Creating your new wallet')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeDisabled();
         expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
         expect(context.onSweepChain).not.toHaveBeenCalled();
         await waitFor(() => expect(messaging.addImportedWallet).toHaveBeenCalledWith({
@@ -164,7 +164,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(await screen.findByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
         expect(await screen.findByRole('button', { name: 'Generate recovery phrase' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(context.onBack).toHaveBeenCalledTimes(1);
         expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();

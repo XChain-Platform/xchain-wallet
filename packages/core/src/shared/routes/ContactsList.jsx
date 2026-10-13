@@ -465,7 +465,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     async function handleDelete(id) {
         if (deleting) return;
         setDeleting(`contact:${id}`);
-        if (!(await confirmDialog.confirm({ title: 'Delete this contact?', confirmLabel: 'Delete', danger: true }))) {
+        const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
+        const displayName = snapshot?.name || 'this contact';
+        if (!(await confirmDialog.confirm({
+            title: `Delete ${displayName} from contacts?`,
+            message: `${displayName} and all saved addresses will be removed. You can restore the contact with Undo.`,
+            confirmLabel: 'Delete contact',
+            danger: true,
+        }))) {
             setDeleting(null);
             return;
         }
@@ -473,8 +480,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // toast can re-create it via saveContact. We freeze the
         // displayed name here so the toast text doesn't change if the
         // user quickly creates another contact with the same id.
-        const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
-        const displayName = snapshot?.name || 'Contact';
         try {
             await messaging.deleteContact({ id });
             setActiveId(null);

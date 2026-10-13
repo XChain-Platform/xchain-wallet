@@ -204,6 +204,9 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
                 ) : null}
                 <img className={styles.image} src={imageUrl}
                     alt={name || 'Unlocked gated image'}
+                    loading="lazy"
+                    decoding="async"
+                    style={{ aspectRatio: '1 / 1', objectFit: 'contain' }}
                     aria-busy={imageLoading}
                     onLoad={() => setLoadedImageUrl(imageUrl)}
                     onError={() => setFailedImageUrl(imageUrl)}

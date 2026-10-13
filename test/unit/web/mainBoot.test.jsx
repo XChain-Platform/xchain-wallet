@@ -1,7 +1,10 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { hideNativeSplash } from '../../../packages/web/src/platform/nativeShellReady.jsx';
 
 const boot = vi.hoisted(() => ({
     render: vi.fn(),
@@ -60,6 +63,9 @@ beforeEach(() => {
         configurable: true,
         value: vi.fn(),
     });
+    globalThis.Capacitor = {
+        Plugins: { SplashScreen: { hide: vi.fn(() => Promise.resolve()) } },
+    };
 });
 
 describe('web application boot', () => {
@@ -82,6 +88,8 @@ describe('web application boot', () => {
         );
         expect(boot.createRoot).toHaveBeenCalledWith(container);
         expect(boot.render).toHaveBeenCalledTimes(1);
+        const shell = boot.render.mock.calls[0][0];
+        expect(shell.props.children[1].type.name).toBe('NativeShellReady');
     });
 
     it('renders a plain blocking panel when required browser capabilities are missing', async () => {
@@ -92,6 +100,7 @@ describe('web application boot', () => {
         expect(alert.querySelector('h1').textContent).toBe('This device cannot run XChain Wallet safely');
         expect(alert.querySelector('p').textContent).toBe('Missing browser capabilities.');
         expect(boot.createRoot).not.toHaveBeenCalled();
+        expect(globalThis.Capacitor.Plugins.SplashScreen.hide).toHaveBeenCalledTimes(1);
     });
 
     it('blocks a native shell whose vault plugin is unavailable', async () => {
@@ -102,6 +111,7 @@ describe('web application boot', () => {
         expect(alert.querySelector('h1').textContent).toBe('XChain Wallet cannot open on this device');
         expect(alert.querySelector('p').textContent).toBe('Native vault unavailable.');
         expect(boot.createRoot).not.toHaveBeenCalled();
+        expect(globalThis.Capacitor.Plugins.SplashScreen.hide).toHaveBeenCalledTimes(1);
     });
 
     it('preserves the pre-bundle refusal panel without mounting React', async () => {
@@ -115,6 +125,7 @@ describe('web application boot', () => {
         expect(root.textContent).toBe('pre-bundle refusal');
         expect(boot.nativeShellIsBroken).not.toHaveBeenCalled();
         expect(boot.createRoot).not.toHaveBeenCalled();
+        expect(globalThis.Capacitor.Plugins.SplashScreen.hide).toHaveBeenCalledTimes(1);
         expect(warn).toHaveBeenCalledWith(
             'web: boot floor refused this engine before the bundle loaded',
         );
@@ -137,5 +148,26 @@ describe('web application boot', () => {
         document.body.innerHTML = '';
         await expect(runBoot()).rejects.toThrow('web: #xchain-web-root missing');
         expect(boot.createRoot).not.toHaveBeenCalled();
+    });
+
+    it('releases the native splash through the mocked Capacitor plugin', () => {
+        hideNativeSplash();
+        expect(globalThis.Capacitor.Plugins.SplashScreen.hide).toHaveBeenCalledTimes(1);
+
+        globalThis.Capacitor.Plugins.SplashScreen.hide.mockImplementation(() => {
+            throw new Error('native bridge unavailable');
+        });
+        expect(() => hideNativeSplash()).not.toThrow();
+    });
+
+    it('pins edge-to-edge insets before the first WebView layout', () => {
+        const config = JSON.parse(readFileSync(
+            resolve('packages/mobile/capacitor.config.json'),
+            'utf8',
+        ));
+        expect(config.plugins.SystemBars).toMatchObject({
+            insetsHandling: 'css',
+            initialViewportFitValueHint: 'cover',
+        });
     });
 });

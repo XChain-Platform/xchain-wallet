@@ -199,8 +199,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallet setup"
+                title="Back to wallet setup"
                 disabled={stage === 'persisting'}
             >
                 <Icon.BackIcon />
@@ -390,15 +390,26 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
     }
 
+    const passwordStepDisabledReason = password.length === 0
+        ? 'Enter a password to continue.'
+        : confirm.length === 0
+            ? 'Confirm your password to continue.'
+            : null;
     const formBody = (
         <FormPage
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
+            status={passwordStepDisabledReason ? (
+                <StatusMessage id="create-wallet-disabled-reason">
+                    {passwordStepDisabledReason}
+                </StatusMessage>
+            ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={password.length === 0 || confirm.length === 0}
+                    disabled={Boolean(passwordStepDisabledReason)}
+                    aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
                     icon={<Icon.MigrateIcon />}
                 >
                     Next

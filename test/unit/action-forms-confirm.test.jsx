@@ -174,6 +174,22 @@ async function drainMicrotasks(rounds = 12) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
+function expectAccessibleFormControls(container) {
+    const controls = container.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    for (const control of controls) {
+        expect(control).toHaveAccessibleName();
+        const descriptionIds = (control.getAttribute('aria-describedby') || '')
+            .split(/\s+/)
+            .filter(Boolean);
+        for (const id of descriptionIds) {
+            expect(document.getElementById(id), `${control.tagName} description #${id}`).toBeTruthy();
+        }
+        if (control.getAttribute('aria-invalid') === 'true') {
+            expect(descriptionIds.length, `${control.tagName} invalid state has a description`).toBeGreaterThan(0);
+        }
+    }
+}
+
 /**
  * Mount a form, run its `fill` step, click the named action button, then
  * Approve on the confirm page. Returns every recorded host dispatch.
@@ -222,6 +238,8 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
             await drainMicrotasks();
         });
     }
+
+    expectAccessibleFormControls(utils.container);
 
     const button = utils.getByRole('button', { name: actionLabel });
     expect(button.disabled, `"${actionLabel}" button is enabled`).toBe(false);
@@ -1036,7 +1054,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             // The software path carries the action verb, never "Review".
             actionLabel: 'Place buy order',
             fill: (utils) => {
-                setValue(utils, /^Price/, '2');
+                // /^Price/ alone also names the "Price and amount" field group.
+                setValue(utils, /^Price \(/, '2');
                 setValue(utils, /^Size/, '5');
             },
         });

@@ -74,18 +74,18 @@ describe('ContactsList audited behavior', () => {
         const add = await screen.findByRole('button', { name: 'Add contact' });
 
         fireEvent.click(add);
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('dialog')).toHaveTextContent('Discard changes?');
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard and leave' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Contacts' })).toBeTruthy());
     });
@@ -212,8 +212,9 @@ describe('ContactsList audited behavior', () => {
 
         fireEvent.click((await screen.findByText('Alice')).closest('button'));
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-        const dialog = await screen.findByRole('dialog', { name: 'Delete this contact?' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        expect(within(dialog).getByText('Alice and all saved addresses will be removed. You can restore the contact with Undo.')).toBeTruthy();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
 
         await waitFor(() => expect(messaging.store.get('alice')).toEqual(alice));

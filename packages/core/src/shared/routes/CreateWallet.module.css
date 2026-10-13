@@ -103,8 +103,10 @@
 
 .wordCountOption {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     cursor: pointer;
@@ -124,6 +126,8 @@
 .wordCountHint {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .advancedRow {
@@ -216,5 +220,17 @@
 @media (prefers-reduced-motion: reduce) {
     .persistingSpinner {
         animation: none;
+    }
+}
+
+@media (max-height: 520px) {
+    .headPopup,
+    .headFull {
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .logo {
+        width: 64px;
+        margin-bottom: var(--xc-space-1);
     }
 }

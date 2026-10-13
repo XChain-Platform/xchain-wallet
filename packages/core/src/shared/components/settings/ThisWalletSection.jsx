@@ -547,12 +547,13 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             borderRadius: 'var(--xc-radius-md)',
         }}>
             <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
-                Permanent deletion
+                Remove {walletName}?
             </div>
             <div style={ROW_HINT}>
-                Type the wallet name <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
+                Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
                 Make sure you have a backup before continuing. The encrypted seed is destroyed and
-                cannot be recovered.
+                cannot be recovered. This cannot be undone. Type the wallet name{' '}
+                <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
             </div>
             <input
                 type="text"
@@ -596,7 +597,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                         cursor: matches && !busy ? 'pointer' : 'not-allowed',
                     }}
                 >
-                    {busy ? 'Removing…' : 'Remove permanently'}
+                    {busy ? 'Removing…' : 'Remove wallet'}
                 </button>
             </div>
         </div>

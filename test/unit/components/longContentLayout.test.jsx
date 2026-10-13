@@ -100,7 +100,10 @@ describe('long content layout', () => {
         );
 
         expect(screen.getByTitle(address)).toHaveTextContent(address);
-        expect(screen.getByTitle(new RegExp(amount))).toHaveTextContent(amount);
+        // The amount is shown digit-grouped; every digit must still be there.
+        const pendingAmount = document.querySelector('[data-pending-amount]');
+        expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);
+        expect(pendingAmount.textContent.replace(/,/g, '')).toContain(amount);
         expect(rule(historyCss, '.rowSourceAddress')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(historyCss, '.pendingAmount')).toMatch(/overflow-x:\s*auto/);
         expect(rule(historyCss, '.pendingAmount')).not.toMatch(/text-overflow:\s*ellipsis/);

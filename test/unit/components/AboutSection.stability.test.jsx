@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 
@@ -106,5 +106,29 @@ describe('AboutSection diagnostics', () => {
         const paragraphs = [...license.querySelectorAll('p')];
         expect(paragraphs.length).toBeGreaterThan(1);
         expect(paragraphs.every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
+    });
+
+    it('opens the repository issue form with redacted diagnostics only', async () => {
+        const location = { replace: vi.fn() };
+        const reportWindow = { location, opener: {}, close: vi.fn() };
+        const open = vi.spyOn(globalThis, 'open').mockReturnValue(reportWindow);
+        const diagnostics = {
+            wallet: { version: 'test' },
+            recent_errors: [{ message: 'redacted:sha256:1234abcd' }],
+        };
+        try {
+            mount(diagnostics);
+            fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+
+            await waitFor(() => expect(location.replace).toHaveBeenCalledOnce());
+            const reportUrl = new URL(location.replace.mock.calls[0][0]);
+            expect(reportUrl.origin + reportUrl.pathname).toBe('https://github.com/XChain-Platform/xchain-wallet/issues/new');
+            expect(reportUrl.searchParams.get('body')).toContain(JSON.stringify(diagnostics, null, 2));
+            expect(reportUrl.searchParams.get('body')).toContain('redacted:sha256:1234abcd');
+            expect(open).toHaveBeenCalledWith('about:blank', '_blank');
+            expect(reportWindow.opener).toBeNull();
+        } finally {
+            open.mockRestore();
+        }
     });
 });

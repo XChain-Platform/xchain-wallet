@@ -9,15 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
- * wallet, with an "Add Account" affordance. Reached from the gear
- * popover's Account summary row. Picking an account calls `onSwitch`
+ * wallet, with thumb-reachable add and current-account management
+ * actions. Reached from the gear popover's Account summary row. Picking
+ * an account calls `onSwitch`
  * and returns to home.
  *
  * @param {object} props
@@ -53,25 +54,27 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            title="Accounts"
-            trailing={(
-                <button
-                    type="button"
-                    onClick={onAddAccount}
-                    aria-label="Add account"
-                    title="Add account"
+    const header = <PageHeader onBack={onBack} title="Accounts" />;
+    const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
+    const footer = (
+        <div className={pickerStyles.footerActions}>
+            <Button variant="primary" onClick={onAddAccount} icon={<Icon.PlusIcon />}>
+                Add account
+            </Button>
+            {onRenameAccount && activeAccount ? (
+                <Button
+                    variant="ghost"
+                    onClick={() => onRenameAccount(activeAccount)}
+                    icon={<Icon.PencilIcon />}
                 >
-                    <Icon.PlusIcon />
-                </button>
-            )}
-        />
+                    Manage account
+                </Button>
+            ) : null}
+        </div>
     );
 
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} footer={footer}>
             <ListPage>
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
@@ -90,16 +93,22 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         <div key={a.id} className={pickerStyles.rowWrap}>
                             <button
                                 type="button"
-                                className={styles.entry}
+                                className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => {
                                     if (!active) onSwitch(a.id);
                                     onBack();
                                 }}
+                                aria-current={active ? 'true' : undefined}
                             >
                                 <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
-                                    <span className={styles.entryLabel}>
-                                        {active ? '● ' : '○ '}{label}
+                                    <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
+                                        {active ? (
+                                            <span className={pickerStyles.currentMark} aria-hidden="true">
+                                                <Icon.CheckIcon />
+                                            </span>
+                                        ) : null}
+                                        <span className={pickerStyles.rowName} title={label}>{label}</span>
                                     </span>
                                     {subtitle ? (
                                         <span className={styles.entryDescription}>{subtitle}</span>

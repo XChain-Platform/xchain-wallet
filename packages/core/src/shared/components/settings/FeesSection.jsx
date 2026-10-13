@@ -149,8 +149,6 @@ export function FeesSection() {
                                     id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
-                                    min={0}
-                                    step="any"
                                     defaultValue={formatWithThousands(settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate))}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.
@@ -180,8 +178,9 @@ export function FeesSection() {
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                     aria-label={`${displayName} custom fee rate`}
-                                    aria-invalid={Boolean(rateErrors[chainId])}
+                                    aria-invalid={rateErrors[chainId] ? 'true' : undefined}
                                     aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
+                                    aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
                                     style={{ ...INPUT, width: 120, textAlign: 'right' }}
                                 />
                             </SettingsFieldRow>

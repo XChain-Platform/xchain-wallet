@@ -77,7 +77,7 @@ const MNEMONIC_LENGTHS = [24, 21, 18, 15, 12];
  * @typedef {Object} DiagnosticError
  * @property {string} at                 ISO timestamp
  * @property {string} kind               error class/name
- * @property {string} message            truncated to {@link ERROR_MESSAGE_LIMIT} chars
+ * @property {string} message            stable hash of the original free-form message
  * @property {string} [phase]            optional context like 'encoding', 'broadcasting'
  */
 
@@ -87,7 +87,7 @@ const MNEMONIC_LENGTHS = [24, 21, 18, 15, 12];
  * @property {number} timestamp
  * @property {'log'|'info'|'warn'|'error'} level
  * @property {string} source
- * @property {string} message              expected to be pre-truncated by the caller (logConsole.snapshot defaults to 500 chars)
+ * @property {string} message              stable hash of the original free-form message
  */
 
 /**
@@ -370,13 +370,9 @@ function sanitizeGrace(grace) {
     };
 }
 
-// Cluster Q FOLLOWUP 5: defensive bound + truncation on logConsole
-// snapshots that crossed a process boundary. The caller is expected
-// to have already truncated each `message` via
-// `logConsole.snapshot({ messageLimit })`, but a stale shell or a
-// custom messaging shim could feed in untrimmed entries. The flow
-// caps the array length and re-truncates each message so a single
-// runaway log line never bloats a pasted bug report.
+// Log and error messages are free-form inputs that can interpolate wallet
+// data. Stable hashes preserve repeated-failure correlation without placing
+// addresses, balances, keys, or recovery phrases in a pasted report.
 const RECENT_LOGS_LIMIT = 200;
 const LOG_MESSAGE_LIMIT = 500;
 function sanitizeLogs(arr) {
@@ -385,10 +381,10 @@ function sanitizeLogs(arr) {
         id: Number.isFinite(e?.id) ? Number(e.id) : 0,
         timestamp: Number.isFinite(e?.timestamp) ? Number(e.timestamp) : 0,
         level: ['log', 'info', 'warn', 'error'].includes(e?.level) ? e.level : 'log',
-        source: typeof e?.source === 'string' ? e.source : 'console',
-        message: typeof e?.message === 'string'
-            ? e.message.slice(0, LOG_MESSAGE_LIMIT)
-            : '',
+        source: sanitizeLogSource(e?.source),
+        message: redactFreeFormText(
+            typeof e?.message === 'string' ? e.message.slice(0, LOG_MESSAGE_LIMIT) : e?.message,
+        ),
     }));
     return logs.map((entry) => ({
         ...entry,
@@ -400,13 +396,43 @@ function sanitizeLogs(arr) {
 function sanitizeErrors(arr) {
     if (!Array.isArray(arr)) return [];
     return arr.slice(-RECENT_ERRORS_LIMIT).map((e) => ({
-        at: typeof e?.at === 'string' ? e.at : new Date().toISOString(),
-        kind: typeof e?.kind === 'string' ? redactDiagnosticText(e.kind) : 'Error',
-        message: typeof e?.message === 'string'
-            ? redactDiagnosticText(e.message.slice(0, ERROR_MESSAGE_LIMIT))
-            : '',
-        ...(typeof e?.phase === 'string' ? { phase: redactDiagnosticText(e.phase) } : {}),
+        at: sanitizeTimestamp(e?.at),
+        kind: sanitizeErrorKind(e?.kind),
+        message: redactFreeFormText(e?.message),
+        ...(sanitizeErrorPhase(e?.phase) ? { phase: sanitizeErrorPhase(e.phase) } : {}),
     }));
+}
+
+function sanitizeLogSource(value) {
+    if (['console', 'app', 'vault', 'encoder', 'storage'].includes(value)) return value;
+    if (typeof value === 'string' && value.startsWith('signer:')) return 'signer';
+    if (typeof value === 'string' && value.startsWith('bridge:')) return 'bridge';
+    return 'other';
+}
+
+function sanitizeTimestamp(value) {
+    const timestamp = typeof value === 'string' ? Date.parse(value) : NaN;
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString();
+}
+
+function sanitizeErrorKind(value) {
+    const safeKinds = [
+        'Error',
+        'TypeError',
+        'RangeError',
+        'ReferenceError',
+        'SyntaxError',
+        'URIError',
+        'EvalError',
+        'AggregateError',
+        'DOMException',
+    ];
+    return safeKinds.includes(value) ? value : 'Error';
+}
+
+function sanitizeErrorPhase(value) {
+    const safePhases = ['error', 'unhandledrejection', 'encoding', 'broadcasting'];
+    return safePhases.includes(value) ? value : null;
 }
 
 function sanitizeBuild(build) {
@@ -530,6 +556,13 @@ function joinEndpoint(e) {
 function redactCustomUrl(url) {
     if (typeof url !== 'string' || url.length === 0) return '';
     const bytes = new TextEncoder().encode(url);
+    const hex = bytesToHex(sha256(bytes)).slice(0, REDACTED_HASH_PREFIX_LEN);
+    return `redacted:sha256:${hex}`;
+}
+
+function redactFreeFormText(value) {
+    if (typeof value !== 'string' || value.length === 0) return '';
+    const bytes = new TextEncoder().encode(value);
     const hex = bytesToHex(sha256(bytes)).slice(0, REDACTED_HASH_PREFIX_LEN);
     return `redacted:sha256:${hex}`;
 }

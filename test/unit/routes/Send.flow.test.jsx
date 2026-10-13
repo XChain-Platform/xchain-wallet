@@ -165,6 +165,9 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
         await user.tab();
+        // The recipient field's paste control sits below it, after its in-field icon.
+        expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Paste from clipboard' })[0]);
+        await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));

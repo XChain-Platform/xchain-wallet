@@ -63,7 +63,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(block.className).toMatch(/danger/);
 
         fireEvent.click(disconnect);
-        fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1));
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect site' }));
         await waitFor(() => expect(messaging.deleteConnectedSite).toHaveBeenCalledTimes(1));
         fireEvent.click(disconnect);
 
@@ -129,13 +129,15 @@ describe('ConnectedSitesSection settings controls', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
         expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog', { name: 'Disconnect Example dApp?' })).toBeTruthy();
+        const dialog = screen.getByRole('dialog', { name: 'Disconnect Example dApp?' });
+        expect(dialog).toHaveTextContent('https://dapp.example will lose access to its shared accounts and signing permissions. You can reconnect the site later.');
+        expect(screen.getByRole('button', { name: 'Disconnect site' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
-        fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1));
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect site' }));
 
         await waitFor(() => expect(messaging.deleteConnectedSite).toHaveBeenCalledWith({ id: 'site-1' }));
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();

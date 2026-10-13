@@ -65,6 +65,15 @@ async function searchFor(token) {
 }
 
 describe('DispenserExplorer network scoping (D-34b)', () => {
+    it('explains that a search term is required once the network is ready', async () => {
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
+        const action = await screen.findByRole('button', { name: /search/i });
+
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
+    });
+
     it('explains and disables search until the active network is loaded', async () => {
         let resolveSettings;
         const getDispensersForToken = vi.fn();
@@ -82,7 +91,9 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
 
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
         expect(screen.getByText('Loading available networks…')).toBeTruthy();
-        expect(screen.getByRole('button', { name: /search/i })).toBeDisabled();
+        const action = screen.getByRole('button', { name: /search/i });
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
         expect(getDispensersForToken).not.toHaveBeenCalled();
 
         await act(async () => resolveSettings({ schemaVersion: 2, activeNetwork: 'mainnet' }));

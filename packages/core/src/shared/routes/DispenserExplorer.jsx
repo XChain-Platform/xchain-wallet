@@ -82,6 +82,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const [lastQueried, setLastQueried] = useState(/** @type {string | null} */ (null));
     const [lastSearchMode, setLastSearchMode] = useState(/** @type {'token' | 'address'} */ ('token'));
     const searchRequestId = useRef(0);
+    const searchDisabledReason = !settings
+        ? 'Loading available networks…'
+        : chains.length === 0
+            ? 'No chains are available for the active network.'
+            : !query.trim()
+                ? `Enter ${searchMode === 'token' ? 'a token ticker' : 'an address'} to search.`
+                : null;
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => Object.entries(rowsByChain)
         .filter(([cid]) => cid !== '_error')
@@ -311,9 +318,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     autoCorrect="off"
                     spellCheck={false}
                 />
-                {chains.length === 0 ? (
-                    <p className={styles.entryDescription}>
-                        {settings ? 'No chains are available for the active network.' : 'Loading available networks…'}
+                {searchDisabledReason ? (
+                    <p id="dispenser-search-disabled-reason" className={styles.entryDescription}>
+                        {searchDisabledReason}
                     </p>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
@@ -321,9 +328,10 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={searching}
-                        disabled={!query.trim() || chains.length === 0}
+                        disabled={Boolean(searchDisabledReason)}
+                        aria-describedby={searchDisabledReason ? 'dispenser-search-disabled-reason' : undefined}
                     >
-                        Search
+                        {searching ? 'Searching…' : 'Search'}
                     </Button>
                 </div>
         </form>

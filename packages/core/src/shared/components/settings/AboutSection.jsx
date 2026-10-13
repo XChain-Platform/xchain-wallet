@@ -69,6 +69,13 @@ const PARAGRAPHS = {
     gap: 'var(--xc-space-3)',
 };
 const PARAGRAPH = { margin: 0 };
+const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
+
+export function buildProblemReportUrl(diagnostics) {
+    const url = new URL(PROBLEM_REPORT_URL);
+    url.searchParams.set('body', `### Redacted diagnostics\n\n\`\`\`json\n${diagnostics}\n\`\`\``);
+    return url.toString();
+}
 
 export function AboutSection() {
     const { shell, messaging } = useMessaging();
@@ -79,6 +86,7 @@ export function AboutSection() {
     const [preview, setPreview] = useState(/** @type {string | null} */ (null));
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
+    const [reportBusy, setReportBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
     const [diagnosticMeta, setDiagnosticMeta] = useState(null);
     // Read once at mount: the provider is installed at shell boot, before any
@@ -160,6 +168,29 @@ export function AboutSection() {
             setError(err?.message || 'Could not load diagnostics preview.');
         } finally {
             setPreviewBusy(false);
+        }
+    }
+
+    async function handleReportProblem() {
+        if (reportBusy) return;
+        setReportBusy(true);
+        setError(null);
+        retryRef.current = null;
+        const reportWindow = globalThis.open?.('about:blank', '_blank') ?? null;
+        if (reportWindow) reportWindow.opener = null;
+        try {
+            const text = preview ?? (await fetchDump());
+            if (preview === null) setPreview(text);
+            const reportUrl = buildProblemReportUrl(text);
+            if (reportWindow) reportWindow.location.replace(reportUrl);
+            else globalThis.location.assign(reportUrl);
+        } catch (err) {
+            reportWindow?.close();
+            retryRef.current = handleReportProblem;
+            setError(err?.message || 'Could not open the problem report.');
+            haptic.error();
+        } finally {
+            setReportBusy(false);
         }
     }
 
@@ -297,6 +328,17 @@ export function AboutSection() {
                     </Button>
                 </div>
             </Row>
+            <Row label="Feedback">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleReportProblem}
+                    loading={reportBusy}
+                    disabled={reportBusy}
+                >
+                    Report a problem
+                </Button>
+            </Row>
             {previewOpen && preview !== null ? (
                 <pre
                     id="diagnostic-dump-preview"
@@ -369,7 +411,7 @@ function DocLink({ path, label }) {
             rel="noreferrer noopener"
             style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
         >
-            {label}
+            {label} <span aria-hidden="true">↗</span>
         </a>
     );
 }

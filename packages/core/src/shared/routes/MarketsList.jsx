@@ -23,6 +23,7 @@ import marketsStyles from './MarketsList.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+const SEARCH_DEBOUNCE_MS = 200;
 function nativeTickerFor(descriptor) {
     if (!descriptor?.coin) return null;
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
@@ -63,6 +64,15 @@ export function MarketsList({
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
     const watchlistRequestId = useRef(0);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const marketResultsRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(handle);
+    }, [search]);
+
     const [visibleMarketCount, setVisibleMarketCount] = useState(MARKETS_PAGE_SIZE);
 
     const loadWatchlist = useCallback(async () => {
@@ -130,6 +140,7 @@ export function MarketsList({
         : null;
     const marketsLoading = Boolean(selectedAsset)
         && (loading || settledAssetKey !== selectedAssetKey);
+    const hasCachedMarkets = settledAssetKey === selectedAssetKey;
 
     const watchlistKeySet = useMemo(() => {
         const s = new Set();
@@ -139,13 +150,13 @@ export function MarketsList({
 
     const displayMarkets = useMemo(() => {
         const selTick = selectedAsset?.tick.toUpperCase() || '';
-        // Side of each pair the user didn't pick (the "other" side)
-        // displayed as the row's primary ticker. Used for filtering.
-        const otherOf = (m) => (m.tick2.toUpperCase() === selTick ? m.tick1
-            : m.tick1.toUpperCase() === selTick ? m.tick2
-            : m.tick1);
-        const q = search.trim().toUpperCase();
-        const applySearch = (rows) => (q ? rows.filter((m) => otherOf(m).toUpperCase().includes(q)) : rows);
+        const q = debouncedSearch.trim().toLowerCase();
+        const applySearch = (rows) => (q ? rows.filter((m) => [
+            m.tick1,
+            m.tick2,
+            m.name1,
+            m.name2,
+        ].some((value) => String(value || '').toLowerCase().includes(q))) : rows);
 
         if (tab === 'all') return applySearch(markets);
         if (tab === 'popular') {
@@ -170,10 +181,28 @@ export function MarketsList({
                 lastPrice: hit?.lastPrice,
                 change24h: hit?.change24h,
                 depth: hit?.depth,
+                name1: hit?.name1,
+                name2: hit?.name2,
             };
         });
         return applySearch(rows);
-    }, [tab, markets, watchlist, selectedAsset, search]);
+    }, [tab, markets, watchlist, selectedAsset, debouncedSearch]);
+
+    const firstMarketResult = () => marketResultsRef.current?.querySelector('[data-market-result="true"]');
+    const handleSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+        const result = firstMarketResult();
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+    const clearSearch = () => {
+        setSearch('');
+        setDebouncedSearch('');
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
+        searchRef.current?.focus();
+    };
 
     const hasRowsBeforeSearch = useMemo(() => {
         if (tab !== 'watchlist') return markets.length > 0;
@@ -300,6 +329,7 @@ export function MarketsList({
                                 marginBottom: 'var(--xc-space-3)',
                             }}>
                                 <input
+                                    ref={searchRef}
                                     type="search"
                                     enterKeyHint="search"
                                     autoCapitalize="off"
@@ -310,6 +340,7 @@ export function MarketsList({
                                         setSearch(e.target.value);
                                         setVisibleMarketCount(MARKETS_PAGE_SIZE);
                                     }}
+                                    onKeyDown={handleSearchKeyDown}
                                     placeholder="Search"
                                     aria-label="Search markets"
                                     style={{
@@ -324,6 +355,11 @@ export function MarketsList({
                                         fontSize: 'var(--xc-text-sm)',
                                     }}
                                 />
+                                {search ? (
+                                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear market search">
+                                        <Icon.XIcon />
+                                    </Button>
+                                ) : null}
                                 <div
                                     className={receivePickerStyles.kindSegments}
                                     role="tablist"
@@ -359,51 +395,49 @@ export function MarketsList({
                 )}
             >
 
-                {!selectedAsset ? (
-                    <EmptyState
-                        title="No asset selected"
-                        body="Choose a coin or token to view its markets."
-                    />
-                ) : marketsLoading ? (
-                    <div role="status" aria-label="Loading markets">
-                        <Skeleton.List rows={5} />
-                    </div>
-                ) : loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        className={styles.hint}
-                        recovery={{
-                            label: 'Try again',
-                            onAction: () => {
-                                setSettledAssetKey(null);
-                                setLoading(true);
-                                setMarketsReload((value) => value + 1);
-                            },
-                        }}
-                    >
-                        {loadError}
-                    </StatusMessage>
-                ) : displayMarkets.length === 0 ? (
-                    filtersHideAllMarkets ? (
+                <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                    {!selectedAsset ? (
                         <EmptyState
-                            title="No results for these filters"
-                            body="Reset the filters to see all markets."
-                            actionLabel="Reset filters"
-                            onAction={resetFilters}
+                            title="No asset selected"
+                            body="Choose a coin or token to view its markets."
+                        />
+                    ) : marketsLoading && !hasCachedMarkets ? (
+                        <div role="status" aria-label="Loading markets">
+                            <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
+                        </div>
+                    ) : loadError ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.hint}
+                            recovery={{
+                                label: 'Try again',
+                                onAction: () => {
+                                    setSettledAssetKey(null);
+                                    setLoading(true);
+                                    setMarketsReload((value) => value + 1);
+                                },
+                            }}
+                        >
+                            {loadError}
+                        </StatusMessage>
+                    ) : displayMarkets.length === 0 ? (
+                        <EmptyState
+                            title={debouncedSearch.trim()
+                                ? 'No matches'
+                                : tab === 'watchlist'
+                                    ? 'Empty watchlist'
+                                    : `No markets for ${selectedAsset.tick}`}
+                            body={debouncedSearch.trim()
+                                ? `No markets match "${debouncedSearch.trim()}".`
+                                : tab === 'watchlist'
+                                    ? `Starred markets for ${selectedAsset.tick} appear here.`
+                                    : 'No pairs found involving this asset on its chain.'}
+                            actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
+                            onAction={filtersHideAllMarkets ? resetFilters : undefined}
                         />
                     ) : (
-                        <EmptyState
-                            title={tab === 'watchlist'
-                                ? 'Empty watchlist'
-                                : `No markets for ${selectedAsset.tick}`}
-                            body={tab === 'watchlist'
-                                ? `Starred markets for ${selectedAsset.tick} appear here.`
-                                : 'No pairs found involving this asset on its chain.'}
-                        />
-                    )
-                ) : (
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                             {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                 <MarketRow
                                     key={`${m.tick1}::${m.tick2}`}
@@ -411,6 +445,8 @@ export function MarketsList({
                                     selectedTick={selectedAsset.tick}
                                     tick1={m.tick1}
                                     tick2={m.tick2}
+                                    name1={m.name1}
+                                    name2={m.name2}
                                     lastPrice={m.lastPrice}
                                     change24h={m.change24h}
                                     depth={m.depth}
@@ -431,7 +467,8 @@ export function MarketsList({
                             </Button>
                         ) : null}
                     </div>
-                )}
+                    )}
+                </div>
             </ListPage>
         </Screen>
     );
@@ -442,6 +479,8 @@ export function MarketsList({
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
+ * @param {string} [props.name1]
+ * @param {string} [props.name2]
  * @param {string} [props.lastPrice]
  * @param {string} [props.change24h]
  * @param {number} [props.depth]
@@ -449,13 +488,17 @@ export function MarketsList({
  * @param {() => void} props.onOpen
  * @param {() => void} props.onToggleStar
  */
-function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
+function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
+    const descriptor = chainRegistry.get(chainId);
     const selUpper = String(selectedTick || '').toUpperCase();
     // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.
     const otherTick = tick2.toUpperCase() === selUpper ? tick1
         : tick1.toUpperCase() === selUpper ? tick2
         : tick1;
+    const otherName = tick2.toUpperCase() === selUpper ? name1
+        : tick1.toUpperCase() === selUpper ? name2
+        : name1;
     const changeNum = change24h ? parseFloat(String(change24h).replace(/[^\d.+-]/g, '')) : NaN;
     const changeColor = Number.isFinite(changeNum)
         ? (changeNum > 0 ? 'var(--xc-success)' : changeNum < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
@@ -470,7 +513,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
             : 48)
         : 0;
     return (
-        <li className={marketsStyles.row} onClick={onOpen}>
+        <li className={marketsStyles.row}>
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
@@ -496,6 +539,26 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
             >
                 {starred ? '★' : '☆'}
             </button>
+            <button
+                type="button"
+                onClick={onOpen}
+                aria-label={`Open ${otherName || otherTick} market`}
+                data-market-result="true"
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--xc-space-2)',
+                    flex: 1,
+                    minWidth: 0,
+                    padding: 0,
+                    border: 0,
+                    background: 'none',
+                    color: 'inherit',
+                    font: 'inherit',
+                    textAlign: 'start',
+                    cursor: 'pointer',
+                }}
+            >
             <TickerIcon chainId={chainId} tick={otherTick} />
             <div
                 style={{
@@ -508,6 +571,9 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
             >
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                    {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
+                        <span>{otherName}</span>
+                    ) : null}
                     <DispenserBadge chainId={chainId} tick={otherTick} />
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
@@ -553,6 +619,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
                     </span>
                 ) : null}
             </div>
+            </button>
         </li>
     );
 }
@@ -609,9 +676,13 @@ export function normalizeMarket(row) {
     const change24h = row.tick1_24hr_change ?? row.change_24h ?? row.change24h ?? null;
     const depthRaw = row.depth ?? row.open_orders ?? row.orderCount;
     const depth = typeof depthRaw === 'number' ? depthRaw : Number(depthRaw);
+    const name1 = row.name1 ?? row.tick1_name ?? row.tick1Name ?? row.base_name ?? row.baseName;
+    const name2 = row.name2 ?? row.tick2_name ?? row.tick2Name ?? row.quote_name ?? row.quoteName;
     return {
         tick1: String(tick1),
         tick2: String(tick2),
+        ...(name1 != null && String(name1).length > 0 ? { name1: String(name1) } : {}),
+        ...(name2 != null && String(name2).length > 0 ? { name2: String(name2) } : {}),
         lastPrice: lastPrice != null && String(lastPrice).length > 0 ? String(lastPrice) : undefined,
         change24h: change24h != null && String(change24h).length > 0 ? String(change24h) : undefined,
         depth: Number.isFinite(depth) ? depth : undefined,

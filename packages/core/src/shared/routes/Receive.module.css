@@ -209,6 +209,17 @@
     min-width: 0;
 }
 
+@media (max-width: 380px) {
+    .qrActions {
+        flex-direction: column;
+    }
+
+    .qrActions > * {
+        flex-basis: auto;
+        width: 100%;
+    }
+}
+
 .generateAddressAction {
     display: flex;
     justify-content: flex-end;

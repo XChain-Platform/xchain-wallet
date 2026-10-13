@@ -191,6 +191,8 @@ export function LanguageRegionSection() {
                         aria-controls="fiat-currency-options"
                         aria-expanded={currencyPickerOpen}
                         aria-label="Fiat currency"
+                        aria-invalid={currencyError ? 'true' : undefined}
+                        aria-describedby={currencyError ? 'fiat-currency-error' : undefined}
                         placeholder="Search by code or name"
                         value={currencyPickerOpen
                             ? currencyQuery
@@ -239,7 +241,7 @@ export function LanguageRegionSection() {
                     ) : null}
                 </div>
             </div>
-            {currencyError ? <Status text={currencyError} tone="error" /> : null}
+            {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
         </div>
     );
 }

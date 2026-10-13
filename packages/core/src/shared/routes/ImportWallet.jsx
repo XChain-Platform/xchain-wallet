@@ -35,6 +35,7 @@ import {
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -132,8 +133,17 @@ function labelSyncRestoredMessage(labelSync) {
  * @param {() => void} props.onImported             refreshes App.jsx state
  * @param {'default' | 'freewallet'} [props.variant]
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
+ * @param {'mnemonic' | 'backup'} [props.initialLane]
+ * @param {(state: { lane: 'mnemonic' | 'backup' }) => void} [props.onOpenInTab]
  */
-export function ImportWallet({ onBack, onImported, variant: importVariant = 'default', mode = 'fresh' }) {
+export function ImportWallet({
+    onBack,
+    onImported,
+    variant: importVariant = 'default',
+    mode = 'fresh',
+    initialLane = 'mnemonic',
+    onOpenInTab,
+}) {
     // S4: The phrase is TYPED here, and a keyboard-visible screen recording is
     // as good as a screenshot of it.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -149,7 +159,11 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
     // §19.4 / G036: two import lanes: recovery phrase (default) and
     // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
-    const [lane, setLane] = useState(/** @type {'mnemonic' | 'backup'} */ ('mnemonic'));
+    const [lane, setLane] = useState(
+        /** @type {'mnemonic' | 'backup'} */ (
+            !isFreeWallet && initialLane === 'backup' ? 'backup' : 'mnemonic'
+        ),
+    );
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
@@ -555,6 +569,23 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         </div>
     ) : null;
 
+    const formDisabledReason = lane === 'backup'
+        ? backupPointer === null && backupContent.trim().length === 0
+            ? 'Choose a backup file, paste its contents, or scan a backup pointer to continue.'
+            : backupPassword.length === 0
+                ? `Enter the ${RESTORE_PASSWORD_LABELS.file.toLowerCase()} to continue.`
+                : backupWalletPassword.length === 0
+                    ? `Enter the ${RESTORE_PASSWORD_LABELS.wallet.toLowerCase()} to continue.`
+                    : backupDevicePassword.length === 0
+                        ? `Enter the ${restoreDeviceLabel(mode).toLowerCase()} to continue.`
+                        : null
+        : mnemonic.trim().length === 0
+            ? 'Enter a recovery phrase to continue.'
+            : password.length === 0
+                ? 'Enter a password to continue.'
+                : confirm.length === 0
+                    ? 'Confirm your password to continue.'
+                    : null;
     const formStatus = error ? (
         <StatusMessage
             variant="error"
@@ -571,6 +602,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         >
             {error}
         </StatusMessage>
+    ) : formDisabledReason ? (
+        <StatusMessage id="import-wallet-disabled-reason">
+            {formDisabledReason}
+        </StatusMessage>
     ) : null;
 
     const formActions = lane === 'backup' ? (
@@ -579,14 +614,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             variant="primary"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={
-                (backupPointer === null && backupContent.trim().length === 0) ||
-                backupPassword.length === 0 ||
-                backupWalletPassword.length === 0 ||
-                backupDevicePassword.length === 0
-            }
+            disabled={Boolean(formDisabledReason)}
+            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            Restore
+            {busy ? 'Restoring…' : 'Restore'}
         </Button>
     ) : (
         <Button
@@ -594,13 +625,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             variant="primary"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={
-                mnemonic.trim().length === 0 ||
-                password.length === 0 ||
-                confirm.length === 0
-            }
+            disabled={Boolean(formDisabledReason)}
+            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            Import
+            {busy ? 'Importing…' : 'Import'}
         </Button>
     );
 
@@ -688,6 +716,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         {...backupDrop.pickerProps}
                         id="xc-backup-file"
                         aria-label="Backup file"
+                        aria-describedby="xc-backup-source-status"
                         disabled={busy}
                     />
                     <button
@@ -698,7 +727,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     >
                         Choose backup file
                     </button>
-                    <p className={styles.backupHint} aria-live="polite">{backupSourceMessage}</p>
+                    <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
+                        {backupSourceMessage}
+                    </p>
                     <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
                         Backup file contents
                     </label>
@@ -719,6 +750,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
+                        aria-describedby="xc-backup-source-status"
                     />
                         </>
                     )}
@@ -785,18 +817,30 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <label className={styles.mnemonicLabel} htmlFor="xc-mnemonic">
                     Recovery phrase
                 </label>
-                <button
-                    type="button"
-                    className={styles.scanButton}
-                    onClick={() => {
-                        setScanning((s) => !s);
-                        if (error) setError(null);
-                    }}
-                    disabled={busy}
-                    aria-pressed={scanning}
-                >
-                    {scanning ? 'Cancel scan' : 'Scan QR'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <ClipboardPasteButton
+                        disabled={busy}
+                        label="Paste recovery phrase from clipboard"
+                        onPaste={(text) => {
+                            const normalized = normalizePhraseEntry(text);
+                            setMnemonic(normalized);
+                            setMnemonicCursor(normalized.length);
+                            if (error) setError(null);
+                        }}
+                    />
+                    <button
+                        type="button"
+                        className={styles.scanButton}
+                        onClick={() => {
+                            setScanning((s) => !s);
+                            if (error) setError(null);
+                        }}
+                        disabled={busy}
+                        aria-pressed={scanning}
+                    >
+                        {scanning ? 'Cancel scan' : 'Scan QR'}
+                    </button>
+                </div>
             </div>
             {scanning ? (
                 <div className={styles.scannerBox}>
@@ -836,8 +880,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     autoComplete="off"
                     rows={3}
                     disabled={busy}
+                    aria-describedby="xc-mnemonic-status"
                 />
-                <div className={styles.phraseMeta} aria-live="polite">
+                <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>
                         {isFreeWallet
                             ? `${mnemonicWordCount} / 12 words`
@@ -945,14 +990,23 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallet setup"
+                title="Back to wallet setup"
                 disabled={busy}
             >
                 <Icon.BackIcon />
             </button>
             <span />
-            <span />
+            {onOpenInTab ? (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onOpenInTab({ lane })}
+                    disabled={busy}
+                >
+                    Open in tab
+                </Button>
+            ) : <span />}
         </div>
     );
 

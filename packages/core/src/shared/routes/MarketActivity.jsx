@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -95,6 +95,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexSwaps, setDexSwaps] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
+    const loadedMarketKeyRef = useRef(/** @type {string | null} */ (null));
     const [visibleCounts, setVisibleCounts] = useState({
         offers: ACTIVITY_PAGE_SIZE,
         orders: ACTIVITY_PAGE_SIZE,
@@ -110,12 +111,16 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     useEffect(() => {
         if (!tick) return undefined;
         let cancelled = false;
+        const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
+        const hasCachedRows = loadedMarketKeyRef.current === marketKey;
         setLoading(true);
         setLoadError(false);
-        setOffers(null);
-        setSales(null);
-        setDexOrders(null);
-        setDexSwaps(null);
+        if (!hasCachedRows) {
+            setOffers(null);
+            setSales(null);
+            setDexOrders(null);
+            setDexSwaps(null);
+        }
         setVisibleCounts({
             offers: ACTIVITY_PAGE_SIZE,
             orders: ACTIVITY_PAGE_SIZE,
@@ -130,6 +135,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 setSales(uniqueRows(demo.sales, marketRowIdentity));
                 setDexOrders(uniqueRows(demo.dexOrders, marketRowIdentity));
                 setDexSwaps(uniqueRows(demo.dexSwaps, marketRowIdentity));
+                loadedMarketKeyRef.current = marketKey;
                 setLoading(false);
             }
             return () => { cancelled = true; };
@@ -196,6 +202,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setSales(uniqueRows(salesBatches.flat().sort(byTimeDesc), marketRowIdentity));
             setDexOrders(uniqueRows(ordersBatches.flat(), marketRowIdentity));
             setDexSwaps(uniqueRows(swapsBatches.flat().sort(byTimeDesc), marketRowIdentity));
+            if (!failed) loadedMarketKeyRef.current = marketKey;
             setLoadError(failed);
             setLoading(false);
         });
@@ -260,13 +267,14 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     return (
         <Screen variant={variant} header={header}>
             <ListPage toolbar={marketSelector}>
-                {loading && offers === null ? (
-                    <div className={styles.list} role="status" aria-label="Loading marketplace activity">
-                        <Skeleton height={56} />
-                        <Skeleton height={56} />
-                        <Skeleton height={56} />
-                    </div>
-                ) : null}
+                <div role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+                    {loading && offers === null ? (
+                        <div className={styles.list} role="status" aria-label="Loading marketplace activity">
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                        </div>
+                    ) : null}
 
                 {loadError ? (
                     <StatusMessage
@@ -496,6 +504,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         ) : null}
                     </section>
                 ) : null}
+                </div>
             </ListPage>
         </Screen>
     );

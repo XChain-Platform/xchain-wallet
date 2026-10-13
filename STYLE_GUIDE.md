@@ -49,9 +49,9 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 
 The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `520px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
 
-### The list rule: full width, always
+### The list rule: fluid, with a readable maximum
 
-`<ListPage>` content fills the full width of the content area up to the scrollbar and never runs under it (Screen reserves the scrollbar gutter), at every width. There is no narrow/wide switch and no 560px column for lists. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+`<ListPage>` content fills the available width on phones, split view and tablet portrait, then stops at a centred 48rem maximum so rows remain easy to scan. Screen reserves the scrollbar gutter, so content never runs under it. Lists remain wider than the 560px form column to leave room for tables and card grids. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
 
 ### Props
 

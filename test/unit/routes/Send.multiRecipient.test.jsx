@@ -187,11 +187,12 @@ describe('Send: multi-recipient (PC-52)', () => {
         expect(screen.queryByText('Recipient 2: address is required.')).toBeNull();
         expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
 
-        // The shared Input hides its error once the field is edited, but a
-        // lone "." is still not a positive amount, so the row keeps blocking
-        // compose until it is fixed.
+        // Editing hides the current error while the user corrects the field.
+        // Submitting the same invalid value presents that error again.
         await fillRow(1, { amount: '.' });
+        expect(screen.queryByText('Recipient 2: amount must be a positive number.')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(await screen.findByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         await fillRow(1, { amount: '3' });

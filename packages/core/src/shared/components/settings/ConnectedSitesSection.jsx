@@ -109,8 +109,8 @@ export function ConnectedSitesSection() {
         if (!snapshot) return;
         const confirmed = await confirmDialog.confirm({
             title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
-            message: `${snapshot.origin} will lose access to its shared accounts and signing permissions.`,
-            confirmLabel: 'Disconnect',
+            message: `${snapshot.origin} will lose access to its shared accounts and signing permissions. You can reconnect the site later.`,
+            confirmLabel: 'Disconnect site',
             danger: true,
         });
         if (!confirmed) return;

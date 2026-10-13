@@ -326,6 +326,28 @@
     outline-offset: 2px;
 }
 
+.inlineAction {
+    /* A full tap target even though it reads as an inline link. */
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--xc-accent-primary);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.inlineAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .validationMessage,
 .validationMeta {
     display: block;

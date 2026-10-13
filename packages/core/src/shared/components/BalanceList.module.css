@@ -141,6 +141,8 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 2px;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .qty {

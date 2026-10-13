@@ -63,8 +63,11 @@ describe('OrderbookPanel market display', () => {
         expect(screen.getByText('1,500')).toBeInTheDocument();
 
         const columns = screen.getByText('Order book').nextElementSibling;
-        expect(columns.style.gridTemplateColumns).toContain('auto-fit');
-        expect(columns.style.gridTemplateColumns).toContain('18rem');
+        expect(columns.className).toMatch(/orderBookGrid/);
+
+        const bidScroller = screen.getByRole('region', { name: 'Bids order book levels' });
+        expect(bidScroller.className).toMatch(/levelsScroller/);
+        expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 
         const header = screen.getAllByText('Price (BTC)')[0].parentElement;
         expect(header.style.textAlign).toBe('right');

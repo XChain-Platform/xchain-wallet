@@ -154,10 +154,11 @@ export function ToggleRow({
  * @param {object} props
  * @param {string} props.text
  * @param {'error'|'muted'} [props.tone]
+ * @param {string} [props.id]
  */
-export function Status({ text, tone }) {
+export function Status({ text, tone, id }) {
     return (
-        <div style={{
+        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
             padding: 'var(--xc-space-3) var(--xc-space-4)',
             background: 'var(--xc-surface-raised)',
             border: tone === 'error'

@@ -617,6 +617,7 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
+            <h1 className="sr-only">{inCaptureStep ? 'Save wallet passphrase' : 'Unlock wallet'}</h1>
             {body}
         </Screen>
     );
