@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -363,55 +363,57 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     if (!licenseSatisfied) {
         return (
             <Screen variant={variant} header={null}>
-                <div className={styles.licenseGate}>
-                    <div className={styles.licenseHero}>
-                        <img
-                            src={branding.logoUrl()}
-                            alt={branding.PRODUCT_NAME}
-                            className={isFull ? styles.logoFull : styles.logoPopup}
-                        />
-                    </div>
-                    <div
-                        ref={licenseScrollRef}
-                        className={styles.licenseScroll}
-                        onScroll={handleLicenseScroll}
-                        tabIndex={0}
-                        aria-label="License terms"
-                    >
-                        {LICENSE_SUMMARY.map((p, i) => (
-                            <p
-                                key={i}
-                                className={p.critical ? styles.licenseParagraphCritical : styles.licenseParagraph}
-                            >
-                                {p.text}
-                            </p>
-                        ))}
-                    </div>
-                    <label className={styles.licenseAck}>
-                        <input
-                            type="checkbox"
-                            checked={licenseAck}
-                            disabled={!scrolledToEnd}
-                            onChange={(e) => setLicenseAck(e.target.checked)}
-                        />
-                        <span>
-                            {scrolledToEnd
-                                ? 'I have read and agree to these terms.'
-                                : 'Scroll to the end to review all terms.'}
-                        </span>
-                    </label>
-                    <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                        <Button
-                            variant="primary"
-                            block
-                            onClick={handleAcceptLicense}
-                            disabled={!licenseAck || !scrolledToEnd}
-                            icon={<Icon.CheckIcon />}
+                <FormPage label="License agreement">
+                    <div className={styles.licenseGate}>
+                        <div className={styles.licenseHero}>
+                            <img
+                                src={branding.logoUrl()}
+                                alt={branding.PRODUCT_NAME}
+                                className={isFull ? styles.logoFull : styles.logoPopup}
+                            />
+                        </div>
+                        <div
+                            ref={licenseScrollRef}
+                            className={styles.licenseScroll}
+                            onScroll={handleLicenseScroll}
+                            tabIndex={0}
+                            aria-label="License terms"
                         >
-                            Accept and continue
-                        </Button>
+                            {LICENSE_SUMMARY.map((p, i) => (
+                                <p
+                                    key={i}
+                                    className={p.critical ? styles.licenseParagraphCritical : styles.licenseParagraph}
+                                >
+                                    {p.text}
+                                </p>
+                            ))}
+                        </div>
+                        <label className={styles.licenseAck}>
+                            <input
+                                type="checkbox"
+                                checked={licenseAck}
+                                disabled={!scrolledToEnd}
+                                onChange={(e) => setLicenseAck(e.target.checked)}
+                            />
+                            <span>
+                                {scrolledToEnd
+                                    ? 'I have read and agree to these terms.'
+                                    : 'Scroll to the end to review all terms.'}
+                            </span>
+                        </label>
+                        <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                            <Button
+                                variant="primary"
+                                block
+                                onClick={handleAcceptLicense}
+                                disabled={!licenseAck || !scrolledToEnd}
+                                icon={<Icon.CheckIcon />}
+                            >
+                                Accept and continue
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                </FormPage>
             </Screen>
         );
     }
@@ -419,74 +421,76 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     if (mustGraduate) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={isFull ? styles.heroFull : styles.heroPopup}>
-                    <img
-                        src={branding.logoUrl()}
-                        alt={branding.PRODUCT_NAME}
-                        className={isFull ? styles.logoFull : styles.logoPopup}
-                    />
-                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
-                        Leave the demo first
-                    </h1>
-                </div>
-                <div className={styles.demoGraduateNotice}>
-                    <p>
-                        The demo uses a temporary password for this device.
-                    </p>
-                    <p>
-                        Clear the demo before you create or import a wallet. Your wallet
-                        can then use the password you choose.
-                    </p>
-                    <p>
-                        Demo balances and activity are examples, so clearing the demo
-                        does not affect real funds.
-                    </p>
-                </div>
-                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                    <Button
-                        variant="primary"
-                        block
-                        onClick={() => handleGraduate('create', onCreate)}
-                        loading={gradBusy === 'create'}
-                        disabled={!!gradBusy || !onCreate}
-                        icon={<Icon.PlusIcon />}
-                    >
-                        Clear demo &amp; create new wallet
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        block
-                        onClick={() => handleGraduate('import', onImport)}
-                        loading={gradBusy === 'import'}
-                        disabled={!!gradBusy || !onImport}
-                        icon={<Icon.KeyIcon />}
-                    >
-                        Clear demo &amp; import wallet
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        block
-                        onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
-                        loading={gradBusy === 'import-freewallet'}
-                        disabled={!!gradBusy || !onImportFromFreeWallet}
-                        icon={<Icon.MigrateIcon />}
-                    >
-                        Clear demo &amp; import from FreeWallet
-                    </Button>
-                    {onBack ? (
+                <FormPage label="Leave the demo">
+                    <div className={isFull ? styles.heroFull : styles.heroPopup}>
+                        <img
+                            src={branding.logoUrl()}
+                            alt={branding.PRODUCT_NAME}
+                            className={isFull ? styles.logoFull : styles.logoPopup}
+                        />
+                        <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                            Leave the demo first
+                        </h1>
+                    </div>
+                    <div className={styles.demoGraduateNotice}>
+                        <p>
+                            The demo uses a temporary password for this device.
+                        </p>
+                        <p>
+                            Clear the demo before you create or import a wallet. Your wallet
+                            can then use the password you choose.
+                        </p>
+                        <p>
+                            Demo balances and activity are examples, so clearing the demo
+                            does not affect real funds.
+                        </p>
+                    </div>
+                    <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                        <Button
+                            variant="primary"
+                            block
+                            onClick={() => handleGraduate('create', onCreate)}
+                            loading={gradBusy === 'create'}
+                            disabled={!!gradBusy || !onCreate}
+                            icon={<Icon.PlusIcon />}
+                        >
+                            Clear demo &amp; create new wallet
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            onClick={() => handleGraduate('import', onImport)}
+                            loading={gradBusy === 'import'}
+                            disabled={!!gradBusy || !onImport}
+                            icon={<Icon.KeyIcon />}
+                        >
+                            Clear demo &amp; import wallet
+                        </Button>
                         <Button
                             variant="ghost"
                             block
-                            onClick={onBack}
-                            disabled={!!gradBusy}
+                            onClick={() => handleGraduate('import-freewallet', onImportFromFreeWallet)}
+                            loading={gradBusy === 'import-freewallet'}
+                            disabled={!!gradBusy || !onImportFromFreeWallet}
+                            icon={<Icon.MigrateIcon />}
                         >
-                            Keep exploring the demo
+                            Clear demo &amp; import from FreeWallet
                         </Button>
-                    ) : null}
-                    {gradError ? (
-                        <StatusMessage variant="error" className={styles.demoError}>{gradError}</StatusMessage>
-                    ) : null}
-                </div>
+                        {onBack ? (
+                            <Button
+                                variant="ghost"
+                                block
+                                onClick={onBack}
+                                disabled={!!gradBusy}
+                            >
+                                Keep exploring the demo
+                            </Button>
+                        ) : null}
+                        {gradError ? (
+                            <StatusMessage variant="error" className={styles.demoError}>{gradError}</StatusMessage>
+                        ) : null}
+                    </div>
+                </FormPage>
             </Screen>
         );
     }
@@ -510,78 +514,80 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.heroFull : styles.heroPopup}>
-                <img
-                    src={branding.logoUrl()}
-                    alt={branding.PRODUCT_NAME}
-                    className={isFull ? styles.logoFull : styles.logoPopup}
-                />
-                <h1 className={isFull ? styles.nameFull : styles.namePopup}>
-                    {branding.PRODUCT_NAME}
-                </h1>
-                <p className={isFull ? styles.taglineFull : styles.taglinePopup}>
-                    {branding.TAGLINE}
-                </p>
-            </div>
-            <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
-                <Button
-                    variant="primary"
-                    block
-                    onClick={onCreate}
-                    disabled={!onCreate}
-                    icon={<Icon.PlusIcon />}
-                >
-                    Create new wallet
-                </Button>
-                <Button
-                    variant="secondary"
-                    block
-                    onClick={onImport}
-                    disabled={!onImport}
-                    icon={<Icon.KeyIcon />}
-                >
-                    Import wallet
-                </Button>
-                <Button
-                    variant="ghost"
-                    block
-                    onClick={onImportFromFreeWallet}
-                    disabled={!onImportFromFreeWallet}
-                    icon={<Icon.MigrateIcon />}
-                >
-                    From FreeWallet
-                </Button>
-                {/*
-                  §20.5: the fourth lane. Create / Import both make a
-                  standalone `full` wallet; this one makes HALF of an
-                  air-gapped pair, so it needs its own entry point rather than
-                  a post-hoc mode flip in Settings that nothing verifies.
-                */}
-                {onPairPartner ? (
+            <FormPage label="Wallet setup">
+                <div className={isFull ? styles.heroFull : styles.heroPopup}>
+                    <img
+                        src={branding.logoUrl()}
+                        alt={branding.PRODUCT_NAME}
+                        className={isFull ? styles.logoFull : styles.logoPopup}
+                    />
+                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                        {branding.PRODUCT_NAME}
+                    </h1>
+                    <p className={isFull ? styles.taglineFull : styles.taglinePopup}>
+                        {branding.TAGLINE}
+                    </p>
+                </div>
+                <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
+                    <Button
+                        variant="primary"
+                        block
+                        onClick={onCreate}
+                        disabled={!onCreate}
+                        icon={<Icon.PlusIcon />}
+                    >
+                        Create new wallet
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        onClick={onImport}
+                        disabled={!onImport}
+                        icon={<Icon.KeyIcon />}
+                    >
+                        Import wallet
+                    </Button>
                     <Button
                         variant="ghost"
                         block
-                        onClick={onPairPartner}
-                        icon={<Icon.LinkIcon />}
+                        onClick={onImportFromFreeWallet}
+                        disabled={!onImportFromFreeWallet}
+                        icon={<Icon.MigrateIcon />}
                     >
-                        Pair a watcher or signer
+                        From FreeWallet
                     </Button>
-                ) : null}
-                {onDemoEntered ? (
-                    <Button
-                        variant="ghost"
-                        block
-                        onClick={handleEnterDemo}
-                        loading={demoBusy}
-                        disabled={demoBusy}
-                    >
-                        {demoBusy ? 'Setting up demo…' : 'Try in demo mode'}
-                    </Button>
-                ) : null}
-                {demoError ? (
-                    <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
-                ) : null}
-            </div>
+                    {/*
+                      §20.5: the fourth lane. Create / Import both make a
+                      standalone `full` wallet; this one makes HALF of an
+                      air-gapped pair, so it needs its own entry point rather than
+                      a post-hoc mode flip in Settings that nothing verifies.
+                    */}
+                    {onPairPartner ? (
+                        <Button
+                            variant="ghost"
+                            block
+                            onClick={onPairPartner}
+                            icon={<Icon.LinkIcon />}
+                        >
+                            Pair a watcher or signer
+                        </Button>
+                    ) : null}
+                    {onDemoEntered ? (
+                        <Button
+                            variant="ghost"
+                            block
+                            onClick={handleEnterDemo}
+                            loading={demoBusy}
+                            disabled={demoBusy}
+                        >
+                            {demoBusy ? 'Setting up demo…' : 'Try in demo mode'}
+                        </Button>
+                    ) : null}
+                    {demoError ? (
+                        <StatusMessage variant="error" className={styles.demoError}>{demoError}</StatusMessage>
+                    ) : null}
+                </div>
+            </FormPage>
         </Screen>
     );
 }

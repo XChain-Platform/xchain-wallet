@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 import balanceSource from '../../../packages/core/src/shared/components/BalanceList.jsx?raw';
 import homeTabsSource from '../../../packages/core/src/shared/components/HomeTabs.jsx?raw';
 import homeSource from '../../../packages/core/src/shared/routes/Home.jsx?raw';
+import lockedSource from '../../../packages/core/src/shared/routes/Locked.jsx?raw';
+import onboardingSource from '../../../packages/core/src/shared/routes/Onboarding.jsx?raw';
 import resumeSource from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx?raw';
 
 const balanceCss = readFileSync(
@@ -30,6 +32,22 @@ const walletPickerCss = readFileSync(
     'packages/core/src/shared/routes/WalletPicker.module.css',
     'utf8',
 );
+const homeCss = readFileSync(
+    'packages/core/src/shared/routes/Home.module.css',
+    'utf8',
+);
+const lockedCss = readFileSync(
+    'packages/core/src/shared/routes/Locked.module.css',
+    'utf8',
+);
+const onboardingCss = readFileSync(
+    'packages/core/src/shared/routes/Onboarding.module.css',
+    'utf8',
+);
+const carouselCss = readFileSync(
+    'packages/core/src/shared/routes/OnboardingCarousel.module.css',
+    'utf8',
+);
 
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
@@ -46,6 +64,20 @@ describe('onboarding and Home layout guards', () => {
 
     it('allows a resumed transaction id to wrap', () => {
         expect(resumeSource).toContain("style={{ overflowWrap: 'anywhere' }}");
+    });
+
+    it('leaves route gutters to Screen and form widths to FormPage', () => {
+        expect(homeCss).not.toMatch(/\.bodyFull\s*\{[^}]*padding:/s);
+        expect(lockedCss).not.toMatch(/\.hero\s*\{[^}]*padding:/s);
+        expect(onboardingCss).not.toMatch(/\.hero(?:Popup|Full)\s*\{[^}]*padding:/s);
+        expect(onboardingCss).not.toMatch(/\.heroFull\s*\{[^}]*(?:max-width|margin):/s);
+        expect(onboardingCss).not.toMatch(/\.licenseGate\s*\{[^}]*max-width:/s);
+        expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
+        expect(onboardingSource).toContain('<FormPage label="License agreement">');
+        expect(onboardingSource).toContain('<FormPage label="Wallet setup">');
+        expect(lockedSource).toContain('<FormPage');
+        expect(resumeSource).toContain('<FormPage label={title}>');
+        expect(resumeSource).not.toMatch(/<button\b/);
     });
 
     it('uses theme tokens for assigned badges and icon overlays', () => {
