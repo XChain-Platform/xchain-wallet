@@ -145,6 +145,7 @@
 
 .alertOpen {
     cursor: pointer;
+    min-height: var(--xc-tap-min);
 }
 
 .alertOpen:focus-visible,
