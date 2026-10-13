@@ -102,7 +102,7 @@ overrides:
   # 3.1.6 closes four more (GHSA-5jgf-p345-68v8, -f65p-4m7j-42xc, -fph4-wmhf-6fwf,
   # -jqff-g426-hqxp: host confusion and SSRF through skipped IDN
   # canonicalization), all published 2026-09-02 and all high.
-  fast-uri: ^3.1.6
+  fast-uri: ^3.1.8
   # hono arrives under the SDK's @modelcontextprotocol/sdk dependency;
   # 4.12.33 carries CVE-2026-71848/-71849/-71850 (language-middleware DoS,
   # Connection-header passthrough in the proxy helper, memo() retaining SSR
@@ -121,6 +121,7 @@ overrides:
   # (GHSA-jqcg-44mw-7w3h); express pulls it in under the SDK and the MCP SDK.
   proxy-addr: ^2.0.8
   ip-address: ^10.5.1
+  http-cache-semantics: ^4.3.0
   # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
   '@modelcontextprotocol/sdk': ^1.31.0
   'undici@7': ^7.29.1
