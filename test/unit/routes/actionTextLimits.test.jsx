@@ -123,7 +123,7 @@ describe('BroadcastForm text limits', () => {
 
     it('shows a live counter and disables Broadcast past the message limit', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message');
+        const message = await screen.findByLabelText('Message (optional)');
         const submit = screen.getByRole('button', { name: 'Broadcast' });
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });

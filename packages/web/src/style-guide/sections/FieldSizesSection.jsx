@@ -30,20 +30,20 @@ export function FieldSizesSection() {
                 whenNot={<>Don't mix sizes within one form's field stack: a 48px field next to 36px fields is the exact clash this contract removes. Don't hand-roll big-field styling with inline <code>style</code> objects (the old pattern); pass <code>size="lg"</code>.</>}
                 sizing={<>md: <code>36px</code> / 14px text / 8-12px padding / 13px label. lg: <code>48px</code> / 16px text / 12-16px padding / 14px-600 label. Both share the same border, radius (<code>--xc-radius-md</code>), and focus ring, so only the scale changes.</>}
                 variants={<><code>size="md" | "lg"</code> on <code>Input</code>, <code>Select</code>, <code>Textarea</code>, <code>AmountField</code>, <code>AddressCombobox</code>, and <code>TokenField</code>. Default is <code>md</code> everywhere; omit the prop for compact.</>}
-                doRule={<>✓ Pick one size per form · use <code>lg</code> only for the primary fields · pass <code>size</code> instead of an inline style · pair an inline action (Max, address book) with the field via the component, not a bespoke wrapper</>}
-                dontRule={<>✗ Mix 36px and 48px fields in one stack · duplicate the big-field values inline · use <code>lg</code> for every field (loses the "this is what matters" signal)</>}
+                doRule={<>✓ Pick one size per form · mark only optional fields with the exact <code>(optional)</code> suffix · use <code>optional</code> when the base label is translated or dynamic · pair an inline action (Max, address book) with the field via the component</>}
+                dontRule={<>✗ Mix required and optional markers · write <code>(required)</code> in labels · put units inside the optional marker · mix 36px and 48px fields in one stack</>}
                 supersedes={<>The old ad-hoc big-field inline <code>style</code> objects and the duplicated <code>.bigField</code> CSS that used to live in <code>AmountField.module.css</code>, <code>Send.module.css</code>, and this section. The contract now lives once in <code>Input.module.css</code> (<code>.lg</code>).</>}
             />
 
             <Markup>
 {`<Input label="Amount" size="lg" />   // 48px hero field
-<Input label="Memo" />               // 36px default (md)
+<Input label="Memo" optional />       // 36px optional field
 <Select label="Network" size="lg">…</Select>
 <AmountField size="lg" … />          // composed fields take the same prop`}
             </Markup>
 
             <LiveExample label="Default (md, 36px) vs hero (lg, 48px): Input">
-                <Input label="Memo (md, default)" placeholder="Optional note" defaultValue="" />
+                <Input label="Memo (md, default)" optional placeholder="Optional note" defaultValue="" />
                 <Input label="Amount (lg, hero)" size="lg" placeholder="0.00" defaultValue="" />
             </LiveExample>
 

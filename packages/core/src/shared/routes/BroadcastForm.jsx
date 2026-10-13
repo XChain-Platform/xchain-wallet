@@ -1022,7 +1022,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 spellCheck={false}
             />
             <Input
-                label="Message"
+                label="Message (optional)"
                 hint={feedName.trim()
                     ? `${memoBytes} / ${MAX_MEMO_LENGTH} on-chain memo bytes.`
                     : `${messageBytes} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`}
@@ -1040,7 +1040,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 autoComplete="off"
             />
             <Input
-                label="Feed fee (optional, %)"
+                label="Feed fee (%) (optional)"
                 hint="Usage fee charged to dispensers that use this oracle. Leave blank for none."
                 inputMode="decimal"
                 value={feedFee}

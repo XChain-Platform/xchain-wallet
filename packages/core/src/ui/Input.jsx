@@ -10,6 +10,7 @@
 
 import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { resolveFieldRequirement } from './fieldRequirement.js';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 
 /**
@@ -33,6 +34,7 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [error]
  * @property {string | number} [errorKey]
  * @property {string} [id]
+ * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
 export const Input = forwardRef(function Input(
@@ -42,6 +44,7 @@ export const Input = forwardRef(function Input(
         error,
         errorKey,
         id,
+        optional = false,
         size = 'md',
         type = 'text',
         value,
@@ -58,14 +61,22 @@ export const Input = forwardRef(function Input(
         onKeyUp,
         onFocus,
         onBlur,
+        required = false,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
+        'aria-required': externalRequired,
         ...rest
     },
     ref,
 ) {
     const autoId = useId();
     const inputId = id || autoId;
+    const requirement = resolveFieldRequirement({
+        label,
+        optional,
+        required,
+        ariaRequired: externalRequired,
+    });
     const [dismissedError, setDismissedError] = useState(null);
     const errorIsDismissed = dismissedError !== null && dismissedError.message === error
         && Object.is(dismissedError.key, errorKey);
@@ -143,7 +154,7 @@ export const Input = forwardRef(function Input(
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={inputId} className={styles.label}>
-                    {label}
+                    {requirement.label}
                 </label>
             ) : null}
             <input
@@ -158,6 +169,8 @@ export const Input = forwardRef(function Input(
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                aria-required={requirement.ariaRequired}
+                required={required}
                 value={value}
                 defaultValue={defaultValue}
                 maxLength={maxLength}

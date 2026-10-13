@@ -37,6 +37,23 @@ describe('<Input>', () => {
         expect(screen.getByLabelText('Network').tagName).toBe('SELECT');
     });
 
+    it('uses one field-requirement convention in labels and accessibility metadata', () => {
+        render(
+            <>
+                <Input label="Account name" />
+                <Textarea label="Memo" optional />
+                <Select label="Expiration (optional)" defaultValue="none">
+                    <option value="none">No expiration</option>
+                </Select>
+            </>,
+        );
+
+        expect(screen.getByLabelText('Account name')).toHaveAttribute('aria-required', 'true');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveAttribute('aria-required', 'false');
+        expect(screen.getByLabelText('Expiration (optional)')).toHaveAttribute('aria-required', 'false');
+        expect(screen.queryByText(/\(required\)/i)).toBeNull();
+    });
+
     it('renders hint and ties it via aria-describedby', () => {
         render(<Input label="Password" hint="Min 8 chars" />);
         const input = screen.getByLabelText('Password');
