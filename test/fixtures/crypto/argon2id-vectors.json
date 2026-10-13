@@ -1,0 +1,60 @@
+{
+  "comment": "Argon2id v1.3 (0x13) golden vectors. Inputs and keyBase64 use standard base64; password is UTF-8. Generated with @noble/hashes argon2id, the implementation existing wallets were encrypted with; the first case is the reference implementation test vector. Native implementations must match every case byte for byte.",
+  "vectors": [
+    {
+      "name": "reference-implementation vector (phc-winner-argon2 test.c, v=19 m=65536 t=2 p=1)",
+      "password": "password",
+      "salt": "c29tZXNhbHQ=",
+      "iterations": 2,
+      "memoryKib": 65536,
+      "parallelism": 1,
+      "length": 32,
+      "keyHex": "09316115d5cf24ed5a15a31a3ba326e5cf32edc24702987c02b6566f61913cf7",
+      "keyBase64": "CTFhFdXPJO1aFaMaO6Mm5c8y7cJHAph8ArZWb2GRPPc="
+    },
+    {
+      "name": "wallet floor params, ascii password, 16-byte salt",
+      "password": "correct horse battery staple",
+      "salt": "AAECAwQFBgcICQoLDA0ODw==",
+      "iterations": 3,
+      "memoryKib": 65536,
+      "parallelism": 1,
+      "length": 32,
+      "keyHex": "0d1a3c6523c8f06e4e0af9c515aa5b5448cfebd6838f2d52c3d8b6ef8ddc3c2e",
+      "keyBase64": "DRo8ZSPI8G5OCvnFFapbVEjP69aDjy1Sw9i2743cPC4="
+    },
+    {
+      "name": "wallet floor params, non-ascii password",
+      "password": "pässwörd ✓ 鍵",
+      "salt": "8OHSw7Sllod4aVpLPC0eDw==",
+      "iterations": 3,
+      "memoryKib": 65536,
+      "parallelism": 1,
+      "length": 32,
+      "keyHex": "77596532f8bff272dbbbacf8b66a4aa22fadae881a1143b19e95dc7caa8112d4",
+      "keyBase64": "d1llMvi/8nLbu6z4tmpKoi+trogaEUOxnpXcfKqBEtQ="
+    },
+    {
+      "name": "small params, 8-byte salt (the minimum), parallelism 2",
+      "password": "x",
+      "salt": "AQIDBAUGBwg=",
+      "iterations": 1,
+      "memoryKib": 8192,
+      "parallelism": 2,
+      "length": 32,
+      "keyHex": "83078d55734c88b32f7aba99709cdcd36ff88e379688300f5e49d266bdedd038",
+      "keyBase64": "gweNVXNMiLMverqZcJzc02/4jjeWiDAPXknSZr3t0Dg="
+    },
+    {
+      "name": "higher iterations",
+      "password": "K51test-12345-Wallet-not-a-real-one",
+      "salt": "qrvM3e7/ABEiM0RVZneImQ==",
+      "iterations": 5,
+      "memoryKib": 32768,
+      "parallelism": 1,
+      "length": 32,
+      "keyHex": "796430f82422e434f9abe081eda7590a5c1c97281018013bacee8783ba67034d",
+      "keyBase64": "eWQw+CQi5DT5q+CB7adZClwclygQGAE7rO6Hg7pnA00="
+    }
+  ]
+}
