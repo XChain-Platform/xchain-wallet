@@ -1533,6 +1533,7 @@ function ImageHero({ img }) {
             target="_blank"
             rel="noreferrer noopener"
             className={styles.heroImageLink}
+            aria-label={img.name ? `Open image ${img.name}` : 'Open token image'}
             title={img.name || ''}
         >
             <img
