@@ -362,6 +362,22 @@ fieldset {
     min-width: 0;
 }
 
+/* iOS WebKit zooms the whole page in when a form control under 16px takes
+ * focus, and the zoom stays after the keyboard closes: the layout runs off
+ * the right edge and the shell can be dragged sideways. Every Input is 14px
+ * (--xc-text-md), so tapping Send's From field zoomed an iPhone 17 Pro
+ * simulator by 1.14 (2026-10-12). The 16px floor is the documented way to
+ * stop it without disabling pinch zoom. -webkit-touch-callout exists only in
+ * iOS WebKit, so Android, desktop and macOS Safari keep their sizes. The
+ * !important outranks the module classes and inline styles that set 14px. */
+@supports (-webkit-touch-callout: none) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
 /* About thirty dropdowns are bare <select>s with no class (settings rows,
  * filters, pickers), and the UA default draws them as grey system widgets
  * that match nothing else on the screen. Give every class-less select the
