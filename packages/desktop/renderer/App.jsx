@@ -329,7 +329,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -2429,7 +2429,12 @@ function AppInner() {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
-                        onRenamed={() => {
+                        onRenamed={(wallet) => {
+                            if (wallet?.id) {
+                                setWalletList((list) => list.map((entry) => (
+                                    entry.id === wallet.id ? { ...entry, ...wallet } : entry
+                                )));
+                            }
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}

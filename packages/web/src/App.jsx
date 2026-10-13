@@ -857,7 +857,7 @@ function AppInner() {
     // can name the active one. The per-wallet effect above owns SELECTION;
     // this owns the label, and keeping them separate stops the header from
     // reaching into that effect's control flow.
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
 
     // Build the pancake menu's Alerts panel from the shared list in core
     // (walletAlerts.js); the menu lives at the App level here, not in Home.
@@ -2562,7 +2562,12 @@ function AppInner() {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
-                        onRenamed={() => {
+                        onRenamed={(wallet) => {
+                            if (wallet?.id) {
+                                setWalletList((list) => list.map((entry) => (
+                                    entry.id === wallet.id ? { ...entry, ...wallet } : entry
+                                )));
+                            }
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
