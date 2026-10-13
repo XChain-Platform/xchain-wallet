@@ -27,6 +27,16 @@ import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
 import { t } from '../../i18n/index.js';
 
+// The integrity check handles transaction payloads, but refuses enough text to
+// turn hashing an explicit paste into a main-thread memory or CPU spike.
+export const MAX_PASTE_INTEGRITY_LENGTH = 1_048_576;
+
+function normalizedClipboardText(value) {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    return normalized.length <= MAX_PASTE_INTEGRITY_LENGTH ? normalized : null;
+}
+
 /**
  * SHA-256 hex over the UTF-8 bytes of `text`. Stable across runs;
  * comparable across reads.
@@ -51,22 +61,23 @@ export function hashText(text) {
  */
 
 /**
- * Cross-check the value the paste event delivered against the actual
- * clipboard contents one frame later.
+ * Cross-check the normalized value the paste event delivered against the
+ * normalized clipboard contents one frame later.
  *
  * Caller passes the `pastedText` it received from
- * `event.clipboardData.getData('text')`. This function hashes it,
- * tries to read the clipboard again via `navigator.clipboard.readText`,
- * and compares. Any failure path (no Clipboard API, permission denied,
- * read returns the same value) returns `{ ok: true }` (with `skipped`
- * set when no comparison was possible).
+ * `event.clipboardData.getData('text')`. This function trims and bounds it,
+ * hashes it, tries to read the clipboard again via
+ * `navigator.clipboard.readText`, and compares. Any failure path (no Clipboard
+ * API, permission denied, read returns the same value) returns `{ ok: true }`
+ * (with `skipped` set when no comparison was possible).
  *
  * @param {{ pastedText: string, clipboard?: { readText?: () => Promise<string> } }} opts
  * @returns {Promise<IntegrityResult>}
  */
 export async function checkPasteIntegrity({ pastedText, clipboard } = {}) {
-    if (typeof pastedText !== 'string') return { ok: true, skipped: true };
-    const pastedHash = hashText(pastedText);
+    const normalizedPaste = normalizedClipboardText(pastedText);
+    if (normalizedPaste === null) return { ok: true, skipped: true };
+    const pastedHash = hashText(normalizedPaste);
 
     const cb = clipboard
         || (typeof navigator !== 'undefined' && navigator.clipboard)
@@ -80,17 +91,18 @@ export async function checkPasteIntegrity({ pastedText, clipboard } = {}) {
     } catch {
         return { ok: true, skipped: true, pastedHash };
     }
-    if (typeof reread !== 'string') {
+    const normalizedReread = normalizedClipboardText(reread);
+    if (normalizedReread === null) {
         return { ok: true, skipped: true, pastedHash };
     }
-    const rereadHash = hashText(reread);
+    const rereadHash = hashText(normalizedReread);
     if (rereadHash === pastedHash) {
         return { ok: true, pastedHash, rereadHash };
     }
     return {
         ok: false,
         pastedHash,
-        reread,
+        reread: normalizedReread,
         rereadHash,
         reason: t('flows.pasteIntegrity.changed'),
     };

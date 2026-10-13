@@ -11,7 +11,7 @@
 // SSC-4 clipboard hygiene keeps every wallet copy on one path. Native shells
 // use the local, sensitivity-marked plugin path. Web, desktop, and extension
 // copies use browser APIs. Sensitive writes on every path share the selected
-// expiry and compare the current value before clearing it.
+// expiry and cancel the clear when the clipboard changes first.
 
 import { CLIPBOARD_AUTO_CLEAR_DEFAULT, CLIPBOARD_AUTO_CLEAR_MAX } from '../schemas/settings.js';
 import { getNativePlugin, isNativeShell } from './nativeShell.js';
@@ -27,6 +27,7 @@ export const SENSITIVE_CLIP_TTL_SECONDS = CLIPBOARD_AUTO_CLEAR_DEFAULT;
 let sensitiveAutoClearSeconds = SENSITIVE_CLIP_TTL_SECONDS;
 let copyGeneration = 0;
 let pendingAutoClear = null;
+let observedClipboardValue;
 
 /**
  * Apply the active wallet's clipboard retention preference.
@@ -108,7 +109,6 @@ export async function copyText(value, opts = {}) {
             // to be honest about the guarantee needs to know, and a copy that
             // silently gave less than it promised is the shape of bug this
             // whole contract exists to remove.
-            if (sensitive) scheduleAutoClear(text, ttlSeconds, env, generation);
             return { ok: true, native: true, marked: res?.marked !== false };
         } catch {
             // A native write that THREW is not a reason to try the web path
@@ -123,6 +123,7 @@ export async function copyText(value, opts = {}) {
     }
 
     if (await writeViaWebApis(text, env)) {
+        observedClipboardValue = text;
         if (sensitive) scheduleAutoClear(text, ttlSeconds, env, generation);
         return { ok: true, native: false };
     }
@@ -130,54 +131,60 @@ export async function copyText(value, opts = {}) {
 }
 
 /**
- * Clear the clipboard, optionally only when it still holds `expectedValue`.
+ * Clear the clipboard without reading its contents.
  *
  * @param {{ env?: any, expectedValue?: string }} [opts]
  * @returns {Promise<boolean>}
  */
 export async function clearClipboard(opts = {}) {
     const { env = globalThis, expectedValue } = opts;
+    if (expectedValue !== undefined && expectedValue !== observedClipboardValue) return false;
     const plugin = getNativeClipboard(env);
     if (plugin && typeof plugin.clear === 'function') {
         try {
-            const res = await plugin.clear(expectedValue === undefined ? {} : { expectedValue });
-            return res?.cleared !== false;
+            const res = await plugin.clear({});
+            const cleared = res?.cleared !== false;
+            if (cleared) observedClipboardValue = undefined;
+            return cleared;
         } catch { /* fall through: leaving a secret there is the worse outcome */ }
-    }
-    if (expectedValue !== undefined) {
-        const readText = env?.navigator?.clipboard?.readText;
-        if (typeof readText !== 'function') return false;
-        try {
-            if (await readText.call(env.navigator.clipboard) !== expectedValue) return false;
-        } catch {
-            return false;
-        }
     }
     // A single space rather than an empty string: some browsers treat writing
     // '' as a no-op, which would leave the secret in place.
-    return writeViaWebApis(' ', env);
+    const cleared = await writeViaWebApis(' ', env);
+    if (cleared) observedClipboardValue = undefined;
+    return cleared;
 }
 
 function cancelPendingAutoClear() {
     if (!pendingAutoClear) return;
     pendingAutoClear.cancel(pendingAutoClear.id);
+    pendingAutoClear.clipboard.removeEventListener('clipboardchange', pendingAutoClear.onChange);
     pendingAutoClear = null;
 }
 
 function scheduleAutoClear(value, seconds, env, generation) {
     if (!Number.isFinite(seconds) || seconds <= 0 || generation !== copyGeneration) return;
+    const clipboard = env?.navigator?.clipboard;
+    if (typeof clipboard?.addEventListener !== 'function'
+        || typeof clipboard?.removeEventListener !== 'function') return;
     const schedule = typeof env?.setTimeout === 'function'
         ? env.setTimeout.bind(env)
         : setTimeout;
     const cancel = typeof env?.clearTimeout === 'function'
         ? env.clearTimeout.bind(env)
         : clearTimeout;
+    const onChange = () => {
+        observedClipboardValue = undefined;
+        cancelPendingAutoClear();
+    };
+    clipboard.addEventListener('clipboardchange', onChange);
     const id = schedule(async () => {
         if (generation !== copyGeneration) return;
+        clipboard.removeEventListener('clipboardchange', onChange);
         pendingAutoClear = null;
         await clearClipboard({ env, expectedValue: value });
     }, seconds * 1000);
-    pendingAutoClear = { id, cancel };
+    pendingAutoClear = { id, cancel, clipboard, onChange };
 }
 
 /**
