@@ -238,6 +238,7 @@ export function LanguageRegionSection() {
                                     role="option"
                                     aria-selected={currency.code === selectedCurrency?.code}
                                     onClick={() => onCurrencySelect(currency.code)}
+                                    title={currencyLabel(currency)}
                                     style={CURRENCY_OPTION}
                                 >
                                     {currencyLabel(currency)}
