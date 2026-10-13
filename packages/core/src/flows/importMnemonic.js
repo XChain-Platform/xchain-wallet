@@ -57,7 +57,7 @@ const DEFAULT_ORIGIN_BY_FORMAT = {
 
 // 'created' is the Create screen: it generates the phrase in-app and then
 // persists it through this flow, so the seed's origin is not an import.
-const ALLOWED_ORIGINS = new Set(['created', 'imported-mnemonic', 'imported-freewallet', 'imported-xchain-backup']);
+const ALLOWED_ORIGINS = new Set(['created', 'demo', 'imported-mnemonic', 'imported-freewallet', 'imported-xchain-backup']);
 
 /**
  * Trim, collapse internal whitespace, lowercase. Users paste from many
@@ -93,7 +93,7 @@ export function detectMnemonicFormat(normalized) {
  * @property {'bip39' | 'counterwallet-legacy'} [format]       auto-detect if omitted
  * @property {string} [name]                                   default 'Imported Wallet'
  * @property {string} [bip39Passphrase]                        BIP39 only; rejected on Counterwallet
- * @property {'created' | 'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
+ * @property {'created' | 'demo' | 'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
  * @property {Uint8Array} [masterKey]                         key already derived from `password` under `kdfParams` (required with it); copied, never zeroed here, the caller zeroes its own
  */

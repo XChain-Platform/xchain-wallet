@@ -245,6 +245,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 password,
                 mnemonic,
                 name: 'Demo Wallet',
+                origin: 'demo',
                 activeChainIds: [
                     'bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest',
                     'bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet',

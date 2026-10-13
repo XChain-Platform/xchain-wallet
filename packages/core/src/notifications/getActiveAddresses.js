@@ -36,12 +36,19 @@ export async function getActiveAddresses(vault, chainRegistry, opts = {}) {
     if (!chainRegistry) throw new Error('getActiveAddresses: chainRegistry is required');
     const { activeNetwork } = opts;
 
-    const records = await vault.addresses.list();
+    const [records, accounts, wallets] = await Promise.all([
+        vault.addresses.list(),
+        vault.accounts.list(),
+        vault.wallets.list(),
+    ]);
+    const walletIdByAccount = new Map(accounts.map((account) => [account.id, account.walletId]));
+    const demoWalletIds = new Set(wallets.filter((wallet) => wallet.origin === 'demo').map((wallet) => wallet.id));
     const seen = new Set();
     /** @type {ActiveAddress[]} */
     const out = [];
     for (const a of records) {
         if (!a || !a.address) continue;
+        if (a.accountId && demoWalletIds.has(walletIdByAccount.get(a.accountId))) continue;
         if (activeNetwork && a.network !== activeNetwork) continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;

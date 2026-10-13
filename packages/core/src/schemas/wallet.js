@@ -34,6 +34,7 @@ export const CURRENT_VERSION = 3;
 
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
+    'demo',
     'imported-mnemonic',
     'imported-wif',
     'imported-xchain-backup',

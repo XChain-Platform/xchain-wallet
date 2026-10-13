@@ -88,13 +88,13 @@ function tabVisible() {
 export function createWebNotifyAdapter() {
     function notify({ kind, title, body, sound }) {
         const visible = tabVisible();
-        let delivered = false;
+        let inAppDelivered = false;
         // In-app channel: always dispatched; the React listener decides
         // whether to show it (it only toasts when the tab is focused).
         try {
             if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
                 window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { kind, title, body } }));
-                delivered = visible;
+                inAppDelivered = visible;
             }
         } catch {
             // Non-DOM environment (e.g. a Node smoke run); nothing to do.
@@ -105,6 +105,7 @@ export function createWebNotifyAdapter() {
         if (sound && visible) playFile(sound);
 
         // OS channel: only when backgrounded and permission is granted.
+        let osDelivered = false;
         try {
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden'
@@ -112,12 +113,12 @@ export function createWebNotifyAdapter() {
                 && Notification.permission === 'granted') {
                 // eslint-disable-next-line no-new
                 new Notification(title, { body });
-                delivered = true;
+                osDelivered = true;
             }
         } catch {
             // Permission revoked mid-session / unsupported; silently skip.
         }
-        return delivered;
+        return inAppDelivered || osDelivered;
     }
 
     /**
