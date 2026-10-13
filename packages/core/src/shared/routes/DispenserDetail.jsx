@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
+    Input, ListPage, PageHeader, Screen, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -125,7 +128,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
     const isDemoWallet = flowsLib.isDemoWallet(walletId);
 
@@ -1279,9 +1281,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 : 'Dispenser detail'}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, template = 'list') => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );
 
@@ -1398,10 +1400,26 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (refillStage === 'confirm' || refillStage === 'submitting') {
         return wrap(
-            <form onSubmit={handleRefill} noValidate>
-                <p className={styles.summary}>
+            <FormPage
+                label="Refill dispenser"
+                onSubmit={handleRefill}
+                intro={(
+                    <>
                     Refill dispenser #{actionIndex}: add {giveTick} to escrow.
-                </p>
+                    </>
+                )}
+                status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={refillStage === 'submitting'}
+                        disabled={refillCount.remaining <= 0 && refillCount.exact}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Refill dispenser'}
+                    </Button>
+                )}
+            >
                 {/*
                   * D-147: this used to be policy copy alone ("a dispenser allows
                   * up to 5 refills … a 6th is rejected") with no count, on a
@@ -1443,14 +1461,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={refillError}
-                    submitting={refillStage === 'submitting'}
-                    disabled={refillCount.remaining <= 0 && refillCount.exact}
-                    label="Refill dispenser"
-                />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1498,11 +1516,27 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (editStage === 'confirm' || editStage === 'submitting') {
         const anyListFilled = Boolean(editAllowList.trim() || editBlockList.trim());
         return wrap(
-            <form onSubmit={handleEdit} noValidate>
-                <p className={styles.summary}>
+            <FormPage
+                label="Edit dispenser"
+                onSubmit={handleEdit}
+                intro={(
+                    <>
                     Edit dispenser #{actionIndex}: reschedule its close time or update its
                     allow/block lists. Leave a field blank to keep it unchanged.
-                </p>
+                    </>
+                )}
+                status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={editStage === 'submitting'}
+                        disabled={Boolean(editListConflictText)}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Edit dispenser'}
+                    </Button>
+                )}
+            >
                 <Input
                     type="datetime-local"
                     label="New expiration"
@@ -1561,14 +1595,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={editError}
-                    submitting={editStage === 'submitting'}
-                    disabled={Boolean(editListConflictText)}
-                    label="Edit dispenser"
-                />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1599,8 +1633,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (cancelStage === 'confirm' || cancelStage === 'submitting') {
         return wrap(
-            <form onSubmit={handleCancel} noValidate>
-                <p className={styles.summary}>{decodedCancel?.summary}</p>
+            <FormPage
+                label="Close dispenser"
+                onSubmit={handleCancel}
+                intro={decodedCancel?.summary}
+                status={cancelError ? <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="danger"
+                        loading={cancelStage === 'submitting'}
+                        disabled={cancelStage === 'submitting'}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Close dispenser'}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -1627,14 +1675,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
                 <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={cancelError}
-                    submitting={cancelStage === 'submitting'}
-                    label="Close dispenser"
-                    danger
-                />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1971,7 +2019,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {tab === 'lifecycle' ? (
                 <ul className={local.dispenseList}>
                     {lifecycleTimeline.length === 0 ? (
-                        <li><div className={local.dispenseEmpty}>No lifecycle events yet.</div></li>
+                        <li><EmptyState title="No lifecycle events yet." titleAs="p" /></li>
                     ) : lifecycleTimeline.slice(0, 40).map((e) => {
                         const refused = e.kind === 'dispense' && !e.row.valid;
                         return (
@@ -1997,7 +2045,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             ) : (
             <ul className={local.dispenseList}>
                 {matchingDispenses.length === 0 ? (
-                    <li><div className={local.dispenseEmpty}>No dispenses yet.</div></li>
+                    <li><EmptyState title="No dispenses yet." titleAs="p" /></li>
                 ) : matchingDispenses.slice(0, 25).map((d) => {
                     const paidAmount = d.get_amount ?? getAmount;
                     const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
@@ -2333,35 +2381,6 @@ function localInputToUnix(localStr) {
     const ms = Date.parse(String(localStr));
     if (!Number.isFinite(ms)) return null;
     return Math.floor(ms / 1000);
-}
-
-/**
- * The bottom of an owner form: the watcher-mode note, the error, and the one
- * button. Credentials live on the confirm page, not here, because nothing is
- * signed until the dry run has been seen there.
- */
-function OwnerLaneFooter({ isWatcherMode, error, submitting, disabled = false, label, danger = false }) {
-    return (
-        <>
-            {isWatcherMode ? (
-                <p className={styles.hint}>
-                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                    Signer-mode wallet, then broadcast from a Full-mode wallet.
-                </p>
-            ) : null}
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant={danger ? 'danger' : 'primary'}
-                    loading={submitting}
-                    disabled={submitting || disabled}
-                >
-                    {isWatcherMode ? 'Create unsigned transaction' : label}
-                </Button>
-            </div>
-        </>
-    );
 }
 
 /**
