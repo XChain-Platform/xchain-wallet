@@ -222,7 +222,9 @@ test('switching wallets while balances load never paints the previous wallet bal
 test('leaving Receive during generation does not paint its late address after returning', async ({ page }) => {
     await createWallet(page, { password: PASSWORD });
     await gotoSection(page, 'Receive');
-    const address = page.getByLabel('Address', { exact: true });
+    // The field is named by its visible label: the address's own label
+    // ("BTC Address #1", then "#2" once generated), or "Address" when unlabelled.
+    const address = page.getByRole('textbox', { name: /^(?:Address|BTC Address #\d+)$/ });
     await expect(address).toHaveValue(/^[a-zA-Z0-9]{20,}$/);
     const initialAddress = await address.inputValue();
 
@@ -242,5 +244,9 @@ test('leaving Receive during generation does not paint its late address after re
         () => window.__xchainRaceProbe.completed['receive.getAddress'] || 0,
     )).toBe(1);
     await expect(address).toHaveValue(generatedAddress);
-    await expect(page.getByDisplayValue(STALE_GENERATED_ADDRESS)).toHaveCount(0);
+    // Playwright has no display-value query; read every field's live value.
+    expect(await page.locator('input, textarea').evaluateAll(
+        (fields, stale) => fields.filter((field) => field.value === stale).length,
+        STALE_GENERATED_ADDRESS,
+    )).toBe(0);
 });
