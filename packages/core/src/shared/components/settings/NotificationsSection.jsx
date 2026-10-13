@@ -37,6 +37,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
 import { PriceAlertForm, coinLabelForChain } from '../PriceAlertForm.jsx';
+import { RelativeTime } from '../RelativeTime.jsx';
 import { QUIET_HOURS_DEFAULT } from '../../../schemas/settings.js';
 import {
     SOUND_FAMILIES,
@@ -498,7 +499,16 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                             {coinLabelForChain(a.chainId)}{' '}
                             {a.direction === 'above' ? 'rises above' : 'falls below'}{' '}
                             {formatThreshold(a.targetFiat, a.fiatCurrency)}
-                            {a.status === 'triggered' ? <span style={ROW_HINT}> · triggered</span> : null}
+                            {a.status === 'triggered' ? (
+                                <span style={ROW_HINT}>
+                                    {' · triggered'}
+                                    {a.triggeredAt ? (
+                                        <RelativeTime timestamp={a.triggeredAt}>
+                                            {(when) => ` ${when}`}
+                                        </RelativeTime>
+                                    ) : null}
+                                </span>
+                            ) : null}
                         </span>
                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                             {a.status === 'triggered' ? (

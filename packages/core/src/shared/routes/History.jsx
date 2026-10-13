@@ -67,7 +67,8 @@ import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
-import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './History.module.css';
 
@@ -2355,12 +2356,16 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
 
             {meta?.firstSeenMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.firstSeen', { when: formatRelativeTime(meta.firstSeenMs) })}
+                    <RelativeTime timestamp={meta.firstSeenMs}>
+                        {(when) => t('pending.detail.firstSeen', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.broadcastAtMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.broadcastAt', { when: formatRelativeTime(meta.broadcastAtMs) })}
+                    <RelativeTime timestamp={meta.broadcastAtMs}>
+                        {(when) => t('pending.detail.broadcastAt', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.replaced && meta.replacementTxHash ? (
@@ -2615,7 +2620,7 @@ function fullDetailRows(entry, balancesHidden = false) {
     if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
     else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
-        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+        rows.push(['Time', <RelativeTime timestamp={entry.timestamp} />]);
     }
     if (entry.txHash) {
         rows.push(['Transaction ID', (
@@ -3281,12 +3286,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span
+                        <RelativeTime
                             className={styles.rowRelativeTime}
-                            title={formatTimestamp(entry.timestamp)}
-                        >
-                            {formatRelativeTime(entry.timestamp)}
-                        </span>
+                            timestamp={entry.timestamp}
+                        />
                     ) : null}
                 </span>
             </button>
@@ -3367,9 +3370,9 @@ function GroupCard({ item, expanded, onToggle }) {
             <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? (
-                    <span title={formatTimestamp(newest.timestamp)}>
-                        Latest {formatRelativeTime(newest.timestamp)}
-                    </span>
+                    <RelativeTime timestamp={newest.timestamp}>
+                        {(when) => `Latest ${when}`}
+                    </RelativeTime>
                 ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />

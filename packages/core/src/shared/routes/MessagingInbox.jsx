@@ -18,6 +18,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     readMsgRead,
@@ -776,7 +777,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                 </span>
                                             </span>
                                             <span className={local.convTime}>
-                                                {c.lastTimestamp ? formatRelative(c.lastTimestamp) : ''}
+                                                {c.lastTimestamp ? <RelativeTime timestamp={c.lastTimestamp} /> : ''}
                                             </span>
                                         </div>
                                         <div className={isUnread
@@ -1166,27 +1167,6 @@ function buildThreadItems(thread) {
         items.push({ type: 'msg', key: m.txid || `row-${i}`, m });
     }
     return items;
-}
-
-// Relative "X ago" label for a conversation's last activity, e.g. "a few
-// seconds ago" / "1 day ago". Accepts unix seconds or ms. Mirrors the wording
-// History uses for its timeline rows.
-function formatRelative(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 45) return 'a few seconds ago';
-    const min = Math.floor(diffSec / 60);
-    if (min < 1) return 'less than a minute ago';
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
 }
 
 // One-line preview of a conversation's most recent message for the list row.
