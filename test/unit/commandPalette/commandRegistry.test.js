@@ -180,6 +180,12 @@ describe('buildCommands', () => {
         }
     });
 
+    it('uses sentence case for navigation menu items', () => {
+        const commands = buildCommands({ navigate() {} });
+        expect(findById(commands, 'nav-my-tokens').title).toBe('My tokens');
+        expect(findById(commands, 'nav-lists').title).toBe('My lists');
+    });
+
     it('omits verb commands whose handler the shell did not supply', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();

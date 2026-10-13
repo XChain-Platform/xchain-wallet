@@ -43,15 +43,15 @@ describe('Settings search', () => {
         ['lock', 'Safety'],
         ['backup', 'Backup'],
         ['network', 'Network'],
-        ['currency', 'Language & Region'],
-        ['language', 'Language & Region'],
+        ['currency', 'Language & region'],
+        ['language', 'Language & region'],
         ['theme', 'Appearance'],
         ['biometric unlock', 'Safety'],
         ['lock wallet', 'Keyboard'],
         ['saved chain filters', 'Display'],
         ['quiet hours', 'Notifications'],
-        ['localhost auto sign', 'Developer Mode'],
-        ['Primary Vault', 'This Wallet'],
+        ['localhost auto sign', 'Developer mode'],
+        ['Primary Vault', 'This wallet'],
     ])('finds "%s" in %s', (query, sectionTitle) => {
         mount();
         searchFor(query);

@@ -86,8 +86,8 @@ export function WalletPicker({
                 <button
                     type="button"
                     onClick={onAddWallet}
-                    aria-label="Add Wallet"
-                    title="Add Wallet"
+                    aria-label="Add wallet"
+                    title="Add wallet"
                     disabled={switching}
                 >
                     <Icon.PlusIcon />

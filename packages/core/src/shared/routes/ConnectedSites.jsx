@@ -32,7 +32,7 @@ import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSect
 export function ConnectedSites({ onBack }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const header = <PageHeader onBack={onBack} title="Connected Sites" />;
+    const header = <PageHeader onBack={onBack} title="Connected sites" />;
     return (
         <Screen variant={variant} header={header}>
             <ListPage>

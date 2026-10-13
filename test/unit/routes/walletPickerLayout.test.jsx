@@ -81,7 +81,7 @@ describe('WalletPicker switching', () => {
         expect(onSwitch).toHaveBeenCalledWith('wallet-2');
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
-        expect(screen.getByRole('button', { name: 'Add Wallet' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Add wallet' }).disabled).toBe(true);
         expect(savings.disabled).toBe(true);
         expect(savings.getAttribute('aria-busy')).toBe('true');
 

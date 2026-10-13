@@ -39,7 +39,7 @@ export function ActionsMenu({ entries, onBack }) {
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="Token Actions"
+            title="Token actions"
             titleIcon={<Icon.TokenIcon />}
         />
     );

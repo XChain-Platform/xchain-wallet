@@ -71,13 +71,13 @@ export function NetworkFilterDropdown({ value, onChange }) {
                     {selected?.iconUrl ? <img src={selected.iconUrl} alt="" /> : <Icon.FilterIcon />}
                 </span>
                 <span className={styles.networkTriggerLabel}>
-                    {selected ? selected.label : 'All Networks'}
+                    {selected ? selected.label : 'All networks'}
                 </span>
                 <span className={styles.networkCaret} aria-hidden="true">&#9660;</span>
             </button>
             {open ? (
                 <ul ref={popoverRef} className={styles.networkPopover} role="listbox">
-                    {[{ value: 'all', label: 'All Networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
+                    {[{ value: 'all', label: 'All networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
                         <li key={n.value}>
                             <button
                                 type="button"

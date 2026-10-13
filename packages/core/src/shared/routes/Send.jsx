@@ -2022,7 +2022,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 : onBack}
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? 'Back to edit' : 'Back to home'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review & send' : 'Send'}
             titleIcon={<Icon.SendIcon />}
         />
     );
@@ -2328,7 +2328,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         details={submitErrorDetail || undefined}
                         recovery={
                             submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
+                                ? { label: 'Use max', onAction: () => { setStage('form'); onMax(); } }
                                 : undefined
                         }
                     >
@@ -2592,7 +2592,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     variant="error"
                     recovery={
                         /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                            ? { label: 'Use Max', onAction: onMax }
+                            ? { label: 'Use max', onAction: onMax }
                             : undefined
                     }
                 >

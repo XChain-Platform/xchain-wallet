@@ -92,7 +92,7 @@ export const en = {
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
-    'send.review': 'Review & Send',
+    'send.review': 'Review & send',
     'send.pickSourceFirst': 'Pick a source address first.',
     'send.destinationRequired': 'Destination address is required.',
     'send.tickRequired': 'Token ticker is required.',

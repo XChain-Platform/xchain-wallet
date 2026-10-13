@@ -40,15 +40,14 @@ assert.ok(/<button[\s\S]*?type="button"[\s\S]*?aria-label/.test(statusSrc),
 assert.ok(/Promise\.resolve\(recovery\.onAction\(\)\)\.catch/.test(statusSrc),
     'StatusMessage swallows recovery.onAction rejections so the message stays visible');
 
-// 2. Send.jsx surfaces a "Use Max" recovery on amount-related form
+// 2. Send.jsx surfaces a "Use max" recovery on amount-related form
 //    errors AND on insufficient-funds submit errors.
 assert.ok(/StatusMessage/.test(sendSrc),
     'Send.jsx imports StatusMessage');
-assert.ok(/label: 'Use Max'/.test(sendSrc),
-    'Send.jsx wires "Use Max" recovery');
-// migrated this from a regex over the displayed message to the
-// structured cause returned by humanizeError, so the Use-Max recovery keys
-// off the classified cause instead of re-parsing display copy.
+assert.ok(/label: 'Use max'/.test(sendSrc),
+    'Send.jsx wires "Use max" recovery');
+// The structured cause returned by humanizeError makes the Use max recovery
+// key off the classification instead of re-parsing display copy.
 assert.ok(/submitErrorCause\s*===\s*'insufficient_funds'/.test(sendSrc),
     'Send.jsx detects insufficient-funds submit errors (via humanizeError cause) for the Use-Max recovery');
 
