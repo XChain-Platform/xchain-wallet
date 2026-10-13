@@ -75,7 +75,11 @@ assert.ok(
 // only thing that calls onImported (ads-onboarding-notice.smoke.js pins the
 // rest).
 assert.ok(
-    /<AdsNotice[\s\S]*onContinue=\{onImported\}/.test(importWallet),
+    (/<AdsNotice[\s\S]*onContinue=\{onImported\}/.test(importWallet)
+        // The continue handler marks the notice as passed (a label restore
+        // finishing later refreshes Home only after it), then hands over.
+        || (/<AdsNotice[\s\S]*onContinue=\{continueAfterNotice\}/.test(importWallet)
+            && /const continueAfterNotice = \(\) => \{[^}]*onImported\(\);[^}]*\}/.test(importWallet))),
     'ImportWallet (FreeWallet variant included) hands over to onImported only from the ADS notice',
 );
 

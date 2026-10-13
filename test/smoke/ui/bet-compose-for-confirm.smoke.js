@@ -232,7 +232,8 @@ for (const [shell, ...p] of [
 ]) {
     const src = read(...p);
     for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole', 'OracleRecord']) {
-        assert.ok(src.includes(`import { ${c} }`), `${shell}: imports ${c}`);
+        // Startup code split: a route may load lazily on first open.
+        assert.ok(src.includes(`import { ${c} }`) || new RegExp(`const\\s+${c}\\s*=\\s*lazyRoute\\(\\s*\\(\\)\\s*=>\\s*import\\([^)]*${c}\\.jsx`).test(src), `${shell}: imports ${c}`);
         assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
     }
     for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console', 'bet-oracle-record']) {
