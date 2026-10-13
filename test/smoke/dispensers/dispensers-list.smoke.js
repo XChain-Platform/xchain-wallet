@@ -106,7 +106,7 @@ assert.ok(
     'DispensersList surfaces the no-addresses case',
 );
 assert.ok(
-    /No dispensers opened/.test(listSrc),
+    /title="No dispensers yet"/.test(listSrc),
     'DispensersList surfaces the empty per-chain case',
 );
 assert.ok(

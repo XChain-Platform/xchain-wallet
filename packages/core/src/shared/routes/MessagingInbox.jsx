@@ -662,7 +662,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             ) : null}
 
             {conversations.length === 0 ? (
-                <EmptyState title="No messages for this account yet." />
+                <EmptyState
+                    title="No messages yet"
+                    body="Messages sent to or from this account's addresses show up here."
+                    actionLabel={onCompose ? 'New message' : undefined}
+                    onAction={onCompose ? () => onCompose() : undefined}
+                />
             ) : visibleConversations.length === 0 ? (
                 <EmptyState title="No conversations match the current filter." />
             ) : (
