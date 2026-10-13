@@ -46,10 +46,29 @@ describe('installShellErrorCapture', () => {
         expect(installShellErrorCapture({}, buffer)).toBeTypeOf('function');
     });
 
-    it('feeds recent_errors in the dump', async () => {
+    it('hashes free-form error and log messages before they enter the dump', async () => {
         const buffer = createErrorRingBuffer();
-        buffer.record(new Error('x'));
-        const dump = await diagnosticDump({ recentErrors: buffer.list() });
-        expect(dump.recent_errors[0].message).toBe('x');
+        const address = 'bc1qexampleaddresswithwalletbalance000000000000000';
+        const wif = 'L1ExamplePrivateKeyThatMustNeverLeaveTheWallet11111';
+        const phrase = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+        const secretMessage = `${address} has 42 BTC; key=${wif}; phrase=${phrase}`;
+        buffer.record(new Error(secretMessage));
+        const [capturedError] = buffer.list();
+
+        const dump = await diagnosticDump({
+            recentErrors: [{ ...capturedError, at: secretMessage, kind: secretMessage, phase: secretMessage }],
+            recentLogs: [{ id: 1, timestamp: 2, level: 'error', source: secretMessage, message: secretMessage }],
+        });
+        const serialized = JSON.stringify(dump);
+
+        expect(dump.recent_errors[0].message).toMatch(/^redacted:sha256:[0-9a-f]{8}$/);
+        expect(dump.recent_logs[0].message).toBe(dump.recent_errors[0].message);
+        expect(dump.recent_errors[0].kind).toBe('Error');
+        expect(dump.recent_errors[0].phase).toBeUndefined();
+        expect(dump.recent_logs[0].source).toBe('other');
+        expect(serialized).not.toContain(address);
+        expect(serialized).not.toContain('42 BTC');
+        expect(serialized).not.toContain(wif);
+        expect(serialized).not.toContain(phrase);
     });
 });

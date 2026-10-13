@@ -134,8 +134,9 @@ describe('desktop deep-link delivery', () => {
         process.argv = ['electron', 'app.js'];
         const app = electronApp();
         const onDeepLink = vi.fn();
+        const onSecondInstance = vi.fn();
 
-        expect(attachDeepLinkHandlers(app, { onDeepLink })).toEqual({ gotLock: true });
+        expect(attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance })).toEqual({ gotLock: true });
 
         const preventDefault = vi.fn();
         app.listeners.get('open-url')({ preventDefault }, 'dogecoin:DAddress?amount=2');
@@ -143,6 +144,7 @@ describe('desktop deep-link delivery', () => {
         app.listeners.get('second-instance')({}, ['electron', 'https://example.com'], '/tmp');
 
         expect(preventDefault).toHaveBeenCalledOnce();
+        expect(onSecondInstance).toHaveBeenCalledTimes(2);
         expect(onDeepLink).toHaveBeenCalledTimes(2);
         expect(onDeepLink.mock.calls[0][0]).toMatchObject({ scheme: 'dogecoin' });
         expect(onDeepLink.mock.calls[1][0]).toMatchObject({ scheme: 'litecoin' });

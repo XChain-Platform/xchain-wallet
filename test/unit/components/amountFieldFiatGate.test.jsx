@@ -15,12 +15,25 @@
 // alive, the gate would go on returning null and the wrong number would come
 // back with no test failing anywhere.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import {
+    registerLocale,
+    setLocale,
+} from '../../../packages/core/src/i18n/index.js';
 
 const RATE = { rate: 67000, fiatCurrency: 'USD' };
+
+beforeAll(() => {
+    registerLocale('de-DE', {});
+    registerLocale('fr-FR', {});
+});
+
+afterEach(async () => {
+    await setLocale('en');
+});
 
 function mount(props) {
     return render(React.createElement(AmountField, {
@@ -120,6 +133,37 @@ describe('AmountField input contract', () => {
         });
 
         expect(onAmountFieldChange).toHaveBeenCalledWith('1234567.89', 10);
+    });
+
+    it.each([
+        ['de-DE', '1,234.56', '1.234,56'],
+        ['fr-FR', '1,234.56', '1\u202f234,56'],
+    ])('uses %s separators for display while accepting either common paste style', async (
+        locale,
+        pasted,
+        displayed,
+    ) => {
+        await setLocale(locale);
+        const onAmountFieldChange = vi.fn();
+        const u = mount({ amount: '1234.56', onAmountFieldChange });
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        expect(input).toHaveValue(displayed);
+        fireEvent.change(input, {
+            target: { value: pasted, selectionStart: pasted.length },
+        });
+        expect(onAmountFieldChange).toHaveBeenCalledWith('1234.56', null);
+    });
+
+    it('shows a plain error for malformed mixed separators', () => {
+        const onAmountFieldChange = vi.fn();
+        const u = mount({ amount: '', onAmountFieldChange });
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        fireEvent.change(input, { target: { value: '12.34,56' } });
+
+        expect(onAmountFieldChange).not.toHaveBeenCalled();
+        expect(u.getByRole('alert')).toHaveTextContent('Enter a valid decimal amount');
     });
 
     it('rejects precision beyond the selected asset divisibility', () => {
