@@ -41,6 +41,10 @@
 }
 
 @media (max-width: 420px) {
+    .search {
+        flex: 1 1 100%;
+    }
+
     .sort {
         flex: 1 1 100%;
     }
