@@ -284,6 +284,16 @@ export function attachHidPermissions(session, opts) {
             callback(!isRemoteFrameUrl(url, appRoot));
             return;
         }
+        // Writing an image to the clipboard (Receive's Copy QR) asks for
+        // `clipboard-sanitized-write` on this path, and the default deny
+        // turned every desktop Copy QR into "Copy failed". It is write-only
+        // and sanitized, so the app's own page gets it and a remote frame
+        // does not; clipboard reads stay refused.
+        if (permission === 'clipboard-sanitized-write') {
+            const url = requestingFrameUrl(webContents, details);
+            callback(!isRemoteFrameUrl(url, appRoot));
+            return;
+        }
         callback(false);
     });
 
