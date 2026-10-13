@@ -60,26 +60,14 @@
     background: var(--xc-danger, #c33);
 }
 
-.popover {
+.wrap .popover {
     display: none;
-    position: absolute;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    z-index: var(--xc-z-dropdown);
-    width: min(280px, calc(100vw - 24px));
-    box-sizing: border-box;
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    box-shadow: var(--xc-shadow-header-menu);
     font-size: var(--xc-text-sm);
 }
 
 .wrap:hover .popover,
 .wrap[data-open='true'] .popover {
-    display: block;
+    display: flex;
 }
 
 .title {

@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './NetworkStatusIndicator.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -107,7 +108,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
             >
                 <span className={styles.dot} aria-hidden="true" />
             </button>
-            <div className={styles.popover} role="dialog" aria-label="Network status">
+            <OverlaySurface variant="popover" className={styles.popover} aria-label="Network status">
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
                     <div className={styles.detail}>All selected chains are reachable.</div>
@@ -131,7 +132,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 >
                     Network settings
                 </button>
-            </div>
+            </OverlaySurface>
         </div>
     );
 }
