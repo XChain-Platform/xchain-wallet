@@ -136,8 +136,8 @@ assert.match(
 );
 assert.match(
     sectionSrc,
-    /update\(\{ signThrottle: patch \}\)/,
-    'Apply patches signThrottle via update',
+    /update\(\{ signThrottle: next \}\)/,
+    'Apply writes the validated signThrottle patch via update',
 );
 assert.match(
     sectionSrc,

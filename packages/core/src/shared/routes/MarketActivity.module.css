@@ -117,6 +117,8 @@
 
 button.row {
     cursor: pointer;
+    /* Only the tappable rows are buttons; keep them at the tap floor even if the padding shrinks. */
+    min-height: var(--xc-tap-min);
 }
 
 button.row:hover:not(:disabled) {

@@ -42,7 +42,9 @@ assert.ok(/onShowPrivateKey\s*&&\s*selected\.record\s*&&\s*!selected\.multisig/.
     'AddressList only enables the Secret button for non-multisig rows with a record');
 // A shell that wired no handler gets no button at all, rather than one
 // that can never activate (the onReceive gating rule in the same file).
-assert.ok(/\{onShowPrivateKey \? \([\s\S]{0,600}?<span>Secret<\/span>/.test(al),
+// The handler gate is hoisted into canSecret, which also requires a record and
+// a non-multisig row (asserted above), so the button renders only under it.
+assert.ok(/\{canSecret \? \([\s\S]{0,600}?<span>Secret<\/span>/.test(al),
     'AddressList renders the Secret button only when a handler was supplied');
 
 // --- 2. Every shell imports + renders ViewPrivateKey --------------------

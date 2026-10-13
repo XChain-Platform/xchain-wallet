@@ -68,10 +68,19 @@ assert.equal(
     'DispensersList.jsx only exports the component',
 );
 assert.ok(/export function DispenserDetail\b/.test(detailSrc), 'DispenserDetail is a named export');
-assert.equal(
-    (detailSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
-    1,
-    'DispenserDetail.jsx only exports the component',
+// formatUnixDate / formatLocalClock are exported pure helpers so the
+// timestamp-format unit test can reach them; the component is still the only
+// capitalised (React) export.
+const detailExports = [...detailSrc.matchAll(/^export\s+(?:function|const|class)\s+(\w+)/gm)].map((m) => m[1]);
+assert.deepEqual(
+    detailExports.filter((n) => /^[A-Z]/.test(n)),
+    ['DispenserDetail'],
+    'DispenserDetail.jsx exports exactly one component',
+);
+assert.deepEqual(
+    detailExports.filter((n) => !/^[A-Z]/.test(n)).sort(),
+    ['formatLocalClock', 'formatUnixDate'],
+    'DispenserDetail.jsx other exports are the two timestamp helpers',
 );
 
 // --- 2. DispensersList wiring + edge-case handling --------------------

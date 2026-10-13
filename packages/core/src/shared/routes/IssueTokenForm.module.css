@@ -56,7 +56,7 @@
 .hintLeft {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-align: left;
+    text-align: start;
     margin: 0;
 }
 

@@ -55,8 +55,12 @@ assert.ok(/target="_blank"/.test(send) && /rel="noopener noreferrer"/.test(send)
 
 // --- 4. Copy-txid affordance is wired to the clipboard ------------------
 
-assert.ok(/navigator\.clipboard\?\.writeText/.test(send),
-    'Done stage copy-txid uses navigator.clipboard.writeText (best-effort guarded)');
+// Copies go through the shared copyText helper, which owns the native
+// plugin / browser split; the Done stage reports a failed copy in a toast.
+assert.ok(/import \{ copyText \} from '\.\.\/clipboard\.js'/.test(send)
+        && /await copyText\(txid\)/.test(send)
+        && /Copy failed: clipboard unavailable/.test(send),
+    'Done stage copy-txid goes through copyText and toasts a failed copy');
 
 // --- 5. CSS additions ----------------------------------------------------
 

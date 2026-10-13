@@ -44,15 +44,16 @@ for (const v of [1, 5, 15, 60]) {
 assert.ok(src.includes('value: 0'), 'autolock supports 0 (never)');
 
 // Live rows: test-send warning, biometric unlock, panic-mode activation,
-// auto-arm reservation toggle, backup reminders. (v0.146 added
-// BiometricRow; v0.147 added PanicModeRow + relabelled the schema toggle
-// from "Panic mode" to "Auto-arm panic mode".)
+// backup reminders. (v0.146 added BiometricRow; v0.147 added PanicModeRow;
+// the schema toggle was later removed as a placeholder.)
 assert.match(src, /Test-send warning \(sats\)/, 'test-send warning row present');
 assert.match(src, /testSendThresholdSats:\s*threshold/, 'test-send writes through grace.testSendThresholdSats');
 assert.match(src, /<BiometricRow \/>/, 'biometric unlock row mounted');
 assert.match(src, /<PanicModeRow \/>/, 'panic-mode activation row mounted');
-assert.match(src, /label="Auto-arm panic mode"/, 'panic-mode auto-arm toggle present');
-assert.match(src, /panicMode:\s*\{\s*enabled:\s*v\s*\}/, 'panic mode toggle writes through panicMode.enabled');
+// The auto-arm toggle was removed: nothing reads panicMode.enabled, so the
+// section must not offer a preference that does nothing.
+assert.doesNotMatch(src, /Auto-arm panic mode/, 'no auto-arm toggle (no code delivers auto-arming)');
+assert.doesNotMatch(src, /panicMode:\s*\{\s*enabled/, 'Safety section does not write panicMode.enabled');
 assert.match(src, /Backup reminders/, 'backup reminders row present');
 assert.match(src, /backupReminders:\s*e\.target\.value/, 'backup reminders writes through update');
 
