@@ -36,7 +36,7 @@ const styleGuideRoutes = {
     MultisigCreate: ['Button', 'Input', 'Select'],
     PairSignerForm: ['Button', 'Input'],
 };
-const styleGuideRoutes = [
+const styleGuideRowRoutes = [
     'BetFeedDetail',
     'CoSignerAccountList',
     'CoinpayForm',
@@ -95,15 +95,6 @@ describe('shared route button usage', () => {
     });
 
     it.each(Object.entries(styleGuideRoutes))('%s uses kit form and action controls', (routeName, controls) => {
-    it.each([
-        ['SellOwnershipForm', ['Button', 'Input'], 0],
-        ['Settings', ['Button', 'Input'], 1],
-        ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
-        ['TokenPicker', ['Button', 'Input'], 0],
-        ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
-        ['WalletPicker', ['Button'], 1],
-    ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
-    it.each(styleGuideRoutes)('%s uses kit controls except documented row buttons', (routeName) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
             'utf8',
@@ -113,6 +104,45 @@ describe('shared route button usage', () => {
             expect(source).toMatch(new RegExp(`<${control}\\b`));
         }
         expect(source).not.toMatch(/<(?:select|textarea)\b/);
+    });
+
+    it.each([
+        ['SellOwnershipForm', ['Button', 'Input'], 0],
+        ['Settings', ['Button', 'Input'], 1],
+        ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
+        ['TokenPicker', ['Button', 'Input'], 0],
+        ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
+        ['WalletPicker', ['Button'], 1],
+    ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const primitive of primitives) {
+            expect(source).toMatch(new RegExp(`<${primitive}\\b`));
+        }
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        expect(source.match(/<button\b/g) || []).toHaveLength(nativeRowCount);
+        if (nativeRowCount > 0) {
+            expect(source).toMatch(/Keep the native button because the complete .+ row is the list .+ target\./);
+        }
+    });
+
+    it.each(styleGuideRowRoutes)('%s uses kit controls except documented row buttons', (routeName) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        const nativeButtons = source.match(/<button\b/g) || [];
+        if (nativeRowButtonRoutes.has(routeName)) {
+            expect(nativeButtons).toHaveLength(1);
+            expect(source).toMatch(/native row button keeps the whole .* card as one target/);
+        } else {
+            expect(nativeButtons).toHaveLength(0);
+        }
     });
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
@@ -187,6 +217,8 @@ describe('trade form style guide primitives', () => {
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
         expect(placeOrder.match(/<button\b/g)).toHaveLength(2);
         expect(placeOrder.match(/Native buttons retain segmented-toggle pressed behavior/g)).toHaveLength(2);
+    });
+
     it('uses style-guide controls throughout wallet setup routes', () => {
         const importSource = readFileSync(
             resolve(process.cwd(), 'packages/core/src/shared/routes/ImportWallet.jsx'),
@@ -205,6 +237,8 @@ describe('trade form style guide primitives', () => {
         expect(importSource.match(/<button\b/g)).toHaveLength(3);
         expect(importSource.match(/role="tab"/g)).toHaveLength(3);
         expect(createSource).not.toMatch(/<button\b|<textarea\b|<select\b/);
+    });
+
     it('uses style guide controls in the market, contact, preference, and token lists', () => {
         const readRoute = (routeName) => readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -236,21 +270,5 @@ describe('trade form style guide primitives', () => {
         expect(tokens).toMatch(/<EmptyState\b/);
         expect(tokens.match(/<button\b/g)).toHaveLength(2);
         expect(tokens.match(/role="radio"/g)).toHaveLength(2);
-    });
-        for (const primitive of primitives) {
-            expect(source).toMatch(new RegExp(`<${primitive}\\b`));
-        }
-        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
-        expect(source.match(/<button\b/g) || []).toHaveLength(nativeRowCount);
-        if (nativeRowCount > 0) {
-            expect(source).toMatch(/Keep the native button because the complete .+ row is the list .+ target\./);
-        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
-        const nativeButtons = source.match(/<button\b/g) || [];
-        if (nativeRowButtonRoutes.has(routeName)) {
-            expect(nativeButtons).toHaveLength(1);
-            expect(source).toMatch(/native row button keeps the whole .* card as one target/);
-        } else {
-            expect(nativeButtons).toHaveLength(0);
-        }
     });
 });
