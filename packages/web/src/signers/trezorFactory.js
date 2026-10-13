@@ -34,7 +34,7 @@
 // Cross-package relative path to core. Matches the convention in
 // hostBridge.js so Node smoke scripts resolve the module without the
 // pnpm workspace symlink, while Vite still bundles it cleanly.
-import { makeTrezorFactory } from '../../../core/src/signerFactories/index.js';
+import { makeTrezorFactory, walletOnlyRegistry } from '../../../core/src/signerFactories/index.js';
 import {
     TREZOR_CONNECT_SCRIPT_URL,
     TREZOR_MANIFEST,
@@ -160,13 +160,22 @@ export async function getTrezorConnect(loader = loadHostedTrezorConnect) {
  *
  * @param {Object} [opts]
  * @param {() => Promise<any>} [opts.loader]  for tests
+ * @param {() => Promise<any>} [opts.walletLoader]  pure wallet helpers for signing; injectable for tests
  * @returns {ReturnType<ReturnType<typeof makeTrezorFactory>>}
  */
-export async function pairTrezorSigner({ loader } = {}) {
+export async function pairTrezorSigner({ loader, walletLoader = defaultWalletLoader } = {}) {
     const factory = makeTrezorFactory({
         getConnect: () => getTrezorConnect(loader),
+        getSdkRegistry: async () => {
+            const mod = await walletLoader();
+            return walletOnlyRegistry(mod?.default ?? mod);
+        },
     });
     return factory();
+}
+
+function defaultWalletLoader() {
+    return import('xchain-sdk/src/wallet.js');
 }
 
 /**
