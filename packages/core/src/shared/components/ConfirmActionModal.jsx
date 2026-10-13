@@ -295,6 +295,17 @@ export function ConfirmActionModal({
     // non-pre-sign, non-terminal signing phase where reject is unsafe.
     const exitsLocked = signaturePhase && !terminal;
 
+    useEffect(() => {
+        if (!open || exitsLocked) return undefined;
+        const handleEscape = (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            onReject();
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [exitsLocked, onReject, open]);
+
     // Approve disables SYNCHRONOUSLY in the click handler's tick, before any
     // await (§5.1). The parent's onApprove runs the async signing.
     const handleApprove = useCallback((e) => {
