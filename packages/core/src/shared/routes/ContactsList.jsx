@@ -17,6 +17,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { ScanRoute } from './ScanRoute.jsx';
@@ -166,6 +167,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
+    useBackHandler(addAddrOpen ? () => setAddAddrOpen(false) : undefined, addAddrSaving);
     // The user's answer when the typed address's network cannot be read from
     // its bytes (shared testnet/regtest version bytes); null until they pick.
     const [addAddrChain, setAddAddrChain] = useState(/** @type {string | null} */ (null));

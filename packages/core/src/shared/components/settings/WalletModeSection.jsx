@@ -16,6 +16,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
+import { useBackHandler } from '../../../ui/backStack.js';
 
 const MODE_OPTIONS = /** @type {const} */ ([
     {
@@ -43,6 +44,7 @@ export function WalletModeSection() {
     const [pending, setPending] = useState(/** @type {typeof WALLET_MODES[number] | null} */ (null));
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+    useBackHandler(pending ? () => setPending(null) : undefined, saving);
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;

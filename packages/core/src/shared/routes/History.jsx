@@ -69,6 +69,7 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -3978,6 +3979,7 @@ function ExportModal({
     visibleCount,
     onConfirm,
 }) {
+    useBackHandler(onClose);
     // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
     // closing hands focus back to the opener.
     const dialogRef = useRef(null);
