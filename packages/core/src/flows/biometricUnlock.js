@@ -131,7 +131,7 @@ export class BiometricPrfUnavailableError extends Error {
 // @property {() => boolean} isRegistered
 // @property {(opts: { password: string, accountName?: string }) => Promise<void>} register
 // @property {() => Promise<string>} unlock      resolves to the wallet password
-// @property {() => void} clear
+// @property {() => void | Promise<void>} clear
 // @property {string} name
 // @property {string} [mechanism]   what the USER uses, in their words
 // @property {string} [wrapNote]    how the password is protected, in their words
@@ -237,7 +237,7 @@ function webauthnIsRegistered() {
 function webauthnClear() {
     const store = getStorage();
     if (!store) return;
-    try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
+    store.removeItem(STORAGE_KEY);
 }
 
 /**
@@ -486,7 +486,7 @@ export function unlockWithBiometric() {
 
 /** Discard the enrollment. Called on disable AND on password change. */
 export function clearBiometricCredential() {
-    activeProvider().clear();
+    return activeProvider().clear();
 }
 
 // ---------------------------------------------------------------------

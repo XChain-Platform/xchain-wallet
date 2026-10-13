@@ -225,21 +225,17 @@ export const nativeBiometricProvider = {
         }
     },
 
-    /**
-     * Destroy the wrap. Synchronous by contract (the shared UI calls it
-     * without awaiting), so the native delete is fired and the local flag
-     * cleared immediately: the affordance must disappear now, not after a
-     * round trip.
-     */
-    clear() {
+    /** Destroy the wrap before dropping the cached enrollment flag. */
+    async clear() {
+        if (!hasNativeVault()) {
+            enrolledCache = false;
+            return;
+        }
+        const reply = await callNativeVault('biometricClear');
+        if (reply?.status !== VaultStatus.OK && reply?.status !== VaultStatus.ABSENT) {
+            throw new Error(`biometricUnlock: native clear failed (${reply?.status || 'unknown'})`);
+        }
         enrolledCache = false;
-        if (!hasNativeVault()) return;
-        Promise.resolve(callNativeVault('biometricClear')).catch(() => {
-            // Best-effort by necessity, and safe: the Keystore key is what
-            // guards the wrap, and the paths that call clear() (disable,
-            // password change) either rotate the password the wrap holds or
-            // are followed by a wipe.
-        });
     },
 };
 
