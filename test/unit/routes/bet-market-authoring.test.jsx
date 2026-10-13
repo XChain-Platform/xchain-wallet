@@ -363,6 +363,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // Nothing is signed by opening the confirm page.
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000015 BTC');
 
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
