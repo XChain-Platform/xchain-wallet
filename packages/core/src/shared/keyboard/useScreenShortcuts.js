@@ -44,7 +44,10 @@ export function useScreenShortcuts({ enabled = true, keys }) {
             }
             if (mod || e.altKey) return;
             if (isEditableTarget(e.target)) return;
-            const handler = map[e.key] || map[(e.key || '').toLowerCase()];
+            // Shift only matches a binding that names the produced character,
+            // such as '?'; it does not make Shift+E an alias for 'e'.
+            const handler = map[e.key]
+                || (!e.shiftKey ? map[(e.key || '').toLowerCase()] : undefined);
             if (handler && handler(e) !== false) e.preventDefault();
         };
         window.addEventListener('keydown', onKey);

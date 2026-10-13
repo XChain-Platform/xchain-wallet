@@ -157,7 +157,11 @@ assert.ok(
 );
 
 const schemes = plistValue(infoPlist, 'CFBundleURLSchemes');
-assert.deepEqual(schemes, ['xchain'], 'exactly one custom scheme, and it is inbound compatibility only');
+assert.deepEqual(
+    schemes,
+    ['xchain', 'bitcoin', 'litecoin', 'dogecoin'],
+    'the wallet accepts its app scheme and the three supported payment schemes',
+);
 
 assert.equal(
     plistValue(infoPlist, 'ITSAppUsesNonExemptEncryption'), false,
@@ -451,6 +455,21 @@ assert.match(
     readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'tokens.css'), 'utf8'),
     /padding-top: env\(safe-area-inset-top/,
     'the shared stylesheet insets the top safe area',
+);
+// In an iPadOS 26 resizable window the close/minimise/resize controls sit
+// outside the plain safe area, so env(safe-area-inset-top) reads 0 there and
+// the header logo drew under them. The native shell tops the safe area up to
+// UIKit's corner-adapted value, which the body padding above then honours.
+const windowControls = readFileSync(join(ios, 'App', 'App', 'MainViewController.swift'), 'utf8');
+assert.match(
+    windowControls,
+    /override func viewDidLayoutSubviews\(\)[\s\S]*?clearWindowControls\(\)/,
+    'MainViewController re-checks the window-control inset on every layout pass',
+);
+assert.match(
+    windowControls,
+    /edgeInsets\(for: \.safeArea\(cornerAdaptation: \.vertical\)\)[\s\S]*?additionalSafeAreaInsets\.top = /,
+    'MainViewController raises the safe area to clear the iPadOS window controls',
 );
 
 // --- 12. The submission runbook agrees with the repo it describes -------
@@ -803,6 +822,11 @@ assert.ok(
     + 'tapped Universal Link is silently discarded.',
 );
 const linksSwift = readFileSync(linksSwiftPath, 'utf8');
+assert.match(
+    linksSwift,
+    /coinSchemes = Set\(\["bitcoin", "litecoin", "dogecoin"\]\)/,
+    'the iOS URL declarations and the native link inbox must accept the same payment schemes',
+);
 
 // The SPA looks the plugin up by jsName and REFUSES it unless takePendingLink is
 // callable (nativeDeepLinks.js `linksPlugin()`), so a rename on either side is
@@ -1075,7 +1099,7 @@ console.log(
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
     + ' universal device family; associated domains applinks:xchain.io only, entitlements wired into the build;'
     + ' default ATS asserted by absence; camera + Face ID usage strings present and honest about what biometrics'
-    + ' do; one custom scheme, xchain:, as inbound compatibility; export-compliance flag set; armv7 leftover'
+    + ' do; inbound xchain and payment schemes; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
     + ' and the rails §2 store integer is the same one Android gets.: CAPACITOR_DEBUG lives only in'

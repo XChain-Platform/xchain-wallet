@@ -8,23 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The chain picker must say WHICH chain question it is answering.
-//
-// Its visible label is a plain <span> beside the trigger, not a <label for>, so
-// the trigger used to take its whole accessible name from the selection:
-// "Bitcoin · regtest, button". One picker on a form is merely vague. The case
-// that makes it a defect rather than a nicety is CrossChainSwapForm, which
-// renders "Give chain" and "Get chain" side by side - two buttons a screen
-// reader announced identically, on the one control pair where transposing them
-// sends the money the wrong way.
-//
-// These tests pin the accessible name in BOTH directions: the label must be in
-// it, and a picker given no label must NOT gain a stray "undefined: " prefix.
-
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ChainPicker } from '../../../packages/core/src/ui/ChainPicker.jsx';
 import { IconSelect } from '../../../packages/core/src/ui/IconSelect.jsx';
+import { NetworkField } from '../../../packages/core/src/ui/NetworkField.jsx';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const reg = defaultRegistry();
@@ -58,7 +46,6 @@ describe('<ChainPicker> accessible name', () => {
                 />
             </>,
         );
-        // The bug this replaces: both of these matched the same query.
         expect(screen.getByRole('button', { name: /^Give chain:/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Get chain:/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Give chain: Bitcoin · regtest' }))
@@ -90,8 +77,6 @@ describe('<ChainPicker> accessible name', () => {
     });
 
     it('leaves an unlabelled picker naming itself by its selection', () => {
-        // A guard against the obvious wrong fix: interpolating an absent label
-        // would announce "undefined: Bitcoin · regtest".
         render(
             <ChainPicker
                 value="bitcoin-regtest"
@@ -101,11 +86,39 @@ describe('<ChainPicker> accessible name', () => {
         expect(screen.queryByRole('button', { name: /undefined/ })).toBeNull();
         expect(screen.getByRole('button', { name: /Bitcoin/ })).toBeInTheDocument();
     });
+
+    it('announces testnet and regtest while leaving mainnet implicit', () => {
+        const { rerender } = render(
+            <ChainPicker
+                label="Network" value="bitcoin-mainnet"
+                chainIds={['bitcoin-mainnet', 'bitcoin-testnet', 'bitcoin-regtest']}
+                chainRegistry={reg} onChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin' })).toBeInTheDocument();
+
+        rerender(
+            <ChainPicker
+                label="Network" value="bitcoin-testnet"
+                chainIds={['bitcoin-mainnet', 'bitcoin-testnet', 'bitcoin-regtest']}
+                chainRegistry={reg} onChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin · testnet' }))
+            .toBeInTheDocument();
+
+        rerender(
+            <ChainPicker
+                label="Network" value="bitcoin-regtest"
+                chainIds={['bitcoin-mainnet', 'bitcoin-testnet', 'bitcoin-regtest']}
+                chainRegistry={reg} onChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin · regtest' }))
+            .toBeInTheDocument();
+    });
 });
 
-// The sibling found by sweeping the same shape (a <span> label beside an
-// unlabelled trigger) across `ui/` and `shared/components/`: ChainPicker and
-// IconSelect were the only two, and TokenField was already correct.
 describe('<IconSelect> accessible name', () => {
     const OPTIONS = [
         { value: 'ecdh', label: 'Encrypted' },
@@ -141,5 +154,94 @@ describe('<IconSelect> accessible name', () => {
         );
         expect(screen.getByRole('button', { name: 'Encryption: Select…' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /undefined/ })).toBeNull();
+    });
+});
+
+describe('picker keyboard operation', () => {
+    it('opens ChainPicker from the keyboard, navigates, selects, and restores focus', () => {
+        const onChange = vi.fn();
+        render(
+            <ChainPicker
+                label="Network" value="bitcoin-regtest"
+                chainIds={CHAINS} chainRegistry={reg} onChange={onChange}
+            />,
+        );
+        const trigger = screen.getByRole('button', { name: 'Network: Bitcoin · regtest' });
+
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        const options = screen.getAllByRole('option');
+        expect(options[0]).toHaveFocus();
+        expect(options[0]).toHaveAttribute('aria-selected', 'true');
+
+        fireEvent.keyDown(options[0], { key: 'ArrowDown' });
+        expect(options[1]).toHaveFocus();
+        fireEvent.keyDown(options[1], { key: 'Enter' });
+
+        expect(onChange).toHaveBeenCalledWith('litecoin-regtest');
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('focuses searchable input, moves into results, and clears searches on Escape', () => {
+        const onChange = vi.fn();
+        const chainIds = reg.supportedChains().map((chain) => chain.id);
+        render(
+            <ChainPicker
+                label="Network" value="bitcoin-mainnet"
+                chainIds={chainIds} chainRegistry={reg} onChange={onChange}
+            />,
+        );
+        const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
+
+        fireEvent.click(trigger);
+        const search = screen.getByRole('textbox', { name: 'Search networks' });
+        expect(search).toHaveFocus();
+        fireEvent.change(search, { target: { value: 'testnet' } });
+        expect(screen.getAllByRole('option')).toHaveLength(3);
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
+        expect(screen.getAllByRole('option')[0]).toHaveFocus();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(trigger).toHaveFocus();
+        fireEvent.click(trigger);
+        expect(screen.getAllByRole('option')).toHaveLength(chainIds.length);
+    });
+
+    it('supports IconSelect arrow, End, and Space keys', () => {
+        const onChange = vi.fn();
+        const options = [
+            { value: 'ecdh', label: 'Encrypted' },
+            { value: 'none', label: 'Plain text' },
+            { value: 'signed', label: 'Signed only' },
+        ];
+        render(
+            <IconSelect label="Encryption" value="ecdh" options={options} onChange={onChange} />,
+        );
+        const trigger = screen.getByRole('button', { name: 'Encryption: Encrypted' });
+
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        const renderedOptions = screen.getAllByRole('option');
+        expect(renderedOptions[0]).toHaveFocus();
+        fireEvent.keyDown(renderedOptions[0], { key: 'End' });
+        expect(renderedOptions[2]).toHaveFocus();
+        fireEvent.keyDown(renderedOptions[2], { key: ' ' });
+
+        expect(onChange).toHaveBeenCalledWith('signed');
+        expect(trigger).toHaveFocus();
+    });
+});
+
+describe('<NetworkField>', () => {
+    it('uses the default label and exposes the selected network kind', () => {
+        render(
+            <NetworkField
+                value="bitcoin-testnet"
+                chainIds={['bitcoin-mainnet', 'bitcoin-testnet']}
+                chainRegistry={reg}
+                onChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'Network: Bitcoin · testnet' }))
+            .toBeInTheDocument();
     });
 });

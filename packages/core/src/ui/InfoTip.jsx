@@ -29,12 +29,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import styles from './InfoTip.module.css';
 
-// Default bubble width assumptions, kept in sync with the CSS clamp
-// (`.bubble { min-width: 180px; max-width: 260px }`). A measurement-
-// driven layout would be more precise, but the bubble is opt-in and
-// reads as a band of width somewhere in this range; the half-width
-// constant just decides which side overflows for re-anchoring.
-const BUBBLE_HALF_WIDTH = 130; // ≈ max-width / 2
+const VIEWPORT_MARGIN = 8;
+const BUBBLE_GAP = 6;
 
 /**
  * @param {object} props
@@ -45,13 +41,12 @@ const BUBBLE_HALF_WIDTH = 130; // ≈ max-width / 2
  */
 export function InfoTip({ label, aria = 'More info', placement = 'top', className }) {
     const [open, setOpen] = useState(false);
-    // Cluster P FOLLOWUP 3: alignment is measured at open time so the
-    // bubble re-anchors to the start / end of the trigger when its
-    // center-anchored extent would clip the viewport. Default 'center'
-    // matches the v0.210.0 layout for triggers that comfortably fit.
     const [align, setAlign] = useState(/** @type {'start' | 'center' | 'end'} */ ('center'));
+    const [side, setSide] = useState(placement);
+    const [maxHeight, setMaxHeight] = useState(/** @type {number | null} */ (null));
     const id = useId();
     const wrapRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
+    const bubbleRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
 
     useEffect(() => {
         if (!open) return undefined;
@@ -61,40 +56,55 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
             if (!wrapRef.current.contains(event.target)) setOpen(false);
         };
         document.addEventListener('keydown', onKey);
-        document.addEventListener('mousedown', onPointer);
-        document.addEventListener('touchstart', onPointer, { passive: true });
+        document.addEventListener('pointerdown', onPointer);
         return () => {
             document.removeEventListener('keydown', onKey);
-            document.removeEventListener('mousedown', onPointer);
-            document.removeEventListener('touchstart', onPointer);
+            document.removeEventListener('pointerdown', onPointer);
         };
     }, [open]);
 
-    // Re-anchor on every open transition (and on viewport resize while
-    // open). useLayoutEffect runs before the browser paints the bubble
-    // so the user never sees a flash of clipped layout, then re-paint
-    // with the corrected alignment class.
     useLayoutEffect(() => {
         if (!open) return undefined;
         const recompute = () => {
             const node = wrapRef.current;
-            if (!node) return;
+            const bubble = bubbleRef.current;
+            if (!node || !bubble) return;
             const rect = node.getBoundingClientRect();
+            const bubbleRect = bubble.getBoundingClientRect();
             const center = rect.left + rect.width / 2;
             const viewportWidth =
                 (typeof document !== 'undefined' && document.documentElement?.clientWidth) ||
                 (typeof window !== 'undefined' && window.innerWidth) ||
                 0;
+            const viewportHeight =
+                (typeof document !== 'undefined' && document.documentElement?.clientHeight) ||
+                (typeof window !== 'undefined' && window.innerHeight) ||
+                0;
             if (viewportWidth <= 0) {
                 setAlign('center');
-                return;
-            }
-            if (center - BUBBLE_HALF_WIDTH < 0) {
-                setAlign('start');
-            } else if (center + BUBBLE_HALF_WIDTH > viewportWidth) {
-                setAlign('end');
             } else {
-                setAlign('center');
+                const bubbleWidth = bubbleRect.width || Math.min(260, viewportWidth - 2 * VIEWPORT_MARGIN);
+                const halfWidth = bubbleWidth / 2;
+                const rtl = (node.closest('[dir]')?.getAttribute('dir') || document.documentElement.dir) === 'rtl';
+                if (center - halfWidth < VIEWPORT_MARGIN) {
+                    setAlign(rtl ? 'end' : 'start');
+                } else if (center + halfWidth > viewportWidth - VIEWPORT_MARGIN) {
+                    setAlign(rtl ? 'start' : 'end');
+                } else {
+                    setAlign('center');
+                }
+            }
+
+            if (viewportHeight > 0) {
+                const spaceAbove = Math.max(0, rect.top - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const spaceBelow = Math.max(0, viewportHeight - rect.bottom - BUBBLE_GAP - VIEWPORT_MARGIN);
+                const preferredSpace = placement === 'top' ? spaceAbove : spaceBelow;
+                const oppositeSpace = placement === 'top' ? spaceBelow : spaceAbove;
+                const nextSide = bubbleRect.height > preferredSpace && oppositeSpace > preferredSpace
+                    ? (placement === 'top' ? 'bottom' : 'top')
+                    : placement;
+                setSide(nextSide);
+                setMaxHeight(nextSide === 'top' ? spaceAbove : spaceBelow);
             }
         };
         recompute();
@@ -103,7 +113,7 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
         return () => {
             if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
         };
-    }, [open]);
+    }, [label, open, placement]);
 
     const cls = [styles.wrap, className].filter(Boolean).join(' ');
     const alignClass = align === 'start'
@@ -118,20 +128,24 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                 type="button"
                 className={styles.trigger}
                 aria-label={aria}
-                aria-describedby={open ? id : undefined}
+                aria-describedby={id}
                 aria-expanded={open}
                 onMouseEnter={() => setOpen(true)}
-                onMouseLeave={() => setOpen(false)}
+                onMouseLeave={() => {
+                    if (!wrapRef.current?.contains(document.activeElement)) setOpen(false);
+                }}
                 onFocus={() => setOpen(true)}
-                onBlur={() => setOpen(false)}
+                onBlur={(event) => {
+                    if (!wrapRef.current?.contains(event.relatedTarget)) setOpen(false);
+                }}
                 onClick={(e) => {
                     e.stopPropagation();
-                    setOpen((v) => !v);
+                    setOpen(true);
                 }}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        setOpen((v) => !v);
+                        setOpen(true);
                     }
                 }}
             >
@@ -140,15 +154,16 @@ export function InfoTip({ label, aria = 'More info', placement = 'top', classNam
                     target), so the glyph carries the circle. */}
                 <span className={styles.glyph} aria-hidden="true">?</span>
             </button>
-            {open ? (
-                <span
-                    id={id}
-                    role="tooltip"
-                    className={`${styles.bubble} ${placement === 'bottom' ? styles.placementBottom : styles.placementTop} ${alignClass}`}
-                >
-                    {label}
-                </span>
-            ) : null}
+            <span
+                ref={bubbleRef}
+                id={id}
+                role="tooltip"
+                hidden={!open}
+                className={`${styles.bubble} ${side === 'bottom' ? styles.placementBottom : styles.placementTop} ${alignClass}`}
+                style={maxHeight === null ? undefined : { maxHeight: `${maxHeight}px` }}
+            >
+                {label}
+            </span>
         </span>
     );
 }

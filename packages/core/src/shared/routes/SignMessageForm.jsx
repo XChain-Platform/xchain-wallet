@@ -238,6 +238,19 @@ export function SignMessageForm({ walletId, onBack }) {
         <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
     );
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign messages. Open the message in a
+                        Full-mode or Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
