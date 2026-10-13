@@ -115,6 +115,10 @@ describe('IssueTokenForm initial mint', () => {
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+
+        await user.keyboard('{Escape}');
+        expect(await screen.findByLabelText('Ticker')).toHaveValue('KEYS');
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
     });
 
     it.each([
