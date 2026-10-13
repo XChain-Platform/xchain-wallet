@@ -1257,7 +1257,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             return undefined;
         }
         let cancelled = false;
-        setChainBalanceState({ chainId, status: 'loading' });
+        // A re-check for a chain already judged keeps its last status, so a
+        // refreshed address map never swaps the form for a loading line.
+        setChainBalanceState((prev) => (
+            prev.chainId === chainId ? prev : { chainId, status: 'loading' }
+        ));
         messaging.getWalletBalances(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -2315,9 +2319,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
+    // Switching chains after a first check keeps the form mounted (typed or
+    // pasted values stay put) while the new chain is checked.
     const selectedChainBalanceStatus = chainBalanceState.chainId === chainId
         ? chainBalanceState.status
-        : 'loading';
+        : (chainBalanceState.chainId === null ? 'loading' : 'unknown');
     if (!isWatcherMode && selectedChainBalanceStatus === 'loading') {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
