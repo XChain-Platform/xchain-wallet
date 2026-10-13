@@ -5,9 +5,22 @@
 
 import React from 'react';
 import { render } from '@testing-library/react';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import '../../../packages/core/src/ui/tokens.css';
+
+// jsdom has no canvas, and lightweight-charts cannot parse jsdom's default
+// computed color (`canvastext`), so a real chart throws from a later draw
+// after the test has moved on. This suite measures layout, not the chart, so
+// the chart gets the same inert stub the MarketChart unit tests use.
+vi.mock('lightweight-charts', () => ({
+    createChart: () => ({
+        addLineSeries: () => ({ setData() {}, applyOptions() {} }),
+        timeScale: () => ({ fitContent() {} }),
+        applyOptions() {},
+        remove() {},
+    }),
+}));
 
 const VIEWPORT_WIDTHS = [320, 360, 412];
 // The K51 accessibility venue applies Android's 1.3 font scale to the
