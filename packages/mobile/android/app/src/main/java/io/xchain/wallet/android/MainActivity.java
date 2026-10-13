@@ -53,6 +53,12 @@ public class MainActivity extends BridgeActivity {
         routeBackKeyToTheSpa();
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        dispatchFontScale();
+    }
+
     /** Releases the launch splash after the SPA has committed its shell. */
     public void markShellReady() {
         shellReady = true;
@@ -62,6 +68,7 @@ public class MainActivity extends BridgeActivity {
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         configureWebViewLayout();
+        dispatchFontScale();
     }
 
     private void configureSystemBars() {
@@ -82,13 +89,20 @@ public class MainActivity extends BridgeActivity {
         webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
     }
 
+    private void dispatchFontScale() {
+        Bridge bridge = getBridge();
+        if (bridge == null || bridge.getPlugin("App") == null) return;
+        XChainAppPlugin app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
+        app.dispatchFontScale(getResources().getConfiguration().fontScale);
+    }
+
     /**
      * Send the system Back gesture to the SPA's topmost back handler.
      *
-     * The narrow App plugin exposes only the back event and minimization. The
-     * SPA handler stack closes overlays before routes and preserves in-route
-     * stages that do not create browser history entries. With no listener,
-     * the task moves to the background instead of destroying the flow.
+     * The narrow App plugin exposes Back beside the font-scale bridge. The SPA
+     * handler stack closes overlays before routes and preserves in-route stages
+     * that do not create browser history entries. With no listener, the task
+     * moves to the background instead of destroying the flow.
      */
     private void routeBackKeyToTheSpa() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {

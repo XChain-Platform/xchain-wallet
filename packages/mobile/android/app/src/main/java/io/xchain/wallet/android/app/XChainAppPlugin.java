@@ -20,10 +20,11 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-/** The two App-plugin capabilities required by Android hardware Back. */
+/** The narrow App-plugin capabilities required by the Android shell. */
 @CapacitorPlugin(name = "App")
 public class XChainAppPlugin extends Plugin {
     private static final String BACK_BUTTON = "backButton";
+    private static final String FONT_SCALE_CHANGED = "fontScaleChanged";
 
     /**
      * Give the SPA first refusal on Back.
@@ -36,6 +37,26 @@ public class XChainAppPlugin extends Plugin {
         payload.put("canGoBack", canGoBack);
         notifyListeners(BACK_BUTTON, payload, false);
         return true;
+    }
+
+    /** Keep WebView zoom fixed while exposing the user's system text preference. */
+    public void dispatchFontScale(float fontScale) {
+        JSObject payload = new JSObject();
+        payload.put("fontScale", fontScale);
+        notifyListeners(FONT_SCALE_CHANGED, payload, true);
+    }
+
+    /** Return the current scale when the web listener attaches after startup. */
+    @PluginMethod
+    public void getFontScale(PluginCall call) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("No activity is available.");
+            return;
+        }
+        JSObject payload = new JSObject();
+        payload.put("fontScale", activity.getResources().getConfiguration().fontScale);
+        call.resolve(payload);
     }
 
     /** Put the task in the background without destroying its current flow. */
