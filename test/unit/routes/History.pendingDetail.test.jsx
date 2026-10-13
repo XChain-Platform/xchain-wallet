@@ -360,13 +360,14 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed, no effect')).toBeTruthy();
-        expect(within(panel).getByText('Included in block 67,881,853')).toBeTruthy();
+        const confirmedBlock = (67881853).toLocaleString();
+        expect(within(panel).getByText(`Included in block ${confirmedBlock}`)).toBeTruthy();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
         expect(region.textContent).not.toMatch(/may never have reached/i);
         expect(region.textContent).not.toMatch(/no longer in (the )?mempool/i);
         expect(region.textContent).not.toContain('Pending, not yet validated by the service.');
         // The timeline reads the same proof: the block is a done stage.
-        expect(within(region).getByText('Confirmed at block 67,881,853')).toBeTruthy();
+        expect(within(region).getByText(`Confirmed at block ${confirmedBlock}`)).toBeTruthy();
         // And a mined transaction is not offered a fee bump.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
