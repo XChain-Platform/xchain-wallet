@@ -13,19 +13,25 @@
 // the lazy path is exercised end-to-end (unlike the Node smoke, which
 // registers pseudo-rtl by hand because plain Node has no import.meta.glob).
 
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-import {
-    availableLocales,
-    getDirection,
-    getLocale,
-    setLocale,
-    t,
-} from '../../packages/core/src/i18n/index.js';
+let availableLocales;
+let getDirection;
+let getLocale;
+let setLocale;
+let t;
 
 beforeEach(async () => {
-    // Reset to a known baseline; en is always statically registered.
-    if (getLocale() !== 'en') await setLocale('en');
+    // Each case gets an unloaded locale registry so lazy-path assertions do
+    // not depend on whether an earlier case has already cached the chunk.
+    vi.resetModules();
+    ({
+        availableLocales,
+        getDirection,
+        getLocale,
+        setLocale,
+        t,
+    } = await import('../../packages/core/src/i18n/index.js'));
 });
 
 describe('lazy locale loading', () => {
