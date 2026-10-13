@@ -16,6 +16,7 @@ const sharedRoot = join(
 const componentsRoot = join(sharedRoot, 'components');
 const uiRoot = join(sharedRoot, '../ui');
 const tokensPath = join(sharedRoot, '../ui/tokens.css');
+const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.css');
 const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
@@ -158,6 +159,32 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
     expect(loading).toMatch(
         /\.dots > span\s*\{[^}]*width:\s*var\(--xc-space-2\)[^}]*height:\s*var\(--xc-space-2\)/s,
     );
+});
+
+it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale insets', () => {
+    const css = readFileSync(viewPrivateKeyStylesPath, 'utf8');
+    const lines = css.split('\n');
+    const rawPixelDeclarations = lines.flatMap((line, index) => {
+        const match = line.match(/^\s*([\w-]+)\s*:\s*([^;]*\d+(?:\.\d+)?px[^;]*);/);
+        if (!match) return [];
+        return [{
+            declaration: `${match[1]}: ${match[2]}`,
+            precedingLine: lines[index - 1]?.trim(),
+        }];
+    });
+
+    expect(rawPixelDeclarations.map(({ declaration }) => declaration)).toEqual([
+        'border: 1px solid var(--xc-border)',
+        'padding: 2px var(--xc-space-1)',
+        'border: 1px solid var(--xc-border)',
+        'border: 1px dashed var(--xc-border-strong)',
+        'outline: 2px solid var(--xc-focus-ring)',
+        'outline-offset: 2px',
+        'border: 1px solid var(--xc-border)',
+    ]);
+    for (const { precedingLine } of rawPixelDeclarations) {
+        expect(precedingLine).toMatch(/^\/\* .+ \*\/$/);
+    }
 });
 
 it('lists raw pixel paddings on card-like module CSS rules', () => {
