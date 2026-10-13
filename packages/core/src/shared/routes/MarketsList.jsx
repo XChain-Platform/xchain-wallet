@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -61,18 +61,23 @@ export function MarketsList({
     const [marketsReload, setMarketsReload] = useState(0);
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
+    const watchlistRequestId = useRef(0);
 
     const loadWatchlist = useCallback(async () => {
+        const requestId = ++watchlistRequestId.current;
         try {
             const rows = await messaging.listWatchlistForWallet({ walletId });
+            if (requestId !== watchlistRequestId.current) return;
             setWatchlist(Array.isArray(rows) ? rows : []);
         } catch {
+            if (requestId !== watchlistRequestId.current) return;
             setWatchlist([]);
         }
     }, [walletId, messaging]);
 
     useEffect(() => {
         loadWatchlist();
+        return () => { watchlistRequestId.current += 1; };
     }, [loadWatchlist]);
 
     useEffect(() => {
