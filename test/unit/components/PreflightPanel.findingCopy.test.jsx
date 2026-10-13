@@ -55,6 +55,16 @@ const DISPENSER_GIVE_AMOUNT = {
 };
 
 describe('PreflightPanel warning copy (§5.2.4)', () => {
+    it('groups the checked block height', () => {
+        mount({ ...reportWith(), stateHeight: 1234567 });
+        expect(screen.getByText('Checked at block 1,234,567')).toBeTruthy();
+    });
+
+    it('groups the unverified check count', () => {
+        mount(reportWith({ unverified: Array(1234) }));
+        expect(screen.getByText('Could not verify (1,234)')).toBeTruthy();
+    });
+
     it('leads a warning with plain copy and keeps the SDK sentence as the detail', () => {
         mount(reportWith({ findings: [DISPENSER_GIVE_AMOUNT] }));
         const row = screen.getByTestId('preflight-warning-AMOUNT_NOT_POSITIVE');

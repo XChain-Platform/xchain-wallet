@@ -144,7 +144,7 @@ describe('diagnostic text safety', () => {
     });
 
     it('redacts every field and caps the rendered finding count', () => {
-        const items = Array.from({ length: 205 }, (_, index) => ({
+        const items = Array.from({ length: 1205 }, (_, index) => ({
             subject: index === 0 ? 'address=0x1234567890abcdef1234567890abcdef12345678' : `subject-${index}`,
             message: index === 0 ? 'balance=99.5' : `message-${index}`,
             location: index === 0 ? 'password=secret' : `file-${index}`,
@@ -156,7 +156,7 @@ describe('diagnostic text safety', () => {
         expect(container.textContent).not.toContain('99.5');
         expect(container.textContent).not.toContain('secret');
         expect(container.textContent).not.toContain('summary-secret');
-        expect(screen.getByText('Showing the first 200 of 205 findings.')).toBeTruthy();
+        expect(screen.getByText('Showing the first 200 of 1,205 findings.')).toBeTruthy();
     });
 });
 
@@ -185,19 +185,19 @@ describe('DiagnosticDetails keepAddresses', () => {
 
 describe('LogConsole safety and controls', () => {
     it('renders only the newest 200 redacted entries', () => {
-        mocks.entries = Array.from({ length: 205 }, (_, index) => ({
+        mocks.entries = Array.from({ length: 1205 }, (_, index) => ({
             id: index,
             timestamp: index,
             level: 'log',
             source: `source-${index}`,
-            message: index === 204 ? 'password=visible-secret' : `message-${index}`,
+            message: index === 1204 ? 'password=visible-secret' : `message-${index}`,
         }));
         render(<LogConsole />);
 
         expect(screen.getByRole('log').children).toHaveLength(200);
         expect(screen.queryByText('message-0')).toBeNull();
         expect(screen.queryByText(/visible-secret/)).toBeNull();
-        expect(screen.getByText('Showing 200 of 205 matching entries (205 total).')).toBeTruthy();
+        expect(screen.getByText('Showing 200 of 1,205 matching entries (1,205 total).')).toBeTruthy();
     });
 
     it('copies all redacted entries regardless of the active search and clears the buffer', async () => {

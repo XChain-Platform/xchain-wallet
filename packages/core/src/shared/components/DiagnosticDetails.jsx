@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const MAX_VISIBLE_ITEMS = 200;
 
@@ -43,7 +44,10 @@ export function DiagnosticDetails({ summary, items, className, keepAddresses = f
                 })}
             </ul>
             {items.length > visibleItems.length ? (
-                <p>Showing the first {visibleItems.length} of {items.length} findings.</p>
+                <p>
+                    Showing the first {formatDecimalAmount(visibleItems.length)} of{' '}
+                    {formatDecimalAmount(items.length)} findings.
+                </p>
             ) : null}
         </details>
     );

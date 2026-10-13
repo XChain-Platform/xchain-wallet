@@ -78,6 +78,14 @@ describe('ListPickerScreen description detail', () => {
         expect(await detailText('10')).toBe('2 members');
     });
 
+    it('groups large member counts', async () => {
+        renderPicker(
+            [{ action_index: '10', type: '2' }],
+            { type: '2', list: Array.from({ length: 1234 }, (_, index) => `member-${index}`) },
+        );
+        expect(await detailText('10')).toBe('1,234 members');
+    });
+
     it('shows today\'s text for an empty description', async () => {
         renderPicker([{ action_index: '10', type: '2', description: '' }]);
         expect(await detailText('10')).toBe('2 members');

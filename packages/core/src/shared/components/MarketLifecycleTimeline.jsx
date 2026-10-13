@@ -25,6 +25,7 @@
 import { useEffect, useState } from 'react';
 import S from './MarketLifecycleTimeline.module.css';
 import { StatusMessage } from '@xchain-wallet/core/ui';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const LABEL = {
     created: 'Created',
@@ -133,10 +134,10 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
                     <span className={S.label}>{LABEL[e.kind] || e.kind}</span>
                     <span className={S.meta}>
                         {e.kind === 'matches' && e.row.give_amount != null
-                            ? `${e.row.give_amount} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
+                            ? `${formatDecimalAmount(e.row.give_amount)} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
                             : e.row.block_index != null
-                                ? `block ${e.row.block_index}`
-                                : (e.row.action_index != null ? `#${e.row.action_index}` : '')}
+                                ? `block ${formatDecimalAmount(e.row.block_index)}`
+                                : (e.row.action_index != null ? `#${formatDecimalAmount(e.row.action_index)}` : '')}
                     </span>
                 </li>
             ))}

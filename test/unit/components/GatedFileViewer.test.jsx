@@ -20,6 +20,7 @@ import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { MarketLifecycleTimeline } from '../../../packages/core/src/shared/components/MarketLifecycleTimeline.jsx';
+import { registerLocale, setLocale } from '../../../packages/core/src/i18n/index.js';
 
 const b64 = (input) => Buffer.from(input).toString('base64');
 const PNG_BYTES = Buffer.concat([
@@ -28,13 +29,17 @@ const PNG_BYTES = Buffer.concat([
 ]);
 
 beforeAll(() => {
+    registerLocale('de-DE', {});
     // jsdom ships no blob-URL support; the viewer only hands the URL
     // to <img>, so a marker string is enough to observe the wiring.
     URL.createObjectURL = vi.fn(() => 'blob:viewer-test');
     URL.revokeObjectURL = vi.fn();
 });
 
-afterEach(cleanup);
+afterEach(async () => {
+    cleanup();
+    await setLocale('en');
+});
 
 function show(props) {
     return render(
@@ -109,6 +114,17 @@ describe('GatedFileViewer render decisions', () => {
         const { getByText } = show({ declaredType: 'text/plain', plaintextBase64: b64('hello') });
         expect(getByText('Download')).toBeTruthy();
         expect(getByText(/detected: plain text/)).toBeTruthy();
+    });
+
+    it('groups the unlocked file size', () => {
+        show({ declaredType: 'text/plain', plaintextBase64: b64('x'.repeat(1234)) });
+        expect(screen.getByText(/1,234 bytes/)).toBeTruthy();
+    });
+
+    it('uses the active locale for the unlocked file size', async () => {
+        await setLocale('de-DE');
+        show({ declaredType: 'text/plain', plaintextBase64: b64('x'.repeat(1234)) });
+        expect(screen.getByText(/1\.234 bytes/)).toBeTruthy();
     });
 
     it('announces invalid unlocked data as a failure and disables Download', () => {
@@ -186,5 +202,28 @@ describe('MarketLifecycleTimeline states', () => {
         for (const label of ['Created', 'Edited', 'Filled / matched', 'Expired', 'Cancelled']) {
             expect(screen.getByText(label)).toBeTruthy();
         }
+    });
+
+    it('groups lifecycle amounts and action indices', async () => {
+        const rows = {
+            edits: [{ order_action_index: 7, action_index: 1234567 }],
+            matches: [{
+                give_action_index: 7,
+                action_index: 12,
+                block_index: 1234567,
+                give_amount: '1234567.89',
+                give_tick: 'XCH',
+            }],
+            expires: [{ order_action_index: 7, action_index: 13, block_index: 1234567 }],
+            cancels: [],
+        };
+        const messaging = {
+            getOrderLifecycle: vi.fn(({ kind }) => Promise.resolve({ data: rows[kind] })),
+        };
+        render(<MarketLifecycleTimeline {...baseProps} messaging={messaging} />);
+
+        expect(await screen.findByText('1,234,567.89 XCH')).toBeTruthy();
+        expect(screen.getByText('block 1,234,567')).toBeTruthy();
+        expect(screen.getByText('#1,234,567')).toBeTruthy();
     });
 });

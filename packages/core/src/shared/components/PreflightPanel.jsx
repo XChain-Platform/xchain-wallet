@@ -29,6 +29,7 @@ import {
     preflightFindingKey,
 } from '../utils/preflightFindingKey.js';
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -408,7 +409,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {report.unverified && report.unverified.length > 0 ? (
                 <details className={styles.unverifiedList}>
-                    <summary>Could not verify ({report.unverified.length})</summary>
+                    <summary>Could not verify ({formatDecimalAmount(report.unverified.length)})</summary>
                     <ul>
                         {report.unverified.map((u, i) => {
                             const { headline, detail } = unverifiedText(u);
@@ -426,7 +427,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className={styles.stamp}>Checked at block {report.stateHeight}</div>
+                <div className={styles.stamp}>Checked at block {formatDecimalAmount(report.stateHeight)}</div>
             ) : null}
         </div>
     );
