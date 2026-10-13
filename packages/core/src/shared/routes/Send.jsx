@@ -419,6 +419,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const [recipientErrors, setRecipientErrors] = useState(
         /** @type {Record<string, { to?: string, amount?: string, tick?: string }>} */ ({}),
     );
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [tokenPickerRecipientId, setTokenPickerRecipientId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -1753,6 +1754,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -3022,6 +3024,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
                                 suggestions={suggestions}
                                 placeholder={t('send.destination.placeholder')}
+                                errorKey={validationAttempt}
                                 error={recipientErrors[leg.id]?.to
                                     || (leg.to.trim() && destinationAddressError(leg.to, descriptor)
                                         ? destinationAddressError(leg.to, descriptor)
@@ -3045,6 +3048,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 value={leg.amount}
                                 onChange={(e) => updateRecipient(leg.id, { amount: e.target.value })}
                                 autoComplete="off"
+                                errorKey={validationAttempt}
                                 error={recipientErrors[leg.id]?.amount}
                             />
                         </div>

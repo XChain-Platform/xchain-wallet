@@ -163,6 +163,21 @@ describe('<Input>', () => {
         expect(control.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
     });
 
+    it('shows the same error again when its key changes', () => {
+        const view = render(
+            <Input label="Name" error="Required" errorKey={1} defaultValue="" />,
+        );
+        const input = screen.getByLabelText('Name');
+        fireEvent.change(input, { target: { value: 'x' } });
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        view.rerender(
+            <Input label="Name" error="Required" errorKey={2} defaultValue="" />,
+        );
+        expect(screen.getByRole('alert')).toHaveTextContent('Required');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+    });
+
     it('renders and updates an input character counter described by the field', () => {
         render(<Input label="Alias" defaultValue="abc" maxLength={10} />);
         const input = screen.getByLabelText('Alias');
