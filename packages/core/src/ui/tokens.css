@@ -39,6 +39,10 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
+    /* Screen owns page-edge spacing so route content stays geometry-free. */
+    --xc-page-gutter: var(--xc-space-3);
+    --xc-page-top: var(--xc-space-3);
+
     /* Typography - platform fonts remain available when the web font fails. */
     --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;

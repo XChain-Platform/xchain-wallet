@@ -19,6 +19,9 @@ import styles from './FormPage.module.css';
  *   narrow (< 600px)  fields sit bare on the page gutter, no card
  *   wide  (>= 600px)  the form sits in one card, a centred 560px column
  *
+ * Screen owns the page gutter and top spacing. The wide card centres within
+ * that content box without adding its own top margin.
+ *
  * Pass `sectioned` when the children are FormSections: each section then
  * becomes its own card when wide, and a heading-divided block when narrow.
  * The action row always closes the form, below the last field or section,
