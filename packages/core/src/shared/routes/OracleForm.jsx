@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -115,7 +115,6 @@ function staleAgeText(seconds) {
 export function OracleForm({ walletId, onBack, initialChainId, initialFromAddress, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const {
         addressesByChain,
@@ -413,9 +412,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     // The oracle-only facts that must sit in front of the signature on both
@@ -505,8 +502,24 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>{decoded?.summary}</p>
+            <FormPage
+                label="Review price publish"
+                onSubmit={handleSubmit}
+                intro={decoded?.summary}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={needsTypedConfirm ? 'danger' : 'primary'}
+                        loading={stage === 'submitting'}
+                        disabled={!typedConfirmOk}
+                    >
+                        Create unsigned transaction
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
@@ -533,19 +546,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     Watcher mode: this wallet will build an unsigned transaction. Sign it on your
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
-                {submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={needsTypedConfirm ? 'danger' : 'primary'}
-                        loading={stage === 'submitting'}
-                        disabled={!typedConfirmOk}
-                    >
-                        Create unsigned transaction
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -571,14 +572,34 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     };
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.hint}>
+        <FormPage
+            label="Publish oracle price"
+            onSubmit={handleReview}
+            sectioned
+            intro={(
+                <>
                 An oracle publishes what one unit of a token is worth in a traditional currency.
                 Dispensers can then price in that currency, and a buyer pays in {priceCoin || 'the chain coin'} at
                 the going rate. Anyone can run one; whoever opens a dispenser against your oracle
                 pays you the usage fee you set below.
-            </p>
+                </>
+            )}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
+                </Button>
+            )}
+        >
 
+            <FormSection title="My published prices">
             {/*
               * Pick the PUBLISHING chain: it decides which address signs, pays
               * the fee and becomes the oracle's identity. The priced token's
@@ -606,7 +627,6 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
 
-            <p className={styles.successLabel}>My published prices</p>
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
             ) : feeds.length === 0 ? (
@@ -643,8 +663,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 </ul>
             )}
             {feedsError ? <p className={styles.hint}>{feedsError}</p> : null}
+            </FormSection>
 
-            <p className={styles.successLabel}>Publish a price</p>
+            <FormSection title="Publish a price">
             <Select
                 label="Token's chain"
                 hint={crossChain
@@ -717,19 +738,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
-                </Button>
-            </div>
-        </form>,
+            </FormSection>
+        </FormPage>,
     );
 }
 

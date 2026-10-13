@@ -122,16 +122,16 @@ assert.ok(
 
 const addrSrc = readFileSync(join(routes, 'AddressList.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\.\/components\/EmptyStateNudge\.jsx['"]/.test(addrSrc),
-    'AddressList imports EmptyStateNudge',
+    /import\s*\{[^}]*\bEmptyState\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(addrSrc),
+    'AddressList imports the shared EmptyState template',
 );
 assert.ok(
     /onReceive/.test(addrSrc),
     'AddressList accepts onReceive prop',
 );
 assert.ok(
-    /<EmptyStateNudge\b/.test(addrSrc),
-    'AddressList renders <EmptyStateNudge> in its empty branch',
+    /<EmptyState\b/.test(addrSrc),
+    'AddressList renders <EmptyState> in its empty branch',
 );
 
 // --- 6. App.jsx wires onReceive into both routes -------------------------

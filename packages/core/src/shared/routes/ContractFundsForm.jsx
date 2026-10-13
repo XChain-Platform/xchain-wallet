@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -73,7 +73,6 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isDeposit = mode === 'deposit';
     const verb = isDeposit ? 'Deposit' : 'Withdraw';
     const preposition = isDeposit ? 'to' : 'from';
@@ -435,10 +434,32 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
-                    {verb} {actionParams.QUANTITY} {actionParams.TICK} {preposition} contract #{actionParams.CONTRACT_ACTION_INDEX}.
-                </p>
+            <FormPage
+                label={`Review ${verb.toLowerCase()}`}
+                onSubmit={handleSubmit}
+                intro={`${verb} ${actionParams.QUANTITY} ${actionParams.TICK} ${preposition} contract #${actionParams.CONTRACT_ACTION_INDEX}.`}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -489,28 +510,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -562,12 +562,10 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     if (tokenPickerOpen && !isDeposit) {
         const rows = contractBalanceRows(contractBalances);
         return wrap(
-            <div>
-                <p className={styles.pickerLabel}>Tokens held by the contract</p>
+            <ListPage>
+                <SectionHeader title="Tokens held by the contract" />
                 {rows.length === 0 ? (
-                    <p className={styles.hint}>
-                        This contract holds no tokens right now.
-                    </p>
+                    <EmptyState title="This contract holds no tokens right now." titleAs="h3" />
                 ) : (
                     <ul className={styles.detailsList}>
                         {rows.map((row) => (
@@ -594,7 +592,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                         Back
                     </Button>
                 </div>
-            </div>,
+            </ListPage>,
         );
     }
 
@@ -618,12 +616,32 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            {withdrawRefused ? (
-                <StatusMessage variant="error" className={styles.error}>
-                    {OWNER_WITHDRAW_DISABLED_REASON}
-                </StatusMessage>
+        <FormPage
+            label={`${verb} ${preposition} contract`}
+            onSubmit={handleReview}
+            status={withdrawRefused || formError ? (
+                <>
+                    {withdrawRefused ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {OWNER_WITHDRAW_DISABLED_REASON}
+                        </StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                </>
             ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={withdrawRefused || !fromAddress || !tick.trim() || !quantity || actionConfirm.composing}
+                >
+                    {singleEncode ? verb : 'Preview'}
+                </Button>
+            )}
+        >
             {isDeposit ? <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} /> : null}
             {/* The target contract pins the network, so the field is single-option. */}
             <NetworkField value={chainId} onChange={() => {}} chainIds={[chainId]} chainRegistry={chainRegistry} />
@@ -679,20 +697,6 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={withdrawRefused || !fromAddress || !tick.trim() || !quantity || actionConfirm.composing}
-                >
-                    {singleEncode ? verb : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

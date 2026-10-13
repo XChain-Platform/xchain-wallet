@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -47,7 +47,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const { settings } = useSettings();
 
@@ -142,21 +141,14 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         });
     }
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             title="Dispenser explorer"
         />
     );
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div style={{ padding: '1rem' }}>{children}</div> : children}
-        </Screen>
-    );
-
-    return wrap(
-        <>
-            <form onSubmit={handleSearch} noValidate style={{ marginBottom: '1rem' }}>
+    const toolbar = (
+        <form onSubmit={handleSearch} noValidate>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     <label>
                         <input
@@ -198,6 +190,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     </select>
                 </label>
                 <Input
+                    type="search"
+                    role="textbox"
                     label={searchMode === 'token' ? 'Token ticker' : 'Address'}
                     hint={searchMode === 'token'
                         ? 'Ticker name (e.g. MYTOKEN) or TICK_ID reference (e.g. ^1234).'
@@ -224,8 +218,12 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         Search
                     </Button>
                 </div>
-            </form>
+        </form>
+    );
 
+    return (
+        <Screen variant={variant} header={header}>
+            <ListPage toolbar={toolbar}>
             {lastQueried ? (
                 <ResultsPane
                     rowsByChain={rowsByChain}
@@ -239,7 +237,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     a specific creator's or dispenser's listings.
                 </p>
             )}
-        </>,
+            </ListPage>
+        </Screen>
     );
 }
 
@@ -249,7 +248,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
     }
     const entries = Object.entries(rowsByChain);
     if (entries.length === 0) {
-        return <p className={styles.entryDescription}>No results.</p>;
+        return <EmptyState title="No results." />;
     }
     // Surface an overall-error row when the precondition failed (e.g.,
     // invalid token regex). That uses the sentinel "_error" key.
@@ -270,7 +269,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
     // The raw-404 complaint only ever became visible because ONE chain
     // happened to return rows; the total-failure case was silently worse.
     if (!anyRow && !anyError) {
-        return <p className={styles.entryDescription}>No open dispensers matched.</p>;
+        return <EmptyState title="No open dispensers matched." />;
     }
     return (
         <>
@@ -280,11 +279,11 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
                 if (state.rows.length === 0 && !state.error) return null;
                 return (
                     <section key={cid} style={{ marginBottom: '1rem' }}>
-                        <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {d
+                        <SectionHeader
+                            title={d
                                 ? <ChainBadge descriptor={d} size="sm" />
                                 : <span>{cid}</span>}
-                        </header>
+                        />
                         {state.error ? (
                             <StatusMessage variant="error" className={styles.entryDescription}>
                                 Couldn't search: {state.error}
