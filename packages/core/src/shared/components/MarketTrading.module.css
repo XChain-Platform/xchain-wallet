@@ -16,9 +16,7 @@
 }
 
 .sideToggle {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--xc-space-2);
+    width: 100%;
     margin-bottom: var(--xc-space-2);
 }
 
@@ -45,7 +43,6 @@
            container, which already sits below the shell's safe-area padding. */
         top: 0;
         z-index: var(--xc-z-base);
-        padding-block: var(--xc-space-1);
         background: var(--xc-surface);
     }
 }

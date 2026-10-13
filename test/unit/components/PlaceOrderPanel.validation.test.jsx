@@ -79,7 +79,7 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('accepts grouped decimal entry and uses theme tokens for side controls', async () => {
+    it('accepts grouped decimal entry and selects the order side as a radio group', async () => {
         mount();
         const price = await screen.findByLabelText('Price (BTC)');
         fireEvent.change(price, { target: { value: '1,234.5' } });
@@ -87,12 +87,15 @@ describe('PlaceOrderPanel validation', () => {
         expect(price.style.textAlign).toBe('right');
         expect(price.style.fontVariantNumeric).toBe('tabular-nums');
 
-        const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
-        const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
+        const buy = screen.getByRole('radio', { name: 'Buy XCHAIN' });
+        const sell = screen.getByRole('radio', { name: 'Sell XCHAIN' });
         expect(buy.parentElement.className).toMatch(/sideToggle/);
-        expect(buy.style.background).toBe('var(--xc-success)');
-        expect(sell.style.background).toBe('var(--xc-danger)');
-        expect(buy.style.color).toBe('var(--xc-on-accent)');
+        expect(buy).toHaveAttribute('aria-checked', 'true');
+        expect(buy).toHaveAttribute('data-tone', 'success');
+        expect(sell).toHaveAttribute('data-tone', 'danger');
+        fireEvent.keyDown(buy, { key: 'ArrowRight' });
+        expect(sell).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('button', { name: 'Place sell order' })).toBeEnabled();
 
         const expiration = screen.getByRole('combobox', { name: 'Expiration' });
         fireEvent.change(expiration, { target: { value: 'custom' } });
@@ -103,7 +106,7 @@ describe('PlaceOrderPanel validation', () => {
         mount({}, {}, 360);
 
         await screen.findByLabelText('Price (BTC)');
-        expect(screen.getByRole('group', { name: 'Order side' }).className).toMatch(/sideToggle/);
+        expect(screen.getByRole('radiogroup', { name: 'Order side' }).className).toMatch(/sideToggle/);
         expect(screen.getByRole('group', { name: 'Price and amount' }).className).toMatch(/priceAmountFields/);
 
         const tradingCss = readFileSync(resolve(

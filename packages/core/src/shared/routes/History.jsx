@@ -21,6 +21,7 @@ import {
     ListRow,
     PageHeader,
     Screen,
+    SegmentedControl,
     SectionHeader,
     Skeleton,
     StatusMessage,
@@ -1870,24 +1871,15 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
                             : t('history.filters.showFiat')}
                     </Button>
-                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
-                        {/* Native buttons preserve the segmented control's composite radio role. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'grouped'}
-                            onClick={() => setGroupingMode('grouped')}
-                            className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.grouped')}</button>
-                        {/* Native buttons preserve the segmented control's composite radio role. */}
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked={groupingMode === 'flat'}
-                            onClick={() => setGroupingMode('flat')}
-                            className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
-                        >{t('history.filters.flat')}</button>
-                    </div>
+                    <SegmentedControl
+                        aria-label={t('history.filters.groupingMode')}
+                        value={groupingMode}
+                        onChange={setGroupingMode}
+                        items={[
+                            { id: 'grouped', label: t('history.filters.grouped') },
+                            { id: 'flat', label: t('history.filters.flat') },
+                        ]}
+                    />
                 </div>
 
                 {moreFiltersOpen ? (
