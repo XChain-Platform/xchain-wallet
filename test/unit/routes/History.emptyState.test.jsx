@@ -8,7 +8,7 @@
 // rows that exist.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -38,7 +38,9 @@ afterEach(() => cleanup());
 describe('History empty state', () => {
     it('says there is no activity yet when the wallet has no history', async () => {
         mount();
-        expect(await screen.findByText('No activity yet')).toBeInTheDocument();
+        // History re-renders once the per-chain loads settle; wait on the
+        // settled screen rather than the first node that matched.
+        await waitFor(() => expect(screen.getByText('No activity yet')).toBeInTheDocument());
         expect(screen.queryByText(/No matches/)).toBeNull();
     });
 
