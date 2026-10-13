@@ -2680,7 +2680,7 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
 const DETAIL_FIELD_LABELS = Object.freeze({
     action: 'Action',
     action_index: 'Action number',
-    address: 'Wallet address',
+    address: 'Address',
     block_index: 'Block',
     chain: 'Chain',
     chain_id: 'Chain',
@@ -2805,7 +2805,7 @@ function fullDetailRows(entry, balancesHidden = false) {
         )]);
     }
     if (entry.address) {
-        rows.push(['Wallet address', (
+        rows.push(['Address', (
             <CopyableValue
                 display={entry.address}
                 fullValue={entry.address}

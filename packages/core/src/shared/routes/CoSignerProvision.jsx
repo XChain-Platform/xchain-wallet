@@ -97,7 +97,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 setChainId(btcWithAddresses);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet addresses.');
+                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
     }, [walletId, btcChainIds, messaging]);

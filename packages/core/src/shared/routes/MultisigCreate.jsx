@@ -131,8 +131,8 @@ export function MultisigCreate({ walletId, onBack }) {
                 setChainId(btcWithAddresses);
             })
             .catch((err) => {
-                console.error('MultisigCreate: load wallet addresses failed:', err); // eslint-disable-line no-console
-                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet addresses.'));
+                console.error('MultisigCreate: load addresses failed:', err); // eslint-disable-line no-console
+                if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, btcChainIds, messaging]);

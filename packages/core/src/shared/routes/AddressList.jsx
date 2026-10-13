@@ -1464,7 +1464,7 @@ export function AddressList({
                         : "Try a different search or network filter."}
                 />
             ) : (
-            <ul className={local.addrList} aria-label="Wallet addresses">
+            <ul className={local.addrList} aria-label="Addresses">
                 {listedRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (

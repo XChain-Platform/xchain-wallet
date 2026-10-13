@@ -92,7 +92,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 setAddressesByChain(byChain || {});
             })
             .catch(() => {
-                if (!cancelled) setAddressesError('Could not load wallet addresses. Try again.');
+                if (!cancelled) setAddressesError('Could not load addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);

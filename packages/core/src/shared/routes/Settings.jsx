@@ -221,7 +221,7 @@ export function Settings({
         {
             id: 'backup',
             title: 'Backup',
-            description: 'Seed phrase, dry-run restore, encrypted backup file.',
+            description: 'Recovery phrase, dry-run restore, encrypted backup file.',
             keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,

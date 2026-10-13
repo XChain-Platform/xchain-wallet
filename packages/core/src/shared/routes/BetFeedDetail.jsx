@@ -719,7 +719,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 ? 'Bet placed.'
                                 : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
                                   + 'by the block it lands in, so the network will most likely reject this one. '
-                                  + 'The miner fee and the protocol fee are spent either way.'}
+                                  + 'The network fee and the protocol fee are spent either way.'}
                     </p>
                     {result?.queued ? null : (
                         <dl className={styles.detailsList}>

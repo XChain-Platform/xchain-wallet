@@ -13,7 +13,7 @@
 // Live:
 //   - Export encrypted backup (.xchain-wallet): wires `exportBackupFile`
 //     core flow through the `wallet.exportBackup` host handler.
-//   - Back up seed phrase: wires `revealMnemonic` core flow through
+//   - Back up recovery phrase: wires `revealMnemonic` core flow through
 //     the `wallet.revealMnemonic` host handler. Inline password gate;
 //     mnemonic blurred until tapped; row collapses on done.
 //   - Test backup (dry-run restore): wires `dryRunRestore` core flow
@@ -194,7 +194,7 @@ export function BackupSection({ activeWallet }) {
 
     const onReveal = async (password) => {
         if (typeof messaging?.revealMnemonicRequest !== 'function') {
-            setRevealError('Seed reveal is not wired in this shell yet.');
+            setRevealError('Recovery phrase reveal is not wired in this shell yet.');
             return;
         }
         if (!activeWallet?.id) {
@@ -216,7 +216,7 @@ export function BackupSection({ activeWallet }) {
         } catch (err) {
             const name = err?.name || '';
             const msg = name === 'NoMnemonicForWifOnlyError'
-                ? 'This wallet was imported from a private key only. There is no seed phrase to reveal.'
+                ? 'This wallet was imported from a private key only. There is no recovery phrase to reveal.'
                 : passwordStepFailure(err, 'Could not show the recovery phrase. Try again.');
             setRevealError(msg);
         } finally {
@@ -436,8 +436,8 @@ export function BackupSection({ activeWallet }) {
 
             {revealStage === 'password' ? (
                 <UnlockPrompt
-                    label="Reveal seed phrase"
-                    hint="Enter your wallet password. The seed phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    label="Reveal recovery phrase"
+                    hint="Enter your wallet password. The recovery phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
                     busy={revealing}
                     onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
                     onSubmit={(pw) => onReveal(pw)}
@@ -456,8 +456,8 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Back up seed phrase"
-                    hint="Reveal the wallet's seed phrase so you can copy it onto paper or another device. Requires the wallet password every time."
+                    label="Back up recovery phrase"
+                    hint="Reveal the wallet's recovery phrase so you can copy it onto paper or another device. Requires the wallet password every time."
                     actionLabel="Show…"
                     disabled={!activeWallet}
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
@@ -716,7 +716,7 @@ function RevealedMnemonic({
             borderRadius: 'var(--xc-radius-md)',
         }}>
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                Your seed phrase
+                Your recovery phrase
             </div>
             <div className={styles.sheetMeta}>Wallet: {walletName}</div>
             <div style={ROW_HINT}>
@@ -727,7 +727,7 @@ function RevealedMnemonic({
             <button
                 type="button"
                 onClick={onToggle}
-                aria-label={hidden ? 'Reveal seed phrase' : 'Hide seed phrase'}
+                aria-label={hidden ? 'Reveal recovery phrase' : 'Hide recovery phrase'}
                 className={styles.secret}
                 style={{
                     background: 'var(--xc-bg)',

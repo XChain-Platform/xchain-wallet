@@ -1028,7 +1028,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 {' · '}
                 <strong>Total out:</strong> {formatExactSats(totalOut)} sats
                 {' · '}
-                <strong>Fee:</strong> {formatExactSats(fee)} sats
+                <strong>Network fee:</strong> {formatExactSats(fee)} sats
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
