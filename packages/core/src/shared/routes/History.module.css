@@ -281,51 +281,19 @@
 }
 
 .dateRow {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
     gap: var(--xc-space-2);
 }
 
-.dateInput {
-    flex: 1 1 0;
-    min-width: 0;
-    /* Keep the native calendar picker indicator; appearance:none
-       would strip it. The indicator naturally renders on the right
-       in LTR; we just give it a hover hint and a normalized color. */
-    height: 36px;
-    line-height: 1;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-}
-
-.dateInput::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    opacity: 0.6;
-    margin-inline-start: var(--xc-space-1);
-    /* In dark mode the default indicator can render near-invisible;
-       this filter inverts it so the glyph stays legible against
-       --xc-bg in both palettes. */
-    filter: invert(var(--xc-icon-invert, 0));
-}
-
-.dateInput::-webkit-calendar-picker-indicator:hover {
-    opacity: 1;
-}
-
-@media (prefers-color-scheme: dark) {
-    .dateInput::-webkit-calendar-picker-indicator {
-        --xc-icon-invert: 1;
-    }
+.dateRow > div {
+    margin-bottom: 0;
 }
 
 .dateSep {
     color: var(--xc-text-muted);
-    flex: 0 0 auto;
+    line-height: 36px;
 }
 
 .chip {
