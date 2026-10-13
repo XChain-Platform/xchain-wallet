@@ -20,6 +20,7 @@
 //   registerLocale(code, d)  - add a dictionary at runtime
 //   getLocale()              - current locale code
 //   getDirection(locale?)    - 'rtl' | 'ltr' for the given (or current) code
+//   syncDocumentLocale()     - align the root lang and dir attributes
 //   availableLocales()       - codes of registered + lazily-discoverable
 //                              dictionaries
 //
@@ -135,15 +136,20 @@ export function getLocale() {
     return currentLocale;
 }
 
-/** Flip the live locale, sync `document` direction, notify subscribers. */
-function applyLocale(locale) {
-    currentLocale = locale;
+/** Keep the root language metadata aligned with the active locale. */
+export function syncDocumentLocale(locale = currentLocale) {
     if (typeof document !== 'undefined' && document.documentElement) {
         document.documentElement.dir = getDirection(locale);
         // `pseudo-rtl` is English copy, so advertise `en` to assistive
         // tech / spellcheckers; real locales advertise themselves.
         document.documentElement.lang = locale === 'pseudo-rtl' ? 'en' : locale;
     }
+}
+
+/** Flip the live locale, sync `document` metadata, notify subscribers. */
+function applyLocale(locale) {
+    currentLocale = locale;
+    syncDocumentLocale(locale);
     for (const fn of subscribers) {
         try { fn(locale); } catch (_err) { /* sub errors never bubble */ }
     }
@@ -164,7 +170,10 @@ function applyLocale(locale) {
  * @returns {Promise<string>} the locale actually in effect afterwards
  */
 export function setLocale(locale) {
-    if (locale === currentLocale) return Promise.resolve(locale);
+    if (locale === currentLocale) {
+        syncDocumentLocale(locale);
+        return Promise.resolve(locale);
+    }
     if (DICTIONARIES[locale]) {
         applyLocale(locale);
         return Promise.resolve(locale);

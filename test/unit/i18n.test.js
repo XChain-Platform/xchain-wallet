@@ -10,10 +10,11 @@
 
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     getLocale,
+    onLocaleChange,
     registerLocale,
     setLocale,
     t,
@@ -77,6 +78,20 @@ describe('translations', () => {
 
         expect(t('common.back')).toBe('Retour');
         expect(t('session.unlock')).toBe('Unlock');
+    });
+
+    it('stamps root language metadata when the selected locale is already active', async () => {
+        document.documentElement.removeAttribute('dir');
+        document.documentElement.lang = 'stale';
+        const subscriber = vi.fn();
+        const unsubscribe = onLocaleChange(subscriber);
+
+        await setLocale('en');
+
+        expect(document.documentElement.lang).toBe('en');
+        expect(document.documentElement.dir).toBe('ltr');
+        expect(subscriber).not.toHaveBeenCalled();
+        unsubscribe();
     });
 
     it('interpolates message variables', () => {
