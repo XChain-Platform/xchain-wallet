@@ -158,7 +158,7 @@ describe('Receive QR copy and share toasts', () => {
         )[0];
 
         expect(paymentRequest).toMatch(
-            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001$/,
+            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001&label=Daily%20deposits$/,
         );
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
 

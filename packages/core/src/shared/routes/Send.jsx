@@ -587,7 +587,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 // `hardenUriIntentText`'s comment for why.
                 setTick(neutralizeControlText(tickParam).toUpperCase());
             }
-            if (parts.message) setMemo(neutralizeControlText(parts.message));
+            const memoParam = parts.message ?? parts.label;
+            if (memoParam) setMemo(neutralizeControlText(memoParam));
+            const requestChainId = uriLib.safeChainIdParam(parts.params?.chain);
+            const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            if (requestDescriptor?.uriScheme === detected.scheme && requestChainId !== chainId) {
+                setChainId(requestChainId);
+            }
             setPasteHint(`Filled from ${detected.scheme}: URI`);
         } else if (detected.type === 'xchain-uri') {
             e.preventDefault();

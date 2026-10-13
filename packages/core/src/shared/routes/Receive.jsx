@@ -496,6 +496,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             scheme: descriptor.uriScheme,
             address: address.address,
             amount,
+            label: address.label || undefined,
             params: {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
