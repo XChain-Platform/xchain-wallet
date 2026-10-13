@@ -16,6 +16,7 @@
 // other directories shouldn't import from here.
 
 import { cloneElement, useId } from 'react';
+import { Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 
 export const ROW = {
@@ -108,8 +109,7 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
 }
 
 /**
- * Two-column row with a label + hint on the left and an `<input
- * type="checkbox">` styled as a toggle on the right.
+ * Two-column row with a label, hint, and on-off control.
  *
  * @param {object} props
  * @param {string} props.label
@@ -130,36 +130,16 @@ export function ToggleRow({
     embedded = false,
 }) {
     return (
-        <SettingsFieldRow label={label} hint={hint} embedded={embedded}>
-            <input
-                type="checkbox"
-                role="switch"
+        <div style={embedded ? EMBEDDED_ROW : ROW}>
+            <Switch
+                label={label}
+                description={hint}
                 aria-label={accessibleLabel}
-                aria-checked={checked}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
-                style={{
-                    appearance: 'none',
-                    WebkitAppearance: 'none',
-                    width: 40,
-                    minWidth: 40,
-                    margin: 0,
-                    border: `1px solid ${checked ? 'var(--xc-accent-primary)' : 'var(--xc-border-strong)'}`,
-                    borderRadius: 999,
-                    backgroundColor: checked ? 'var(--xc-accent-primary)' : 'var(--xc-surface)',
-                    backgroundImage: `radial-gradient(circle, ${checked ? 'var(--xc-on-accent)' : 'var(--xc-text-muted)'} 0 7px, transparent 8px)`,
-                    backgroundPosition: checked ? 'right 2px center' : 'left 2px center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '20px 20px',
-                    // Keep the visible track and pointer target at the shared accessibility floor.
-                    height: 'var(--xc-tap-min)',
-                    flexShrink: 0,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 120ms ease, background-position 120ms ease, border-color 120ms ease',
-                }}
             />
-        </SettingsFieldRow>
+        </div>
     );
 }
 

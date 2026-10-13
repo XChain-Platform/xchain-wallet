@@ -239,6 +239,24 @@ describe('shared route button usage', () => {
             expect(source).not.toMatch(/kit has no (?:checkbox|radio|radio-group) control/);
         },
     );
+
+    it('uses kit controls for settings switches and wallet mode choices', () => {
+        const primitives = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/_settingsPrimitives.jsx',
+        ), 'utf8');
+        const walletMode = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/WalletModeSection.jsx',
+        ), 'utf8');
+
+        expect(primitives).toMatch(/import\s+\{\s*Switch\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(primitives).toMatch(/<Switch\b/);
+        expect(primitives).not.toMatch(/<input\b/);
+        expect(walletMode).toMatch(/import\s+\{\s*RadioGroup\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(walletMode).toMatch(/<RadioGroup\b/);
+        expect(walletMode).not.toMatch(/<input\b/);
+    });
 });
 
 describe('trade form style guide primitives', () => {

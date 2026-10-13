@@ -26,6 +26,7 @@ export function Switch({
     disabled = false,
     id,
     className,
+    'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedBy,
     'aria-labelledby': ariaLabelledBy,
     ...inputProps
@@ -58,7 +59,8 @@ export function Switch({
                     type="checkbox"
                     role="switch"
                     aria-checked={checked}
-                    aria-labelledby={ariaLabelledBy || labelId}
+                    aria-label={ariaLabel}
+                    aria-labelledby={ariaLabelledBy || (ariaLabel ? undefined : labelId)}
                     aria-describedby={describedBy}
                     checked={checked}
                     disabled={disabled}
