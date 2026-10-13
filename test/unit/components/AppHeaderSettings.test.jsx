@@ -42,6 +42,12 @@ describe('AppHeader settings gear', () => {
         expect(gear()).not.toBeNull();
     });
 
+    it('keeps the watch-only badge in the persistent header', () => {
+        render(<AppHeader isWatcherMode />);
+        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
+        expect(screen.getByText('Watch-only')).toBeTruthy();
+    });
+
     it('renders the gear when only the network filter is wired', () => {
         render(
             <AppHeader

@@ -17,10 +17,10 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
@@ -274,6 +274,7 @@ export function TokenWizard({ walletId, onBack }) {
     // Host composition and signing use the shared confirmation page after the
     // wizard's review step, keeping the reviewed and signed transaction equal.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
+    const { isWatcherMode } = useWalletMode();
     // An already-unlocked wallet does not re-prompt on the confirm page.
     const signerReady = useSignerReady(walletId);
     // The confirm page's password field writes `password` state; the approve

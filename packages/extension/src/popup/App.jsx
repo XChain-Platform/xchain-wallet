@@ -70,6 +70,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
@@ -644,7 +645,7 @@ function AppInner() {
     // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
-    const { isSignerMode } = useWalletMode();
+    const { isSignerMode, isWatcherMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -2655,6 +2656,7 @@ function AppInner() {
                         />
                     )}
                 >
+                    <WatchOnlyBadge visible={isWatcherMode} />
                     <RouteErrorBoundary
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}

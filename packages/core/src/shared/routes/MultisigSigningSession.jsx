@@ -111,8 +111,8 @@ function replyMismatchMessage(envelope, session) {
  */
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
-    const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
+    const variant = screenVariantFor(shell);
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
@@ -599,7 +599,20 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
-    if (view === 'sign-locally' && !isWatcherMode) {
+    if (view === 'sign-locally') {
+        if (isWatcherMode) {
+            return wrap(
+                <>
+                    <StatusMessage variant="status">
+                        This watch-only wallet can coordinate the multisig session but cannot
+                        add a local signature. Scan the request with a signer wallet instead.
+                    </StatusMessage>
+                    <div className={styles.actions}>
+                        <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                    </div>
+                </>,
+            );
+        }
         return wrap(
             <>
                 <p className={styles.successTitle}>Sign with my key</p>
