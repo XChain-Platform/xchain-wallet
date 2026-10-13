@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -763,30 +763,21 @@ export function LinkForm({ walletId, onBack }) {
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            <div role="group" aria-label="Submit the link on" className={styles.checkRow}>
-                <span style={{ marginRight: 'var(--xc-space-2)' }}>Submit the link on:</span>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain1"
-                        checked={submitOn === 'chain1'}
-                        onChange={() => setSubmitOn('chain1')}
-                    />
-                    <span>{descriptor1?.displayName || 'Chain A'}</span>
-                </label>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain2"
-                        checked={submitOn === 'chain2'}
-                        onChange={() => setSubmitOn('chain2')}
-                        disabled={!chain2Id || chain2Id === chain1Id}
-                    />
-                    <span>{descriptor2?.displayName || 'Chain B'}</span>
-                </label>
-            </div>
+            <RadioGroup
+                legend="Submit the link on:"
+                aria-label="Submit the link on"
+                name="submitOn"
+                value={submitOn}
+                onChange={(nextValue) => setSubmitOn(nextValue)}
+                options={[
+                    { value: 'chain1', label: descriptor1?.displayName || 'Chain A' },
+                    {
+                        value: 'chain2',
+                        label: descriptor2?.displayName || 'Chain B',
+                        disabled: !chain2Id || chain2Id === chain1Id,
+                    },
+                ]}
+            />
 
             {fromAddress && submitChainId ? (
                 <dl className={styles.detailsList}>

@@ -55,6 +55,14 @@ const listRowRoutes = [
     'MyLists',
 ];
 
+const choicePrimitiveRoutes = {
+    AttachContentForm: ['Checkbox'],
+    BroadcastForm: ['RadioGroup', 'Switch'],
+    GatedPublishForm: ['Checkbox', 'RadioGroup'],
+    LinkForm: ['RadioGroup'],
+    SleepForm: ['RadioGroup'],
+};
+
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
         const source = readFileSync(
@@ -192,6 +200,23 @@ describe('shared route button usage', () => {
         expect(source).toMatch(/<ListRow\b/);
         expect(source).not.toMatch(/<button\b/);
     });
+
+    it.each(Object.entries(choicePrimitiveRoutes))(
+        '%s uses kit choice controls instead of native checkbox or radio markup',
+        (routeName, controls) => {
+            const source = readFileSync(
+                resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+                'utf8',
+            );
+
+            for (const control of controls) {
+                expect(source).toMatch(new RegExp(`\\b${control}\\b`));
+                expect(source).toMatch(new RegExp(`<${control}\\b`));
+            }
+            expect(source).not.toMatch(/type="(?:checkbox|radio)"/);
+            expect(source).not.toMatch(/kit has no (?:checkbox|radio|radio-group) control/);
+        },
+    );
 });
 
 describe('trade form style guide primitives', () => {
