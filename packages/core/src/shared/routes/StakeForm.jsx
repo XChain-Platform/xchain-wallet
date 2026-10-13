@@ -387,7 +387,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         }
         const pk = signingPubkey.trim();
         if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
-            setFormError('Signing pubkey must be exactly 64 hex characters (Ed25519 public key).');
+            setFormError('Signing public key must be exactly 64 hexadecimal characters (Ed25519).');
             return;
         }
         setFormError(null);
@@ -536,7 +536,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>
-                    {verb} {actionParams.AMOUNT} XCHAIN for signing pubkey{' '}
+                    {verb} {actionParams.AMOUNT} XCHAIN for signing public key{' '}
                     {actionParams.SIGNING_PUBKEY.slice(0, 12)}….
                 </p>
                 <dl className={styles.detailsList}>
@@ -552,7 +552,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     <dd className={styles.detailsValue}>
                         {stakeMode === '2' ? 'Top up an existing stake' : 'New stake'}
                     </dd>
-                    <dt className={styles.detailsLabel}>Signing pubkey</dt>
+                    <dt className={styles.detailsLabel}>Signing public key</dt>
                     <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {actionParams.SIGNING_PUBKEY}
                     </dd>
@@ -669,7 +669,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             <fieldset style={{ border: '1px solid var(--xc-border)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
                 <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
                 <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
-                    Auto-set from the signing pubkey below; flip if you want to override.
+                    Set automatically from the signing public key below. Change it only if you need to override the detected mode.
                 </p>
                 <label style={{ display: 'block', marginBottom: '0.25rem' }}>
                     <input
@@ -692,7 +692,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 {detectStatus !== 'idle' ? (
                     <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
                         {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
-                        {detectStatus === 'new' && '✓ No existing stake for this pubkey; defaulting to New stake.'}
+                        {detectStatus === 'new' && '✓ No existing stake for this public key. New stake is selected.'}
                         {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
                         {detectStatus === 'error' && 'Couldn\'t reach the network. Pick the mode manually; the network will reject if the wrong one is chosen.'}
                     </p>
@@ -763,7 +763,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     </ul>
                     <p style={{ fontSize: '0.75rem', color: 'var(--xc-text-muted)', margin: '0.5rem 0 0' }}>
                         {qualifyReadout.hasTopup
-                            ? `Based on your total stake of ${qualifyReadout.projected} XCHAIN for this pubkey (existing + this top-up). `
+                            ? `Based on your total stake of ${qualifyReadout.projected} XCHAIN for this public key, including this top-up. `
                             : ''}
                         Thresholds are set by network governance and can change.
                     </p>

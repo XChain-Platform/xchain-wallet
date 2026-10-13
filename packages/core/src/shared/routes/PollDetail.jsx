@@ -496,7 +496,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         }
         return wrap(
             <ListPage>
-                <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
+                <p className={styles.summary}>Vote submitted. It counts once the network records it; voting weight is measured at the poll&apos;s close block.</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Your choice</dt>
                     <dd className={styles.detailsValue}>{submittedChoice}</dd>
@@ -544,7 +544,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         <div style={{ marginTop: '0.75rem' }}>
             <SectionHeader title="Your vote" />
             {walletVotes === null ? (
-                <p className={styles.hint}>Loading your ballot…</p>
+                <p className={styles.hint}>Loading your vote…</p>
             ) : walletBallots.length ? (
                 walletBallots.map(({ address, rows }) => (
                     <dl className={styles.detailsList} key={address}>
@@ -556,11 +556,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                 ))
             ) : (
                 <p className={styles.hint}>{voteLoadError
-                    ? 'Your ballot could not be loaded.'
-                    : 'No direct ballot from this wallet.'}</p>
+                    ? 'Your vote could not be loaded.'
+                    : 'No direct vote from this wallet.'}</p>
             )}
-            <p className={styles.hint}>A direct ballot overrides any standing {poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.</p>
-            {isOpen && sourceBallot.length ? <p className={styles.hint}>You can change this address's vote until the poll closes. The latest confirmed ballot replaces its earlier ballot.</p> : null}
+            <p className={styles.hint}>A direct vote overrides any standing {poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.</p>
+            {isOpen && sourceBallot.length ? <p className={styles.hint}>You can change this address&apos;s vote until the poll closes. The latest confirmed vote from this address replaces its earlier vote.</p> : null}
         </div>
     );
 
@@ -646,7 +646,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
             <FormPage
-                label="Review ballot"
+                label="Review vote"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError
                     ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
@@ -656,7 +656,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
                         <Button type="submit" variant="primary" loading={stage === 'submitting'}
                             disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                            {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Cast ballot'}
+                            {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
                         </Button>
                     </>
                 )}
@@ -702,7 +702,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             {isOpen ? (
                 <FormPage
                     className={detailStyles.ballotForm}
-                    label={sourceBallot.length ? 'Change ballot' : 'Cast ballot'}
+                    label={sourceBallot.length ? 'Change vote' : 'Vote'}
                     onSubmit={handleReview}
                     status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
                     actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}

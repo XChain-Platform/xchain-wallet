@@ -96,7 +96,7 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
 
     it('says on the picker that any token can pay dividends', async () => {
         mountWizard();
-        const note = await screen.findByText(/Any token you create here can pay dividends/i);
+        const note = await screen.findByText(/Any token you issue here can pay dividends/i);
         // The second sentence is the one that closes the inverse reading:
         // without it the note still reads as "some templates enable this".
         expect(note.textContent).toMatch(/not something a template turns on/i);

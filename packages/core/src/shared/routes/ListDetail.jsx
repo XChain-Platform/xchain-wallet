@@ -169,7 +169,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 ) : null}
                 <dt className={styles.detailsLabel}>Type</dt>
                 <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
-                <dt className={styles.detailsLabel}>Created by</dt>
+                <dt className={styles.detailsLabel}>Published by</dt>
                 <dd className={styles.detailsValue}>{data.source ? <AddressText address={data.source} /> : '?'}</dd>
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>{data.status === 'valid' ? 'Valid' : String(data.status || '?')}</dd>

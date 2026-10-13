@@ -198,7 +198,7 @@ export function TokenWizard({ walletId, onBack }) {
                 setActiveByChain(active || {});
                 if (Object.keys(byChain || {}).length === 0) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a token.',
+                        'No addresses on any chain yet. Use Receive to generate one before issuing a token.',
                     );
                     return;
                 }
@@ -550,7 +550,7 @@ export function TokenWizard({ walletId, onBack }) {
         <PageHeader
             onBack={stageBack}
             backLabel={stage === 'template' || stage === 'done' ? 'Back to home' : 'Back'}
-            title="Create a token"
+            title="Issue a token"
         />
     );
     const wrap = (children) => (
@@ -741,13 +741,13 @@ export function TokenWizard({ walletId, onBack }) {
         if (result?.queued) {
             return wrap(
                 <ListPage>
-                    <QueuedResultPanel onDone={onBack} what="token creation" unsaved={result.unsaved} />
+                    <QueuedResultPanel onDone={onBack} what="token issuance" unsaved={result.unsaved} />
                 </ListPage>,
             );
         }
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Token created</h2>
+                <h2 className={styles.successTitle}>Token issued</h2>
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
@@ -770,7 +770,7 @@ export function TokenWizard({ walletId, onBack }) {
         <>
             <WizardProgress stage={stage} />
             <FormPage
-                label="Review token creation"
+                label="Review token issuance"
                 onSubmit={(event) => {
                     event.preventDefault();
                     openConfirmScreen();
@@ -1066,7 +1066,7 @@ const TEMPLATES = [
     {
         id: 'meme',
         name: 'Meme token',
-        tagline: 'Fixed supply, locked, non-divisible: launch and forget.',
+        tagline: 'Fixed supply, locked, and non-divisible. No more supply can be minted after issuance.',
         interactive: true,
     },
     {
@@ -1135,7 +1135,7 @@ function renderTemplateStage({ onPick }) {
                 perfectly good token and paying a second ISSUE fee to
                 re-create it under the "right" template. */}
             <p className={styles.stageHint}>
-                Any token you create here can pay dividends to its holders later.
+                Any token you issue here can pay dividends to its holders later.
                 That is a property of every token, not something a template turns on.
             </p>
         </ListPage>
@@ -1153,7 +1153,7 @@ function renderChainStage({
                 event.preventDefault();
                 if (fromAddress) onNext();
             }}
-            intro="Which chain should this token live on?"
+            intro="Which chain should record this token's issuance?"
             actions={(
                 <Button
                     type="submit"
@@ -1176,7 +1176,7 @@ function renderChainStage({
                     onIconClick={onPickSource}
                     iconLabel="Choose source address"
                     hint={subtoken
-                        ? 'A subtoken can only be created by the address that owns its parent.'
+                        ? 'A subtoken can only be issued by the address that owns its parent.'
                         : undefined}
                 />
             ) : (
@@ -1297,7 +1297,7 @@ function renderDetailsStage({
                 <Input
                     label={isEdition ? 'Edition size' : 'Supply'}
                     hint={isEdition
-                        ? 'How many copies will ever exist. This number is locked permanently when the edition is created.'
+                        ? 'How many copies will ever exist. This number is locked permanently when the edition is issued.'
                         : undefined}
                     inputMode="decimal"
                     value={supply}
@@ -1474,15 +1474,14 @@ function AdvancedIssuePanel({
             ) : (
                 <div className={styles.advancedBody}>
                     <p className={styles.hint}>
-                        These settings ride the same transaction that creates the token,
-                        so everything below is configured in one signature. If any value
-                        here is rejected by the network, the whole creation is rejected
-                        and the token is not created.
+                        These settings are included in the transaction that issues the token,
+                        so everything below is configured in one signature. If the network
+                        rejects any value, it rejects the whole issuance and does not issue the token.
                     </p>
 
                     <h3 className={styles.advancedHeading}>Locks (permanent)</h3>
                     <p className={styles.hint}>
-                        Each flag is a one-way switch. Once the token is created with a
+                        Each flag is a one-way switch. Once the token is issued with a
                         lock set, it can never be unlocked.
                     </p>
                     <div role="group" aria-label="Lock flags">
@@ -1516,8 +1515,8 @@ function AdvancedIssuePanel({
                         A callback lets you later recall <strong>all</strong> of this token
                         back to your address in one action, paying every holder a set amount
                         of another token per unit they held. It can only be configured before
-                        any supply is distributed, so creating the token with it set is the
-                        one moment it is guaranteed to be available.
+                        any supply is distributed, so setting it during issuance guarantees
+                        it is available.
                     </p>
                     <Input
                         label="Callback token (optional)"
@@ -1600,7 +1599,7 @@ function AdvancedIssuePanel({
                     </div>
                     <p className={styles.hint}>
                         Removing a list here only clears it before the token exists. Once
-                        created, a bound list can be replaced but never removed: the
+                        issued, a bound list can be replaced but never removed: the
                         protocol has no "clear" for one. To lift a restriction later, point
                         it at an empty address list.
                     </p>

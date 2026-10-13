@@ -117,7 +117,7 @@ describe('protocol form accessibility', () => {
             <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={23} onBack={() => {}} />,
             host,
         );
-        await screen.findByRole('form', { name: 'Cast ballot' });
+        await screen.findByRole('form', { name: 'Vote' });
         await expectNoSeriousAxeViolations(container);
     });
 });

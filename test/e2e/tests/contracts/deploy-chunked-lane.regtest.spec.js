@@ -695,7 +695,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await selectVenueChain(scope, 'Network');
             await scope.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await scope.getByRole('button', { name: 'Execute', exact: true }).click();
+            await scope.getByRole('button', { name: 'Call contract', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });

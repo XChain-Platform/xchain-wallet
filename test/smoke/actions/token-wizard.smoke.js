@@ -126,7 +126,7 @@ assert.ok(
     'utility tagline says dividends work on every token',
 );
 assert.ok(
-    /Any token you create here can pay dividends/.test(src),
+    /Any token you issue here can pay dividends/.test(src),
     'template stage states dividends are available on any token',
 );
 

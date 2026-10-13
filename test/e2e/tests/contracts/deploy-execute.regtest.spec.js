@@ -380,7 +380,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // method name and pipe-delimited params. `inc` takes none.
             await main.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await main.getByRole('button', { name: 'Execute', exact: true }).click();
+            await main.getByRole('button', { name: 'Call contract', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText('Method call broadcast.')).toBeVisible({ timeout: 120_000 });

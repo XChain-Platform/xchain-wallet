@@ -99,7 +99,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token creation' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
         expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
     });
 
@@ -115,7 +115,7 @@ describe('TokenWizard guided flow', () => {
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token creation' }));
+        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
 
         // An unclassified host error reaches the user as the generic house line.
         expect(await screen.findByText(/Something went wrong\. Try again\./)).toBeTruthy();

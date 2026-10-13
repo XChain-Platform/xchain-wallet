@@ -147,8 +147,8 @@ describe('governance route audit', () => {
         expect(await screen.findByRole('button', { name: 'Change vote' })).toBeTruthy();
         expect(screen.getByLabelText('0: Yes')).not.toBeChecked();
         expect(screen.getByLabelText('1: No')).toBeChecked();
-        expect(screen.getByText(/A direct ballot overrides any standing VOTE delegation/)).toBeTruthy();
-        expect(screen.getByText(/latest confirmed ballot replaces its earlier ballot/)).toBeTruthy();
+        expect(screen.getByText(/A direct vote overrides any standing VOTE delegation/)).toBeTruthy();
+        expect(screen.getByText(/latest confirmed vote from this address replaces its earlier vote/)).toBeTruthy();
         expect(messaging.governanceVotes).toHaveBeenCalledWith({
             chainId: CHAIN, query: ADDRESS.address, type: 'address',
         });
@@ -272,7 +272,7 @@ describe('governance route audit', () => {
             expect(await screen.findByText('25 blocks remaining')).toBeTruthy();
             expect(screen.getByLabelText(`0: ${longOption}`)).toBeTruthy();
             expect(screen.getByRole('button', { name: 'Vote' })).toBeTruthy();
-            expect(screen.getByRole('form', { name: 'Cast ballot' }).contains(
+            expect(screen.getByRole('form', { name: 'Vote' }).contains(
                 screen.getByRole('button', { name: 'Vote' }),
             )).toBe(true);
         } finally {
