@@ -155,6 +155,20 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('keeps field labels ahead of their values in DOM reading order', async () => {
+        mount();
+
+        const from = await screen.findByLabelText('From');
+        const fromLabel = document.querySelector(`label[for="${from.id}"]`);
+        const token = screen.getByLabelText('Token');
+        const tokenLabel = document.querySelector(`label[for="${token.id}"]`);
+
+        expect(fromLabel.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
     it('tabs through payment fields and reviews only a valid Enter submission', async () => {
         const user = userEvent.setup();
         const messaging = mount();

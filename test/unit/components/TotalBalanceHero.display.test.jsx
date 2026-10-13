@@ -164,6 +164,19 @@ describe('TotalBalanceHero refresh status', () => {
 });
 
 describe('TotalBalanceHero responsive layout', () => {
+    it('keeps the Home total ahead of its actions in DOM reading order', () => {
+        mount();
+
+        const label = screen.getByText('Active address balance');
+        const total = screen.getByText('$1,234.56');
+        const action = screen.getByRole('button', { name: 'Hide balance' });
+
+        expect(label.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(total.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
     it('wraps summary facts and contains oversized total text', () => {
         expect(cssRule('meta')).toMatch(/flex-wrap:\s*wrap/);
         expect(cssRule('metaLeft')).toMatch(/flex-wrap:\s*wrap/);

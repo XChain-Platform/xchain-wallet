@@ -16,7 +16,7 @@
 // active address alone.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -70,6 +70,20 @@ function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
 }
 
 describe('TokenDetail "Manage token" action', () => {
+    it('keeps the balance label and amount ahead of the hero actions in DOM reading order', () => {
+        renderDetail({ creator: OTHER });
+
+        const hero = screen.getByRole('region', { name: 'S18PROBE balance' });
+        const label = within(hero).getByText('Total balance');
+        const amountUnit = within(hero).getByText('S18PROBE');
+        const action = within(hero).getByRole('button', { name: 'Hide balance' });
+
+        expect(label.compareDocumentPosition(amountUnit) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(amountUnit.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE });
 
