@@ -159,7 +159,7 @@ const shells = [
 
 for (const shell of shells) {
     const src = readFileSync(join(wsRoot, ...shell.path), 'utf8');
-    assert.ok(/ScanRoute.*from '@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
+    assert.ok(/(ScanRoute.*from |const\s+ScanRoute\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
         `${shell.name} App.jsx imports ScanRoute`);
     assert.ok(/unlockedView === 'scan' && activeWalletId/.test(src),
         `${shell.name} App.jsx ships a 'scan' top-level view guarded on activeWalletId`);

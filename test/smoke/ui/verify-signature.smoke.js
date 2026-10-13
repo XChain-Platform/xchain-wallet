@@ -114,7 +114,7 @@ for (const [src, name] of [
 ]) {
     assert.match(
         src,
-        /import \{ VerifySignatureForm \}/,
+        /import \{ VerifySignatureForm \}|const VerifySignatureForm = lazyRoute\(\(\) => import\('@xchain-wallet\/core\/shared\/routes\/VerifySignatureForm\.jsx'\)/,
         `${name} App imports VerifySignatureForm`,
     );
     assert.match(

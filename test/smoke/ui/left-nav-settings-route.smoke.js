@@ -70,7 +70,7 @@ const desktopApp = readFileSync(
 
 for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
     assert.ok(
-        /import\s*\{\s*Settings\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/routes\/Settings\.jsx'/.test(src),
+        /(import\s*\{\s*Settings\s*\}\s*from\s*|const\s+Settings\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/Settings\.jsx'/.test(src),
         `${label} App imports Settings`,
     );
     assert.ok(/const \[walletList, setWalletList\] = useState/.test(src),
