@@ -135,6 +135,10 @@ export const TOKEN_GROUPS = [
         tokens: [
             token('--xc-tap-min', '24px', 'Minimum pointer target', 'length'),
             token('--xc-transition', '160ms cubic-bezier(0.2, 0, 0.2, 1)', 'Default transition'),
+            token('--xc-backdrop-filter', 'blur(2px)', 'Scrim backdrop blur, none under reduced effects'),
+            token('--xc-list-shadow', 'var(--xc-shadow-md)', 'List card shadow, none under reduced effects', 'shadow'),
+            token('--xc-privacy-filter', 'blur(12px)', 'Privacy-mode value blur'),
+            token('--xc-privacy-opacity', '1', 'Privacy-mode value opacity'),
             token('--xc-disabled-opacity', '1', 'Disabled control opacity'),
             token('--xc-disabled-saturation', '0.35', 'Disabled control saturation'),
             token('--xc-viewport-h', 'calc(100vh - env(safe-area-inset-top, 0px))', 'Safe-area-aware shell height'),
