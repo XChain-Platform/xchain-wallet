@@ -27,6 +27,14 @@ const cardModules = [
     'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
+const tokenCleanupModules = [
+    'ActionIntentSummary.module.css',
+    'AlertsOverlay.module.css',
+    'AmountField.module.css',
+    'BackupReminderCard.module.css',
+    'BalanceChanges.module.css',
+    'CollectiblesView.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -87,6 +95,12 @@ function rawCardPadding(file, css) {
     }
 
     return violations;
+}
+
+function declarationsWithPixels(css) {
+    return [...withoutComments(css).matchAll(
+        /(?:^|[;{])\s*([\w-]+)\s*:\s*([^;}]*?(?:-?\d+(?:\.\d+)?px)[^;}]*)/gm,
+    )].map(([, property, value]) => `${property}: ${value.trim()}`);
 }
 
 it('detects token-sized spacing literals only in margin and padding declarations', () => {
@@ -151,4 +165,56 @@ it('uses the shared padding and radius for explicit card modules', () => {
         expect(css, file).toContain('padding: var(--xc-card-pad);');
         expect(css, file).toContain('border-radius: var(--xc-card-radius);');
     }
+});
+
+it('tokenizes shared component dimensions except documented pixel exceptions', () => {
+    const expectedPixelDeclarations = {
+        'ActionIntentSummary.module.css': [
+            'border-inline-start: 3px solid var(--xc-warning)',
+            'border: 1px solid var(--xc-border)',
+        ],
+        'AlertsOverlay.module.css': [
+            'max-width: min(380px, 100%)',
+            'border-bottom: 1px solid var(--xc-border)',
+            'padding: 1px var(--xc-space-2)',
+            'outline: 2px solid var(--xc-focus-ring)',
+            'outline-offset: 2px',
+        ],
+        'AmountField.module.css': [],
+        'BackupReminderCard.module.css': [
+            'border: 1px solid var(--xc-border)',
+            'flex: 1 1 240px',
+            'outline: 2px solid var(--xc-focus-ring)',
+            'outline-offset: 2px',
+        ],
+        'BalanceChanges.module.css': [
+            'border: 1px solid var(--xc-border)',
+            'border-bottom: 1px dashed var(--xc-border-soft, var(--xc-border))',
+            'border-top: 1px solid var(--xc-border-soft, var(--xc-border))',
+        ],
+        'CollectiblesView.module.css': [
+            'border: 1px solid var(--xc-border)',
+            'outline: 2px solid var(--xc-focus-ring)',
+            'outline-offset: -2px',
+            'outline: 2px solid var(--xc-on-accent)',
+            'outline-offset: 2px',
+            'border-top: 1px dashed var(--xc-border)',
+        ],
+    };
+
+    for (const file of tokenCleanupModules) {
+        const css = readFileSync(join(componentsRoot, file), 'utf8');
+        expect(declarationsWithPixels(css), file).toEqual(expectedPixelDeclarations[file]);
+    }
+
+    const alerts = readFileSync(join(componentsRoot, 'AlertsOverlay.module.css'), 'utf8');
+    expect(alerts).toContain('translateX(var(--xc-space-5))');
+    expect(alerts).toMatch(/\.close\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/s);
+    expect(alerts).toContain('border-inline-start: var(--xc-space-1) solid');
+
+    const collectibles = readFileSync(join(componentsRoot, 'CollectiblesView.module.css'), 'utf8');
+    expect(collectibles).toContain('font-size: var(--xc-text-2xl);');
+    expect(collectibles).toMatch(/\.chainOverlay\s*\{[^}]*width: var\(--xc-icon-lg\);[^}]*height: var\(--xc-icon-lg\)/s);
+    expect(collectibles).toMatch(/\.pinBtn,[\s\S]*?\.hideBtn\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/);
+    expect(collectibles).toContain('font-size: var(--xc-text-lg);');
 });

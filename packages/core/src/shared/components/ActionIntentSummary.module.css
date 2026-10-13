@@ -56,6 +56,7 @@
     gap: var(--xc-space-1);
     background: var(--xc-warning-bg);
     color: var(--xc-warning-text);
+    /* The three-pixel emphasis stripe has no token equivalent. */
     border-inline-start: 3px solid var(--xc-warning);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
