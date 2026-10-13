@@ -206,6 +206,7 @@ function hardenWebContents(contents) {
                         contextIsolation: true,
                         nodeIntegration: false,
                         sandbox: true,
+                        devTools: !app.isPackaged,
                         // No `preload` key. The default window.open child
                         // would otherwise inherit this app's preload (and
                         // therefore xchainWalletBridge /
@@ -403,6 +404,11 @@ function createWindow(opts = {}) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            // A console in the shipped wallet invites "paste this to fix
+            // your wallet" scams against a page that holds unlocked keys;
+            // the mobile shells ship with WebView debugging off for the
+            // same reason. Unpackaged dev and test runs keep the tools.
+            devTools: !app.isPackaged,
         },
         show: false,
     });
@@ -566,7 +572,7 @@ function buildApplicationMenu() {
             submenu: [
                 { role: 'reload' },
                 { role: 'forceReload' },
-                { role: 'toggleDevTools' },
+                ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
                 { role: 'zoomIn' },
