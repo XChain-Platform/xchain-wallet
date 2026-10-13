@@ -13,6 +13,10 @@ import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
 import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
 import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx';
+import {
+    clearActiveWallet,
+    writeActiveWallet,
+} from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qheadingorderexample';
@@ -60,7 +64,10 @@ function actionEntry(overrides = {}) {
     };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    clearActiveWallet();
+});
 
 describe('main route heading order', () => {
     it('keeps menu and list-card routes rooted at one h1', () => {
@@ -96,9 +103,10 @@ describe('main route heading order', () => {
         expectOrderedHeadings(view.container);
     });
 
-    it('gives the locked and first-run screens one page heading', () => {
+    it('shows the active wallet as the locked screen\'s only page heading', () => {
+        writeActiveWallet('wallet-2', 'Treasury');
         const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, { unlockWallet: vi.fn() });
-        expect(screen.getByRole('heading', { level: 1, name: 'Unlock wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Treasury' })).toBeVisible();
         expectOrderedHeadings(locked.container);
         locked.unmount();
 

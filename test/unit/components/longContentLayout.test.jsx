@@ -168,6 +168,7 @@ describe('long content layout', () => {
         render(<PageHeader title={title} onBack={() => {}} trailing={<button type="button">Action</button>} />);
 
         expect(screen.getByRole('heading', { name: title })).toHaveAttribute('title', title);
-        expect(rule(pageHeaderCss, '.title')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(pageHeaderCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(pageHeaderCss, '.title')).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 });

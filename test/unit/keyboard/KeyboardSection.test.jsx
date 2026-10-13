@@ -49,6 +49,8 @@ const press = (init) => act(() => {
 describe('KeyboardSection', () => {
     it('lists rebindable rows with Rebind buttons and fixed context rows without', () => {
         return setup().then(() => {
+            expect(screen.getByText(/Select Rebind, then press the new key combination\./)).toBeTruthy();
+            expect(screen.queryByText(/Click Rebind/)).toBeNull();
             expect(screen.getByText('Export history')).toBeTruthy();
             expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
             expect(screen.getByText('Requires “Show pin button on rows” in Display.')).toBeTruthy();

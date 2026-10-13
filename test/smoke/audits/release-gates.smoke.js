@@ -138,15 +138,17 @@ for (const marker of [
 // changes nothing observable, so a behavioural test would pass either way
 // and the machines where it matters are the ones nobody runs the suite on.
 assert.ok(
-    !/grep -r -l -F/.test(scriptSrc),
-    'every recursive marker grep passes -a: without it a dev-mock marker '
+    /grep_args=\(-r -a -H -o -F --exclude='\*\.map'\)/.test(scriptSrc),
+    'the recursive marker scan passes -a: without it a dev-mock marker '
     + 'sealed in app.asar is invisible to ugrep, and the gate reports CLEAN',
 );
 assert.equal(
-    (scriptSrc.match(/grep -r -a -l -F/g) || []).length,
-    3,
-    'all three marker/SDK greps carry -a, not just the one someone edited',
+    (scriptSrc.match(/marker_hits="\$\(grep /g) || []).length,
+    1,
+    'mock and real-SDK markers share one recursive scan per target',
 );
+assert.ok(scriptSrc.includes('grep_args+=(-e "$marker")'),
+    'the shared scan passes every mock and real-SDK marker as a fixed pattern');
 
 // --- 3. Script REFUSES a tree where it can scan nothing --------------
 //
