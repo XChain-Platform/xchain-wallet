@@ -19,6 +19,14 @@ const sources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const localizedRoutes = [
+    'AccountPicker.jsx',
+    'ActionDetail.jsx',
+    'ActionsMenu.jsx',
+    'AlertsRoute.jsx',
+    'BridgeOriginBadge.jsx',
+];
+
 describe('shared route localization', () => {
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
@@ -40,5 +48,12 @@ describe('shared route localization', () => {
 
         expect(violations).toEqual([]);
         expect(missingKeys).toEqual([]);
+    });
+
+    test('migrated routes remain enrolled in the literal guard', () => {
+        for (const route of localizedRoutes) {
+            const source = sources[`../../packages/core/src/shared/routes/${route}`];
+            expect(source, route).toMatch(/\bt\s*\(/);
+        }
     });
 });

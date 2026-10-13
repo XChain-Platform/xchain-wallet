@@ -16,6 +16,7 @@
 // AlertsOverlay.module.css for the alert-row styling.
 
 import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from '../components/AlertsOverlay.module.css';
 import { alertSeverityPresentation } from '../components/alertSeverity.js';
@@ -28,14 +29,14 @@ import { alertSeverityPresentation } from '../components/alertSeverity.js';
 export function AlertsRoute({ onBack, alerts = [] }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const header = <PageHeader onBack={onBack} title="Alerts" />;
+    const header = <PageHeader onBack={onBack} title={t('alerts.title')} />;
     const visibleAlerts = Array.isArray(alerts) ? alerts : [];
 
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
                 {visibleAlerts.length === 0 ? (
-                    <EmptyState title="No alerts" body="You're all caught up." />
+                    <EmptyState title={t('alerts.empty.title')} body={t('alerts.empty.body')} />
                 ) : (
                     /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">

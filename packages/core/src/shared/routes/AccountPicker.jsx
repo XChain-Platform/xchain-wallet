@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -39,7 +40,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listAccounts !== 'function') {
-            setError('messaging.listAccounts is not available in this shell.');
+            setError(t('accountPicker.error.unavailable'));
             return undefined;
         }
         messaging.listAccounts(walletId)
@@ -50,16 +51,16 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     : [];
                 setAccounts(sorted);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load accounts.'); });
+            .catch((err) => { if (!cancelled) setError(err?.message || t('accountPicker.error.load')); });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const header = <PageHeader onBack={onBack} title="Accounts" />;
+    const header = <PageHeader onBack={onBack} title={t('accountPicker.title')} />;
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
             <Button variant="primary" onClick={onAddAccount} icon={<Icon.PlusIcon />}>
-                Add account
+                {t('accountPicker.add')}
             </Button>
             {onRenameAccount && activeAccount ? (
                 <Button
@@ -67,7 +68,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     onClick={() => onRenameAccount(activeAccount)}
                     icon={<Icon.PencilIcon />}
                 >
-                    Manage account
+                    {t('accountPicker.manage')}
                 </Button>
             ) : null}
         </div>
@@ -79,12 +80,16 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : accounts === null ? (
-                    <div className={styles.entryDescription}>Loading…</div>
+                    <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : accounts.length === 0 ? (
-                    <EmptyState title="No accounts yet" body="Accounts added to this wallet appear here." titleAs="p" />
+                    <EmptyState
+                        title={t('accountPicker.empty.title')}
+                        body={t('accountPicker.empty.body')}
+                        titleAs="p"
+                    />
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
-                    const defaultName = `Account ${a.index + 1}`;
+                    const defaultName = t('accountPicker.defaultName', { number: a.index + 1 });
                     const label = a.name || defaultName;
                     // Keep the numbered name visible under a custom one, so a renamed account stays findable.
                     const customName = typeof a.name === 'string' ? a.name.trim() : '';
@@ -119,8 +124,8 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                 <button
                                     type="button"
                                     className={pickerStyles.rowMenuBtn}
-                                    aria-label={`Rename ${label}`}
-                                    title="Rename account"
+                                    aria-label={t('accountPicker.renameLabel', { label })}
+                                    title={t('accountPicker.renameTitle')}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onRenameAccount(a);
