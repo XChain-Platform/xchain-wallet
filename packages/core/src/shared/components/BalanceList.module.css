@@ -107,7 +107,7 @@
 
 .title {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
 }
@@ -119,9 +119,8 @@
 .name {
     font-weight: 600;
     color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
     min-width: 0;
 }
 
@@ -205,7 +204,7 @@
 }
 
 .pinBtnActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .rowPinned {

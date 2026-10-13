@@ -29,6 +29,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
@@ -47,6 +48,7 @@ export function SignMessageForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -156,14 +158,10 @@ export function SignMessageForm({ walletId, onBack }) {
         ));
     }, [chainId, addressesByChain, activeByChain]);
 
-    const chainOptions = useMemo(() => {
+    const chainIds = useMemo(() => {
         if (!addressesByChain) return [];
         return Object.keys(addressesByChain)
-            .filter((id) => (addressesByChain[id] || []).length > 0)
-            .map((id) => {
-                const desc = chainRegistry.get(id);
-                return { id, label: desc?.displayName || id };
-            });
+            .filter((id) => (addressesByChain[id] || []).length > 0);
     }, [addressesByChain]);
 
     const addressOptions = useMemo(() => {
@@ -240,11 +238,24 @@ export function SignMessageForm({ walletId, onBack }) {
         <PageHeader onBack={onBack} backDisabled={confirmAction.composing} title="Sign message" />
     );
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign messages. Open the message in a
+                        Full-mode or Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
+                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
                         {loadError}
                     </div>
                 </ListPage>
@@ -325,6 +336,18 @@ export function SignMessageForm({ walletId, onBack }) {
         );
     }
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        Watcher mode does not sign messages or ask for a signing password. Switch to Normal mode to sign a message on this device.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
     const draftBanner = draft.hasDraft() && !draftPending && !signature ? (
         <StatusMessage
             variant="status"
@@ -372,9 +395,13 @@ export function SignMessageForm({ walletId, onBack }) {
             {draftBanner}
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
-                    chains={chainOptions}
-                    selectedChainId={chainId}
-                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    value={chainId || ''}
+                    onChange={(nextChainId) => {
+                        setChainId(nextChainId);
+                        if (error) setError(null);
+                    }}
                     label="Chain"
                 />
             </div>

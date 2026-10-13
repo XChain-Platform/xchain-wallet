@@ -30,6 +30,7 @@ import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
     buildEditFeedListsParams,
+    buildBetActionPsbt,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
 import {
@@ -940,6 +941,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -948,6 +950,7 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
+        surfaceStateEvents,
         // Called after a settings.update whose patch touches
         // `privacy`, so a shell that routes requests itself can re-apply
         // before the next one. Desktop uses it for Tor routing; the web
@@ -985,6 +988,15 @@ export function createBackgroundHost(deps) {
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
+
+    async function publishSurfaceState(kind, payload) {
+        if (typeof surfaceStateEvents?.publish !== 'function') return;
+        try {
+            await surfaceStateEvents.publish(kind, payload);
+        } catch {
+            // Surface notification is best-effort after the vault mutation commits.
+        }
+    }
 
     async function sendWithHold(req, flowDeps) {
         const opts = { ...req, ...flowDeps };
@@ -1223,7 +1235,11 @@ export function createBackgroundHost(deps) {
 
     // The wallet UI names the wallet the user just selected, so connected
     // sites can get accountsChanged with that wallet's granted accounts.
-    host.register('wallet.setActive', (req, { vault }) => announceWalletSwitch(req, vault, bridgeEvents));
+    host.register('wallet.setActive', async (req, { vault }) => {
+        const result = await announceWalletSwitch(req, vault, bridgeEvents);
+        await publishSurfaceState('wallet', { walletId: req.walletId });
+        return result;
+    });
 
     // Add a wallet to an already-open vault; the Add Wallet create and import
     // screens both land here. `wallet.create` / `wallet.import` are not
@@ -1507,6 +1523,7 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
@@ -1547,6 +1564,9 @@ export function createBackgroundHost(deps) {
                 console.error('[xchain] privacy settings apply failed:', err);
             }
         }
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await publishSurfaceState('network', { settings: result });
+        }
         return result;
     });
 
@@ -1577,7 +1597,16 @@ export function createBackgroundHost(deps) {
         if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
             await updateSettings(vault, { walletMode: req.walletMode });
         }
-        const pooled = await sessionSigner(req, vault, signerPool);
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) {
+            throw new Error(`pairing: no wallet with id "${walletId}"`);
+        }
+        // A standalone xpub export confirms the password every time. Public
+        // keys cannot spend, but they reveal the account's complete address
+        // history, so an unlocked session alone does not authorize disclosure.
+        const pooled = req?.publicExport === true
+            ? null
+            : await sessionSigner(req, vault, signerPool);
         const signer = pooled
             || await unlockWallet({
                 vault,
@@ -1588,7 +1617,7 @@ export function createBackgroundHost(deps) {
                 sdkRegistry,
             });
         try {
-            return await fn(signer, await getSettings(vault));
+            return await fn(signer, await getSettings(vault), wallet);
         } finally {
             // The pool owns the lifecycle of a pooled signer; only a signer
             // we unlocked ourselves gets locked here.
@@ -1610,12 +1639,30 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.payload', async (req, deps) => {
         const { chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                accountIndex: Number.isInteger(req?.accountIndex) && req.accountIndex >= 0
+                    ? req.accountIndex
+                    : 0,
+                format: wallet.format,
             });
+            if (req?.publicExport === true) {
+                const publicKeys = keys
+                    .filter((key) => /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/.test(key?.xpub || ''))
+                    .map((key) => ({
+                        chainId: key.chainId,
+                        addressType: key.addressType,
+                        path: key.path,
+                        xpub: key.xpub,
+                    }));
+                if (publicKeys.length === 0) {
+                    throw new Error('pairing.payload: this wallet has no extended public keys to export');
+                }
+                return { payload: { keys: publicKeys }, encoded: null };
+            }
             const payload = buildPairingPayload({
                 walletMode: settings?.walletMode,
                 keys,
@@ -1627,11 +1674,12 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.pair', async (req, deps) => {
         const { vault, chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                format: wallet.format,
             });
             const local = buildPairingPayload({
                 walletMode: settings?.walletMode,
@@ -2287,6 +2335,20 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
+    // Keep hidden addresses in the vault and off the main list. The list's
+    // collapsed hidden section remains the recovery path for this flag.
+    host.register('addresses.setHidden', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.setHidden: id is required');
+        if (typeof req?.hidden !== 'boolean') {
+            throw new Error('addresses.setHidden: hidden must be a boolean');
+        }
+        const rec = await vault.addresses.get(id);
+        if (!rec) throw new Error('addresses.setHidden: address not found');
+        await vault.addresses.put({ ...rec, hidden: req.hidden });
+        return { ok: true };
+    });
+
     // Delete an address record by id (e.g. an imported WIF the user no
     // longer wants surfaced). A derived address comes back through
     // receive.getAddress, which re-derives the lowest index no record
@@ -2473,6 +2535,7 @@ export function createBackgroundHost(deps) {
                 ...(req.fee !== undefined && { fee: req.fee }),
                 ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req.rbf !== undefined && { rbf: req.rbf }),
+                ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
             };
         }
 
@@ -2485,7 +2548,14 @@ export function createBackgroundHost(deps) {
         // A caller that named its own change destination is stating where the
         // value must land; a privacy preference does not get to move it. Only
         // the default (change back to the spender) is rotated.
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.composeForConfirm: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -2520,12 +2590,20 @@ export function createBackgroundHost(deps) {
             pubkey: source.publicKey,
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
+            ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
         };
         encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
-        const { change } = await confirmChangeAndOwnAddresses({
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.quoteMaxSendable: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return flows.quoteMaxSendable({
             sdkRegistry, chainRegistry, vault, chainId,
@@ -4614,6 +4692,10 @@ export function createBackgroundHost(deps) {
         return { ...composed, betParams: params };
     });
 
+    host.register('action.bet.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildBetActionPsbt({ ...req, chainRegistry, sdkRegistry });
+    });
+
     // BET reads (no signing): market list / one market with pools + timeline /
     // placed bets / an oracle's track record.
     host.register('bet.feeds', async (req, { sdkRegistry }) => {
@@ -5101,6 +5183,22 @@ export function createBackgroundHost(deps) {
 
     host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
         return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    });
+
+    host.register('utxos.address', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const address = req?.address;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('utxos.address: chainId is required');
+        }
+        if (typeof address !== 'string' || !address) {
+            throw new Error('utxos.address: address is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getUTXOs !== 'function') {
+            throw new Error(`utxos.address: SDK unavailable for "${chainId}"`);
+        }
+        return sdk.getUTXOs(address);
     });
 
     host.register('history.address', async (req, { sdkRegistry }) => {

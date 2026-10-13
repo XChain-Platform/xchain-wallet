@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Screen } from '@xchain-wallet/core/ui';
+import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
@@ -29,6 +30,14 @@ function getRequestId() {
  * arrives via a different path).
  */
 export function Router() {
+    return (
+        <RouteErrorBoundary>
+            <ApprovalRoute />
+        </RouteErrorBoundary>
+    );
+}
+
+function ApprovalRoute() {
     const id = getRequestId();
     const [data, setData] = useState(
         /** @type {{ id: string, kind: string, payload: any } | null} */ (null),

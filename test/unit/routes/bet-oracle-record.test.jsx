@@ -182,7 +182,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.resolve({ data: [{ ...RECORD, fees_earned: [] }] }),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
     it('survives an explorer too old to report fees at all', async () => {
@@ -193,17 +193,18 @@ describe('OracleRecord (P8)', () => {
         // The record still renders; the missing field degrades to "no fees", never
         // to a crash on a non-array.
         expect(text(utils)).toMatch(/Markets opened/);
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
-    it('keeps the record on screen when the market listing fails', async () => {
+    it('keeps the record and does not claim there are no markets when the listing fails', async () => {
         const { messaging } = harness({
             betFeeds: () => Promise.reject(new Error('explorer down')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         const body = text(utils);
         expect(body).toMatch(/Markets opened/);
-        expect(body).toMatch(/No markets from this address/i);
+        expect(body).toMatch(/Could not load this address's markets/i);
+        expect(body).not.toMatch(/No markets from this address/i);
         expect(body).not.toMatch(/explorer down/);
     });
 

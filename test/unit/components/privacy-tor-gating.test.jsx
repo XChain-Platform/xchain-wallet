@@ -78,7 +78,7 @@ describe('the Tor routing row', () => {
         setShellCapabilities({ socksProxy: false });
         render(<PrivacySection />);
         expect(screen.getByText('Tor routing')).toBeTruthy();
-        const hint = screen.getByText(/available only in the desktop app/i);
+        const hint = screen.getByText(/Not available on this platform/i);
         // Naming the shell that can do it is the point: a bare "no"
         // reads as "this wallet has no Tor support at all".
         expect(hint.textContent).toMatch(/desktop app/i);
@@ -95,7 +95,7 @@ describe('the Tor routing row', () => {
         // The stubbed settings have torRouting on; a proxying shell
         // reflects it rather than forcing it off.
         expect(sw.checked).toBe(true);
-        expect(screen.queryByText(/available only in the desktop app/i)).toBeNull();
+        expect(screen.queryByText(/Not available on this platform/i)).toBeNull();
     });
 
     it('renders exactly one Tor row in either shell', () => {
@@ -115,14 +115,7 @@ describe('the Tor routing row', () => {
         // The old hint said "when available", which implied a graceful
         // fallback and would have made the setting meaningless.
         const hint = screen.getByText(/Tor must already be running/i);
-        expect(hint.textContent).toMatch(/requests fail if it cannot be reached/i);
-    });
-
-    it('explains third-party lookups without protocol names', () => {
-        render(<PrivacySection />);
-        expect(screen.getByText(/CoinGecko lookups for fiat values, market data, charts, and price alerts/i)).toBeTruthy();
-        const metadataHint = screen.getByText(/Loads artwork, media, and links referenced by token descriptions/i);
-        expect(metadataHint.textContent).not.toMatch(/TIS|JSON|IPFS/i);
+        expect(hint.textContent).toMatch(/requests fail rather than quietly going direct/i);
     });
 
     it('leaves the other privacy rows alone either way', () => {

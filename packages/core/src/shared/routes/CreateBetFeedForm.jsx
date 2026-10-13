@@ -28,6 +28,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -39,6 +40,13 @@ const MAX_LABEL = 250;
 const MAX_OUTCOMES = 16;
 const MAX_OUTCOME_LABEL = 64;
 const MAX_FEE_PCT = 10;
+const MIN_REFUND_WINDOW = 3600;
+const MAX_REFUND_WINDOW = 31536000;
+const MAX_DEADLINE_HORIZON = 31536000;
+const MAX_DESCRIPTION = 2000;
+const MAX_RESOLUTION_CRITERIA = 1000;
+const MAX_SOURCE = 500;
+const MAX_CATEGORY = 64;
 
 // Refund window presets, in seconds. This is how long after betting closes the
 // oracle still has to publish a result; past it, the chain refunds everyone.
@@ -75,7 +83,7 @@ function unwrap(resp) {
 // rejected for the same reason the indexer rejects them: they render as nothing,
 // which hides the difference between two labels that look identical.
 // eslint-disable-next-line no-control-regex
-const OUTCOME_BAD_CHARS = /[,|;]|[\u0000-\u001f]/;
+const OUTCOME_BAD_CHARS = /[,|;]|[\u0000-\u001f\u007f]/;
 
 /**
  * BET v0: open a betting market (a "feed") as its oracle.
@@ -366,6 +374,7 @@ export function CreateBetFeedForm({
         if (!label.trim()) return 'Give the market a question or title.';
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
         if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the chain coin cannot be wagered.';
+        if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
         if (cleanOutcomes.length < 2) return 'A market needs at least two outcomes.';
         if (cleanOutcomes.length > MAX_OUTCOMES) return `A market can have at most ${MAX_OUTCOMES} outcomes.`;
         if (cleanOutcomes.some((o) => o.length > MAX_OUTCOME_LABEL)) return `Each outcome label must be ${MAX_OUTCOME_LABEL} characters or fewer.`;
@@ -373,7 +382,11 @@ export function CreateBetFeedForm({
         if (new Set(cleanOutcomes).size !== cleanOutcomes.length) return 'Two outcomes have the same label. Each one must be distinct.';
         if (!deadlineUnix) return 'Pick when betting closes.';
         if (deadlineUnix <= nowSec) return 'Betting must close in the future.';
+        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return 'Betting must close within one year.';
         if (!refundSeconds) return 'Set how long you have to publish the result.';
+        if (refundSeconds < MIN_REFUND_WINDOW || refundSeconds > MAX_REFUND_WINDOW) {
+            return 'Time to publish the result must be between one hour and one year.';
+        }
         if (feePct.trim()) {
             if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return 'Your fee must be a number with at most two decimal places, as a percent of the pot.';
             if (Number(feePct.trim()) > MAX_FEE_PCT) return `Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`;
@@ -386,6 +399,10 @@ export function CreateBetFeedForm({
         if (allowList.trim() && allowList.trim() === blockList.trim()) {
             return 'The same list is set as both allowed and blocked, so nobody could ever bet. Pick one.';
         }
+        if (description.trim().length > MAX_DESCRIPTION) return `The description must be ${MAX_DESCRIPTION} characters or fewer.`;
+        if (resolutionCriteria.trim().length > MAX_RESOLUTION_CRITERIA) return `The settlement rule must be ${MAX_RESOLUTION_CRITERIA} characters or fewer.`;
+        if (source.trim().length > MAX_SOURCE) return `The result source must be ${MAX_SOURCE} characters or fewer.`;
+        if (category.trim().length > MAX_CATEGORY) return `The category must be ${MAX_CATEGORY} characters or fewer.`;
         return null;
     }
 
@@ -400,6 +417,17 @@ export function CreateBetFeedForm({
         setFormError(null);
         const from = sourceDescriptor();
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId,
+                    from,
+                    builder: 'createMarketParams',
+                    params: marketParams,
+                    payFeeInNativeCoin: nativeFee.flag,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -487,19 +515,6 @@ export function CreateBetFeedForm({
         );
     }
 
-    // Creating a market means signing, so watcher mode has nothing to offer here.
-    // Said plainly rather than shown as a form that cannot be submitted.
-    if (isWatcherMode) {
-        return wrap(
-            <>
-                <p className={styles.hint}>
-                    This wallet is in watcher mode, so it cannot open a market. Opening one commits you
-                    to publishing the result, which needs the key that will later resolve it.
-                </p>
-            </>,
-        );
-    }
-
     if (loadError) {
         return wrap(
             <>
@@ -511,6 +526,15 @@ export function CreateBetFeedForm({
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onBack}
+                />,
+            );
+        }
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
@@ -590,7 +614,9 @@ export function CreateBetFeedForm({
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : isWatcherMode ? 'Create unsigned transaction' : 'Review market'}
                 </Button>
             )}
         >
@@ -803,12 +829,13 @@ export function CreateBetFeedForm({
                 </>
             ) : null}
 
-            {!isHwSource && !signerReady ? (
+            {!isWatcherMode && !isHwSource && !signerReady ? (
                 <Input
                     label="Password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                 />
             ) : null}
 

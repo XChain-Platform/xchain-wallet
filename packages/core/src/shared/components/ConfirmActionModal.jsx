@@ -34,6 +34,7 @@ import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
+import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './ConfirmActionModal.module.css';
 
@@ -82,6 +83,8 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   wallet name when more than one wallet exists
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
+ * @param {(amount: string) => string|null} [props.formatNativeFee]
+ * @param {(amount: string) => string|null} [props.formatProtocolFee]
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
@@ -91,6 +94,7 @@ export function ConfirmActionModal({
     screenVariant = 'small', feeText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
+    formatNativeFee, formatProtocolFee,
 }) {
     const fallbackHeadline = variant === 'message'
         ? 'Sign message'
@@ -116,8 +120,8 @@ export function ConfirmActionModal({
     const preflightNotApplicable = !!composed?.bareNativePayment;
     // The protocol fee in the DEFAULT (XCHAIN) payment lane, read from
     // the pre-flight report the panel above already renders. The native lane
-    // discloses its own fee as a coin debit, so the helper returns
-    // null there rather than charging the user twice on screen.
+    // uses the exact coin-denominated line below, so the helper returns null
+    // there rather than labelling the same charge as an XCHAIN debit.
     //
     // Action variant only. A caller-supplied PSBT (the psbt variant) was built
     // elsewhere and the wallet cannot tell which lane paid its fee, so a line
@@ -126,6 +130,31 @@ export function ConfirmActionModal({
     const protocolFee = (variant === 'action' && !preflightNotApplicable)
         ? xchainProtocolFeeLine({ report, composed })
         : null;
+    const protocolFeeFiat = protocolFee && typeof formatProtocolFee === 'function'
+        ? formatProtocolFee(protocolFee.amount)
+        : null;
+    const reportedProtocolFee = report?.quote?.xchainFee;
+    const protocolFeeKnownFree = reportedProtocolFee !== undefined
+        && reportedProtocolFee !== null
+        && /^0+(?:\.0+)?$/.test(String(reportedProtocolFee).trim());
+    const paysProtocolFeeNatively = Number(composed?.quote?.requiredFeeSats) > 0
+        || Number(composed?.protocolFeeSats) > 0;
+    const nativeProtocolFeeSats = paysProtocolFeeNatively
+        ? Number(composed?.protocolFeeSats || composed?.quote?.requiredFeeSats)
+        : null;
+    const nativeProtocolFeeAmount = Number.isFinite(nativeProtocolFeeSats)
+        ? satsToCoinDecimal(nativeProtocolFeeSats)
+        : null;
+    const nativeProtocolFeeFiat = nativeProtocolFeeAmount
+        && typeof formatNativeFee === 'function'
+        ? formatNativeFee(nativeProtocolFeeAmount)
+        : null;
+    const protocolFeeUnavailable = variant === 'action'
+        && !preflightNotApplicable
+        && !reportLoading
+        && !protocolFee
+        && !protocolFeeKnownFree
+        && !paysProtocolFeeNatively;
     // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
     // neither fee line covers. Action variant only, for the reason above.
     const oracleFee = variant === 'action'
@@ -270,7 +299,23 @@ export function ConfirmActionModal({
                         one section, and named as itself so neither passes for
                         the other (the same rule the delta rows follow). */}
                     {protocolFee ? (
-                        <div className={styles.fee} data-testid="confirm-protocol-fee">{protocolFee.text}</div>
+                        <div className={styles.fee} data-testid="confirm-protocol-fee">
+                            {protocolFee.text}{protocolFeeFiat ? ` (${protocolFeeFiat})` : ''}
+                        </div>
+                    ) : null}
+
+                    {nativeProtocolFeeAmount ? (
+                        <div className={styles.fee} data-testid="confirm-native-protocol-fee">
+                            Protocol fee: {nativeProtocolFeeAmount} {nativeTicker}
+                            {nativeProtocolFeeFiat ? ` (${nativeProtocolFeeFiat})` : ''}
+                            {' (sent on-chain and not refunded if the action is rejected)'}
+                        </div>
+                    ) : null}
+
+                    {protocolFeeUnavailable ? (
+                        <div className={styles.fee} data-testid="confirm-protocol-fee-unavailable">
+                            Protocol fee estimate unavailable.
+                        </div>
                     ) : null}
 
                     {oracleFee ? (

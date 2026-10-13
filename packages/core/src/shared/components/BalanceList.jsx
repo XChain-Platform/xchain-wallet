@@ -15,11 +15,13 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -36,7 +38,7 @@ import {
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {string} [props.emptyActionLabel]          label for a caller-defined empty-state action; takes the button over from Receive
  * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
- * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, fiatRateSource?: string, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
@@ -44,6 +46,8 @@ import {
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
+ * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
  * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
  */
 export function BalanceList({
@@ -51,7 +55,7 @@ export function BalanceList({
     multisig,
     multisigChainId,
     emptyTitle = 'No balances yet',
-    emptyBody,
+    emptyBody = 'Balances appear here after this wallet receives funds.',
     onReceive,
     emptyActionLabel,
     onEmptyAction,
@@ -62,6 +66,8 @@ export function BalanceList({
     onToggleHide,
     verifyMap,
     hideSmallBalances = false,
+    smallBalanceThreshold = 'dust',
+    numberFormat = 'full',
     showChain = false,
     fiatCurrency = 'USD',
 }) {
@@ -93,7 +99,7 @@ export function BalanceList({
     // moves into its own collapsed section. Collapsed, not dropped: a balance
     // the wallet knows about but will not show anywhere is a support ticket.
     const small = hideSmallBalances
-        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r))
+        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r, smallBalanceThreshold))
         : [];
     const smallSet = new Set(small.map((r) => `${r.chainId}:${r.tick}`));
     const visible = small.length > 0
@@ -106,7 +112,11 @@ export function BalanceList({
         ]
         : visible;
     return (
-        <div className={styles.list} role="list" aria-label="Balances">
+        <div
+            className={styles.list}
+            role={typeof onSelectToken === 'function' ? 'group' : 'list'}
+            aria-label="Balances"
+        >
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
                 const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
@@ -114,6 +124,7 @@ export function BalanceList({
                     <BalanceRowEl
                         key={key}
                         row={r}
+                        numberFormat={numberFormat}
                         fiatCurrency={fiatCurrency}
                         multisig={r.chainId === multisigChainId ? multisig : null}
                         onSelect={onSelectToken}
@@ -145,6 +156,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`hidden:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
@@ -178,6 +190,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`small:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
@@ -196,7 +209,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD' }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -244,6 +257,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
             imageUrl: row.imageUrl,
         })
@@ -330,7 +344,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             ? '•••••'
                             : row.unavailable === 'all'
                                 ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                                : formatAmount(row.quantity, row.divisibility)}
+                                : formatAmount(row.quantity, row.divisibility, numberFormat)}
                     </div>
                     {row.escrowed ? (
                         <div className={styles.fiat} data-testid="balance-escrowed">
@@ -343,8 +357,8 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             : row.unavailable === 'all'
                                 ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                                 : row.unavailable === 'partial'
-                                    ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
-                                    : formatFiat(fiat, fiatCurrency)}
+                                    ? <span title={row.unavailableReason || undefined}>At least {formatRowFiat(row, fiat, fiatCurrency)}</span>
+                                    : formatRowFiat(row, fiat, fiatCurrency)}
                     </div>
                 </div>
             </ContentTag>
@@ -438,22 +452,36 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
  *
  * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
  * @returns {boolean}
  */
-export function isSmallBalanceRow(row) {
+export function isSmallBalanceRow(row, threshold = 'dust') {
     if (!row) return false;
     if (row.escrowed || row.unavailable) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
+    if (threshold !== 'dust') {
+        return q < decimalUnitsToBaseUnits(threshold, row.divisibility);
+    }
     if (row.kind === 'native') {
-        const threshold = SMALL_BALANCE_BASE_UNITS[row.coin || coinFromChainId(row.chainId)]
+        const chainThreshold = SMALL_BALANCE_BASE_UNITS[row.coin || coinFromChainId(row.chainId)]
             ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
-        return q < threshold;
+        return q < chainThreshold;
     }
     const div = Number(row.divisibility) || 0;
     if (div <= 0) return false;
     return q < (10n ** BigInt(div)) / 10000n;
+}
+
+function decimalUnitsToBaseUnits(value, divisibility) {
+    const div = Math.max(0, Number(divisibility) || 0);
+    const [whole, fraction = ''] = String(value).split('.');
+    const scale = 10n ** BigInt(div);
+    const kept = fraction.slice(0, div).padEnd(div, '0');
+    let result = BigInt(whole || '0') * scale + BigInt(kept || '0');
+    if (fraction.slice(div).replace(/0/g, '')) result += 1n;
+    return result;
 }
 
 /**
@@ -731,20 +759,27 @@ function safeBigInt(v) {
     return 0n;
 }
 
-export function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/**
+ * Atomic quantity at its divisibility, grouped for the selected language.
+ * numberFormat: 'full' keeps every place, 'trim' drops trailing zeros, and
+ * 'plain' skips grouping and locale entirely.
+ */
+export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
+    if (numberFormat === 'plain') {
+        const q = String(quantityStr || '0');
+        if (!divisibility || divisibility <= 0) return q;
+        const negative = q.startsWith('-');
+        const abs = negative ? q.slice(1) : q;
+        const padded = abs.padStart(divisibility + 1, '0');
+        const whole = padded.slice(0, padded.length - divisibility);
+        const frac = padded.slice(padded.length - divisibility);
+        const out = frac ? `${whole}.${frac}` : whole;
+        return negative ? `-${out}` : out;
+    }
+    if (numberFormat !== 'trim') return formatAtomicAmount(quantityStr, divisibility);
+    const plain = formatAmount(quantityStr, divisibility, 'plain');
+    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/\.$/, '') : plain;
+    return formatDecimalAmount(trimmed);
 }
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -783,30 +818,21 @@ export function sumFiatValue(rows) {
  * @param {string} [currency]   ISO code; defaults to USD
  */
 export function formatFiat(value, currency = 'USD') {
-    if (value === null || value === undefined) return '';
-    let fmt;
-    try {
-        fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: String(currency || 'USD').toUpperCase(),
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    } catch {
-        // An unknown code (a custom currency) still renders, just without a symbol.
-        return `${value} ${currency}`;
-    }
-    if (compareDecimalStrings(value, '0') === 0) return fmt.format(0);
-    if (compareDecimalStrings(value, '0') === 1 && compareDecimalStrings(value, '0.01') === -1) {
-        return `<${fmt.format(0.01)}`;
-    }
-    return fmt.format(String(value));
+    return formatFiatAmount(value, currency);
 }
 
+function formatRowFiat(row, value, currency) {
+    const formatted = formatFiat(value, currency);
+    if (!formatted || row?.kind === 'native' || row?.fiatRateSource !== 'market') return formatted;
+    return `${formatted} · DEX price`;
+}
+
+// Every chip carries white text, so each swatch is dark enough for 4.5:1
+// against #FFFFFF (the brighter Tailwind 400/500 steps measured 2.0 to 3.0).
 const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
+    '#1A74A8', '#7B2C8F', '#0369A1', '#047857', '#B45309',
+    '#DC2626', '#7C3AED', '#BE185D', '#0F766E', '#C2410C',
+    '#4F46E5', '#4D7C0F', '#0E7490', '#9333EA', '#BE123C',
 ];
 export function tickerColor(tick) {
     let h = 0;

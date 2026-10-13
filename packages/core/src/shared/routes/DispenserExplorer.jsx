@@ -16,9 +16,11 @@ import { useSettings } from '../hooks/useSettings.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const RESULTS_PAGE_SIZE = 25;
 
 /**
  * Dispenser explorer (§40.7.2 buyer-facing browse surface).
@@ -71,9 +73,10 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const [chainFilter, setChainFilter] = useState(/** @type {string} */ ('all'));
     const [searching, setSearching] = useState(false);
     const [rowsByChain, setRowsByChain] = useState(
-        /** @type {Record<string, { rows: any[], error: string | null }>} */ ({}),
+        /** @type {Record<string, { rows: any[], error: string | null, moreError?: string | null, page?: number, total?: number | null, hasMore?: boolean, loadingMore?: boolean }>} */ ({}),
     );
     const [lastQueried, setLastQueried] = useState(/** @type {string | null} */ (null));
+    const [lastSearchMode, setLastSearchMode] = useState(/** @type {'token' | 'address'} */ ('token'));
     const searchRequestId = useRef(0);
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => Object.entries(rowsByChain)
@@ -98,6 +101,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         }
         setSearching(true);
         setLastQueried(q);
+        setLastSearchMode(searchMode);
         setRowsByChain({});
 
         const targetChains = chainFilter === 'all' ? chains : [chainFilter];
@@ -108,12 +112,29 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             return;
         }
         const fetchOne = searchMode === 'token'
-            ? (cid) => messaging.getDispensersForToken({ chainId: cid, token: q })
-            : (cid) => messaging.getDispensersForAddress({ chainId: cid, address: q });
+            ? (cid) => messaging.getDispensersForToken({
+                chainId: cid,
+                token: q,
+                opts: { page: 1, limit: RESULTS_PAGE_SIZE },
+            })
+            : (cid) => messaging.getDispensersForAddress({
+                chainId: cid,
+                address: q,
+                opts: { page: 1, limit: RESULTS_PAGE_SIZE },
+            });
 
         Promise.all(targetChains.map((cid) =>
             Promise.resolve().then(() => fetchOne(cid))
-                .then((resp) => ({ cid, rows: extractRows(resp) }))
+                .then((resp) => {
+                    const rawRows = extractRows(resp);
+                    const page = explorerPage(resp, rawRows, 1, RESULTS_PAGE_SIZE);
+                    return {
+                        cid,
+                        rows: uniqueRows(rawRows, actionRowIdentity),
+                        total: page.total,
+                        hasMore: page.hasMore,
+                    };
+                })
                 .catch((err) => {
                     const message = err?.message || String(err);
                     // D-34(b): the explorer answers 404 for "this token has no
@@ -134,10 +155,70 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             for (const r of results) {
                 next[r.cid] = r.error
                     ? { rows: [], error: r.error }
-                    : { rows: r.rows, error: null };
+                    : {
+                        rows: r.rows,
+                        error: null,
+                        page: 1,
+                        total: r.total,
+                        hasMore: r.hasMore,
+                        loadingMore: false,
+                        moreError: null,
+                    };
             }
             setRowsByChain(next);
             setSearching(false);
+        });
+    }
+
+    function handleLoadMore(cid) {
+        const state = rowsByChain[cid];
+        if (!state?.hasMore || state.loadingMore || !lastQueried) return;
+        const requestId = searchRequestId.current;
+        const nextPage = (state.page || 1) + 1;
+        setRowsByChain((current) => ({
+            ...current,
+            [cid]: { ...current[cid], loadingMore: true, moreError: null },
+        }));
+        Promise.resolve().then(() => (lastSearchMode === 'token'
+            ? messaging.getDispensersForToken({
+                chainId: cid,
+                token: lastQueried,
+                opts: { page: nextPage, limit: RESULTS_PAGE_SIZE },
+            })
+            : messaging.getDispensersForAddress({
+                chainId: cid,
+                address: lastQueried,
+                opts: { page: nextPage, limit: RESULTS_PAGE_SIZE },
+            }))).then((resp) => {
+            if (requestId !== searchRequestId.current) return;
+            const pageRows = extractRows(resp);
+            const page = explorerPage(resp, pageRows, nextPage, RESULTS_PAGE_SIZE);
+            setRowsByChain((current) => {
+                const prior = current[cid];
+                if (!prior) return current;
+                const merged = uniqueRows([...prior.rows, ...pageRows], actionRowIdentity);
+                return {
+                    ...current,
+                    [cid]: {
+                        ...prior,
+                        rows: merged,
+                        page: nextPage,
+                        total: page.total ?? prior.total ?? null,
+                        hasMore: page.hasMore && merged.length > prior.rows.length,
+                        loadingMore: false,
+                    },
+                };
+            });
+        }).catch((err) => {
+            if (requestId !== searchRequestId.current) return;
+            setRowsByChain((current) => ({
+                ...current,
+                [cid]: {
+                    ...current[cid],
+                    loadingMore: false,
+                    moreError: err?.message || String(err),
+                },
+            }));
         });
     }
 
@@ -199,7 +280,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize={searchMode === 'token' ? 'characters' : 'none'}
+                    autoCapitalize={searchMode === 'token' ? 'characters' : 'off'}
                     autoCorrect="off"
                     spellCheck={false}
                 />
@@ -230,6 +311,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     searching={searching}
                     onOpenDispenser={onOpenDispenser}
                     oracleFeedsFor={oracleFeedsFor}
+                    onLoadMore={handleLoadMore}
                 />
             ) : (
                 <p className={styles.entryDescription}>
@@ -242,13 +324,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     );
 }
 
-function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }) {
+function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, onLoadMore }) {
     if (searching) {
         return <p className={styles.entryDescription}>Searching…</p>;
     }
     const entries = Object.entries(rowsByChain);
     if (entries.length === 0) {
-        return <EmptyState title="No results." />;
+        return <EmptyState title="No results yet" body="Search results appear here after a query finishes." />;
     }
     // Surface an overall-error row when the precondition failed (e.g.,
     // invalid token regex). That uses the sentinel "_error" key.
@@ -269,7 +351,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
     // The raw-404 complaint only ever became visible because ONE chain
     // happened to return rows; the total-failure case was silently worse.
     if (!anyRow && !anyError) {
-        return <EmptyState title="No open dispensers matched." />;
+        return <EmptyState title="No matching dispensers" body="Try a different ticker or address." />;
     }
     return (
         <>
@@ -280,23 +362,49 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
                 return (
                     <section key={cid} style={{ marginBottom: '1rem' }}>
                         <SectionHeader
-                            title={d
-                                ? <ChainBadge descriptor={d} size="sm" />
-                                : <span>{cid}</span>}
+                            title={(
+                                <>
+                                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
+                                    {' '}
+                                    <span>
+                                        {state.total != null && state.total > state.rows.length
+                                            ? `${state.rows.length} of ${state.total}`
+                                            : state.rows.length}
+                                    </span>
+                                </>
+                            )}
                         />
                         {state.error ? (
                             <StatusMessage variant="error" className={styles.entryDescription}>
                                 Couldn't search: {state.error}
                             </StatusMessage>
                         ) : (
-                            state.rows.map((row) => (
-                                <ResultRow
-                                    key={String(row.action_index)}
-                                    row={row}
-                                    oracleFeeds={oracleFeedsFor(cid, row)}
-                                    onSelect={() => onOpenDispenser(cid, String(row.action_index))}
-                                />
-                            ))
+                            <>
+                                {state.rows.map((row, index) => (
+                                    <ResultRow
+                                        key={String(actionRowIdentity(row) ?? `result:${index}`)}
+                                        row={row}
+                                        oracleFeeds={oracleFeedsFor(cid, row)}
+                                        onSelect={() => onOpenDispenser(cid, String(row.action_index))}
+                                    />
+                                ))}
+                                {state.moreError ? (
+                                    <StatusMessage variant="error" className={styles.entryDescription}>
+                                        Couldn't load more: {state.moreError}
+                                    </StatusMessage>
+                                ) : null}
+                                {state.hasMore ? (
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        loading={state.loadingMore}
+                                        onClick={() => onLoadMore(cid)}
+                                        aria-label={`Load more results for ${d?.displayName || cid}`}
+                                    >
+                                        Load more results
+                                    </Button>
+                                ) : null}
+                            </>
                         )}
                     </section>
                 );
@@ -331,5 +439,6 @@ function extractRows(resp) {
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
+    if (Array.isArray(resp.dispensers)) return resp.dispensers;
     return [];
 }

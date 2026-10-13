@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { DetailCard, EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -23,6 +24,36 @@ function provider(messaging, child) {
 afterEach(() => cleanup());
 
 describe('History usability', () => {
+    it('shows an exact History timestamp in local time', () => {
+        const timestamp = Date.parse('2024-01-15T20:30:00Z') / 1000;
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+        };
+        const entry = {
+            action: 'SEND',
+            actionIndex: '12',
+            blockIndex: 100,
+            chainId: CHAIN,
+            timestamp,
+            raw: {},
+        };
+        const expected = formatLocalDateTime(timestamp);
+
+        render(provider(
+            messaging,
+            <DetailCard
+                entry={entry}
+                peerCache={{}}
+                walletId="wallet-a"
+                showFiatInHistory={false}
+                fiatCurrency="USD"
+            />,
+        ));
+
+        expect(screen.getByText(expected)).toBeInTheDocument();
+        expect(screen.queryByText(/ UTC$/)).toBeNull();
+    });
+
     it('opens the selected row', () => {
         const onClick = vi.fn();
         render(provider(
@@ -121,7 +152,7 @@ describe('History usability', () => {
         ));
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Copy index' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
         expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
@@ -164,7 +195,7 @@ describe('History usability', () => {
             ));
 
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Copy tx hash' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
             await waitFor(() => expect(writeText).toHaveBeenCalledWith(txHash));
 
             expect(screen.getByRole('link', { name: 'XChain' }))

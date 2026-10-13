@@ -307,7 +307,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                     if (quizError) setQuizError(null);
                                 }}
                                 autoComplete="off"
-                                autoCapitalize="none"
+                                autoCapitalize="off"
                                 autoCorrect="off"
                                 spellCheck={false}
                                 disabled={stage === 'persisting'}
@@ -433,7 +433,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 ref={passwordRef}
                 type="password"
                 label="Password"
-                hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Use a unique password; longer is stronger.`}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -463,7 +463,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         onChange={() => setWordCount(12)}
                     />
                     <span className={styles.wordCountLabel}>12 words</span>
-                    <span className={styles.wordCountHint}>Default (128-bit entropy)</span>
+                    <span className={styles.wordCountHint}>Recommended: secure and easier to back up</span>
                 </label>
                 <label className={styles.wordCountOption}>
                     <input
@@ -474,7 +474,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         onChange={() => setWordCount(24)}
                     />
                     <span className={styles.wordCountLabel}>24 words</span>
-                    <span className={styles.wordCountHint}>256-bit entropy</span>
+                    <span className={styles.wordCountHint}>Extra entropy, twice as many words to store</span>
                 </label>
             </fieldset>
             <div className={styles.advancedRow}>
@@ -490,32 +490,31 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             }
                         }}
                     />
-                    <span>Add a BIP39 passphrase (advanced)</span>
+                    <span>Use a BIP39 passphrase (advanced)</span>
                     <InfoTip
-                        aria="Passphrase help"
-                        label="Creates a different wallet from the same recovery phrase. You need it for recovery. Lose it and the wallet cannot be recovered. Hardware wallets handle it."
+                        aria="BIP39 passphrase help"
+                        label="An optional secret string, sometimes called a 13th or 25th word, that derives a different wallet from the same recovery phrase. It is not one of the recovery words. Every character, space, and capital letter matters. The wallet stores it on this device, protected by your password, but you must provide it when restoring elsewhere. A missing or different passphrase opens a different wallet without an error. Hardware wallets handle it on the device itself."
                     />
                 </label>
                 {showPassphrase ? (
                     <>
                         <p className={styles.advancedWarning}>
-                            The passphrase becomes a permanent part of your wallet.
-                            It is stored on this device, protected by your wallet
-                            password, so you will not be asked for it again here. To
-                            restore this wallet anywhere else you will need BOTH your
-                            recovery phrase AND this passphrase. If you forget it,
-                            your wallet cannot be recovered or reset.
+                            Save this passphrase separately from your recovery phrase.
+                            You need both to restore this wallet. It cannot be reset or
+                            recovered, and a missing or mistyped passphrase opens a
+                            different wallet without warning. Capitalization and spaces
+                            matter.
                         </p>
                         <Input
                             type="password"
                             label="BIP39 passphrase"
-                            hint="Optional. Leave blank to skip."
+                            hint="Required when enabled. Capitalization and spaces matter."
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                         <Input
                             type="password"
@@ -525,7 +524,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                 setBip39PassphraseConfirm(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                     </>
                 ) : null}

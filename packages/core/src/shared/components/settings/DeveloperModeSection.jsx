@@ -388,8 +388,9 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                             Deriving the first {descriptor.displayName} address round-trips to your hardware device. Connect it and check your device to confirm the new address when prompted; no wallet password is needed.
                         </div>
                     ) : (
-                        <input
-                            type="password"
+                    <input
+                        type="password"
+                        enterKeyHint="go"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="Wallet password"
@@ -514,6 +515,10 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Miner URL</span>
                     <input
                         type="text"
+                        enterKeyHint="next"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         // The wrapping <label> associates this implicitly, which
                         // assistive tech honours, but the repo's a11y audit only
                         // accepts an explicit name (label= / aria-label /
@@ -538,6 +543,7 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     <input
                         type="text"
                         inputMode="decimal"
+                        enterKeyHint="go"
                         aria-label={`Amount (${coinTicker})`}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}

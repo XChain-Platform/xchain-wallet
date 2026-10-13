@@ -34,6 +34,15 @@ export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.
 const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token/i;
+const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|\n\s*at\s+\S+|request failed with status code\s+\d{3}|^(?:rpc|http)\s+(?:error|code)\b/i;
+const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
+
+function errorText(err) {
+    const raw = (err && typeof err === 'object')
+        ? (/** @type {any} */ (err).message || '')
+        : (typeof err === 'string' ? err : '');
+    return String(raw).trim();
+}
 
 /**
  * @param {unknown} err       the caught error (Error, string, or anything)
@@ -41,14 +50,9 @@ const INTERNALS = /non-base58|cannot read propert|is not a function|is not defin
  *                            developer output (or missing entirely)
  * @returns {string}
  */
-export function userFacingMessage(err, fallback) {
-    const raw = (err && typeof err === 'object')
-        ? (/** @type {any} */ (err).message || '')
-        : (typeof err === 'string' ? err : '');
-    const text = String(raw).trim();
-    if (!text) return fallback;
-    if (DEV_PREFIX.test(text)) return fallback;
-    if (INTERNALS.test(text)) return fallback;
+export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
+    const text = errorText(err);
+    if (isDeveloperMessage(err)) return fallback;
     return text;
 }
 
@@ -60,10 +64,13 @@ export function userFacingMessage(err, fallback) {
  * @returns {boolean}
  */
 export function isDeveloperMessage(err) {
-    const raw = (err && typeof err === 'object')
-        ? (/** @type {any} */ (err).message || '')
-        : (typeof err === 'string' ? err : '');
-    const text = String(raw).trim();
+    const text = errorText(err);
     if (!text) return true;
-    return DEV_PREFIX.test(text) || INTERNALS.test(text);
+    if (err && typeof err === 'object') {
+        const e = /** @type {any} */ (err);
+        if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
+        if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
+    }
+    return DEV_PREFIX.test(text) || INTERNALS.test(text)
+        || WIRE_TEXT.test(text) || SERIALIZED_DATA.test(text);
 }

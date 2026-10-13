@@ -30,13 +30,15 @@ assert.match(
     'privacy writes go through update({ privacy: { [field]: next } }), nested merge',
 );
 
-// All five live toggles (v2 added blurOnBlur + labelsSurviveRestore)
-for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore']) {
+// Privacy controls stay in this panel; balance visibility lives in Display.
+for (const field of ['torRouting', 'changeAddressRotation', 'blurOnBlur', 'labelsSurviveRestore']) {
     assert.ok(
         src.includes(`onToggle('${field}'`),
         `toggle for privacy.${field} present`,
     );
 }
+assert.ok(!src.includes("onToggle('hideSmallBalances'"),
+    'hide-small-balances control lives in Display');
 assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
 assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
 
@@ -69,7 +71,7 @@ assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
     'the non-proxying shells render an explicit unavailable row');
 const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
 const unavailBlock = src.slice(unavailGate, unavailGate + 700);
-assert.match(unavailBlock, /available only in the desktop app/,
+assert.match(unavailBlock, /Not available on this platform/,
     'the unavailable row names the platform limit in the hint');
 assert.match(unavailBlock, /checked=\{false\}/,
     'the unavailable row never draws a switch in the on position');

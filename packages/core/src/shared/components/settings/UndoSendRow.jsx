@@ -31,9 +31,10 @@ import { useMessaging } from '../../useMessaging.js';
 import { INPUT, ROW, ROW_LABEL, ToggleRow } from './_settingsPrimitives.jsx';
 
 const HINT_UNAVAILABLE =
-    'Not available yet: sends are not held on this build. Your choice here is saved and will apply once they are.';
+    'This build cannot hold sends. The preference is saved for a build that supports it.';
 const HINT_AVAILABLE =
-    'Holds each signed send for the seconds below so you can cancel it before it is broadcast.';
+    'When enabled, holds each signed send for the duration below so you can cancel it before '
+    + 'broadcast. A duration of 0 does not hold sends.';
 
 export function UndoSendRow() {
     const { settings, update } = useSettings();
@@ -48,7 +49,7 @@ export function UndoSendRow() {
     return (
         <>
             <ToggleRow
-                label="Give me time to cancel sends"
+                label="Hold signed sends before broadcast"
                 hint={held ? HINT_AVAILABLE : HINT_UNAVAILABLE}
                 checked={enabled}
                 onChange={(v) => {
@@ -59,7 +60,7 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_LABEL}>Seconds to cancel a send</span>
+                <span style={ROW_LABEL}>Hold duration in seconds (0 disables)</span>
                 <input
                     key={seconds}
                     type="number"
@@ -80,7 +81,7 @@ export function UndoSendRow() {
                         });
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    aria-label="Seconds to cancel a send"
+                    aria-label="Send hold duration in seconds"
                     style={{ ...INPUT, width: 100, textAlign: 'right' }}
                 />
             </div>

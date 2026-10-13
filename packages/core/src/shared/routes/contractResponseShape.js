@@ -72,7 +72,7 @@ export function contractBalanceOf(balances, tick) {
 // the explorer. The abi is display metadata the deployer controls and the
 // explorer relays verbatim, so a malformed or hostile shape must never reach
 // render: a method whose `params` is a string (or any non-array) would throw on
-// `.map` and, with no ErrorBoundary in the wallet, white-screen the whole SPA.
+// `.map` and replace the route with its crash-recovery screen.
 // Fail-closed per method, mirroring the SDK/explorer parseAbi: a method whose
 // `params` is present but not an array is dropped, and a kept method is
 // guaranteed a `params` array of {name,type}. Returns a safe {version, methods}

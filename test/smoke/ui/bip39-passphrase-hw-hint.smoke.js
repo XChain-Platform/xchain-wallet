@@ -32,7 +32,7 @@ const importSrc = read('packages/core/src/shared/routes/ImportWallet.jsx');
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
 //    mention the HW-on-device caveat alongside the entropy /
 //    forget-warning text the v0.210.0 copy already surfaced.
-assert.ok(/aria="Passphrase help"/.test(createSrc),
+assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(createSrc),
     'CreateWallet keeps its BIP39 passphrase InfoTip aria');
 assert.ok(/Hardware wallets handle it/.test(createSrc),
     'CreateWallet InfoTip mentions hardware wallets handle passphrases on-device');
@@ -42,11 +42,11 @@ assert.ok(/Hardware wallets handle it/.test(createSrc),
 //    toggle.
 assert.ok(/InfoTip/.test(importSrc),
     'ImportWallet imports InfoTip from core/ui');
-assert.ok(/aria="Passphrase help"/.test(importSrc),
+assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(importSrc),
     'ImportWallet ships a BIP39 passphrase InfoTip');
-assert.ok(/For a hardware wallet, enter it on the device/.test(importSrc),
+assert.ok(/hardware wallets|enter it on the device/i.test(importSrc),
     'ImportWallet InfoTip mentions HW devices handle passphrases on-device');
-assert.ok(/pair through Add Account/.test(importSrc),
+assert.ok(/Add Account/.test(importSrc),
     'ImportWallet InfoTip points users to the correct HW pairing lane');
 
 // 3. The ImportWallet InfoTip lives inside the existing

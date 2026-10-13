@@ -186,7 +186,7 @@
 
 .status_pending {
     background: color-mix(in srgb, var(--xc-accent-primary) 15%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .amount {

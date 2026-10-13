@@ -14,7 +14,7 @@
 // The wallet used to tell a user whose broadcast failed that the signed
 // transaction "will be re-broadcast automatically". Nothing in the wallet
 // re-broadcasts anything. The one and only caller of the broadcast route is
-// the user pressing "Broadcast now" in QueuedBroadcastBanner; what the wallet
+// the user pressing "Send now" in QueuedBroadcastBanner; what the wallet
 // does by itself is show a toast when reachability flips back to normal. A
 // user who believed the old sentence, and was told in the same breath not to
 // send the payment again, waited for a retry that could never run.
@@ -197,7 +197,7 @@ for (const file of scanned) {
 assert.deepEqual(
     callers,
     ['packages/core/src/shared/components/QueuedBroadcastBanner.jsx'],
-    'the queued-broadcast route has exactly one caller (the banner\'s "Broadcast now" button). '
+    'the queued-broadcast route has exactly one caller (the banner\'s "Send now" button). '
     + `Found: ${callers.join(', ') || 'none'}. If an auto-drain was added, the done-screen copy `
     + 'in QUEUED_SURFACES has to be made true again (remedy b).',
 );
@@ -218,8 +218,8 @@ assert.ok(
     'the banner watches reachability and can raise a toast',
 );
 assert.ok(
-    /queued transactions?\. Broadcast now\?/.test(banner),
-    'the reconnection toast asks the user to broadcast the queued transactions',
+    /transactions? (?:is|are) ready to send\./.test(banner),
+    'the reconnection toast says the queued transactions are ready to send',
 );
 assert.ok(
     /if \(prev !== 'offline' && prev !== 'degraded'\) return;[\s\S]{0,120}?reachabilityOverall !== 'normal'/

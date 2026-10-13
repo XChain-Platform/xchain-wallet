@@ -155,4 +155,27 @@ class MainViewController: CAPBridgeViewController {
             controller.add(list)
         }
     }
+
+    // MARK: - iPadOS window controls
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        clearWindowControls()
+    }
+
+    /// Clear the iPadOS 26 window controls: a resizable window keeps them outside the
+    /// plain safe area, so top the safe area that the WebView reads through env() up to
+    /// UIKit's corner-adapted value. Full screen, where the two agree, is unchanged.
+    private func clearWindowControls() {
+        guard #available(iOS 26.0, *) else { return }
+        // Window controls exist only on iPad; an iPhone keeps its plain safe area untouched.
+        guard traitCollection.userInterfaceIdiom == .pad else { return }
+        let base = view.safeAreaInsets.top - additionalSafeAreaInsets.top
+        let adapted = view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)).top
+        let extra = max(0, adapted - base)
+        // Only on a real change: setting the inset lays the view out again.
+        if abs(additionalSafeAreaInsets.top - extra) > 0.5 {
+            additionalSafeAreaInsets.top = extra
+        }
+    }
 }

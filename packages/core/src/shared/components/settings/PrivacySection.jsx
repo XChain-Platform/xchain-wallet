@@ -8,18 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// PrivacySection (§35.1 Privacy panel).
-//
-// All five §35.1 toggles backed by `settings.privacy.*` (schema v2):
-//   - Tor routing
-//   - Change-address rotation
-//   - Hide small balances
-//   - Blur sensitive data on blur (window-unfocus blur of mnemonic /
-//     QR / balance values; toggle ships now, the actual blur-on-blur
-//     wiring lives in shell-level event handlers added later)
-//   - Labels-survive-restore (§19.5.2 on-chain label sync opt-in;
-//     toggle persists the preference, the FILE-action submit/fetch
-//     wiring is shell-level work pending separately)
+// PrivacySection (§35.1 Privacy panel). Every switch describes its live
+// consumer, including shell limits and the behavior of default-on fields.
+// Form-draft retention is a select because it has more than two states.
 //
 // (operator ruling a, 2026-08-11): the "Clipboard auto-clear
 // (seconds)" input that used to sit at the bottom of this panel is gone.
@@ -61,34 +52,22 @@ export function PrivacySection() {
 
     return (
         <div style={STACK}>
-            {/* The live toggle renders only where the host can
-                actually route. A browser page cannot speak SOCKS at all,
-                and an MV3 extension could only proxy the user's whole
-                browser rather than the wallet, so an operable toggle
-                there would promise something no code could keep. It was
-                offered in all three shells and implemented in none. */}
+            {/* Only a host that can proxy wallet-owned traffic exposes the
+                live setting. Browser-based shells show the disabled row. */}
             {shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Routes wallet requests through Tor at 127.0.0.1:9050. Tor must already be running; requests fail if it cannot be reached."
+                    hint="Desktop only. Send the wallet's network traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050. Tor must already be running: if it is unreachable, requests fail rather than quietly going direct."
                     checked={settings.privacy.torRouting}
                     onChange={(v) => onToggle('torRouting', v)}
                 />
             )}
-            {/* (operator ruling a): the shells that cannot route
-                say so, rather than dropping the row. Silence reads as
-                "this wallet has no Tor option"; the disabled row reads
-                as "not here, and here is where". It is rendered
-                unchecked and inert on purpose: a saved `torRouting: true`
-                carried in from a desktop vault must never draw a switch
-                in the on position on a shell where nothing is proxied,
-                which is the exact misrepresentation this item exists to
-                close. Same disclosure shape as "Labels survive restore"
-                below. */}
+            {/* An unavailable shell always renders this switch off because
+                its stored desktop preference cannot affect local traffic. */}
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Tor routing is available only in the desktop app. This platform cannot proxy only the wallet's requests."
+                    hint="Not available on this platform or shell. Browser-based wallets cannot open a wallet-only SOCKS connection, and an extension proxy would affect the entire browser. The desktop app can route only the wallet's traffic through Tor."
                     checked={false}
                     disabled
                     onChange={() => {}}
@@ -96,56 +75,43 @@ export function PrivacySection() {
             )}
             <ToggleRow
                 label="Change-address rotation"
-                /* This drives flows/changeAddress.js. The second
-                   sentence is not a caveat for its own sake - the wallet funds
-                   one action from one address, so after a rotated send the
-                   remaining balance sits on the new address and the address you
-                   sent from reads zero. Users who are not told that report it
-                   as lost funds. */
-                hint="Uses a fresh address for change after each send, making transactions harder to link. Your remaining balance appears under a new Change address."
+                hint="For HD wallets, use the next internal change address when a send can derive one. Imported-key and watch-only sends keep the spending address. Rotated leftovers appear in the address list as “Change #N”."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
             <ToggleRow
-                label="Hide small balances"
-                hint="Hides tiny balances from balance and portfolio views."
-                checked={settings.privacy.hideSmallBalances}
-                onChange={(v) => onToggle('hideSmallBalances', v)}
-            />
-            <ToggleRow
                 label="Blur sensitive data on blur"
-                hint="Blurs recovery phrases, QR codes, and balances while the wallet is not focused."
+                hint="Blur the entire wallet display while its window or tab is unfocused or hidden, then reveal it again when focus returns."
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <ToggleRow
                 label="Labels survive restore"
-                /* Spec §19.5.2: the extension background host reads this flag to queue label batches; Backup publishes by hand in every shell. */
-                hint="In the browser extension, queues label changes for encrypted backup and restore. You can also publish them manually from Backup."
+                hint="In the browser extension, batch label and contact edits and prompt for one on-chain publish per unlock window. Every app can still publish and restore labels manually from Backup."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <ToggleRow
                 label="Haptic feedback"
-                hint="Vibrates for success, errors, and taps on supported devices. Your reduced-motion setting also turns this off."
+                hint="Allow vibration for tap, success, warning, and error events when the device supports the Vibration API. OS or in-app reduced-motion settings suppress haptics."
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <ToggleRow
                 label="Native coin price data"
-                hint="Allows CoinGecko lookups for fiat values, market data, charts, and price alerts. CoinGecko can learn that you use this wallet. Turn off to stop these requests."
+                hint="Allow third-party CoinGecko requests for native-coin detail stats and fallback fiat rates, and allow price-alert checks when alerts are enabled. Turning this off blocks CoinGecko and hides the detail stats and chart; explorer-backed on-chain oracle rates can still appear as normal wallet API traffic."
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <ToggleRow
                 label="Fetch token metadata"
-                hint="Loads artwork, media, and links referenced by token descriptions. Their hosts can learn which token you view. Turn off to show only on-chain details."
+                hint="When a token description points to a Token Information Standard (TIS) JSON document, fetch it and load its referenced artwork or media from issuer-selected hosts. Turning this off shows only on-chain token fields without TIS or remote-media requests."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <ToggleRow
                 label="Always require hardware cross-check confirm"
-                hint="Requires you to confirm the path and address on every hardware-wallet signature. Risky signatures already require this check."
+                hint={`Require the explicit "I've verified path + address" checkbox on every hardware-wallet sign. Without this setting, the checkbox is still required for large amounts, first-time recipients, and multisig signs.`}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />

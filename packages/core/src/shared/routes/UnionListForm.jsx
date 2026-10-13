@@ -27,6 +27,7 @@ import { unionPickState } from '../../flows/unionListPicks.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -304,6 +305,15 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
         return wrap(<p className={styles.hint}>Loading...</p>);
     }
     if (result) {
+        if (result.psbtHex && !result.txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onDone}
+                />,
+            );
+        }
         return wrap(
             <>
                 <StatusMessage variant="success">
@@ -335,9 +345,9 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
                     type="submit"
                     variant="primary"
                     loading={lane.composing}
-                    disabled={sdkSupported !== true || !fromAddress || !pickState.canReview || lane.composing}
+                    disabled={sdkSupported !== true || !fromAddress || pickState.overLimit || lane.composing}
                 >
-                    Review
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
                 </Button>
             )}
         >
@@ -360,7 +370,8 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             <fieldset aria-label="Member lists" disabled={sdkSupported !== true}>
                 {candidates.length === 0 ? (
                     <EmptyState
-                        title="No local or shared lists can be used on this chain."
+                        title="No usable lists"
+                        body="Local and shared lists available on this chain appear here."
                         titleAs="p"
                     />
                 ) : null}

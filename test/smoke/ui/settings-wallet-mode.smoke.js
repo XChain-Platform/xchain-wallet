@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §20 / G039: Wallet Mode panel (Step 1 of 3).
+// Smoke for the Wallet Mode panel.
 //
 // Pins:
 //   - schemas/settings.js exports WALLET_MODES + WALLET_MODE_DEFAULT, the
 //     default seed includes walletMode: 'full', and validateSettings is
 //     v2-tolerant (optional walletMode rejected only when present + invalid).
 //   - WalletModeSection renders a fieldset of three radio options
-//     (full / watcher / signer) and writes through update({ walletMode }).
+//     (full / watcher / signer), confirms the consequence, and persists it.
 //   - Settings.jsx registers the section as an internal-drill row above
 //     Backup, with a summary helper that reads settings.walletMode.
 
@@ -71,9 +71,11 @@ assert.match(sectionSrc, /<fieldset/, 'wraps options in a <fieldset>');
 assert.match(sectionSrc, /type="radio"/, 'renders radio inputs');
 assert.match(
     sectionSrc,
-    /update\(\{\s*walletMode:\s*next\s*\}\)/,
-    'onChange writes through update({ walletMode })',
+    /update\(\{\s*walletMode:\s*pending\s*\}\)/,
+    'confirmation writes through update({ walletMode })',
 );
+assert.match(sectionSrc, /role="alertdialog"/, 'mode changes require confirmation');
+assert.match(sectionSrc, /Confirm mode change/, 'confirmation has an explicit action');
 assert.match(
     sectionSrc,
     /aria-describedby=\{`walletMode-\$\{opt\.value\}-hint`\}/,
@@ -86,7 +88,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ WalletModeSection \}/, 'Settings.jsx imports WalletModeSection');
 assert.match(
     settingsSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
+    /import\s*\{[^}]*\bWALLET_MODE_DEFAULT\b[^}]*\}\s*from '\.\.\/\.\.\/schemas\/settings\.js';/,
     'Settings.jsx imports WALLET_MODE_DEFAULT for the summary helper',
 );
 const idx = settingsSrc.indexOf("id: 'wallet-mode'");
