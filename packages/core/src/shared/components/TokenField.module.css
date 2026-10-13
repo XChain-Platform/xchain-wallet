@@ -1,15 +1,16 @@
-/* TokenField: an inline token selector styled to match the shared Input's
-   field chrome (border/background/radius/label) at both sizes, so it sits in
-   a form indistinguishable in size from an Input/Select. The control is a
-   button (icon + ticker/chain text + caret) rather than an <input>, but the
-   sizing contract mirrors Input.module.css: the default control token on
-   .control/.label, with `.lg` overrides for the large hero size. */
+/* TokenField matches the shared Input chrome and size scale while keeping its
+   button semantics for opening the token picker. */
 
 .field {
+    --token-field-control-height: var(--xc-control-h-md);
     display: flex;
     flex-direction: column;
     min-width: 0;
     margin-bottom: var(--xc-space-3);
+}
+
+.lg {
+    --token-field-control-height: var(--xc-control-h-lg);
 }
 
 .label {
@@ -26,15 +27,14 @@
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
-    /* Keep the compact vertical inset while the shared token owns the outer height. */
-    padding: var(--xc-space-1) var(--xc-space-3);
-    min-height: var(--xc-control-h-md);
+    height: var(--token-field-control-height);
+    padding: 0 var(--xc-control-pad-x);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-control-font);
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
@@ -62,19 +62,12 @@
     box-shadow: var(--xc-shadow-danger-focus-ring);
 }
 
-/* lg (hero) size, matching Input.module.css `.lg`. */
-.lg .control {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: var(--xc-control-h-lg);
-}
-
 .lg .label {
     font-size: var(--xc-text-md);
     font-weight: 600;
 }
 
-/* Keep md on one line while lg stacks the two lines inside its taller control. */
+/* The default is a single line; the lg hero control stacks the two lines. */
 .text {
     display: flex;
     flex-direction: row;
