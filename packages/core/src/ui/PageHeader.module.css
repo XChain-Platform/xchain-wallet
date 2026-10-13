@@ -67,8 +67,8 @@
 
 .title {
     margin: 0;
-    font-weight: 700;
-    font-size: var(--xc-text-lg);
+    font-size: var(--xc-type-page-title-size);
+    font-weight: var(--xc-type-page-title-weight);
     color: var(--xc-text);
     text-align: center;
     overflow-wrap: anywhere;

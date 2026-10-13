@@ -30,8 +30,8 @@
 
 .title {
     margin: 0;
-    font-size: var(--xc-text-md);
-    font-weight: 600;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     line-height: 1.3;
     color: var(--xc-text);
 }
@@ -39,7 +39,8 @@
 .body {
     margin: 0;
     max-width: 40ch;
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
     line-height: 1.4;
     color: var(--xc-text-muted);
 }
