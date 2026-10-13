@@ -285,8 +285,7 @@ function utxoValueSats(utxo) {
 
 function utxoOutpoint(utxo) {
     const txid = String(utxo?.txid || 'Unknown transaction');
-    const compactTxid = txid.length > 18 ? `${txid.slice(0, 8)}…${txid.slice(-8)}` : txid;
-    return `${compactTxid}:${utxo?.vout ?? '?'}`;
+    return <><AddressText address={txid} size="sm" />:{utxo?.vout ?? '?'}</>;
 }
 
 // Validate the destination against the chain the SEND will be broadcast on.
@@ -2652,9 +2651,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             })
             : null;
         const sentAmount = amount && tick ? `${amount} ${tick}` : null;
-        const recipient = toAddress
-            ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
-            : null;
+        const recipient = toAddress || null;
         const sendAnother = () => {
             cancelMax();
             setStage('form');
@@ -2761,7 +2758,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             {recipient ? (
                                 <div className={styles.successRow}>
                                     <dt>{t('send.fields.to')}</dt>
-                                    <dd className={styles.successMono}>{recipient}</dd>
+                                    <dd className={styles.successMono}><AddressText address={recipient} /></dd>
                                 </div>
                             ) : null}
                             {desc ? (
@@ -2776,7 +2773,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         <div className={styles.successTxidBlock}>
                             <p className={styles.successLabel}>{t('send.txid')}</p>
                             <div className={styles.successTxidRow}>
-                                <code className={styles.txid}>{txid}</code>
+                                <AddressText address={txid} className={styles.txid} size="sm" />
                                 <CopyButton
                                     value={txid}
                                     label={t('send.success.copy')}

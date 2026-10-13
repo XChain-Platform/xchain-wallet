@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressText, truncateAddress } from '../../../packages/core/src/ui/AddressText.jsx';
 
@@ -22,12 +22,24 @@ describe('truncateAddress', () => {
 });
 
 describe('<AddressText>', () => {
-    it('shows a middle ellipsis while exposing the full address accessibly', () => {
+    it('shows one middle ellipsis and exposes the full value on focus, copy, and to screen readers', () => {
         render(<AddressText address={ADDRESS} />);
 
         const address = screen.getByLabelText(ADDRESS);
         expect(address).toHaveTextContent('bc1q12…uvwxyz');
         expect(address).toHaveAttribute('title', ADDRESS);
+        expect(address).toHaveAttribute('tabindex', '0');
+        expect(address).toHaveStyle({ whiteSpace: 'nowrap', wordBreak: 'normal' });
+
+        fireEvent.focus(address);
+        expect(address).toHaveTextContent(ADDRESS);
+
+        const setData = vi.fn();
+        fireEvent.copy(address, { clipboardData: { setData } });
+        expect(setData).toHaveBeenCalledWith('text/plain', ADDRESS);
+
+        fireEvent.blur(address);
+        expect(address).toHaveTextContent('bc1q12…uvwxyz');
     });
 });
 
@@ -59,18 +71,20 @@ describe('<AddressText> rendering', () => {
         expect(value).toHaveAttribute('title', SHORT_ADDRESS);
     });
 
-    it('renders the full address when truncation is disabled', () => {
+    it('renders the full address in explicit verification contexts', () => {
         render(<AddressText address={SHORT_ADDRESS} truncate={false} />);
         expect(screen.getByLabelText(SHORT_ADDRESS)).toHaveTextContent(SHORT_ADDRESS);
     });
 
     it('splits highlighted addresses into head, middle, and tail without changing their name', () => {
-        const { container } = render(<AddressText address={SHORT_ADDRESS} highlight truncate={false} />);
+        const { container } = render(<AddressText address={SHORT_ADDRESS} highlight />);
         const value = screen.getByLabelText(SHORT_ADDRESS);
         expect(value.children).toHaveLength(3);
         expect(value.children[0]).toHaveTextContent(SHORT_ADDRESS.slice(0, 6));
-        expect(value.children[1]).toHaveTextContent(SHORT_ADDRESS.slice(6, -6));
+        expect(value.children[1]).toHaveTextContent('…');
         expect(value.children[2]).toHaveTextContent(SHORT_ADDRESS.slice(-6));
+        fireEvent.focus(value);
+        expect(value.children[1]).toHaveTextContent(SHORT_ADDRESS.slice(6, -6));
         expect(container.firstChild).toBe(value);
     });
 

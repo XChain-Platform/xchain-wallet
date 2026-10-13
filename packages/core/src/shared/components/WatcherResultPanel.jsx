@@ -33,6 +33,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
 import { CopyButton, FormSection, Textarea } from '../../ui/index.js';
+import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { useToast } from './ToastHost.jsx';
@@ -90,7 +91,7 @@ export function WatcherResultPanel({
                             <div className={styles.successRow}>
                                 <dt>From</dt>
                                 <dd className={styles.successMono}>
-                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
+                                    <AddressText address={result.fromAddress} size="sm" />
                                 </dd>
                             </div>
                         ) : null}

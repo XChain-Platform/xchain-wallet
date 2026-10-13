@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -822,7 +822,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         onClick={() => runAction(addrPicker, e)}
                                     >
                                         <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        <AddressText address={e.address} className={picker.addressText} />
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </Button>
                                 </li>
@@ -851,7 +851,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         return (
                             <li key={i} className={picker.addressCard}>
                                 <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
-                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                <AddressText address={e.address} className={picker.addressText} />
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <Button
                                     type="button"

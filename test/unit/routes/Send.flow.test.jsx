@@ -546,7 +546,7 @@ describe('Send flow with mocked messaging', () => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         }));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
         // The ToastHost notifications viewport is its own status region, so the
         // success screen's announcement is looked up inside the screen's main.
@@ -693,7 +693,7 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
 
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByLabelText(TXID)).toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
