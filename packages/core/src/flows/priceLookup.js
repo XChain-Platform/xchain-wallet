@@ -882,13 +882,39 @@ export function _resetPriceLookupForTests({ preservePersistent = false } = {}) {
  */
 export function coinToFiat(coinAmount, rate) {
     const exact = coinToFiatExact(coinAmount, rate);
-    return exact === null ? null : Number(exact);
+    if (exact === null) return null;
+    const converted = Number(exact);
+    return Number.isFinite(converted) ? converted : null;
+}
+
+function plainDecimalNumber(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    const raw = String(value);
+    if (!/[eE]/.test(raw)) return raw;
+
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(raw);
+    if (!match) return null;
+    const sign = match[1];
+    const integer = match[2];
+    const fraction = match[3] || '';
+    const digits = `${integer}${fraction}`;
+    const decimalIndex = integer.length + Number(match[4]);
+    if (decimalIndex <= 0) return `${sign}0.${'0'.repeat(-decimalIndex)}${digits}`;
+    if (decimalIndex >= digits.length) {
+        return `${sign}${digits}${'0'.repeat(decimalIndex - digits.length)}`;
+    }
+    return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
 }
 
 /** Convert a coin amount to an exact decimal string for display and form state. */
 export function coinToFiatExact(coinAmount, rate) {
-    if (!rate || typeof rate.rate !== 'number' || !Number.isFinite(rate.rate)) return null;
-    return multiplyDecimalStrings(String(coinAmount), String(rate.rate));
+    const rateDecimal = plainDecimalNumber(rate?.rate);
+    if (rateDecimal === null || rate.rate <= 0) return null;
+    const amountDecimal = typeof coinAmount === 'number'
+        ? plainDecimalNumber(coinAmount)
+        : String(coinAmount);
+    if (amountDecimal === null) return null;
+    return multiplyDecimalStrings(amountDecimal, rateDecimal);
 }
 
 /**
@@ -902,7 +928,11 @@ export function coinToFiatExact(coinAmount, rate) {
  * @returns {string | null}
  */
 export function fiatToCoin(fiatAmount, rate, decimals = 8) {
-    if (!rate || typeof rate.rate !== 'number' || rate.rate === 0) return null;
-    if (!/^\d+(\.\d+)?$/.test(String(fiatAmount).trim())) return null;
-    return divideDecimalStrings(fiatAmount, String(rate.rate), decimals);
+    const rateDecimal = plainDecimalNumber(rate?.rate);
+    if (rateDecimal === null || rate.rate <= 0) return null;
+    const amountDecimal = typeof fiatAmount === 'number'
+        ? plainDecimalNumber(fiatAmount)
+        : String(fiatAmount).trim();
+    if (amountDecimal === null || !/^\d+(\.\d+)?$/.test(amountDecimal)) return null;
+    return divideDecimalStrings(amountDecimal, rateDecimal, decimals);
 }
