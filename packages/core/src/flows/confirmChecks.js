@@ -113,7 +113,7 @@ export function sameSats(a, b) {
  * @param {string} args.encoding   'OP_RETURN' | 'P2SH' | 'P2WSH' | 'MULTISIGN'
  * @param {{ address: string|null, value: number|string }|null} [args.adsOutput]   the resolved ADS donation, when present (hidden from display)
  * @param {number} [args.payloadByteLen]   byte length of the compiled action+rawData push, which decides the carrier allowance
- * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string }}
+ * @returns {{ addressed: Array<{ address: string, value: number|string, isAds: boolean }>, encoding: string, carrierAllowance: number, carrierExactCount: number|null }}
  */
 export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput = null, payloadByteLen }) {
     // Values are carried through UNCOERCED: pre-rounding the expected side with Number()
@@ -126,7 +126,12 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
             sameSats(o.value, adsOutput.value)),
     }));
     const enc = String(encoding || '').toUpperCase();
-    return { addressed, encoding: enc, carrierAllowance: expectedCarrierAllowance(enc, payloadByteLen) };
+    return {
+        addressed,
+        encoding: enc,
+        carrierAllowance: expectedCarrierAllowance(enc, payloadByteLen),
+        carrierExactCount: exactChunkCarrierCount(enc, payloadByteLen),
+    };
 }
 
 /**
@@ -146,7 +151,7 @@ export function buildExpectedOutputs({ customOutputs = [], encoding, adsOutput =
  * @param {ReturnType<typeof buildExpectedOutputs>} args.expected
  * @param {string[]} args.ownAddresses            wallet-owned addresses (change is allowed here)
  * @param {(psbtHex: string) => { outputs: Array<{ address: string|null, scriptPubKeyHex: string, scriptType: string, value: number|string }> }} args.decomposePsbt
- * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number|string, scriptType: string }>, missing: Array<{ address: string, value: number|string, isAds: boolean }> }}
+ * @returns {{ ok: boolean, unexpected: Array<{ index: number, address: string|null, value: number|string, scriptType: string }>, missing: Array<{ address: string, value: number|string, isAds: boolean }>, carrierCount: number }}
  */
 export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt }) {
     const own = new Set((ownAddresses || []).map(String));
@@ -163,6 +168,7 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
     let carrierAllowance = Number.isFinite(expected.carrierAllowance)
         ? expected.carrierAllowance
         : carrierAllowanceFor(expected.encoding);
+    let carrierCount = 0;
     const unexpected = [];
 
     for (let i = 0; i < outputs.length; i++) {
@@ -172,14 +178,17 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
         const slot = addressed.find((s) => !s.consumed && s.address === out.address && sameSats(s.value, out.value));
         if (slot) { slot.consumed = true; continue; }
 
-        // 2. The action carrier for the chosen encoding.
+        // 2. Change back to a wallet-owned address (any value). This precedes
+        // the shape-only carrier match because P2SH change is wallet output,
+        // not another chunk commitment.
+        if (out.address && own.has(out.address)) continue;
+
+        // 3. The action carrier for the chosen encoding.
         if (isCarrier(out, expected.encoding) && carrierAllowance > 0) {
             carrierAllowance -= 1;
+            carrierCount += 1;
             continue;
         }
-
-        // 3. Change back to a wallet-owned address (any value).
-        if (out.address && own.has(out.address)) continue;
 
         // 4. Anything else is a tamper.
         // Report the value uncoerced: the tamper report names the amount the user is being
@@ -194,7 +203,7 @@ export function checkOutputSet({ psbtHex, expected, ownAddresses, decomposePsbt 
         .filter((s) => !s.consumed)
         .map((s) => ({ address: s.address, value: s.value, isAds: !!s.isAds }));
 
-    return { ok: unexpected.length === 0 && missing.length === 0, unexpected, missing };
+    return { ok: unexpected.length === 0 && missing.length === 0, unexpected, missing, carrierCount };
 }
 
 function carrierAllowanceFor(encoding) {
@@ -252,11 +261,22 @@ function expectedCarrierAllowance(encoding, payloadByteLen) {
     if (!per) return 0;
     // Unknown size (legacy call sites/tests): keep the single-leg default.
     if (!Number.isFinite(payloadByteLen)) return 1;
-    // +16 covers the magic word + compiled push prefix; the trailing +1 is a
-    // rounding margin so a legitimate deploy is NEVER rejected (over-allowing at
-    // a chunk boundary is safe - see CHUNK_PAYLOAD_BYTES).
+    // +16 covers the magic word + compiled push prefix; the trailing +1 keeps
+    // report-only callers compatible. The blocking path enforces the exact
+    // compiled-payload count after carrier-script verification.
     const len = Math.max(0, Number(payloadByteLen));
     return Math.ceil((len + 16) / per) + 1;
+}
+
+// The SDK verifier concatenates the returned redeem-script chunks into the
+// compiled payload, so its script count has one exact value even though the
+// output-shape check keeps a compatibility margin for report-only callers.
+function exactChunkCarrierCount(encoding, payloadByteLen) {
+    const enc = String(encoding || '').toUpperCase();
+    if (enc !== 'P2SH' && enc !== 'P2WSH') return null;
+    const per = CHUNK_PAYLOAD_BYTES[enc];
+    if (!per || !Number.isSafeInteger(payloadByteLen) || payloadByteLen < 0) return null;
+    return Math.max(1, Math.ceil(payloadByteLen / per));
 }
 
 function isCarrier(out, encoding) {
@@ -385,6 +405,16 @@ export function assertNoTamper({ psbtHex, expected, ownAddresses, decomposePsbt,
         throw new TamperDetectedError(
             'The action encoded in the transaction does not match what you approved.',
             { reason: carrier.reason, checked: carrier.checked });
+    }
+    if (Number.isSafeInteger(expected.carrierExactCount)
+        && outputSet.carrierCount !== expected.carrierExactCount) {
+        throw new TamperDetectedError(
+            'The action encoded in the transaction does not match what you approved.',
+            {
+                reason: 'carrier-count-mismatch',
+                expected: expected.carrierExactCount,
+                outputs: outputSet.carrierCount,
+            });
     }
     return { outputSet, actionBytes, carrier };
 }
