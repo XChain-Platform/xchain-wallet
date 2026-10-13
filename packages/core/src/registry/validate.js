@@ -123,6 +123,15 @@ const isEndpoint = (v, allowInsecure = false) =>
     isSecureEndpointUrl(v.defaultUrl, allowInsecure) &&
     isNonNegativeInteger(v.defaultPort);
 
+const isTransactionExplorer = (v) =>
+    isPlainObject(v) &&
+    isNonEmptyString(v.id) &&
+    isNonEmptyString(v.label) &&
+    isNonEmptyString(v.url) &&
+    v.url.includes('{txid}') &&
+    isSecureEndpointUrl(v.url, false) &&
+    (v.iconImg === undefined || isString(v.iconImg));
+
 const isFeeStrategy = (v) => {
     if (!isPlainObject(v)) return false;
     if (!isOneOf(v.unit, FEE_UNITS)) return false;
@@ -354,6 +363,14 @@ export function validateChainDescriptor(record) {
             'platformListOwners',
             isArray(r.platformListOwners) && r.platformListOwners.every(isNonEmptyString),
             'must be an array of non-empty strings',
+        );
+    }
+    if (r.transactionExplorers !== undefined) {
+        check(
+            errors,
+            'transactionExplorers',
+            isArray(r.transactionExplorers) && r.transactionExplorers.every(isTransactionExplorer),
+            'must be an array of { id, label, https url containing {txid}, iconImg? } entries',
         );
     }
 
