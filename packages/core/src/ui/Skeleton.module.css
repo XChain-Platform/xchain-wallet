@@ -14,7 +14,7 @@
     background-repeat: no-repeat;
     background-position: -100% 0;
     border-radius: var(--xc-radius-sm);
-    animation: xc-skeleton-shimmer 1.4s ease-in-out infinite;
+    animation: xc-skeleton-shimmer var(--xc-motion-duration-ambient) var(--xc-motion-ease-ambient) infinite;
     /* Stable layout - block-level, fills the parent's width unless an
      * explicit `width` prop is set inline. */
     display: block;
@@ -91,8 +91,13 @@
  * a static gray block. The placeholder still occupies the same layout
  * footprint; only the moving gradient stops. */
 @media (prefers-reduced-motion: reduce) {
-    .skeleton {
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .skeleton {
         animation: none;
         background-image: none;
     }
+}
+
+:global(:root[data-xc-reduced-motion='reduce']) .skeleton {
+    animation: none;
+    background-image: none;
 }

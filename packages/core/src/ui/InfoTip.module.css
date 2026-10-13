@@ -28,7 +28,7 @@
     font-weight: 700;
     line-height: 1;
     cursor: help;
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
 .glyph {
@@ -40,7 +40,7 @@
     border: 1px solid var(--xc-border);
     border-radius: 50%;
     background: var(--xc-bg-muted);
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
 .trigger:hover,

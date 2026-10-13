@@ -25,7 +25,7 @@
     font-size: var(--xc-text-sm);
     line-height: 1.4;
     box-shadow: var(--xc-shadow-toast);
-    animation: undo-toast-in 160ms ease-out;
+    animation: undo-toast-in var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
 }
 
 :global(html[data-xc-keyboard='open']) .toast {
@@ -37,8 +37,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .toast { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .toast { animation: none; }
 }
+
+:global(:root[data-xc-reduced-motion='reduce']) .toast { animation: none; }
 
 @keyframes undo-toast-in {
     from { opacity: 0; transform: translateY(var(--xc-space-2)); }
