@@ -165,7 +165,9 @@ const VARS_PINNED_ELSEWHERE = new Set(['packages/core/src/uri/xchainUri.js']);
 /** Collect every .js / .jsx file under `dir`, skipping the dictionaries. */
 function sourceFiles(dir, out = []) {
     for (const name of readdirSync(dir)) {
-        if (name === 'node_modules' || name === 'i18n') continue;
+        // Bundles under dist (and the mobile www copy) inline dependency
+        // code whose strings are not translation keys.
+        if (name === 'node_modules' || name === 'i18n' || name === 'dist' || name === 'www') continue;
         const path = join(dir, name);
         if (statSync(path).isDirectory()) sourceFiles(path, out);
         else if (/\.jsx?$/.test(name)) out.push(path);
