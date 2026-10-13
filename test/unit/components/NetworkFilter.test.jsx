@@ -113,10 +113,12 @@ describe('NetworkFilter selection', () => {
 describe('NetworkFilter dismissal', () => {
     it('closes on Escape', () => {
         mount();
-        openList();
+        const { trigger } = openList();
+        screen.getByRole('option', { name: /^Bitcoin/ }).focus();
 
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByRole('listbox')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
     });
 
     it('closes on a mousedown outside the filter', () => {
