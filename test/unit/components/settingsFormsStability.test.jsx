@@ -32,6 +32,9 @@ const { FeesSection } = await import(
 const { ToggleRow } = await import(
     '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx'
 );
+const { WalletModeSection } = await import(
+    '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
+);
 
 beforeEach(() => {
     settings = createDefaultSettings();
@@ -99,5 +102,31 @@ describe('settings form validation', () => {
             <ToggleRow label="Long setting" checked={false} onChange={() => {}} />,
         );
         expect(container.firstElementChild.style.flexWrap).toBe('wrap');
+    });
+
+    it('explains and confirms a wallet mode change before persisting it', async () => {
+        const { container } = render(<WalletModeSection />);
+
+        fireEvent.click(screen.getByRole('radio', { name: /Watcher/ }));
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog').textContent).toContain(
+            'Transaction actions produce unsigned PSBTs',
+        );
+        expect(container.querySelector('input[type="password"]')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm mode change' }));
+
+        expect(update).toHaveBeenCalledWith({ walletMode: 'watcher' });
+    });
+
+    it('cancels a pending wallet mode change without persisting it', () => {
+        render(<WalletModeSection />);
+        fireEvent.click(screen.getByRole('radio', { name: /Signer/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.queryByRole('alertdialog')).toBeNull();
+        expect(screen.getByRole('radio', { name: /Normal/ }).checked).toBe(true);
     });
 });

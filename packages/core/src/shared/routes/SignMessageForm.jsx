@@ -29,6 +29,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
@@ -47,6 +48,7 @@ export function SignMessageForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -317,6 +319,18 @@ export function SignMessageForm({ walletId, onBack }) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>{body}</ListPage>
+            </Screen>
+        );
+    }
+
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        Watcher mode does not sign messages or ask for a signing password. Switch to Normal mode to sign a message on this device.
+                    </StatusMessage>
+                </ListPage>
             </Screen>
         );
     }

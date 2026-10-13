@@ -21,6 +21,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import {
     compareDecimalStrings,
@@ -332,6 +333,17 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         setFormError(null);
         const from = sourceDescriptor();
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId,
+                    from,
+                    builder: 'placeBetParams',
+                    params: betParams(),
+                    payFeeInNativeCoin: nativeFee.flag,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -418,6 +430,15 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         );
     }
     if (!feed) return wrap(<p>Loading market…</p>);
+    if (result?.psbtHex && !(result?.txid || result?.tx_hash)) {
+        return wrap(
+            <WatcherResultPanel
+                result={result}
+                onBuildAnother={() => setResult(null)}
+                onDone={onBack}
+            />,
+        );
+    }
 
     const outcomes = outcomeLabels;
     const live = isLiveFeedStatus(feed.feed_status);
@@ -522,17 +543,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 transaction: a closed market takes no bets, and the feed's own source
                 may not bet on its own market (§6 format 2). Showing a doomed form and
                 letting the chain refuse it would cost the user a fee for nothing. */}
-            {/* The one refusal that used to say nothing. A market reading "Taking bets"
-                with no form and no sentence looks broken rather than restricted, and this
-                surface already explains the other reason it hides the form. */}
-            {feed.feed_status === 'open' && isWatcherMode ? (
-                <p className={styles.hint}>
-                    This wallet is in watcher mode, so it cannot place a bet. A stake has to be signed
-                    by the address that pays it.
-                </p>
-            ) : null}
-
-            {feed.feed_status === 'open' && !isWatcherMode ? (
+            {feed.feed_status === 'open' ? (
                 fromAddress && feed.source === fromAddress.address ? (
                     <p className={styles.hint}>
                         You run this market, so you cannot bet on it. That rule exists because an oracle
@@ -551,7 +562,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                     disabled={actionConfirm.composing}
                                     onClick={placeBet}
                                 >
-                                    {actionConfirm.composing ? 'Preparing review…' : 'Review bet'}
+                                    {actionConfirm.composing
+                                        ? 'Preparing review…'
+                                        : isWatcherMode ? 'Create unsigned transaction' : 'Review bet'}
                                 </Button>
                             )}
                         >
@@ -615,7 +628,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                 </div>
                             ) : null}
                             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-                            {!isHwSource && !signerReady ? (
+                            {!isWatcherMode && !isHwSource && !signerReady ? (
                                 <Input
                                     label="Password"
                                     type="password"

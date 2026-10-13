@@ -28,6 +28,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -416,6 +417,17 @@ export function CreateBetFeedForm({
         setFormError(null);
         const from = sourceDescriptor();
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId,
+                    from,
+                    builder: 'createMarketParams',
+                    params: marketParams,
+                    payFeeInNativeCoin: nativeFee.flag,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -503,19 +515,6 @@ export function CreateBetFeedForm({
         );
     }
 
-    // Creating a market means signing, so watcher mode has nothing to offer here.
-    // Said plainly rather than shown as a form that cannot be submitted.
-    if (isWatcherMode) {
-        return wrap(
-            <>
-                <p className={styles.hint}>
-                    This wallet is in watcher mode, so it cannot open a market. Opening one commits you
-                    to publishing the result, which needs the key that will later resolve it.
-                </p>
-            </>,
-        );
-    }
-
     if (loadError) {
         return wrap(
             <>
@@ -527,6 +526,15 @@ export function CreateBetFeedForm({
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onBack}
+                />,
+            );
+        }
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
@@ -606,7 +614,9 @@ export function CreateBetFeedForm({
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing}
                 >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : isWatcherMode ? 'Create unsigned transaction' : 'Review market'}
                 </Button>
             )}
         >
@@ -819,7 +829,7 @@ export function CreateBetFeedForm({
                 </>
             ) : null}
 
-            {!isHwSource && !signerReady ? (
+            {!isWatcherMode && !isHwSource && !signerReady ? (
                 <Input
                     label="Password"
                     type="password"

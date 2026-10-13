@@ -82,8 +82,8 @@ const KIND_TITLE = {
 };
 
 /**
- * Shared approval screen for the four password-gated sign kinds
- * (`signMessage` / `signPsbt` / `signAction` / `signIn`). The inner
+ * Shared approval screen for the password-gated sign kinds
+ * (`signMessage` / `signPsbt` / `signAction` / `coSign` / `signIn`). The inner
  * summary block renders per-kind; everything else (origin badge,
  * password input, always-allow toggle, footer buttons) is shared.
  *
@@ -102,7 +102,7 @@ const KIND_TITLE = {
  *
  * @param {object} props
  * @param {string} props.id
- * @param {'signMessage' | 'signPsbt' | 'signAction' | 'signIn'} props.kind
+ * @param {'signMessage' | 'signPsbt' | 'signAction' | 'coSign' | 'signIn'} props.kind
  * @param {any} props.payload  The bridge-level request
  * @param {() => void} props.onReject
  */
@@ -117,6 +117,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const [signInChoice, setSignInChoice] = useState(0);
+    const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Sign-in signs as one address the user picks here, from the list the
@@ -162,8 +163,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
                 setDeveloperMode(Boolean(s?.developerMode));
+                setWalletMode(s?.walletMode || 'full');
             })
-            .catch(() => { /* keep developerMode false on failure */ });
+            .catch(() => { /* keep developerMode false on failure */
+                if (!cancelled) setWalletMode('full');
+            });
         return () => { cancelled = true; };
     }, []);
 
@@ -570,12 +574,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // Hold sign-in until an offered address is selected
     const signInBlocked = kind === 'signIn' && !signInPick;
 
+    const watcherMode = walletMode === 'watcher';
+    const watcherCopy = ['signPsbt', 'signAction', 'coSign'].includes(kind)
+        ? 'Watcher mode never signs or asks for a password. Reject this request and move its unsigned transaction to a Signer wallet.'
+        : 'Watcher mode never signs or asks for a password. Reject this request or switch to Normal mode to sign on this device.';
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked || signInBlocked;
+    const modeApprovalBlocked = walletMode === null || watcherMode;
 
     async function handleApprove(event) {
         event.preventDefault();
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
+        if (modeApprovalBlocked) return;
         setBusy(true);
         setError(null);
         try {
@@ -620,17 +630,19 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     >
                         Reject
                     </Button>
-                    <Button
-                        type="submit"
-                        form="sign-approval-form"
-                        variant="primary"
-                        block
-                        icon={<Icon.ThumbsUpIcon />}
-                        loading={busy}
-                        disabled={password.length === 0 || !walletId || approvalBlocked}
-                    >
-                        {approveLabel}
-                    </Button>
+                    {!watcherMode ? (
+                        <Button
+                            type="submit"
+                            form="sign-approval-form"
+                            variant="primary"
+                            block
+                            icon={<Icon.ThumbsUpIcon />}
+                            loading={busy}
+                            disabled={password.length === 0 || !walletId || approvalBlocked}
+                        >
+                            {approveLabel}
+                        </Button>
+                    ) : null}
                 </div>
             }
         >
@@ -763,38 +775,46 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-            <form
-                id="sign-approval-form"
-                onSubmit={handleApprove}
-                noValidate
-                className={styles.form}
-            >
-                <Input
-                    ref={inputRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign. Your password stays in this window."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={busy}
-                    error={error || undefined}
-                />
-                {showSavePermanent ? (
-                    <label className={shared.toggleRow}>
-                        <input
-                            type="checkbox"
-                            checked={savePermanent}
-                            onChange={(e) => setSavePermanent(e.target.checked)}
-                            disabled={busy}
-                        />
-                        <span>Always allow this on {origin}</span>
-                    </label>
-                ) : null}
-            </form>
+            {watcherMode ? (
+                <p className={styles.refusal} role="status">
+                    {watcherCopy}
+                </p>
+            ) : walletMode === null ? (
+                <p role="status">Checking wallet mode…</p>
+            ) : (
+                <form
+                    id="sign-approval-form"
+                    onSubmit={handleApprove}
+                    noValidate
+                    className={styles.form}
+                >
+                    <Input
+                        ref={inputRef}
+                        type="password"
+                        label="Password"
+                        hint="Required to sign. Your password stays in this window."
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="current-password"
+                        disabled={busy}
+                        error={error || undefined}
+                    />
+                    {showSavePermanent ? (
+                        <label className={shared.toggleRow}>
+                            <input
+                                type="checkbox"
+                                checked={savePermanent}
+                                onChange={(e) => setSavePermanent(e.target.checked)}
+                                disabled={busy}
+                            />
+                            <span>Always allow this on {origin}</span>
+                        </label>
+                    ) : null}
+                </form>
+            )}
         </Screen>
     );
 }

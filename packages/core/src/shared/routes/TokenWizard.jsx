@@ -19,6 +19,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
@@ -89,6 +91,7 @@ function isValidIssueAddress(value, descriptor) {
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { isWatcherMode } = useWalletMode();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -478,6 +481,17 @@ export function TokenWizard({ walletId, onBack }) {
         if (!from) { setFormError('No source address available.'); return; }
         setFormError(null);
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from,
+                    actionData: { action: 'ISSUE', params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                });
+                setResult(res);
+                setStage('done');
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -693,6 +707,15 @@ export function TokenWizard({ walletId, onBack }) {
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => { setResult(null); setStage('details'); }}
+                    onDone={onBack}
+                />,
+            );
+        }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(

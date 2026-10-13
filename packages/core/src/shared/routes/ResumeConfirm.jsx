@@ -42,6 +42,8 @@ import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { copyText } from '../clipboard.js';
 import styles from './ResumeConfirm.module.css';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -65,6 +67,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmAction = useConfirmAction();
+    const { isWatcherMode } = useWalletMode();
     const [password, setPassword] = useState('');
     // Live mirror of `password`, because `confirm()` captures onApprove ONCE
     // and the user types afterwards - a plain closure would dispatch the empty
@@ -175,10 +178,34 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     // opens it on mount rather than making the user press a second button to
     // reach the one they were already looking at.
     useEffect(() => {
+        if (isWatcherMode) return;
         if (startedRef.current) return;
         startedRef.current = true;
         start();
-    }, [start]);
+    }, [isWatcherMode, start]);
+
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} title="Unsigned transaction">
+                {composed?.psbt ? (
+                    <WatcherResultPanel
+                        result={{
+                            psbtHex: String(composed.psbt),
+                            encoding: composed.encoding,
+                            chainId,
+                            fromAddress: fromAddress?.address,
+                        }}
+                        onDone={async () => {
+                            await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
+                            onCancel?.();
+                        }}
+                    />
+                ) : (
+                    <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                )}
+            </Screen>
+        );
+    }
 
     if (isConfirmOpenPhase(confirmAction.phase)) {
         return (

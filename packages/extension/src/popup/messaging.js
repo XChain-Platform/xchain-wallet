@@ -1647,6 +1647,10 @@ export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
 }
 
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
+}
+
 // BET reads (no signing): market list / one market with pools + timeline / placed
 // bets / an oracle track record.
 export function betFeeds(req) {

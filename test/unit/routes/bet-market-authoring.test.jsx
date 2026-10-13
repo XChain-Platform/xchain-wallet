@@ -172,6 +172,13 @@ function harness(overrides = {}) {
             calls.push({ method: 'resolveMarketAction', args });
             return Promise.resolve({ txid: 'f00d' });
         },
+        buildBetActionPsbtRequest: (args) => {
+            calls.push({ method: 'buildBetActionPsbtRequest', args });
+            return Promise.resolve({
+                psbtHex: '70736274ff00', chainId: args.chainId,
+                fromAddress: args.from?.address, encoding: 'op_return',
+            });
+        },
         betFeed: (args) => {
             calls.push({ method: 'betFeed', args });
             return Promise.resolve({ data: [FEED] });
@@ -272,6 +279,39 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
+    it('builds an unsigned market in watcher mode without asking for a password', async () => {
+        const { messaging, calls } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Create unsigned transaction/i));
+            await drain();
+        });
+
+        const build = calls.find((c) => c.method === 'buildBetActionPsbtRequest');
+        expect(build.args).toMatchObject({
+            chainId: CHAIN,
+            builder: 'createMarketParams',
+            params: {
+                label: 'Who wins the final?',
+                outcomes: ['Home', 'Away'],
+                tick: 'PEPECREATURE',
+            },
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
+    });
+
     it('composes through the SDK createMarketParams builder and signs the SAME params', async () => {
         const { messaging, calls } = harness();
         let utils;

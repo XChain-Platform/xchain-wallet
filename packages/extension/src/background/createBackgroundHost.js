@@ -30,6 +30,7 @@ import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
     buildEditFeedListsParams,
+    buildBetActionPsbt,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
@@ -4612,6 +4613,10 @@ export function createBackgroundHost(deps) {
         // The built wire params ride back so the confirm page decodes its intent
         // from what the HOST composed, not from the editor state.
         return { ...composed, betParams: params };
+    });
+
+    host.register('action.bet.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildBetActionPsbt({ ...req, chainRegistry, sdkRegistry });
     });
 
     // BET reads (no signing): market list / one market with pools + timeline /
