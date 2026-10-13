@@ -89,6 +89,15 @@ describe('crypto/backup', () => {
     });
 
     describe('format errors', () => {
+        it('refuses a payload that JSON cannot represent', async () => {
+            await expect(encodeBackupEnvelope({
+                password: 'p',
+                payload: undefined,
+                walletName: 'A',
+                kdfParams: KDF_PARAMS,
+            })).rejects.toThrow(/payload must be JSON-serializable/);
+        });
+
         it('parseBackupEnvelope rejects non-JSON input', () => {
             expect(() => parseBackupEnvelope('not json')).toThrow(BackupFormatError);
         });

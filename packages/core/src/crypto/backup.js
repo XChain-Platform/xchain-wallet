@@ -114,7 +114,11 @@ export async function encodeBackupEnvelope({ password, payload, walletName, kdfP
     const params = kdfParams ?? makeFreshKdfParams();
     const masterKey = await deriveMasterKeyAsync(password, params);
     try {
-        const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+        const serialized = JSON.stringify(payload);
+        if (typeof serialized !== 'string') {
+            throw new Error('encodeBackupEnvelope: payload must be JSON-serializable');
+        }
+        const plaintext = new TextEncoder().encode(serialized);
         let packed;
         try {
             packed = await aeadEncrypt(masterKey, plaintext);
