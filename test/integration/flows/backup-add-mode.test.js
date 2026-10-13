@@ -171,7 +171,12 @@ describe('integration/flows/backup-add-mode', () => {
         const v = makeVault({
             wallets: [sampleWallet('src')],
             accounts: [sampleAccount('acc-src', 'src')],
-            addresses: [sampleAddress('addr-derived-1', 'acc-src')],
+            // The wallet names an imported key, so its address rides along,
+            // as it does in a real export.
+            addresses: [
+                sampleAddress('addr-derived-1', 'acc-src'),
+                { ...sampleAddress('addr-imp-src', null), accountId: null },
+            ],
             settings: { schemaVersion: 1, activeNetwork: 'mainnet' },
         });
         const r = await exportBackupFile({
