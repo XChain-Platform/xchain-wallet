@@ -9,7 +9,7 @@
     padding: 0 0 0.5rem;
     color: var(--xc-text);
     font-weight: 600;
-    text-align: left;
+    text-align: start;
 }
 
 .compactCaption {
@@ -32,19 +32,19 @@
 .headerCell,
 .cell {
     padding: 0.2rem 0.25rem;
-    text-align: left;
+    text-align: start;
     overflow-wrap: anywhere;
 }
 
 .headerCell {
     padding-top: 0;
-    color: var(--xc-text-muted, var(--xc-fg-muted));
+    color: var(--xc-text-muted);
     font-size: var(--xc-text-xs, 0.75rem);
     font-weight: 600;
 }
 
 .numeric {
-    text-align: right;
+    text-align: end;
     font-variant-numeric: tabular-nums;
 }
 
@@ -105,14 +105,14 @@
         grid-template-columns: minmax(6.5rem, 0.8fr) minmax(0, 1fr);
         gap: var(--xc-space-2, 0.5rem);
         align-items: baseline;
-        text-align: right;
+        text-align: end;
     }
 
     .table .cell::before {
-        color: var(--xc-text-muted, var(--xc-fg-muted));
+        color: var(--xc-text-muted);
         font-size: var(--xc-text-xs, 0.75rem);
         font-weight: 600;
-        text-align: left;
+        text-align: start;
         content: attr(data-label);
     }
 
