@@ -181,7 +181,7 @@ describe('Send resets asset-specific draft fields', () => {
         fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
 
         expect(await screen.findByLabelText('Amount (BTC)')).toHaveValue('');
-        expect(screen.getByText('Token changed. Amount was reset for the new token precision.'))
+        expect(screen.getByText('Token changed. The amount was cleared because the new token may use different decimal places.'))
             .toBeInTheDocument();
     });
 
@@ -205,7 +205,7 @@ describe('Send resets asset-specific draft fields', () => {
         await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
         expect(screen.getByLabelText(/^To$/)).toHaveValue('');
         expect(screen.getByLabelText('Amount (DOGE)')).toHaveValue('');
-        expect(screen.getByText('Chain changed. Incompatible draft values and the fee rate were reset.'))
+        expect(screen.getByText('Network changed. The amount and network fee were reset because they may not be valid on the new network.'))
             .toBeInTheDocument();
         expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toMatch(/^Normal:/);
 

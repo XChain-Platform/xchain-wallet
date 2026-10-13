@@ -235,7 +235,7 @@ describe('Send flow with mocked messaging', () => {
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
         await user.keyboard('{Enter}');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Destination address is required.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a recipient address.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(destination, { target: { value: TO } });
@@ -425,10 +425,10 @@ describe('Send flow with mocked messaging', () => {
         const announcement = screen.getByRole('status');
         expect(announcement).toHaveAttribute('aria-live', 'polite');
         expect(announcement).toHaveAttribute('aria-atomic', 'true');
-        expect(announcement).toHaveTextContent(/broadcast but isn't confirmed yet/i);
+        expect(announcement).toHaveTextContent(/network accepted your transaction/i);
         expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Copy transaction id' })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: /View on explorer/i })).toHaveAttribute(
+        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View in block explorer/i })).toHaveAttribute(
             'href',
             `https://explorer.xchain.io/BTC/tx/${TXID}`,
         );
@@ -479,7 +479,7 @@ describe('Send flow with mocked messaging', () => {
         const messaging = mount({ walletMode: 'watcher' });
         await fillSendForm();
 
-        const review = await screen.findByRole('form', { name: 'Review send' });
+        const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
         expect(review).toHaveTextContent('Chain');
         expect(review).toHaveTextContent('Bitcoin');
@@ -494,7 +494,7 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction: send' }));
+        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({

@@ -192,7 +192,7 @@ describe('Send: the funding address is shown and changeable', () => {
         // Names ADDRESSES, which is the thing the user can act on. The encoder's
         // own answer named UTXOs, which is what made the fix undiscoverable.
         expect(said.textContent).toMatch(/From field/i);
-        expect(said.textContent).not.toMatch(/Use Receive/i);
+        expect(said.textContent).not.toMatch(/Open Receive/i);
     });
 
     it('points to Receive when no address holds the selected token', async () => {
@@ -200,8 +200,8 @@ describe('Send: the funding address is shown and changeable', () => {
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));
         await selectToken();
 
-        const warning = await screen.findByText(/wallet has no coins to send yet/i);
-        expect(warning.textContent).toMatch(/Use Receive/i);
+        const warning = await screen.findByText(/wallet has no funds to send yet/i);
+        expect(warning.textContent).toMatch(/Open Receive/i);
         expect(warning.textContent).not.toMatch(/pick the address/i);
     });
 

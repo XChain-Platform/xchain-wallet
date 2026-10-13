@@ -139,8 +139,8 @@ describe('Receive QR copy and share toasts', () => {
             expect(await screen.findByText(MOBILE_ADDRESS)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /^Token:/ })).toBeInTheDocument();
             expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Copy payment request' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Share QR' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Share QR payment link' })).toBeInTheDocument();
             await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -170,7 +170,7 @@ describe('Receive QR copy and share toasts', () => {
         await user.keyboard('{Enter}');
 
         expect(amount).toHaveValue('1.25');
-        expect(screen.getByRole('form', { name: 'Receive request' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         expect(showToast).not.toHaveBeenCalled();
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
@@ -222,7 +222,7 @@ describe('Receive QR copy and share toasts', () => {
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 }),
             ));
-            const address = await screen.findByRole('textbox', { name: 'Copy payment request for receive address' });
+            const address = await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
             expect(address.readOnly).toBe(true);
             expect(address.style.userSelect).toBe('text');
         } finally {
@@ -249,9 +249,9 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', {
-            name: 'Copy payment request for receive address',
+            name: 'Copy payment link for receive address',
         })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy payment request' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
         fireEvent.change(amount, { target: { value: '0.00000001' } });
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
@@ -268,7 +268,7 @@ describe('Receive QR copy and share toasts', () => {
 
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(paymentRequest));
         expect(showToast).toHaveBeenCalledWith({
-            message: 'Payment request copied to clipboard.',
+            message: 'Payment link copied to clipboard.',
             variant: 'default',
         });
     });
@@ -332,9 +332,9 @@ describe('Receive QR copy and share toasts', () => {
 
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);
-        expect(messages).toEqual(['Copy failed: clipboard unavailable']);
+        expect(messages).toEqual(['Could not copy the QR code. Clipboard access is unavailable.']);
         expect(showToast).toHaveBeenCalledWith({
-            message: 'Copy failed: clipboard unavailable',
+            message: 'Could not copy the QR code. Clipboard access is unavailable.',
             variant: 'error',
         });
         expect(messages.join(' ')).not.toContain('Document is not focused');
@@ -372,7 +372,7 @@ describe('Receive QR copy and share toasts', () => {
         // With no amount or token the request is the bare address URI.
         expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample');
         expect(showToast).toHaveBeenCalledWith({
-            message: 'Share unavailable. Payment request copied to clipboard.',
+            message: 'Sharing is unavailable, so the payment link was copied to the clipboard.',
         });
     });
 
@@ -392,7 +392,7 @@ describe('Receive QR copy and share toasts', () => {
 
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
         const messages = showToast.mock.calls.map(([t]) => t.message);
-        expect(messages).toEqual(['Share unavailable. Payment request copied to clipboard.']);
+        expect(messages).toEqual(['Sharing is unavailable, so the payment link was copied to the clipboard.']);
         expect(messages.join(' ')).not.toContain('Permission denied');
     });
 

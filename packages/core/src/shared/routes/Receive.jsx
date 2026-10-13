@@ -225,7 +225,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Failed to load addresses.');
+                    setLoadError(err?.message || 'Could not load wallet addresses. Try again.');
                 }
             }
         })();
@@ -252,7 +252,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Failed to load address.');
+                    setLoadError(err?.message || 'Could not load the receive address. Try again.');
                 }
             }
         })();
@@ -308,7 +308,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
         if (typeof messaging.verifyReceiveAddress !== 'function') {
-            setHwVerify({ status: 'error', message: 'This app cannot verify on device.' });
+            setHwVerify({ status: 'error', message: 'This app cannot verify the address on your hardware wallet.' });
             return;
         }
         setHwVerify({ status: 'checking', message: '' });
@@ -328,7 +328,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (err?.name === 'HardwareAddressMismatchError') {
                 setHwVerify({ status: 'mismatch', message: '' });
             } else {
-                setHwVerify({ status: 'error', message: err?.message || 'Verification failed.' });
+                setHwVerify({ status: 'error', message: err?.message || 'Could not verify the address. Try again.' });
             }
         }
     }, [address, activeChainId, walletId, messaging]);
@@ -460,7 +460,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (stripped !== '' && (!validDecimal || exceedsCoinPrecision)) {
             setAmountError(exceedsCoinPrecision
                 ? `Amount can have at most ${NATIVE_COIN_DECIMALS} decimal places.`
-                : 'Enter the amount as a plain decimal number.');
+                : 'Enter the amount using numbers and a decimal point only.');
             return;
         }
         setAmountError(null);
@@ -579,7 +579,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const generateNewAddress = useCallback(async () => {
         if (!activeChainId || !addressType || generating) return;
         if (typeof messaging.generateReceiveAddress !== 'function') {
-            setGenerateError('This app cannot generate a new receive address.');
+            setGenerateError('This app cannot create a new receive address.');
             return;
         }
         setGenerating(true);
@@ -602,7 +602,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 };
             });
         } catch (err) {
-            setGenerateError(err?.message || 'Could not generate a new receive address.');
+            setGenerateError(err?.message || 'Could not create a new receive address. Try again.');
         } finally {
             setGenerating(false);
         }
@@ -611,7 +611,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const saveAddressLabel = useCallback(async () => {
         if (!address?.id || labelSaving) return;
         if (typeof messaging.setAddressLabel !== 'function') {
-            setLabelError('This app cannot save address labels.');
+            setLabelError('This app cannot save a label for this address.');
             return;
         }
         const next = labelDraft.trim();
@@ -633,7 +633,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 ]),
             ));
         } catch {
-            setLabelError('Could not save that label. Try again.');
+            setLabelError('Could not save the address label. Try again.');
         } finally {
             setLabelSaving(false);
         }
@@ -667,8 +667,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             const { ok } = await copyText(qrUri || address?.address || '');
             showToast({
                 message: ok
-                    ? 'This app cannot copy images, so the payment link was copied instead.'
-                    : 'Copy failed: clipboard unavailable',
+                    ? 'This app cannot copy images, so it copied the payment link instead.'
+                    : 'Could not copy the payment link. Clipboard access is unavailable.',
                 variant: ok ? 'default' : 'error',
             });
             return;
@@ -681,7 +681,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             // The browser's own wording ("Document is not focused") goes to
             // the log; the toast stays in plain words.
             console.error('Receive QR copy failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
+            showToast({ message: 'Could not copy the QR code. Clipboard access is unavailable.', variant: 'error' });
         }
     }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 
@@ -720,8 +720,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
         const { ok } = await copyText(qrUri);
         showToast(ok
-            ? { message: 'Share unavailable. Payment request copied to clipboard.' }
-            : { message: 'Share failed: clipboard unavailable', variant: 'error' });
+            ? { message: 'Sharing is unavailable, so the payment link was copied to the clipboard.' }
+            : { message: 'Could not share or copy the payment link.', variant: 'error' });
     }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
 
     // Single-tap request copy uses the exact payload rendered in the QR so a
@@ -730,7 +730,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!qrUri) return;
         const { ok } = await copyText(qrUri);
         showToast({
-            message: ok ? 'Payment request copied to clipboard.' : 'Copy failed: clipboard unavailable',
+            message: ok ? 'Payment link copied to clipboard.' : 'Could not copy the payment link. Clipboard access is unavailable.',
             variant: ok ? 'default' : 'error',
         });
     }, [qrUri, showToast]);
@@ -755,10 +755,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <Screen variant={variant} header={header}>
                 <StatusMessage variant="status">
-                    This wallet is in signer mode, so its receive screen is hidden.
-                    It signs transactions passed in from a watcher wallet, and holds
-                    no address you are meant to fund. Switch the mode under Settings,
-                    Wallet Mode to receive on this device.
+                    This wallet is in signer mode. It can sign transactions from a
+                    watch-only wallet, but it does not have an address for receiving funds.
+                    To receive on this device, change Wallet mode in Settings.
                 </StatusMessage>
             </Screen>
         );
@@ -789,7 +788,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Receive address"
+                title="Choose a receive address"
                 walletId={walletId}
                 accountId={accountId}
                 chainId={activeChainId}
@@ -864,7 +863,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {!address && descriptor && addressType && !generating && !generateError ? (
                 <StatusMessage variant="status">
-                    No {addressTypeLabel(addressType)} address exists yet. Generate one to receive with this type.
+                    There is no {addressTypeLabel(addressType)} address yet. Create one to receive funds with this address type.
                 </StatusMessage>
             ) : null}
 
@@ -891,15 +890,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             {address ? (
                 <AddressField
                     label={address.label || 'Address'}
-                    aria-label="Copy payment request for receive address"
+                    aria-label="Copy payment link for receive address"
                     icon="addresses"
                     value={address.address}
                     readOnly
                     onChange={() => {}}
                     onClick={copyAddress}
                     onKeyDown={onAddressKeyDown}
-                    title="Tap to copy payment request"
-                    hint="Tap the address to copy its payment request."
+                    title="Tap to copy payment link"
+                    hint="Tap the address to copy its payment link."
                     style={{ cursor: 'text', userSelect: 'text' }}
                     wrapReadOnlyAddress
                     onIconClick={() => setAddressPickerOpen(true)}
@@ -981,7 +980,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             disabled={!qrDataUrl}
                             icon={<Icon.CopyIcon />}
                         >
-                            {canCopyImages ? 'Copy QR code' : 'Copy payment request'}
+                            {canCopyImages ? 'Copy QR code' : 'Copy payment link'}
                         </Button>
                         <Button
                             variant="secondary"
@@ -989,7 +988,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             disabled={!qrDataUrl}
                             icon={<Icon.UploadIcon />}
                         >
-                            Share QR
+                            Share QR payment link
                         </Button>
                         {addressExplorerUrl ? (
                             <a
@@ -997,7 +996,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                View address on explorer <span aria-hidden="true">↗</span>
+                                View address in block explorer <span aria-hidden="true">↗</span>
                             </a>
                         ) : null}
                     </div>
@@ -1005,7 +1004,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {isHwAddress ? (
                         <section
                             role="group"
-                            aria-label="Confirm this address on your hardware wallet"
+                            aria-label="Verify this receive address on your hardware wallet"
                             className={styles.hwVerify}
                         >
                             <div className={styles.addressBox}>
@@ -1014,19 +1013,19 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             </div>
                             {hwVerify.status === 'confirmed' ? (
                                 <p className={styles.hint} role="status">
-                                    ✅ Confirmed on your {hwDeviceLabel}. Safe to share.
+                                    ✅ Address verified on your {hwDeviceLabel}. It is safe to share.
                                 </p>
                             ) : hwVerify.status === 'mismatch' ? (
                                 <StatusMessage variant="error" className={styles.error}>
-                                    Your {hwDeviceLabel} showed a different address. Do not deposit here.
+                                    Your {hwDeviceLabel} showed a different address. Do not use this address.
                                     Disconnect and re-pair the device.
                                 </StatusMessage>
                             ) : hwVerify.status === 'error' ? (
                                 <StatusMessage variant="error" className={styles.error}>{hwVerify.message}</StatusMessage>
                             ) : (
                                 <p className={styles.hint}>
-                                    Verify this address on your {hwDeviceLabel} before depositing, so a
-                                    compromised computer cannot swap it.
+                                    Verify this address on your {hwDeviceLabel} before sharing it. This
+                                    protects you if the computer has been compromised.
                                 </p>
                             )}
                             <Button
@@ -1081,11 +1080,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     )}
                     <div className={styles.addressBox}>
                         <AddressText address={multisig.address} truncate={false} size="sm" />
-                        <CopyButton value={multisig.address} label="Copy multisig receive address" />
+                        <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>
-                            Cosigners: {multisig.cosignerNames.join(' · ')}
+                            People who can sign (cosigners): {multisig.cosignerNames.join(' · ')}
                         </p>
                     ) : null}
                 </section>
@@ -1096,7 +1095,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     return (
         <Screen variant={variant} header={header}>
-            <FormPage label="Receive request" onSubmit={(event) => event.preventDefault()}>
+            <FormPage label="Receive payment" onSubmit={(event) => event.preventDefault()}>
                 {body}
             </FormPage>
         </Screen>
