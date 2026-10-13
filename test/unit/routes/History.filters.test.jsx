@@ -22,6 +22,14 @@ const historyCss = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/History.module.css'),
     'utf8',
 ).replace(/\/\*[\s\S]*?\*\//g, '');
+const tokenDetailCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/TokenDetail.module.css'),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
+const tokenDetailSource = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/TokenDetail.jsx'),
+    'utf8',
+);
 
 function ruleBody(text, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
@@ -172,6 +180,8 @@ describe('History filters', () => {
             entries: [{ chain: 'litecoin', address: clientAddress }],
         }]);
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
+        expect(screen.getByText(clientAddress)).toBeInTheDocument();
+        expect(screen.queryByText(LTC_ADDRESS)).toBeNull();
 
         const search = screen.getByLabelText('Search history');
         const expectToday = async (query) => {
@@ -248,7 +258,7 @@ describe('History filters', () => {
 
         expect(screen.getByRole('radio', { name: 'Grouped' })).toHaveAttribute('aria-checked', 'true');
         fireEvent.click(screen.getByRole('radio', { name: 'Flat' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show fiat' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show fiat: Off' }));
         await screen.findByRole('button', { name: 'Fiat: USD' });
 
         const callsBeforeRefresh = messaging.getAddressHistory.mock.calls.length;
@@ -316,13 +326,13 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         expect(screen.getByText('Day boundaries use local time.')).toBeInTheDocument();
-        expect(screen.getByText('Active range: 2026-09-14 to 2026-10-13')).toBeInTheDocument();
+        expect(screen.getByText('Active range: 09/14/2026 to 10/13/2026')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
 
         fireEvent.click(screen.getByRole('button', { name: '7 days' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:30:${LTC_ADDRESS}`]));
         expect(screen.getByLabelText('From date')).toHaveValue('2026-10-07');
-        expect(screen.getByText('Active range: 2026-10-07 to 2026-10-13')).toBeInTheDocument();
+        expect(screen.getByText('Active range: 10/07/2026 to 10/13/2026')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'All' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
@@ -417,7 +427,7 @@ describe('History filters', () => {
             expect(ruleBody(phone, '.filterCard')).toMatch(/display:\s*none/);
             expect(ruleBody(phone, '.filterCard.filterCardOpen')).toMatch(/display:\s*flex/);
 
-            const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
+            const narrow = mediaBlock(historyCss, 'not all and (min-width: 421px)');
             // The two date fields stack into one full-width column on phones.
             expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
             expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);
@@ -428,6 +438,12 @@ describe('History filters', () => {
             expect(ruleBody(narrow, '.detailsTable tbody'))
                 .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
             expect(ruleBody(narrow, '.detailsTable tr + tr > td')).toMatch(/border-top:\s*0/);
+            expect(ruleBody(tokenDetailCss, '.headerIcon'))
+                .toMatch(/width:\s*1\.5rem[\s\S]*height:\s*1\.5rem/);
+            expect(tokenDetailSource)
+                .toMatch(/useNativePrice\(isNative && !isDemo \? chainId : null/);
+            expect(tokenDetailSource)
+                .toMatch(/entry: synthesizeDemoNativePrices\(\[chainId\]\)\[chainId\]/);
         } finally {
             if (widthDescriptor) {
                 Object.defineProperty(window, 'innerWidth', widthDescriptor);

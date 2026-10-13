@@ -346,6 +346,22 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('confirm-request-origin')).toBeNull();
     });
 
+    it('shows the hardware verification caveat only for hardware signers', () => {
+        const copy = /A hardware device verifies native outputs and destinations only/;
+        const { rerender } = render(<ConfirmActionModal {...base()} />);
+
+        expect(screen.queryByText(copy)).toBeNull();
+
+        rerender(<ConfirmActionModal {...base({ hardwareSigner: true })} />);
+        expect(screen.getByText(copy)).toBeInTheDocument();
+
+        const adapter = readFileSync(
+            'packages/core/src/shared/components/ActionConfirmScreen.jsx',
+            'utf8',
+        );
+        expect(adapter).toMatch(/hardwareSigner=\{Boolean\(hwSource\)\}/);
+    });
+
     // #40. The page that is the last check before signing did not say who was
     // signing, in a wallet that holds several addresses per chain.
     describe('the From row (#40)', () => {
