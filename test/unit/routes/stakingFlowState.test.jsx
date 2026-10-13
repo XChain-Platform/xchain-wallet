@@ -5,6 +5,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
@@ -24,6 +26,30 @@ const ADDRESS_ROW = {
     source: 'hd',
 };
 const ADDRESSES = { [CHAIN]: [ADDRESS_ROW] };
+
+function mediaBlock(text, query) {
+    const start = text.indexOf(`@media ${query}`);
+    if (start < 0) return '';
+    const open = text.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < text.length; index += 1) {
+        if (text[index] === '{') depth += 1;
+        if (text[index] === '}') depth -= 1;
+        if (depth === 0) return text.slice(open + 1, index);
+    }
+    return '';
+}
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function readCss(path) {
+    return readFileSync(resolve(process.cwd(), path), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+}
 
 function messaging(overrides = {}) {
     const base = {
@@ -212,5 +238,120 @@ describe('staking action load and review state', () => {
 
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '5' } });
         await waitFor(() => expect(screen.queryByText(/Amount exceeds/)).toBeNull());
+    });
+});
+
+describe.each([320, 360])('staking layout at %ipx', (width) => {
+    it('stacks dense rows and keeps stake and unstake review actions reachable', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+
+        try {
+            withMessaging(
+                <StakingList walletId="w" onOpenStake={() => {}} onNewStake={() => {}} onBack={() => {}} />,
+                messaging({
+                    getContractStakesForAddress: vi.fn().mockResolvedValue([{
+                        target_contract_index: '12',
+                        tick: 'LONGTOKEN',
+                        signing_pubkey: PUBKEY,
+                        amount: '123456789.12345678',
+                        status: 'valid',
+                        activation_block: 1,
+                    }]),
+                    getContractUnstakesForAddress: vi.fn().mockResolvedValue([{
+                        target_contract_index: '12',
+                        tick: 'LONGTOKEN',
+                        signing_pubkey: PUBKEY,
+                        amount: '1',
+                        status: 'valid',
+                        cooldown_end_block: 130,
+                    }]),
+                }),
+            );
+
+            const duration = await screen.findByText(/Releasing: 30 blocks to go/);
+            expect(duration.className).toMatch(/duration/);
+            expect(duration.parentElement?.className).toMatch(/trailing/);
+            expect(screen.getAllByText('123,456,789.12345678 LONGTOKEN')
+                .some((node) => /amount/.test(node.className))).toBe(true);
+
+            cleanup();
+            withMessaging(
+                <StakeDetail
+                    walletId="w"
+                    kind="validator"
+                    chainId={CHAIN}
+                    address={ADDRESS}
+                    onBack={() => {}}
+                />,
+                messaging({
+                    getStakesForAddress: vi.fn().mockResolvedValue([{
+                        amount: '10',
+                        status: 'valid',
+                        signing_pubkey: PUBKEY,
+                    }]),
+                    getRewardsForAddress: vi.fn().mockResolvedValue([{
+                        amount: '987654321.12345678',
+                        status: 'accrued reward with a long readable description',
+                        block_index: 98,
+                    }]),
+                }),
+            );
+
+            const rewardWhen = await screen.findByText('block 98');
+            expect(rewardWhen.closest('div')?.className).toMatch(/eventRow/);
+            expect(rewardWhen.closest('div')).toHaveTextContent('987,654,321.12345678 XCHAIN');
+
+            cleanup();
+            withMessaging(
+                <StakeForm walletId="w" chainId={CHAIN} onBack={() => {}} />,
+                messaging({ getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) }),
+            );
+            fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '1' } });
+            fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            expect(await screen.findByRole('form', { name: 'Review stake' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+
+            cleanup();
+            withMessaging(
+                <StakingActionForm mode="unstake" walletId="w" chainId={CHAIN} onBack={() => {}} />,
+                messaging({
+                    getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+                    getStakesForAddress: vi.fn().mockResolvedValue([{
+                        amount: '10',
+                        status: 'valid',
+                        signing_pubkey: PUBKEY,
+                    }]),
+                }),
+            );
+            await screen.findByText('10 XCHAIN available');
+            fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+            expect(await screen.findByRole('form', { name: 'Review unstake' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Create unsigned transaction' })).toBeEnabled();
+
+            const listNarrow = mediaBlock(readCss(
+                'packages/core/src/shared/routes/StakingList.module.css',
+            ), '(max-width: 399px)');
+            expect(ruleBody(listNarrow, '.row')).toMatch(
+                /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
+            );
+            expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
+
+            const detailNarrow = mediaBlock(readCss(
+                'packages/core/src/shared/routes/StakeDetail.module.css',
+            ), '(max-width: 399px)');
+            expect(ruleBody(detailNarrow, '.eventRow')).toMatch(/flex-direction:\s*column/);
+
+            const amountNarrow = mediaBlock(readCss(
+                'packages/core/src/shared/components/AmountField.module.css',
+            ), '(max-width: 399px)');
+            expect(ruleBody(amountNarrow, '.amountFooter')).toMatch(/flex-direction:\s*column/);
+        } finally {
+            cleanup();
+            if (widthDescriptor) {
+                Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            }
+        }
     });
 });

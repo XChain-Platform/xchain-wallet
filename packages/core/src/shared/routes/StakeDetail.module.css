@@ -212,3 +212,29 @@
     background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
     color: var(--xc-warning);
 }
+
+@media (max-width: 399px) {
+    .quickActions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tabBar {
+        gap: var(--xc-space-3);
+        overflow-x: auto;
+    }
+
+    .eventRow {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--xc-space-1);
+    }
+
+    .eventAmount,
+    .eventMeta,
+    .eventWhen,
+    .slashAmount {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
