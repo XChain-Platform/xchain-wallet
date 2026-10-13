@@ -250,6 +250,7 @@ const {
     verifyAddressAction,
     getActiveNetwork,
     createPriceOracle,
+    isFiatRateSourceUrl,
     getMarkets,
     getMarket,
     getMarketHistory,
@@ -5156,6 +5157,34 @@ export function createBackgroundHost(deps) {
     const priceOracle = (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function')
         ? createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) })
         : null;
+    // The fiat-rate lookup (flows/priceLookup.js) runs in the page. Where
+    // the page may not fetch (the desktop renderer pins connect-src 'self'),
+    // the shell routes its requests here; only the lookup's own URLs pass,
+    // and CoinGecko stays behind the same privacy switch as prices.native.
+    host.register('prices.fiatFetch', async (req, { vault }) => {
+        const url = typeof req?.url === 'string' ? req.url : '';
+        if (!isFiatRateSourceUrl(url)) return { ok: false, status: 0, error: 'not a fiat-rate source' };
+        if (typeof globalThis.fetch !== 'function') return { ok: false, status: 0, error: 'fetch unavailable' };
+        if (new URL(url).hostname === 'api.coingecko.com') {
+            const settings = vault ? await vault.settings.get() : null;
+            if (settings?.privacy?.priceDataEnabled === false) {
+                return { ok: false, status: 0, error: 'price data disabled' };
+            }
+        }
+        try {
+            const resp = await globalThis.fetch(url, {
+                headers: { Accept: 'application/json' },
+                ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+                    ? { signal: AbortSignal.timeout(8000) }
+                    : {}),
+            });
+            if (!resp.ok) return { ok: false, status: resp.status };
+            return { ok: true, status: resp.status, body: await resp.json() };
+        } catch (err) {
+            return { ok: false, status: 0, error: err?.message ? String(err.message) : String(err) };
+        }
+    });
+
     host.register('prices.native', async (req, { vault }) => {
         try {
             const settings = await vault.settings.get();

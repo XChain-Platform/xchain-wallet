@@ -16,7 +16,8 @@
 // as a startup error rather than silent hang.
 
 import { createRoot } from 'react-dom/client';
-import { registry } from '@xchain-wallet/core';
+import { flows, registry } from '@xchain-wallet/core';
+import { fiatFetchRequest } from './messaging.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -38,6 +39,21 @@ try {
         })
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block app boot */ }
+
+// Fiat rates: the price lookup fetches from the page, which this CSP
+// forbids, so every Home balance and Send preview read "not priced". Its
+// requests go through main instead, which fetches only the lookup's own
+// URLs.
+flows.configureFiatRateSource({
+    fetch: async (url) => {
+        const reply = await fiatFetchRequest(String(url));
+        return {
+            ok: Boolean(reply?.ok),
+            status: Number(reply?.status) || 0,
+            json: async () => reply?.body,
+        };
+    },
+});
 
 const container = document.getElementById('xchain-desktop-root');
 if (!container) {
