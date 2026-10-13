@@ -87,12 +87,12 @@ describe('Send advanced choices', () => {
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
         fireEvent.click(screen.getByText('Advanced'));
-        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
-        fireEvent.click(screen.getByLabelText('Coin control enabled'));
+        await waitFor(() => expect(screen.getByLabelText('Choose payment inputs')).not.toBeDisabled());
+        fireEvent.click(screen.getByLabelText('Choose payment inputs'));
 
-        expect(screen.getByText('Dust')).toHaveAttribute(
+        expect(screen.getByText('Too small to spend')).toHaveAttribute(
             'title',
-            'Below the 546 sat dust threshold',
+            'Below the minimum spendable amount of 546 satoshis',
         );
         fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
         expect(screen.getByText('0.003005 BTC')).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('Send advanced choices', () => {
         expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(3);
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-        expect(within(screen.getByLabelText('Coin control summary')).getAllByText('0 BTC')).toHaveLength(2);
+        expect(within(screen.getByLabelText('Selected payment inputs')).getAllByText('0 BTC')).toHaveLength(2);
         expect(screen.getAllByRole('checkbox', { checked: false })).toHaveLength(3);
     });
 
@@ -121,8 +121,8 @@ describe('Send advanced choices', () => {
         const messaging = mount();
         await fillSend();
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'invoice 7' } });
-        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
-        fireEvent.click(screen.getByLabelText('Coin control enabled'));
+        await waitFor(() => expect(screen.getByLabelText('Choose payment inputs')).not.toBeDisabled());
+        fireEvent.click(screen.getByLabelText('Choose payment inputs'));
         fireEvent.click(screen.getByLabelText(/0\.001 BTC/));
         fireEvent.change(screen.getByLabelText('Change address'), { target: { value: 'change' } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
@@ -135,7 +135,7 @@ describe('Send advanced choices', () => {
             utxos: [UTXOS[0]],
         });
 
-        const review = await screen.findByLabelText('Advanced send choices');
+        const review = await screen.findByLabelText('Advanced payment options');
         expect(within(review).getByText('invoice 7')).toBeInTheDocument();
         expect(within(review).getByText('Allowed')).toBeInTheDocument();
         expect(within(review).getByText('1 selected input')).toBeInTheDocument();

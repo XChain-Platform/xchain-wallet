@@ -527,7 +527,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 setAddressesByChain(byChain);
                 if (!Object.keys(byChain)[0]) {
                     setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one.',
+                        'This wallet has no addresses yet. Open Receive to create one.',
                     );
                     return;
                 }
@@ -540,7 +540,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(err?.message || 'Could not load wallet addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, prefill?.chainId]);
@@ -702,8 +702,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
                 setAssetSwitchNotice(chainChanged
-                    ? 'Chain changed. Incompatible draft values and the fee rate were reset.'
-                    : 'Token changed. Amount was reset for the new token precision.');
+                    ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
             }
             if (nextTick !== tick) {
                 // Pasted text is the same untrusted-URI class as
@@ -717,7 +717,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (chainChanged) {
                 setChainId(requestChainId);
             }
-            setPasteHint(`Filled from ${detected.scheme}: URI`);
+            setPasteHint('Payment details filled from the pasted payment link.');
         } else if (detected.type === 'xchain-uri') {
             e.preventDefault();
             // Route through the richer parser so the new coin-code form
@@ -750,19 +750,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
                 setAssetSwitchNotice(chainChanged
-                    ? 'Chain changed. Incompatible draft values and the fee rate were reset.'
-                    : 'Token changed. Amount was reset for the new token precision.');
+                    ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
             }
             if (intent.memo) setMemo(intent.memo);
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
             }
-            setPasteHint('Filled from xchain: URI');
+            setPasteHint('Payment details filled from the pasted payment link.');
         } else if (detected.type === 'wif') {
             e.preventDefault();
             setPastedRecipient(null);
             setPasteHint(
-                'That looks like a private key, not an address. Use Settings → Import private key to import it.',
+                'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.',
             );
         } else {
             e.preventDefault();
@@ -774,7 +774,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // navigator.clipboard.readText is async and permission-gated;
         // skipped + ok results are silent.
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
-            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste; verify the address before sending.'); })
+            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.'); })
             .catch(() => { /* silent */ });
     }, [chainId, perRecipientToken, tick, cancelMax]);
 
@@ -930,9 +930,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     // back is the fix, and discarding a list of addresses the user just entered
     // would be the worse failure.
     const nativeMultiSendBlock = isMultiSend && isNativeSend
-        ? `${tick.trim().toUpperCase()} can only be sent to one recipient at a time. `
-          + 'It pays a real output rather than writing an XChain action, so each recipient '
-          + 'needs their own transaction. Remove the extra recipients, or pick a token.'
+        ? `${tick.trim().toUpperCase()} can be sent to only one recipient at a time. `
+          + 'Remove the additional recipients or choose a token.'
         : null;
 
     // dust floor on the RECIPIENT amount, refused here rather than at the node.
@@ -960,9 +959,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
         const minimum = decimalStringFromSats(BigInt(floor));
-        return `That amount is too small to send. The smallest ${ticker} payment the network will `
-            + `carry is ${minimum} ${ticker} (${formatWithThousands(String(floor))} sats), and anything `
-            + 'under that is refused by every node, so it can never arrive. Enter at least '
+        return `That amount is too small to send. The network requires at least ${minimum} ${ticker} `
+            + `(${formatWithThousands(String(floor))} satoshis) for a payment. Enter at least `
             + `${minimum} ${ticker}.`;
     }, [isNativeSend, chainId, amount, tick]);
 
@@ -1017,7 +1015,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (!perRecipientToken) {
             setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
         }
-        setAssetSwitchNotice('Token changed. Amount was reset for the new token precision.');
+        setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
     }, [amount, extraLegs, perRecipientToken, tick, cancelMax]);
 
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -1341,8 +1339,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     // `gatedInfo` is non-null only for a tick with active gated content
     // (an 'ungated' probe result is never stored).
     const gatedMultiSendBlock = isMultiSend && gatedInfo
-        ? `${tick.trim().toUpperCase()} has token-gated content, and each recipient needs their own `
-          + 'unlock-key handoff. Send this token to one recipient at a time.'
+        ? `${tick.trim().toUpperCase()} includes protected content. Each recipient needs a separate `
+          + 'unlock key, so send this token to one recipient at a time.'
         : null;
 
     // A matching coin or token payment to an open dispenser is a purchase, and
@@ -1384,8 +1382,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setGatedScanPassword('');
             if (!res || res.recoveredKeyHashes?.length === 0) {
                 setGatedScanError(
-                    'No unlock keys found on any of this wallet\'s addresses. '
-                    + 'Keys arrive with the token when it is sent to you directly; ask the sender to re-send it.',
+                    'No unlock keys were found for this wallet. '
+                    + 'Ask the sender to send the token and its key to you again.',
                 );
             }
             // Re-probe either way so the banner reflects the vault state.
@@ -1396,7 +1394,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
         } catch (err) {
             const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
-            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Key recovery scan failed.'));
+            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Could not recover unlock keys. Try again.'));
         } finally {
             setGatedScanBusy(false);
         }
@@ -1518,12 +1516,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const coinControlChange = useMemo(() => {
         const ticker = nativeTickerFor(descriptor) || '';
         if (selectedUtxos.length === 0) return `0 ${ticker}`.trim();
-        if (!isNativeSend) return 'Calculated when composed';
+        if (!isNativeSend) return 'Calculated during review';
         const amountSats = exactSatsBigIntFromDecimalString(amount);
         const feeSats = utxoValueSats({ value: feeEstimate?.sats });
         if (amountSats === null || feeSats === null) return 'Enter an amount to estimate';
         const changeSats = selectedUtxoTotalSats - amountSats - feeSats;
-        if (changeSats < 0n) return 'Not enough selected';
+        if (changeSats < 0n) return 'Selected inputs do not cover this payment';
         return `${decimalStringFromSats(changeSats)} ${ticker}`.trim();
     }, [amount, descriptor, feeEstimate?.sats, isNativeSend, selectedUtxoTotalSats, selectedUtxos.length]);
 
@@ -1636,7 +1634,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (held === null || held > 0) return null;
         }
         if (otherAddressHasTick === false) {
-            return 'This wallet has no coins to send yet. Use Receive to add funds first.';
+            return 'This wallet has no funds to send yet. Open Receive to add funds first.';
         }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
@@ -1727,14 +1725,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
                 setMaxNote(floor > 0n
                     ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor)} `
-                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`
+                        + `${tickerUpper} minimum payment amount, so Max cannot create a payment.`
                     : 'The selected network fee uses the available balance, so Max cannot create a payment.');
                 setMaxBusy(false);
                 return;
             }
             display = decimalStringFromSats(maxSats);
             note = 'Max sends the spendable balance after the selected network fee. '
-                + 'An uneconomical dust input may remain at this address.';
+                + 'A coin amount that costs more to spend than it is worth may remain at this address.';
         } else {
             // A TOKEN balance is not satoshi-denominated and pays no coin fee out of itself,
             // so it is swept verbatim at the tick's own divisibility. The 8-dp sats path
@@ -1830,11 +1828,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            setFormError('Choose the address to send from.');
             return;
         }
         if (!toAddress.trim()) {
-            setFormError('Destination address is required.');
+            setFormError('Enter a recipient address.');
             return;
         }
         const addressError = destinationAddressError(toAddress, descriptor);
@@ -1844,7 +1842,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             return;
         }
         if (!tick.trim()) {
-            setFormError('Token ticker is required.');
+            setFormError('Choose a token.');
             return;
         }
         const amt = String(amount).trim();
@@ -1861,7 +1859,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             return;
         }
         if (/[|;]/.test(memo)) {
-            setFormError('Memo cannot contain | or ; characters.');
+            setFormError(t('send.memoForbiddenChars'));
             return;
         }
         if (memoTooLong) {
@@ -1869,7 +1867,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             return;
         }
         if (coinControlEnabled && selectedUtxos.length === 0) {
-            setFormError('Choose at least one input for coin control.');
+            setFormError('Choose at least one payment input.');
             return;
         }
         // PC-52: the extra recipients get the same checks the first one gets.
@@ -1907,7 +1905,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // visible instead of surfacing a compose error later.
         if (gatedInfo?.state === 'blocked') {
             setFormError(
-                `${tick.trim().toUpperCase()} has token-gated content and this wallet holds none of its unlock keys. `
+                `${tick.trim().toUpperCase()} includes protected content, but this wallet has none of its unlock keys. `
                 + 'Recover the keys below before sending.',
             );
             return;
@@ -1922,8 +1920,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // value of this gate is that it cannot be walked past by accident.
         if (testSendGate) {
             setFormError(
-                'This is your first send to this address. Send a small test first, '
-                + 'or choose "I\'ve verified, continue" above.',
+                'This is your first payment to this address. Send a small test first, '
+                + 'or choose "Continue with the full amount" above.',
             );
             return;
         }
@@ -2452,7 +2450,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (!txid) return;
             const { ok } = await copyText(txid);
             showToast({
-                message: ok ? 'Transaction ID copied.' : 'Copy failed: clipboard unavailable',
+                message: ok ? 'Transaction ID copied to clipboard.' : 'Copy failed: clipboard unavailable',
                 variant: ok ? 'default' : 'error',
             });
         };
@@ -2461,7 +2459,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             event.preventDefault();
             const name = contactName.trim();
             if (!name) {
-                setContactSaveError('Name is required.');
+                setContactSaveError('Enter a contact name.');
                 return;
             }
             setContactSaveStage('saving');
@@ -2479,7 +2477,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 }
                 setContactSaveStage('saved');
             } catch (err) {
-                setContactSaveError(err?.message || 'Save failed.');
+                setContactSaveError(err?.message || 'Could not save this contact. Try again.');
                 setContactSaveStage('editing');
             }
         };

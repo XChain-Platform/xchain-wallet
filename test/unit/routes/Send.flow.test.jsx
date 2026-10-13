@@ -173,7 +173,7 @@ describe('Send flow with mocked messaging', () => {
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
         await user.keyboard('{Enter}');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Destination address is required.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a recipient address.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(destination, { target: { value: TO } });
@@ -342,7 +342,7 @@ describe('Send flow with mocked messaging', () => {
         const messaging = mount({ walletMode: 'watcher' });
         await fillSendForm();
 
-        const review = await screen.findByRole('form', { name: 'Review send' });
+        const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
         expect(review).toHaveTextContent('Chain');
         expect(review).toHaveTextContent('Bitcoin');
@@ -357,7 +357,7 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction: send' }));
+        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
