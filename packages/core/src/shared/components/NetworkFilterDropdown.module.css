@@ -16,3 +16,15 @@
     position: relative;
     box-sizing: border-box;
 }
+
+.sm {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
+}
+
+.md {
+    --network-filter-control-height: var(--xc-control-h-md, 36px);
+}
+
+.lg {
+    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
+}

@@ -34,9 +34,7 @@ import styles from './ChainPicker.module.css';
  * @param {string} [props.label]
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
- * @param {'md' | 'lg'} [props.size]   field size, matching Input: 'md'
- *        (36px, default) sits inline with a form's other inputs; 'lg'
- *        (48px) for hero screens.
+ * @param {'sm' | 'md' | 'lg'} [props.size] field size matching Input; defaults to 'md'.
  * @param {boolean} [props.hideNetworkKind]   When true, suppresses the
  *        ` · testnet` / ` · regtest` suffix in the subtext. Useful on
  *        Receive where the page is already scoped to the user's own

@@ -13,6 +13,10 @@ import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@te
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
 import { useWalletFilters } from '../../../packages/core/src/shared/hooks/useWalletFilters.js';
+import { Input } from '../../../packages/core/src/ui/Input.jsx';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
+import dropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
+import filterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -234,6 +238,39 @@ describe('NetworkFilter search', () => {
 });
 
 describe('shared network filter surfaces', () => {
+    it('matches a neighboring search Input at the default control size', () => {
+        render(
+            <div>
+                <Input type="search" aria-label="Search contacts" />
+                <NetworkFilterDropdown value="all" onChange={() => {}} />
+            </div>,
+        );
+
+        const search = screen.getByRole('searchbox', { name: 'Search contacts' });
+        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+        const dropdown = trigger.closest(`.${dropdownStyles.networkWrap}`);
+        const filter = trigger.closest(`.${filterStyles.wrap}`);
+        const css = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/NetworkFilter.module.css',
+        ), 'utf8');
+        const inputCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/ui/Input.module.css',
+        ), 'utf8');
+        const triggerClass = css.match(/\.trigger\s*\{[^}]*\}/)?.[0] || '';
+        const inputClass = inputCss.match(/\.input\s*\{[^}]*\}/)?.[0] || '';
+
+        expect(search).toHaveClass(inputStyles.input);
+        expect(dropdown).toHaveClass(dropdownStyles.md);
+        expect(filter).toHaveClass(filterStyles.md);
+        expect(trigger).toHaveClass(filterStyles.trigger);
+        expect(inputClass).toMatch(/(?:min-)?height:\s*(?:36px|var\(--xc-control-h-md)/);
+        expect(inputClass).toMatch(/border-radius:\s*var\(--xc-(?:control-radius|radius-md)/);
+        expect(triggerClass).toMatch(/height:\s*var\(--network-filter-control-height,\s*var\(--xc-control-h-md/);
+        expect(triggerClass).toMatch(/border-radius:\s*var\(--xc-control-radius,\s*var\(--xc-radius-md\)\)/);
+    });
+
     it('uses the canonical filter for compact dropdowns and clears through All networks', () => {
         const onChange = vi.fn();
         render(<NetworkFilterDropdown value="dogecoin" onChange={onChange} />);
