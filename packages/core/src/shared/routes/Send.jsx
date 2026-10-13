@@ -653,16 +653,48 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // signer list across re-mounts.
 
     // §29.4 / §21.6 autocomplete source data. Contacts cover the whole
-    // vault and load once; history is per-chain × per-address and
-    // refetches when the chain changes.
+    // vault; history is per-chain × per-address and refetches when the chain
+    // changes.
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const contactsRequestRef = useRef(0);
+    const refreshContacts = useCallback(async ({ warn = false } = {}) => {
+        const requestId = contactsRequestRef.current + 1;
+        contactsRequestRef.current = requestId;
+        try {
+            const rows = await messaging.listContacts();
+            if (contactsRequestRef.current !== requestId) return false;
+            setContacts(Array.isArray(rows) ? rows : []);
+            return true;
+        } catch {
+            if (contactsRequestRef.current !== requestId) return false;
+            if (warn) {
+                showToast({
+                    message: 'Could not refresh contacts. Saved addresses may be out of date.',
+                    variant: 'error',
+                });
+            }
+            return false;
+        }
+    }, [messaging, showToast]);
     useEffect(() => {
-        let cancelled = false;
-        messaging.listContacts()
-            .then((rows) => { if (!cancelled) setContacts(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* silent; autocomplete just shows fewer hits */ });
-        return () => { cancelled = true; };
-    }, [messaging]);
+        refreshContacts();
+        return () => { contactsRequestRef.current += 1; };
+    }, [refreshContacts]);
+
+    // Refresh an already-open picker when a web or desktop window regains
+    // focus, or when a mobile shell returns to the foreground.
+    useEffect(() => {
+        const onVisible = () => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            refreshContacts();
+        };
+        globalThis.addEventListener?.('focus', onVisible);
+        globalThis.document?.addEventListener?.('visibilitychange', onVisible);
+        return () => {
+            globalThis.removeEventListener?.('focus', onVisible);
+            globalThis.document?.removeEventListener?.('visibilitychange', onVisible);
+        };
+    }, [refreshContacts]);
 
     // Contacts UX state: picker open/close and the post-send save form.
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
@@ -671,6 +703,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     );
     const [contactName, setContactName] = useState('');
     const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
+
+    const openContactsPicker = useCallback(async () => {
+        // Read immediately before showing rows so edits made in another shell
+        // cannot silently leave the picker on its mount-time snapshot.
+        await refreshContacts({ warn: true });
+        setContactsPickerOpen(true);
+    }, [refreshContacts]);
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -741,8 +780,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const handlePickRecipient = useCallback((entry) => {
         const address = String(entry?.address || '');
         const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+        const error = destinationAddressError(address, selectedDescriptor);
+        // Keep the current recipient when the picked address cannot be paid on
+        // this chain; the inline message explains which network it belongs to.
+        if (error) {
+            setToError(error);
+            return;
+        }
         setToAddress(address);
-        setToError(destinationAddressError(address, selectedDescriptor));
+        setToError(null);
     }, [chainId]);
 
     const handlePickContact = useCallback((entry) => {
@@ -3396,7 +3442,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 suggestions={suggestions}
                 onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
-                onIconClick={() => setContactsPickerOpen(true)}
+                onIconClick={openContactsPicker}
                 placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />
