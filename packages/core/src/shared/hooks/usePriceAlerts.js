@@ -24,6 +24,7 @@ import { useMessaging } from '../useMessaging.js';
  * @property {boolean} supported     false when the shell lacks the routes
  * @property {string | null} error
  * @property {(input: { chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} addAlert
+ * @property {(id: string, input: { chainId: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} updateAlert
  * @property {(id: string) => Promise<void>} removeAlert
  * @property {(id: string) => Promise<void>} rearm
  * @property {() => Promise<void>} reload
@@ -76,6 +77,12 @@ export function usePriceAlerts(walletId) {
         await reload();
     }, [walletId, supported, messaging, reload]);
 
+    const updateAlert = useCallback(async (id, { chainId, direction, targetFiat, fiatCurrency }) => {
+        if (!walletId || !supported) return;
+        await messaging.savePriceAlert({ id, walletId, chainId, direction, targetFiat, fiatCurrency });
+        await reload();
+    }, [walletId, supported, messaging, reload]);
+
     const removeAlert = useCallback(async (id) => {
         if (!supported) return;
         await messaging.clearPriceAlert({ id });
@@ -88,5 +95,5 @@ export function usePriceAlerts(walletId) {
         await reload();
     }, [supported, messaging, reload]);
 
-    return { alerts, loading, supported, error, addAlert, removeAlert, rearm, reload };
+    return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, reload };
 }
