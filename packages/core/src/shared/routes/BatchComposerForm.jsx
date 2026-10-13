@@ -468,6 +468,20 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             <FormPage
                 label="Review batch"
                 onSubmit={handleSign}
+                status={buildError || (submitError && (hw || isWatcherMode)) ? (
+                    <>
+                        {buildError ? (
+                            <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>
+                                {buildError}
+                            </StatusMessage>
+                        ) : null}
+                        {submitError && (hw || isWatcherMode) ? (
+                            <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>
+                                {submitError}
+                            </StatusMessage>
+                        ) : null}
+                    </>
+                ) : null}
                 actions={(
                     <>
                         <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
@@ -497,7 +511,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
                 </dl>
 
-                {buildError ? <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>{buildError}</StatusMessage> : null}
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
                 {composed ? (
                     <>
@@ -537,8 +550,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 ) : null}
-                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>{submitError}</StatusMessage> : null}
-
             </FormPage>,
         );
     }

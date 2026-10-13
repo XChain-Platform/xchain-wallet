@@ -624,3 +624,285 @@ final class ScreenshotTests: XCTestCase {
         print("=== OTHER (switches \(app.switches.count), fields \(app.textFields.count), secure \(app.secureTextFields.count)) ===")
     }
 }
+
+// MARK: - iPad layout probe
+
+/// Walk the real app on an iPad in portrait, landscape and resized windows, one PNG per screen.
+/// Run `-only-testing:AppUITests/ScreenshotTests/testIPadLayoutProbe` on an iPad simulator;
+/// `TEST_RUNNER_IPAD_PASS_DIR=<dir>` also writes the PNGs there. Misses print, never fail.
+extension ScreenshotTests {
+
+    private var passDir: String? { ProcessInfo.processInfo.environment["IPAD_PASS_DIR"] }
+
+    private func probeShot(_ name: String) {
+        Thread.sleep(forTimeInterval: 1.2)
+        let shot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: shot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        if let dir = passDir {
+            try? shot.pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+        }
+        probeEdges(name)
+    }
+
+    /// Report page elements past the window's left or right edge. Only the WebView is walked:
+    /// system keyboard views report frames in another coordinate space. Element frames are
+    /// window-relative while the window's own frame is screen-relative, so compare to its size.
+    private func probeEdges(_ name: String) {
+        let win = app.windows.firstMatch.frame
+        let page = app.webViews.firstMatch
+        guard page.exists, let root = try? page.snapshot() else { print("EDGES \(name): no page"); return }
+        var hits: [String] = []
+        func walk(_ s: XCUIElementSnapshot) {
+            let f = s.frame
+            if f.width >= 1 && f.height >= 1 && !f.isInfinite
+                && (f.maxX > win.width + 1 || f.minX < -1) {
+                let label = s.label.isEmpty ? s.identifier : s.label
+                hits.append("\(s.elementType.rawValue):\(label.prefix(40)) x=\(Int(f.minX))..\(Int(f.maxX))")
+            }
+            for c in s.children { walk(c) }
+        }
+        walk(root)
+        print("EDGES \(name): window=\(Int(win.width))x\(Int(win.height)) offside=\(hits.count)")
+        for h in hits.prefix(12) { print("EDGES \(name):   \(h)") }
+    }
+
+    /// Find the first hittable element of any type whose label starts with `label`: settings
+    /// rows carry their summary ("Safety Auto-lock 15 min") and nav rows a badge count.
+    private func hittable(_ label: String, exact: Bool = false) -> XCUIElement? {
+        let format = exact ? "label == %@" : "label BEGINSWITH %@"
+        for query in [app.buttons, app.descendants(matching: .any)] {
+            let q = query.matching(NSPredicate(format: format, label))
+            for i in 0..<min(q.count, 6) {
+                let e = q.element(boundBy: i)
+                if e.exists && e.isHittable { return e }
+            }
+        }
+        return nil
+    }
+
+    /// Swipe the page itself: an app-level swipe misses it once the window is resized and moved.
+    private func swipePage() {
+        let page = app.webViews.firstMatch
+        if page.exists { page.swipeUp() } else { app.swipeUp() }
+    }
+
+    private func scrollTo(_ label: String, max: Int = 8) -> XCUIElement? {
+        var e = hittable(label)
+        var n = 0
+        while e == nil && n < max { swipePage(); n += 1; e = hittable(label) }
+        return e
+    }
+
+    private func goHome() {
+        if let h = hittable("Home", exact: true) { h.tap(); Thread.sleep(forTimeInterval: 0.8); return }
+        for _ in 0..<4 {
+            guard let back = hittable("Back", exact: true) else { return }
+            back.tap()
+            Thread.sleep(forTimeInterval: 0.6)
+        }
+    }
+
+    private func dumpButtons(_ tag: String) {
+        let labels = app.buttons.allElementsBoundByIndex.filter { $0.exists }
+            .map { "\($0.label)\($0.isHittable ? "" : "(h-)")" }
+        print("BUTTONS \(tag): \(labels.joined(separator: " | "))")
+    }
+
+    /// Find a form field by its label or placeholder: Send's first field (From) is a
+    /// read-only picker that takes focus without ever raising a keyboard.
+    private func editableField(_ hints: [String]) -> XCUIElement? {
+        for hint in hints {
+            let p = NSPredicate(format: "label CONTAINS[c] %@ OR placeholderValue CONTAINS[c] %@", hint, hint)
+            let q = app.textFields.matching(p)
+            for i in 0..<min(q.count, 4) {
+                let e = q.element(boundBy: i)
+                if e.exists { return e }
+            }
+        }
+        return nil
+    }
+
+    /// Type into a field with the docked keyboard, then pinch it into the floating one.
+    /// The simulator keeps it floating afterwards (KeyboardIsFloating in
+    /// com.apple.keyboard.preferences), so only a fresh simulator gives a docked reading.
+    private func probeKeyboard(_ tag: String, hints: [String]) {
+        guard var field = editableField(hints) else { print("KEYBOARD \(tag): no field for \(hints)"); return }
+        var scrolls = 0
+        while !field.isHittable && scrolls < 5 {
+            swipePage(); scrolls += 1
+            if let again = editableField(hints) { field = again }
+        }
+        guard field.isHittable else { print("KEYBOARD \(tag): field never hittable"); return }
+        field.tap()
+        let kb = app.keyboards.firstMatch
+        if !kb.waitForExistence(timeout: 5) {
+            print("KEYBOARD \(tag): no software keyboard (keyboards=\(app.keyboards.count))")
+            probeShot("\(tag)-kb-none")
+            return
+        }
+        field.typeText("1")
+        let kf = kb.frame
+        let ff = field.frame
+        print("KEYBOARD \(tag): field '\(field.label)' \(ff) keyboard=\(kf) fieldCovered=\(ff.maxY > kf.minY)")
+        probeShot("\(tag)-kb-docked")
+        kb.pinch(withScale: 0.4, velocity: -1)
+        Thread.sleep(forTimeInterval: 1)
+        let fk = app.keyboards.firstMatch.frame
+        print("KEYBOARD \(tag): after pinch keyboard=\(fk) fieldCovered=\(field.frame.intersects(fk))")
+        probeShot("\(tag)-kb-floating")
+        let hide = app.keyboards.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "hide")).firstMatch
+        if hide.exists && hide.isHittable { hide.tap() }
+        Thread.sleep(forTimeInterval: 0.6)
+    }
+
+    /// The menu is the header's "Open menu" on the side rail and the bar's "More" below it.
+    private func openMenu() -> Bool {
+        for label in ["Open menu", "More"] {
+            if let m = hittable(label, exact: true) { m.tap(); Thread.sleep(forTimeInterval: 0.8); return true }
+        }
+        return false
+    }
+
+    private static let navLabels = ["History", "Send", "Receive", "DEX", "Dispensers", "Contracts",
+                                    "Messaging", "Contacts", "Lists", "Payments due"]
+    private static let settingsDrills = ["This Wallet", "Accounts & Addresses", "Display", "Keyboard", "Privacy",
+                                         "Safety", "Wallet Mode", "Backup", "Fees", "Network & Endpoints",
+                                         "Connected Sites", "Automatic Donation System", "Developer Mode", "About"]
+    private static let menuRows = ["Decentralized Exchange", "Marketplace", "Dispensers", "My Tokens", "Alerts",
+                                   "More actions", "Messaging", "Cross-chain", "Contacts", "My Lists", "Addresses",
+                                   "Contracts", "Staking", "Multisig"]
+
+    private func slug(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "and").replacingOccurrences(of: " ", with: "-")
+    }
+
+    /// Page down the Settings root for the inline panels, then open every drill-down panel.
+    private func probeSettings(_ o: String) {
+        goHome()
+        guard openSettings(scene: "\(o)-settings") else { return }
+        for page in 0..<6 {
+            probeShot("\(o)-20-settings-page\(page)")
+            swipePage()
+        }
+        var p = 1
+        for panel in Self.settingsDrills {
+            goHome()
+            guard openSettings(scene: "\(o)-settings-\(panel)") else { continue }
+            guard let row = scrollTo(panel) else { print("SETTINGS \(o): no row '\(panel)'"); continue }
+            row.tap()
+            probeShot(String(format: "%@-2%02d-settings-%@", o, p, slug(panel)))
+            p += 1
+        }
+        goHome()
+    }
+
+    private func probeMenu(_ o: String) {
+        goHome()
+        guard openMenu() else { print("MENU \(o): no Open menu / More control"); return }
+        probeShot("\(o)-40-menu")
+        dumpButtons("\(o)-menu")
+        var r = 1
+        for row in Self.menuRows {
+            goHome()
+            guard openMenu() else { break }
+            guard let b = scrollTo(row, max: 4) else { print("MENU \(o): no row '\(row)'"); continue }
+            b.tap()
+            probeShot(String(format: "%@-4%02d-menu-%@", o, r, slug(row)))
+            r += 1
+        }
+        goHome()
+    }
+
+    private func probeWalk(_ o: String) {
+        goHome()
+        probeShot("\(o)-00-home")
+        dumpButtons("\(o)-home")
+        var n = 1
+        for label in Self.navLabels {
+            goHome()
+            guard let b = hittable(label, exact: label != "Messaging") else { print("NAV \(o): no hittable '\(label)'"); continue }
+            b.tap()
+            probeShot(String(format: "%@-%02d-nav-%@", o, n, slug(label)))
+            n += 1
+            if label == "Send" { probeKeyboard("\(o)-send", hints: ["address or name", "To", "Amount"]) }
+            if label == "Receive" { probeKeyboard("\(o)-receive", hints: ["Amount", "0.00"]) }
+        }
+        probeSettings(o)
+        probeMenu(o)
+    }
+
+    /// Drag the window's corner grip until it is about `target` points wide. The window
+    /// resizes about its centre, so each drag moves the corner half the remaining gap,
+    /// and the frame is re-read before every drag because the window moves too.
+    @discardableResult
+    private func resizeWindow(to target: CGFloat) -> CGFloat {
+        let window = app.windows.firstMatch
+        for _ in 0..<8 {
+            let f = window.frame
+            if abs(f.width - target) < 40 { break }
+            let origin = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            let grip = origin.withOffset(CGVector(dx: f.width - 6, dy: f.height - 6))
+            let to = origin.withOffset(CGVector(dx: f.width - 6 + (target - f.width) / 2, dy: f.height - 6))
+            grip.press(forDuration: 0.6, thenDragTo: to)
+            Thread.sleep(forTimeInterval: 1.5)
+            print("RESIZE target=\(Int(target)): \(f) -> \(window.frame)")
+        }
+        return window.frame.width
+    }
+
+    private func probeWindowed(_ tag: String, width: CGFloat) {
+        let got = resizeWindow(to: width)
+        let name = "\(tag)-w\(Int(got))"
+        goHome()
+        probeShot("\(name)-home")
+        dumpButtons("\(name)-home")
+        for label in ["Send", "Receive"] {
+            goHome()
+            if let b = hittable(label, exact: true) {
+                b.tap()
+                probeShot("\(name)-\(label)")
+                if label == "Send" { probeKeyboard("\(name)-send", hints: ["address or name", "To", "Amount"]) }
+            }
+        }
+        goHome()
+        if openSettings(scene: "\(name)-settings") { probeShot("\(name)-settings") }
+        goHome()
+        if openMenu() { probeShot("\(name)-menu") }
+        goHome()
+    }
+
+    func testIPadLayoutProbe() throws {
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        _ = app.staticTexts.firstMatch.waitForExistence(timeout: 30)
+        if hittable("Accept and continue") != nil || app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS[c] %@", "agree to the GNU Affero")).firstMatch.exists {
+            probeShot("p-onb-01-terms")
+            acceptTerms()
+            probeShot("p-onb-02-intro")
+            advanceIntroCarousel()
+            probeShot("p-onb-03-welcome")
+            enterDemoMode()
+            Thread.sleep(forTimeInterval: 2)
+        }
+
+        // A window resized by an earlier run stays resized, so each walk starts full width.
+        resizeWindow(to: 834)
+        probeWalk("p")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2)
+        resizeWindow(to: 1210)
+        probeWalk("l")
+
+        // Windowed widths: the side rail (640 to 899), the bottom bar with a carded form, the narrowest.
+        probeWindowed("l", width: 760)
+        probeWindowed("l", width: 620)
+        probeWindowed("l", width: 375)
+        resizeWindow(to: 1210)
+        XCUIDevice.shared.orientation = .portrait
+        print("PROBE missed: \(missed.joined(separator: "; "))")
+    }
+}

@@ -102,7 +102,7 @@ assert.ok(
     'DispensersList sorts rows newest-block-first',
 );
 assert.ok(
-    /No addresses on any chain/.test(listSrc) || /No addresses/.test(listSrc),
+    /title="No supported address"/.test(listSrc),
     'DispensersList surfaces the no-addresses case',
 );
 assert.ok(

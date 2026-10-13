@@ -74,7 +74,12 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <EmptyState title="You have no contacts yet" titleAs="p" role={null} />
+                    <EmptyState
+                        title="No contacts yet"
+                        body="Saved contacts with addresses appear here."
+                        titleAs="p"
+                        role={null}
+                    />
                 </ListPage>
             </Screen>
         );
@@ -86,6 +91,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         role="textbox"
                         className={styles.abSearch}
                         placeholder="Search"
@@ -101,7 +108,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
             )}>
                 {rows.length === 0 ? (
                     <EmptyState
-                        title="No addresses match your filters."
+                        title="No matching addresses"
+                        body="Try a different search or network filter."
                         titleAs="p"
                         role={null}
                     />

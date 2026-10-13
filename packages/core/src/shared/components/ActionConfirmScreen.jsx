@@ -123,6 +123,8 @@ function useSourceIdentity(address, chainId, walletId) {
  *   can only say "outcome 0"; supplying the market's own labels NAMES that index
  *   without replacing it. Display-only annotation, and the only caller-supplied text
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
+ * @param {(amount: string) => string|null} [props.formatNativeFee]
+ * @param {(amount: string) => string|null} [props.formatProtocolFee]
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -150,6 +152,8 @@ export function ActionConfirmScreen({
     onHwConfirmedChange,
     hwExplicitConfirmed = false,
     outcomeLabels = null,
+    formatNativeFee,
+    formatProtocolFee,
 }) {
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
@@ -171,8 +175,13 @@ export function ActionConfirmScreen({
     const ticker = coinTicker || nativeTickerFor(composed?.chainId);
     // An envelope's total covers its commit and its reveal, and says so.
     const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
-    const exactFeeText = Number.isFinite(exactSats)
-        ? `${feeLabel}: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
+    const exactCoinAmount = Number.isFinite(exactSats) ? satsToCoinDecimal(exactSats) : null;
+    const exactFeeFiat = exactCoinAmount && typeof formatNativeFee === 'function'
+        ? formatNativeFee(exactCoinAmount)
+        : null;
+    const exactFeeText = exactCoinAmount
+        ? `${feeLabel}: ${exactCoinAmount} ${ticker}`.trim()
+            + (exactFeeFiat ? ` (${exactFeeFiat})` : '')
         : null;
 
     // (c): still the host's decode of the composed bytes, with the
@@ -228,6 +237,8 @@ export function ActionConfirmScreen({
             feeText={exactFeeText || feeText}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
+            formatNativeFee={formatNativeFee}
+            formatProtocolFee={formatProtocolFee}
             credentialsReady={credsComplete}
             credentials={(
                 <>

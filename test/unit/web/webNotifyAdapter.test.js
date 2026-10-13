@@ -64,7 +64,7 @@ describe('webNotifyAdapter', () => {
         window.addEventListener(NOTIFICATION_EVENT, onEvent);
         stubVisibility('visible');
         stubNotification('granted');
-        createWebNotifyAdapter()(payload);
+        expect(createWebNotifyAdapter()(payload)).toBe(true);
         window.removeEventListener(NOTIFICATION_EVENT, onEvent);
         expect(seen).toEqual([payload]);
     });

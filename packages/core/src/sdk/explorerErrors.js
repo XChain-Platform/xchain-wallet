@@ -51,6 +51,13 @@ const MESSAGE_TO_CODE = [
     [/Explorer returned HTTP (\d{3})/i, 'EXPLORER_HTTP_$1'],
     [/Explorer request timed out:/i, 'EXPLORER_TIMEOUT'],
     [/Explorer request failed:/i, 'EXPLORER_NETWORK'],
+    [/Explorer data for \S+ is behind the chain/i, 'COIN_DATA_STALE'],
+    [/WebSocket closed before WELCOME/i, 'WS_CONNECTION_CLOSED'],
+    [/WebSocket (?:connection failed|error:)/i, 'WS_CONNECTION_FAILED'],
+    [/No response for request id:/i, 'WS_TIMEOUT'],
+    [/Unknown network:/i, 'INVALID_NETWORK'],
+    [/addresses must be a non-empty array/i, 'INVALID_ADDRESSES'],
+    [/Explorer does not serve \S+/i, 'EXPLORER_BATCH_UNSUPPORTED'],
 ];
 
 // A 429 the SDK could not ride out (rate-limits spec, M4). The SDK honours
@@ -96,25 +103,22 @@ export function explorerErrorCode(err) {
     }
     if (EXPLORER_429_RE.test(message) && RETRY_AFTER_RE.test(message)) return 'RATE_LIMITED';
     if (EXPLORER_BUSY_RE.test(message)) return 'RATE_LIMITED';
-    // Only codes the SDK actually mints count. A raw axios error also carries a
-    // `code` (ECONNABORTED, ENOTFOUND), and the SDK's own WS_* / INVALID_NETWORK
-    // codes are deliberately NOT claimed here: they are not a failed read of a
-    // submit's data and their sentences would be different ones.
-    if (code.startsWith('EXPLORER_')) return code;
+    // Only a typed SDK explorer error may contribute a code outside the
+    // EXPLORER_* family. Raw transport errors also carry codes such as
+    // ECONNABORTED and ENOTFOUND.
+    if (code.startsWith('EXPLORER_') || (name === 'SDKExplorerError' && code)) return code;
     for (const [pattern, mapped] of MESSAGE_TO_CODE) {
         const m = pattern.exec(message);
         if (m) return mapped.replace('$1', m[1] || '');
     }
-    return null;
+    return name === 'SDKExplorerError' ? 'EXPLORER_UNKNOWN' : null;
 }
 
 /**
  * True when this error came from the SDK explorer client.
  *
- * Deliberately does NOT trust `name` alone: SDKExplorerError is also what the
- * websocket client throws (WS_CONNECTION_FAILED, WS_TIMEOUT) and what an
- * unknown-network programming error is minted as, and neither is the read
- * failure this module has sentences for.
+ * The class name is enough for a generic safe answer when a newly added code
+ * crosses a boundary without its own fields.
  *
  * @param {unknown} err
  * @returns {boolean}
@@ -198,6 +202,31 @@ export function explorerErrorMessage(err) {
             + 'keeps happening.';
     }
 
+    if (code === 'COIN_DATA_STALE') {
+        return 'The service that reads the chain is still catching up. Nothing was signed or sent, so '
+            + 'nothing was spent. Wait a few minutes and try again.';
+    }
+
+    if (code === 'INVALID_NETWORK') {
+        return 'The wallet does not recognize the selected network. Nothing was signed or sent, so nothing '
+            + 'was spent. Choose a supported network in Settings and try again.';
+    }
+
+    if (code === 'INVALID_ADDRESSES') {
+        return 'The wallet could not check one or more addresses for this action. Nothing was signed or sent, '
+            + 'so nothing was spent. Check the addresses and try again.';
+    }
+
+    if (code === 'EXPLORER_BATCH_UNSUPPORTED') {
+        return 'The service that reads the chain does not support this wallet request. Nothing was signed or '
+            + 'sent, so nothing was spent. Update the wallet and try again, or report it if it continues.';
+    }
+
+    if (code === 'WS_CONNECTION_CLOSED' || code === 'WS_CONNECTION_FAILED' || code === 'WS_TIMEOUT') {
+        return 'The wallet lost its live connection to the chain service. Nothing was signed or sent, so '
+            + 'nothing was spent. Check your connection and try again.';
+    }
+
     if (code === 'RATE_LIMITED' || code === 'EXPLORER_HTTP_429') {
         // A rate limit is not "temporarily unavailable": the service is up and
         // answering, it is the wallet's own request rate it is pushing back on,
@@ -269,6 +298,36 @@ export function explorerReadFailure(err, verb = 'complete this') {
         return {
             message: `${opener} The service that reads the chain did not answer in time. Try again in a moment.`,
             cause: 'backend_behind',
+        };
+    }
+    if (code === 'COIN_DATA_STALE') {
+        return {
+            message: `${opener} The service that reads the chain is still catching up. Wait a few minutes and try again.`,
+            cause: 'backend_behind',
+        };
+    }
+    if (code === 'INVALID_NETWORK') {
+        return {
+            message: `${opener} The wallet does not recognize the selected network. Choose a supported network in Settings and try again.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'INVALID_ADDRESSES') {
+        return {
+            message: `${opener} The wallet could not check one or more addresses. Check the addresses and try again.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'EXPLORER_BATCH_UNSUPPORTED') {
+        return {
+            message: `${opener} The chain service does not support this wallet request. Update the wallet and try again, or report it if it continues.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'WS_CONNECTION_CLOSED' || code === 'WS_CONNECTION_FAILED' || code === 'WS_TIMEOUT') {
+        return {
+            message: `${opener} The wallet lost its live connection to the chain service. Check your connection and try again.`,
+            cause: 'network',
         };
     }
     if (code === 'RATE_LIMITED' || code === 'EXPLORER_HTTP_429') {

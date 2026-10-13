@@ -53,6 +53,49 @@ import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.j
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
+import { userFacingMessage } from './userFacingMessage.js';
+
+const SDK_ERROR_MESSAGES = Object.freeze({
+    SDKHubError: 'The wallet could not reach its service directory. Check your connection and try again.',
+    SDKConfigError: 'The wallet is not configured for this request. Check the selected network in Settings and try again.',
+    SDKFormatError: 'The wallet could not prepare this action from the form values. Review the form and try again.',
+    SDKContractError: 'The contract request could not be prepared. Check the contract details and try again.',
+    SDKWalletError: 'The wallet could not prepare or sign this request. Check the wallet details and try again.',
+    SDKAuthError: 'The wallet could not authorize this request. Check the account details and try again.',
+    SDKMessagingError: 'The wallet could not prepare this message. Check the recipient and message, then try again.',
+    SDKActionError: 'The action could not be completed. Check its status and try again.',
+    SDKMuSigError: 'The wallet could not complete the shared signature. Reconnect every signer and try again.',
+    SDKGatedFileError: 'The protected file could not be prepared. Check the file and key, then try again.',
+    SDKCompressionError: 'The file could not be compressed for this action. Choose a smaller file and try again.',
+    SDKPolicyError: 'This request does not meet the signing policy. Review the policy and try again.',
+    SDKX402Error: 'The service payment could not be verified. Check the payment details and try again.',
+    SDKPreflightError: 'This action would be rejected before it confirms. Review the form and try again.',
+    SDKRateLimitedError: 'The service is receiving too many requests. Wait a moment and try again.',
+    SDKError: 'The wallet service could not complete this request. Try again, and report it if it continues.',
+    OracleFeeUnpayableError: 'The wallet could not confirm the required oracle fee. Check the oracle settings and try again.',
+    NonFiniteAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
+    InvalidSatsAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
+    UnknownChainError: 'The wallet does not recognize the selected network. Choose a supported network in Settings and try again.',
+    RevealInputsRefusedError: 'The follow-up transaction did not match the transaction already sent, so it was not signed. Retry the reveal, and report it if it continues.',
+});
+
+function knownSdkErrorMessage(err) {
+    if (!err || typeof err !== 'object') return null;
+    const e = /** @type {any} */ (err);
+    if (e.code === 'HUB_UNAVAILABLE') return SDK_ERROR_MESSAGES.SDKHubError;
+    if (e.code === 'NON_FINITE_AMOUNT' || e.code === 'INVALID_SATS_AMOUNT') {
+        return SDK_ERROR_MESSAGES[e.code === 'NON_FINITE_AMOUNT' ? 'NonFiniteAmountError' : 'InvalidSatsAmountError'];
+    }
+    if (e.code === 'REVEAL_INPUTS_REFUSED') return SDK_ERROR_MESSAGES.RevealInputsRefusedError;
+    return SDK_ERROR_MESSAGES[String(e.name || '')] || null;
+}
+
+const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry|review|try|update|wait)\b/i;
+
+function safeBuildMessage(message, generic) {
+    const safe = userFacingMessage(message, generic);
+    return NEXT_STEP_RE.test(safe) ? safe : `${safe} Review the form and try again.`;
+}
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -224,12 +267,17 @@ export function chainGateErrorMessage(err) {
 export function submitFailureMessage(
     err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
+    const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     if (isNativeFeeForfeit(err)) {
-        return nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+        return userFacingMessage(
+            nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,
+        );
     }
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
-    if (isWatcherChunkLane(err)) return String(/** @type {any} */ (err).message || '');
+    if (isWatcherChunkLane(err)) {
+        return userFacingMessage(String(/** @type {any} */ (err).message || ''), generic);
+    }
     if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
@@ -239,16 +287,16 @@ export function submitFailureMessage(
     // transaction's fate as a build failure.
     if (broadcastKind === null) {
         const encoderCopy = encoderErrorMessage(err, { coinTicker, requiredNative });
-        if (encoderCopy) return encoderCopy;
+        if (encoderCopy) return safeBuildMessage(encoderCopy, generic);
         // Name a per-chain gate refusal ahead of the params-builder check below.
         const chainGateCopy = chainGateErrorMessage(err);
-        if (chainGateCopy) return chainGateCopy;
+        if (chainGateCopy) return userFacingMessage(chainGateCopy, generic);
         // A params-builder refusal happens BEFORE the encoder is called at all,
         // so it can only be reached here - and it is checked after the encoder
         // for the same reason the encoder is checked after broadcast: the more
         // specific classifier goes first. See validationErrors.js (D-118).
         const validationCopy = validationErrorMessage(err);
-        if (validationCopy) return validationCopy;
+        if (validationCopy) return safeBuildMessage(validationCopy, generic);
         // The explorer: the third service a submit talks to, and the last one
         // whose failures were reaching users as wire wording (URL included).
         // Checked last of the three because it is the broadest - every
@@ -256,17 +304,19 @@ export function submitFailureMessage(
         // an encoder or params refusal is the more specific answer.
         const explorerCopy = explorerErrorMessage(err);
         if (explorerCopy) return explorerCopy;
+        const sdkCopy = knownSdkErrorMessage(err);
+        if (sdkCopy) return sdkCopy;
     }
     const raw = (err && typeof err === 'object')
         ? String(/** @type {any} */ (err).message || '')
         : (typeof err === 'string' ? err : '');
-    const fallbackText = String(fallback || '');
-    if (fallbackText && fallbackText !== raw) return fallbackText;
+    const fallbackText = String(fallback || '').trim();
+    if (fallbackText && (!raw || !fallbackText.includes(raw))) {
+        return userFacingMessage(fallbackText, generic);
+    }
     const humanized = humanizeError(err, verb);
-    if ((fallbackText && fallbackText === raw)
-        || humanized.cause !== 'unknown'
-        || humanized.details) return humanized.message;
-    return raw || 'The request stopped because the wallet service returned no explanation.';
+    if (humanized.cause !== 'unknown') return humanized.message;
+    return generic;
 }
 
 /**
