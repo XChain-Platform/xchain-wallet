@@ -76,6 +76,7 @@ import {
     forgetUnusedDispenserAddress,
 } from '../utils/unusedDispenserAddress.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import {
@@ -1420,23 +1421,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
             Your unfinished dispenser draft was saved. Restore it to continue. Nothing was submitted.
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label="Discard saved draft"
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
+            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
                 Discard
-            </button>
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
 
