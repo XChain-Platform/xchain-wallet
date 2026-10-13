@@ -10,6 +10,7 @@ import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
+import io.xchain.wallet.android.app.XChainAppPlugin;
 import io.xchain.wallet.android.clipboard.XChainClipboardPlugin;
 import io.xchain.wallet.android.links.XChainLinksPlugin;
 import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
@@ -36,14 +37,17 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(XChainVaultPlugin.class);
         registerPlugin(XChainLinksPlugin.class);
         registerPlugin(XChainSplashPlugin.class);
+        registerPlugin(XChainAppPlugin.class);
         // SSC-4: without this the SPA finds no clipboard plugin and
         // refuses sensitive copies, rather than writing a seed phrase to an
         // unmarked clip any foreground app can read.
         registerPlugin(XChainClipboardPlugin.class);
+        // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
+        // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
-        routeBackKeyToTheWebView();
+        routeBackKeyToTheSpa();
         lastFontScale = getResources().getConfiguration().fontScale;
     }
 
@@ -81,36 +85,26 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Send the system Back gesture to the WebView's session history.
+     * Send the system Back gesture to the SPA's topmost back handler.
      *
-     * Capacitor's core does nothing with Back (that lives in the optional App
-     * plugin, which SSC-1 keeps out), so the platform default applied: Back
-     * finished the activity from EVERY screen. Measured on an LG K51,
-     * 2026-10-12: Receive, Back, launcher.
-     *
-     * <p>The SPA keeps one sentinel history entry on top exactly while a
-     * screen has a back action (packages/core/src/ui/backStack.js), so
-     * {@code canGoBack()} is true exactly when there is somewhere in the app
-     * to go back to. Going back pops the sentinel and the SPA runs that
-     * screen's own back action. With nothing to go back to, this steps aside
-     * and lets the platform leave the app as it always did.
-     *
-     * <p>This adds no plugin and no bridge method: nothing new is callable
-     * from page script.
+     * The narrow App plugin exposes only the back event and minimization. The
+     * SPA handler stack closes overlays before routes and preserves in-route
+     * stages that do not create browser history entries. With no listener,
+     * the task moves to the background instead of destroying the flow.
      */
-    private void routeBackKeyToTheWebView() {
+    private void routeBackKeyToTheSpa() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 Bridge bridge = getBridge();
                 WebView webView = bridge == null ? null : bridge.getWebView();
-                if (webView != null && webView.canGoBack()) {
-                    webView.goBack();
-                    return;
+                XChainAppPlugin app = null;
+                if (bridge != null && bridge.getPlugin("App") != null) {
+                    app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
                 }
-                setEnabled(false);
-                getOnBackPressedDispatcher().onBackPressed();
-                setEnabled(true);
+                boolean canGoBack = webView != null && webView.canGoBack();
+                if (app != null && app.dispatchBackButton(canGoBack)) return;
+                moveTaskToBack(true);
             }
         });
     }

@@ -248,6 +248,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>

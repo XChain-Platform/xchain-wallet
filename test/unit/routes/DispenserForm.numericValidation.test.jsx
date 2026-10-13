@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = {
@@ -33,6 +34,7 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         getWalletBalances: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         composeForConfirm,
         buildActionPsbtRequest: buildActionPsbtRequest || vi.fn().mockResolvedValue({
             psbtHex: '70736274ff', encoding: 'psbt', fromAddress: SOURCE.address,
@@ -65,6 +67,33 @@ async function mountForm({ walletMode = 'full', onBack = vi.fn(), buildActionPsb
 afterEach(() => cleanup());
 
 describe('DispenserForm numeric validation', () => {
+    it('tabs through terms and opens review from Enter only when valid', async () => {
+        const user = userEvent.setup();
+        const utils = await mountForm();
+        const give = utils.getByLabelText(/^Give amount/);
+        give.focus();
+
+        await user.tab();
+        const escrow = utils.getByLabelText(/^Escrow amount/);
+        expect(document.activeElement).toBe(escrow);
+        fireEvent.change(give, { target: { value: 'invalid' } });
+        fireEvent.change(escrow, { target: { value: '100' } });
+        fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
+        escrow.focus();
+        await user.keyboard('{Enter}');
+
+        expect(utils.getByText('Per-fill give amount must be a positive number.')).toBeInTheDocument();
+        expect(utils.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(give, { target: { value: '10' } });
+        escrow.focus();
+        await user.keyboard('{Enter}');
+
+        await act(async () => { await drainMicrotasks(); });
+        expect(utils.composeForConfirm).toHaveBeenCalledTimes(1);
+        expect(utils.getByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
     it('refuses a malformed trigger price before composing', async () => {
         const utils = await mountForm();
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });

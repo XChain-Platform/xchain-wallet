@@ -24,37 +24,74 @@ const RAW_TRANSACTION = '0200000001'
     + '00000000';
 
 const MULTI_FRAME_CHUNK = encodeXcwChunks(new Uint8Array(400).fill(65))[0];
+const BTC = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+const LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
+const DOGE = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
 
 const ROUTING_CASES = [
     {
-        name: 'Bitcoin URI',
-        input: 'bitcoin:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq?amount=0.25',
-        outcome: { kind: 'send', address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', amount: '0.25' },
+        name: 'BIP21 URI with its standard fields',
+        input: `bitcoin:${BTC}?amount=0.25&label=Coffee%20shop&message=Order%2042`,
+        outcome: {
+            kind: 'send',
+            address: BTC,
+            amount: '0.25',
+            memo: 'Order 42',
+            chainId: 'bitcoin-mainnet',
+        },
     },
     {
         name: 'Litecoin URI',
-        input: 'litecoin:ltc1qg82wtl0pm3m7p4f9l7sn2p8hx5k3h5y0n0l8m9?amount=1.5',
-        outcome: { kind: 'send', address: 'ltc1qg82wtl0pm3m7p4f9l7sn2p8hx5k3h5y0n0l8m9', amount: '1.5' },
+        input: `litecoin:${LTC}?amount=1.5`,
+        outcome: { kind: 'send', address: LTC, amount: '1.5', chainId: 'litecoin-mainnet' },
     },
     {
         name: 'Dogecoin URI',
-        input: 'dogecoin:DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L?amount=12',
-        outcome: { kind: 'send', address: 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L', amount: '12' },
+        input: `dogecoin:${DOGE}?amount=12`,
+        outcome: { kind: 'send', address: DOGE, amount: '12', chainId: 'dogecoin-mainnet' },
     },
     {
         name: 'plain address',
-        input: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-        outcome: { kind: 'send', address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' },
+        input: BTC,
+        outcome: { kind: 'send', address: BTC, chainId: 'bitcoin-mainnet' },
     },
     {
-        name: 'xchain send URI',
-        input: 'xchain://bitcoin-mainnet/BTC?amount=2&to=bc1qexample',
+        name: 'uppercase bech32 address',
+        input: BTC.toUpperCase(),
+        outcome: { kind: 'send', address: BTC.toUpperCase(), chainId: 'bitcoin-mainnet' },
+    },
+    {
+        name: 'legacy xchain send URI',
+        input: `xchain://bitcoin-mainnet/BTC?amount=2&to=${BTC}`,
         outcome: {
             kind: 'send',
-            address: 'bc1qexample',
+            address: BTC,
             amount: '2',
             tick: 'BTC',
             chainId: 'bitcoin-mainnet',
+        },
+    },
+    {
+        name: 'coin-code xchain send URI with the default registry',
+        input: `xchain:BTC/send?to=${BTC}&amount=3&tick=XCP&memo=Invoice`,
+        outcome: {
+            kind: 'send',
+            address: BTC,
+            amount: '3',
+            tick: 'XCP',
+            memo: 'Invoice',
+            chainId: 'bitcoin-mainnet',
+        },
+    },
+    {
+        name: 'BIP21-style xchain URI',
+        input: `xchain:${LTC}?amount=4&tick=LTC`,
+        outcome: {
+            kind: 'send',
+            address: LTC,
+            amount: '4',
+            tick: 'LTC',
+            chainId: 'litecoin-mainnet',
         },
     },
     {
@@ -70,6 +107,31 @@ const ROUTING_CASES = [
 ];
 
 const EXPLANATION_CASES = [
+    {
+        name: 'payment URI whose address belongs to another chain',
+        input: `bitcoin:${LTC}?amount=1`,
+        message: /payment request.*supported chain or valid address/i,
+    },
+    {
+        name: 'payment URI whose chain parameter contradicts its scheme',
+        input: `bitcoin:${BTC}?chain=litecoin-mainnet`,
+        message: /payment request.*supported chain or valid address/i,
+    },
+    {
+        name: 'xchain payment whose address contradicts its chain',
+        input: `xchain:LTC/send?to=${BTC}&amount=1`,
+        message: /payment request.*supported chain or valid address/i,
+    },
+    {
+        name: 'unsupported required BIP21 parameter',
+        input: `bitcoin:${BTC}?req-something=1`,
+        message: /payment request.*supported chain or valid address/i,
+    },
+    {
+        name: 'address-shaped garbage',
+        input: 'thisisnotavalidwalletaddress12345',
+        message: /contains text the wallet does not know how to use/i,
+    },
     {
         name: 'signed transaction hex',
         input: RAW_TRANSACTION,

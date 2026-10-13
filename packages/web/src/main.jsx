@@ -129,7 +129,7 @@ if (globalThis.__xchainBootFloor?.blocked) {
         // Advice, not a gate. Logged rather than modal: the wallet works, and
         // the direct-APK audience includes de-Googled ROMs where the engine
         // ships with the OS and "just update it" is not one tap.
-        console.warn(floorStaleMessage(floor));
+        console.warn(`[web] ${floorStaleMessage(floor)}`);
     }
     createRoot(container).render(<><App /><NativeShellReady /></>);
 }

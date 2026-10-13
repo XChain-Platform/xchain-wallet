@@ -121,8 +121,8 @@ assert.match(
     /if \(testSendGate\) \{[\s\S]{0,400}return;/,
     'handleReview refuses to open the confirm path while the gate is up',
 );
-assert.match(sendSrc, /Send a small test first/i, 'small-test button copy');
-assert.match(sendSrc, /I've verified[,]?\s*continue/i, 'continue button copy');
+assert.match(sendSrc, /t\('send\.testGate\.sendSmall'\)/, 'small-test button copy');
+assert.match(sendSrc, /t\('send\.testGate\.continue'\)/, 'continue button copy');
 assert.match(
     sendSrc,
     /onClick=\{onSendSmallTest\}/,

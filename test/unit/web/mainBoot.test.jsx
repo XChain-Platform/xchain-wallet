@@ -140,7 +140,7 @@ describe('web application boot', () => {
         expect(boot.floorStaleMessage).toHaveBeenCalledWith(
             expect.objectContaining({ stale: true, chromium: 90 }),
         );
-        expect(warn).toHaveBeenCalledWith('Browser engine is stale.');
+        expect(warn).toHaveBeenCalledWith('[web] Browser engine is stale.');
         expect(boot.render).toHaveBeenCalledTimes(1);
     });
 
