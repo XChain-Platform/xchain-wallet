@@ -117,6 +117,8 @@ export const TOKEN_GROUPS = [
             token('--xc-shadow-focus-ring', '0 0 0 3px var(--xc-focus-ring)', 'Focus ring shadow', 'shadow'),
             token('--xc-shadow-danger-focus-ring', '0 0 0 3px rgba(220, 38, 38, 0.2)', 'Danger focus ring', 'shadow'),
             token('--xc-shadow-nav-indicator', 'inset 3px 0 0 var(--xc-accent-primary)', 'Active navigation indicator', 'shadow'),
+            token('--xc-shadow-status-halo', '0 0 0 3px color-mix(in srgb, currentColor 18%, transparent)', 'Status dot halo', 'shadow'),
+            token('--xc-shadow-identity-ring', '0 0 0 2px var(--xc-surface), 0 0 0 4px currentColor', 'Active wallet identity ring', 'shadow'),
         ],
     },
     {

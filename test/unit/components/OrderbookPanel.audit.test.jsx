@@ -72,7 +72,7 @@ describe('OrderbookPanel market display', () => {
         expect(bidScroller.className).toMatch(/levelsScroller/);
         expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 
-        const bids = screen.getByRole('table', { name: 'Bids' });
+        const bids = screen.getByRole('table', { name: 'Buy bids' });
         const priceHeader = screen.getAllByRole('columnheader', { name: 'Price (BTC)' })[0];
         expect(priceHeader).toHaveAttribute('scope', 'col');
         expect(priceHeader.className).toContain('numeric');
@@ -106,7 +106,7 @@ describe('market data table semantics', () => {
             'utf8',
         );
 
-        expect(css).toMatch(/@media \(max-width: 599px\)/);
+        expect(css).toMatch(/@media not all and \(min-width: 600px\)/);
         expect(css).toMatch(/\.table \.cell\s*\{[\s\S]*display: grid/);
         expect(css).toMatch(/content: attr\(data-label\)/);
     });

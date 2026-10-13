@@ -67,12 +67,12 @@
 }
 
 .cellButton:focus-visible {
-    border-radius: 2px;
+    border-radius: var(--xc-radius-xs);
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
 
-@media (max-width: 599px) {
+@media not all and (min-width: 600px) {
     .table thead {
         position: absolute;
         width: 1px;

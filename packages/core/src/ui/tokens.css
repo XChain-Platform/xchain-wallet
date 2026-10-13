@@ -170,6 +170,10 @@
     --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
     --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
     --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
+    /* currentColor resolves on the element using the token, so the halo and
+       ring follow that element's own text color. */
+    --xc-shadow-status-halo: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+    --xc-shadow-identity-ring: 0 0 0 2px var(--xc-surface), 0 0 0 4px currentColor;
 
     /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that

@@ -42,7 +42,7 @@
 }
 
 .active {
-    box-shadow: 0 0 0 2px var(--xc-surface), 0 0 0 4px var(--xc-wallet-identity);
+    box-shadow: var(--xc-shadow-identity-ring);
 }
 
 .name {
