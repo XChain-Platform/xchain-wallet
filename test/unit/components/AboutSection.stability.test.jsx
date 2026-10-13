@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
+import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 
 afterEach(() => cleanup());
 
@@ -27,7 +28,7 @@ describe('AboutSection diagnostics', () => {
             build: { gitCommit: 'abc123def456' },
         });
 
-        expect(screen.getByText('0.341.2')).toBeTruthy();
+        expect(screen.getByText(WALLET_VERSION)).toBeTruthy();
         expect(await screen.findByText('abc123def456')).toBeTruthy();
         expect(screen.getByText('extension')).toBeTruthy();
     });
@@ -60,7 +61,7 @@ describe('AboutSection diagnostics', () => {
             expect(copied).not.toContain('hunter2');
             expect(copied).not.toContain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
             expect(copied).toContain('[REDACTED]');
-            expect(JSON.parse(copied).wallet).toEqual({ version: '0.341.2', platform: 'web' });
+            expect(JSON.parse(copied).wallet).toEqual({ version: WALLET_VERSION, platform: 'web' });
         } finally {
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);
             else delete navigator.clipboard;
