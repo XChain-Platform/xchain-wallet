@@ -26,6 +26,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * The {@code XChainVault} bridge (stage S2). The JS contract and its
@@ -60,6 +63,8 @@ public class XChainVaultPlugin extends Plugin {
     private VaultStore metaStore;
     private VaultStore guardStore;
     private VaultBiometricSidecar sidecar;
+    // One derivation at a time: two concurrent 64 MiB allocations is how a low-end phone runs out of memory.
+    private ExecutorService kdfExecutor;
 
     @Override
     public void load() {
@@ -68,6 +73,17 @@ public class XChainVaultPlugin extends Plugin {
         metaStore = new VaultStore(dir, "meta.json.bin", "xchain.wallet.meta.v1");
         guardStore = new VaultStore(dir, "guards.json.bin", "xchain.wallet.guards.v1");
         sidecar = new VaultBiometricSidecar(getContext(), dir);
+        kdfExecutor = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "xchain-argon2id");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        // A recreated activity loads a fresh plugin; let this one's thread finish and exit.
+        if (kdfExecutor != null) kdfExecutor.shutdown();
     }
 
     // -----------------------------------------------------------------
@@ -314,6 +330,78 @@ public class XChainVaultPlugin extends Plugin {
             // Our own package cannot be missing, but a manufacturer PM that
             // throws must not take the wallet down over an update notice.
             return null;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Key derivation
+    // -----------------------------------------------------------------
+
+    /**
+     * Argon2id over the wallet password, with the parameters the JS passes.
+     *
+     * Same algorithm and parameters as the JavaScript fallback, only faster:
+     * the JS side uses this when it resolves and derives in JS on ANY
+     * rejection, so every failure here rejects rather than answering a status.
+     * The work runs on {@link #kdfExecutor}, never the main or plugin thread.
+     */
+    @PluginMethod
+    public void argon2id(final PluginCall call) {
+        final String password = call.getString("password");
+        final String saltText = call.getString("salt");
+        final Integer iterations = call.getInt("iterations");
+        final Integer memoryKib = call.getInt("memoryKib");
+        final Integer parallelism = call.getInt("parallelism");
+        final Integer length = call.getInt("length");
+        // Every option must be present and of the right type (an integer, not a float or a string).
+        if (password == null || saltText == null || iterations == null
+                || memoryKib == null || parallelism == null || length == null) {
+            call.reject("argon2id: missing or wrongly typed option");
+            return;
+        }
+        final byte[] salt;
+        try {
+            salt = java.util.Base64.getDecoder().decode(saltText);
+        } catch (IllegalArgumentException e) {
+            // The salt must be standard base64.
+            call.reject("argon2id: salt is not valid base64");
+            return;
+        }
+        // Every numeric bound and the salt length are checked before any memory is allocated.
+        final String refusal = Argon2idKdf.checkBounds(iterations, memoryKib, parallelism, length, salt.length);
+        if (refusal != null) {
+            call.reject("argon2id: " + refusal);
+            return;
+        }
+        try {
+            kdfExecutor.execute(() -> deriveAndResolve(call, password, salt, iterations, memoryKib, parallelism, length));
+        } catch (RejectedExecutionException e) {
+            // The plugin is shutting down; the JS falls back to its own derivation.
+            call.reject("argon2id: plugin is shutting down");
+        }
+    }
+
+    private static void deriveAndResolve(PluginCall call, String password, byte[] salt,
+            int iterations, int memoryKib, int parallelism, int length) {
+        // The String itself is immutable and cannot be wiped; its byte copy can.
+        byte[] passwordBytes = null;
+        byte[] key = null;
+        try {
+            passwordBytes = Argon2idKdf.utf8(password);
+            key = Argon2idKdf.derive(passwordBytes, salt, iterations, memoryKib, parallelism, length);
+            JSObject reply = new JSObject();
+            reply.put("key", java.util.Base64.getEncoder().encodeToString(key));
+            call.resolve(reply);
+        } catch (OutOfMemoryError e) {
+            // A low-memory phone must reject and let the JS try, never crash the app.
+            call.reject("argon2id: out of memory");
+        } catch (Exception e) {
+            // No exception text crosses the bridge; it could only ever describe the inputs.
+            call.reject("argon2id: derivation failed");
+        } finally {
+            if (passwordBytes != null) Arrays.fill(passwordBytes, (byte) 0);
+            if (key != null) Arrays.fill(key, (byte) 0);
+            Arrays.fill(salt, (byte) 0);
         }
     }
 

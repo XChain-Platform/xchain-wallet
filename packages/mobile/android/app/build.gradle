@@ -130,6 +130,10 @@ dependencies {
     // FingerprintManager it replaces is deprecated and cannot express the
     // per-use authorization this design depends on.
     implementation "androidx.biometric:biometric:$androidxBiometricVersion"
+    // Argon2id (XChainVault.argon2id). The wallet's key derivation takes about
+    // 40 s in WebView JavaScript on an LG K51; this runs the same parameters
+    // there in about 3.5 s. bcprov alone carries the generator.
+    implementation "org.bouncycastle:bcprov-jdk18on:$bouncyCastleVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

@@ -1094,6 +1094,26 @@ assert.match(
 // running Android 8 or 9.
 assert.match(pluginJava, /getInstallSourceInfo\(/);
 assert.match(pluginJava, /getInstallerPackageName\(/);
+
+// Native Argon2id: same parameters as the JS derivation, off the UI thread,
+// on an exactly pinned BouncyCastle whose checksums Gradle verifies.
+assert.match(pluginJava, /@PluginMethod\s+public void argon2id\(final PluginCall call\)/,
+    'XChainVault.argon2id is a plugin method');
+assert.match(pluginJava, /kdfExecutor\.execute\(/, 'the derivation runs on its own executor, not the plugin thread');
+assert.match(pluginJava, /catch \(OutOfMemoryError e\)[\s\S]*?call\.reject\(/,
+    'running out of memory rejects (the JS falls back) instead of crashing the app');
+const kdfJava = readFileSync(join(vaultDir, 'Argon2idKdf.java'), 'utf8');
+assert.match(kdfJava, /Argon2Parameters\.ARGON2_id\)/, 'the variant is Argon2id');
+assert.match(kdfJava, /ARGON2_VERSION_13/, 'the version is 0x13, the one existing wallets used');
+const bcVersion = /bouncyCastleVersion = '(\d+(?:\.\d+)+)'/.exec(variables)?.[1];
+assert.ok(bcVersion, 'BouncyCastle is pinned to an exact version in variables.gradle');
+assert.match(appGradle, /implementation "org\.bouncycastle:bcprov-jdk18on:\$bouncyCastleVersion"/,
+    'the app depends on bcprov alone, at the pinned version');
+const verificationXml = readFileSync(join(android, 'gradle', 'verification-metadata.xml'), 'utf8');
+assert.ok(
+    verificationXml.includes(`<component group="org.bouncycastle" name="bcprov-jdk18on" version="${bcVersion}">`),
+    `verification-metadata.xml carries checksums for bcprov-jdk18on ${bcVersion}`,
+);
 // And the banner has to be mounted somewhere, or the whole lane is inert.
 const webApp = readFileSync(join(wsRoot, 'packages', 'web', 'src', 'App.jsx'), 'utf8');
 assert.match(webApp, /<UpdateNoticeBanner \/>/, 'the notice is mounted in the shared shell');
