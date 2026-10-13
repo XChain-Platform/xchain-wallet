@@ -27,5 +27,6 @@ import { TokenPicker } from './TokenPicker.jsx';
 export function SendPicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
-    return <TokenPicker {...rest} purpose="send" />;
+    const walletScope = JSON.stringify([rest.walletId ?? null, rest.accountId ?? null]);
+    return <TokenPicker key={walletScope} {...rest} purpose="send" />;
 }
