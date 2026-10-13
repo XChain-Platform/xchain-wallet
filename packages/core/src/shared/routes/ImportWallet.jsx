@@ -36,6 +36,7 @@ import {
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
+import { useBackHandler } from '../../ui/backStack.js';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
 // this screen does not show.
@@ -202,11 +203,32 @@ export function ImportWallet({
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
+    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
     const adsContinuedRef = useRef(false);
 
     useEffect(() => {
-        setTimeout(() => textareaRef.current?.focus(), 0);
-    }, []);
+        headingRef.current?.focus();
+    }, [lane]);
+
+    useBackHandler(handleBack, busy);
+
+    function handleBack() {
+        setMnemonic('');
+        setMnemonicCursor(0);
+        setPassword('');
+        setConfirm('');
+        setBip39Passphrase('');
+        setBackupContent('');
+        setBackupPassword('');
+        setBackupWalletPassword('');
+        setBackupDevicePassword('');
+        setBackupFileName(null);
+        setBackupPointer(null);
+        setBackupScanning(false);
+        setScanning(false);
+        setError(null);
+        onBack();
+    }
 
     function handleQrFrame(text) {
         if (typeof text !== 'string' || text.length === 0) return;
@@ -640,7 +662,7 @@ export function ImportWallet({
             actions={formActions}
         >
             <header className={headClass}>
-                <h1 className={titleClass}>
+                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
                     {isFreeWallet
                         ? (isFull ? 'Import from FreeWallet' : 'FreeWallet import')
                         : lane === 'backup'
@@ -988,7 +1010,7 @@ export function ImportWallet({
         <div className={pickerStyles.header}>
             <button
                 type="button"
-                onClick={onBack}
+                onClick={handleBack}
                 className={pickerStyles.iconBtn}
                 aria-label="Back to wallet setup"
                 title="Back to wallet setup"

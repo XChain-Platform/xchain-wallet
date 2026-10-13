@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useRef } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 
 /**
@@ -30,10 +31,16 @@ import { Button, Icon } from '@xchain-wallet/core/ui';
  * @param {string} props.actionsClass
  */
 export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleClass, actionsClass }) {
+    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
+
+    useEffect(() => {
+        headingRef.current?.focus();
+    }, []);
+
     return (
         <>
             <header className={headClass}>
-                <h1 className={titleClass}>Automatic Donation System</h1>
+                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Automatic Donation System</h1>
                 <p className={subtitleClass}>
                     XChain Wallet includes an Automatic Donation System (ADS) that
                     supports continued development of the XChain Platform.
