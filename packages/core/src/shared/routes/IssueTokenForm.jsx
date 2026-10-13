@@ -70,6 +70,11 @@ function isNonNegativeDecimal(value) {
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') !== -1;
 }
 
+function hasAmountPrecision(value, decimals) {
+    const [, fraction = ''] = String(value || '').trim().split('.');
+    return fraction.length <= decimals;
+}
+
 function isValidIssueAddress(value, descriptor) {
     return !!descriptor?.coin && !!descriptor?.networkKind
         && isValidAddressForChain(String(value).trim(), descriptor.coin, descriptor.networkKind);
@@ -117,6 +122,10 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     const [ticker, setTicker] = useState('');
+    const [tickerCheck, setTickerCheck] = useState(
+        /** @type {{ ticker: string, status: 'idle' | 'checking' | 'available' | 'taken' | 'unknown' }} */
+        ({ ticker: '', status: 'idle' }),
+    );
     const [supply, setSupply] = useState('');
     // Blank means "mint the whole supply now". Kept as its own
     // string so an explicit 0 stays distinguishable from an untouched field.
@@ -282,12 +291,51 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const tickerLookupSupported = Object.prototype.hasOwnProperty.call(messaging, 'getTokenInfo')
+        && typeof messaging.getTokenInfo === 'function';
+
+    // A late response for an earlier ticker must not mark the current name as
+    // taken. Cleanup ties each debounced lookup to the exact field value and
+    // network that started it, while lookup failures leave protocol validation
+    // to composition instead of trapping the form during an explorer outage.
+    useEffect(() => {
+        const checkedTicker = ticker.trim();
+        setTickerCheck({ ticker: checkedTicker, status: checkedTicker ? 'checking' : 'idle' });
+        if (!chainId || !checkedTicker || tickerGrammarError(checkedTicker)
+            || !tickerLookupSupported) {
+            setTickerCheck({ ticker: checkedTicker, status: 'idle' });
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            Promise.resolve()
+                .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }))
+                .then((info) => {
+                    if (!cancelled) {
+                        setTickerCheck({
+                            ticker: checkedTicker,
+                            status: info == null ? 'available' : 'taken',
+                        });
+                    }
+                })
+                .catch(() => {
+                    if (!cancelled) setTickerCheck({ ticker: checkedTicker, status: 'unknown' });
+                });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [chainId, ticker, messaging, tickerLookupSupported]);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
+    // Custom rates use the selected chain's native unit. A network change
+    // returns to that network's normal tier instead of reinterpreting the old
+    // numeric rate under a different unit and showing it as a fresh preview.
+    useEffect(() => {
+        setFeePick({ mode: 'normal' });
+    }, [chainId]);
     const feeTiers = useMemo(
         () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
@@ -392,8 +440,25 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
+        const checkedTicker = ticker.trim();
+        if (tickerLookupSupported
+            && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
+            setFormError('Wait for the ticker availability check to finish.');
+            return;
+        }
+        if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
+            setFormError(`Ticker "${checkedTicker}" already exists on this network.`);
+            return;
+        }
         if (!isPositiveDecimal(supply)) {
             setFormError('Supply must be a positive number.');
+            return;
+        }
+        const amountDecimals = divisible ? 8 : 0;
+        if (!hasAmountPrecision(supply, amountDecimals)) {
+            setFormError(divisible
+                ? 'Supply can have at most 8 decimal places.'
+                : 'Supply must be a whole number for an indivisible token.');
             return;
         }
         // An initial mint above the cap is rejected outright by the
@@ -403,6 +468,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (mintText) {
             if (!isNonNegativeDecimal(mintText)) {
                 setFormError('Initial mint must be zero or a positive number.');
+                return;
+            }
+            if (!hasAmountPrecision(mintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Initial mint can have at most 8 decimal places.'
+                    : 'Initial mint must be a whole number for an indivisible token.');
                 return;
             }
             if (compareDecimalStrings(mintText, supply.trim()) === 1) {
@@ -422,6 +493,12 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (maxMintText) {
             if (!isPositiveDecimal(maxMintText)) {
                 setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
+                return;
+            }
+            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Max mint per transaction can have at most 8 decimal places.'
+                    : 'Max mint per transaction must be a whole number for an indivisible token.');
                 return;
             }
         }
@@ -886,6 +963,9 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
+                error={tickerCheck.ticker === ticker.trim() && tickerCheck.status === 'taken'
+                    ? `Ticker "${ticker.trim()}" already exists on this network.`
+                    : undefined}
             />
             <Input
                 id="issue-supply"
@@ -984,6 +1064,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
 
             <FeeSelector
+                key={chainId}
                 label={t('send.networkFee')}
                 coinTicker={coinTicker}
                 formatFiat={formatNativeFee}
