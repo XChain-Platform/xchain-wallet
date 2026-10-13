@@ -106,7 +106,7 @@ export async function persistHdWallet({
         if (settingsPutAttempted) {
             try {
                 if (previousSettings) await vault.settings.put(previousSettings);
-                else await vault.settings.clear();
+                else if (typeof vault.settings.clear === 'function') await vault.settings.clear();
             } catch (e) {
                 rollbackErrors.push(e);
             }
