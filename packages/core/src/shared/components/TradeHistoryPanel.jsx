@@ -22,7 +22,7 @@
 // adding another 5s timer alongside the orderbook and open-orders
 // pollers.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
@@ -44,9 +44,14 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     const [addressesLoading, setAddressesLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const addressScopeRef = useRef(/** @type {string | null} */ (null));
+    const historyRequestRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
+        const addressScope = `${walletId}\u0000${chainId}`;
+        addressScopeRef.current = null;
+        historyRequestRef.current += 1;
         setAddresses([]);
         setRows([]);
         setAddressesLoading(true);
@@ -55,6 +60,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
+                addressScopeRef.current = addressScope;
                 setAddresses(byChain?.[chainId] || []);
                 setAddressesLoading(false);
             })
@@ -64,11 +70,16 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 setAddressesLoading(false);
                 setLoading(false);
             });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            historyRequestRef.current += 1;
+        };
     }, [messaging, walletId, chainId]);
 
     const reload = useCallback(async () => {
-        if (addressesLoading) return;
+        const requestId = ++historyRequestRef.current;
+        const addressScope = `${walletId}\u0000${chainId}`;
+        if (addressesLoading || addressScopeRef.current !== addressScope) return;
         if (addresses.length === 0) {
             setRows([]);
             setLoading(false);
@@ -83,6 +94,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 }).then((resp) => ({ addr, rows: extractRows(resp), error: null }))
                   .catch((error) => ({ addr, rows: [], error }))
             ));
+            if (requestId !== historyRequestRef.current || addressScopeRef.current !== addressScope) return;
             const successes = results.filter(({ error }) => !error);
             if (successes.length === 0) throw results[0].error;
             const flat = [];
@@ -92,12 +104,15 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             flat.sort((a, b) => rowTime(b) - rowTime(a));
             setRows(flat);
         } catch (err) {
+            if (requestId !== historyRequestRef.current || addressScopeRef.current !== addressScope) return;
             setRows([]);
             setLoadError(readFailureMessage(err, 'load your trade history'));
         } finally {
-            setLoading(false);
+            if (requestId === historyRequestRef.current && addressScopeRef.current === addressScope) {
+                setLoading(false);
+            }
         }
-    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
+    }, [messaging, walletId, chainId, tick1, tick2, addresses, addressesLoading]);
 
     useEffect(() => {
         reload();
@@ -183,7 +198,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         <tbody>
                             {summaries.map((summary, idx) => {
                                 const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
-                                const key = summary.key || `row-${idx}`;
+                                const key = `${summary.ownerAddress || 'unknown'}-${summary.key || 'row'}-${idx}`;
                                 return (
                                     <tr key={key}>
                                         <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
