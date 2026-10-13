@@ -133,10 +133,9 @@ export async function addressPreferencesAction(opts) {
 }
 
 function rowsOf(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
-    if (Array.isArray(resp.data)) return resp.data;
-    return [];
+    if (resp && Array.isArray(resp.data)) return resp.data;
+    throw new Error('currentAddressPreferences: explorer returned a malformed response');
 }
 
 function isBlank(v) {
