@@ -997,6 +997,7 @@ function AppInner() {
                 return (
                     <AlertsRoute
                         onBack={() => setUnlockedView('menu')}
+                        walletId={activeWalletId}
                         alerts={menuAlerts}
                     />
                 );

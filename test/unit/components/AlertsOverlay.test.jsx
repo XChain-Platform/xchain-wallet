@@ -4,20 +4,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('../../../packages/core/src/ui/backStack.js', () => ({
     useBackHandler: () => {},
 }));
 
-vi.mock('../../../packages/core/src/shared/utils/focusTrap.js', () => ({
-    useFocusTrap: () => {},
-}));
-
 vi.mock('@xchain-wallet/core/ui', () => ({
     Icon: { XIcon: () => <span aria-hidden="true">x</span> },
+    Button: ({ children, ...props }) => <button type="button" {...props}>{children}</button>,
 }));
 
 const { AlertsOverlay } = await import(
@@ -28,7 +26,20 @@ const overlayCss = readFileSync(
     'utf8',
 );
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    document.body.style.overflow = '';
+});
+
+function OverlayHarness({ alerts }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button type="button" onClick={() => setOpen(true)}>Show alerts</button>
+            {open ? <AlertsOverlay alerts={alerts} onClose={() => setOpen(false)} /> : null}
+        </>
+    );
+}
 
 describe('AlertsOverlay', () => {
     it('stacks every alert in one ordered, scrollable list', () => {
@@ -57,5 +68,48 @@ describe('AlertsOverlay', () => {
         expect(overlayCss).toMatch(
             /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.panel\s*\{\s*animation:\s*none/,
         );
+    });
+
+    it('reaches every alert action with Tab and restores its opener after Enter', async () => {
+        const user = userEvent.setup();
+        const firstAction = vi.fn();
+        const secondAction = vi.fn();
+        render(<OverlayHarness alerts={[
+            {
+                id: 'one',
+                severity: 'warning',
+                title: 'First',
+                message: 'First message',
+                action: { label: 'Open first', onSelect: firstAction },
+            },
+            {
+                id: 'two',
+                severity: 'info',
+                title: 'Second',
+                message: 'Second message',
+                action: { label: 'Open second', onSelect: secondAction },
+            },
+        ]} />);
+        const opener = screen.getByRole('button', { name: 'Show alerts' });
+
+        await user.tab();
+        expect(opener).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+        expect(screen.getByRole('button', { name: 'Close alerts' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open first' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(firstAction).toHaveBeenCalledOnce();
+        await waitFor(() => expect(opener).toHaveFocus());
+
+        await user.keyboard('{Enter}');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+        await user.tab();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open second' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(secondAction).toHaveBeenCalledOnce();
+        await waitFor(() => expect(opener).toHaveFocus());
     });
 });
