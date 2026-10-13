@@ -106,7 +106,10 @@ export const AddressField = forwardRef(function AddressField(
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
                 title={showReadOnlyAddress ? value : undefined}
                 value={value}
                 onChange={onChange}

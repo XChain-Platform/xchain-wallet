@@ -1,35 +1,47 @@
 .wrap {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
+}
+
+.sm {
+    --address-control-height: var(--xc-control-h-sm);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+}
+
+.md {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
+.lg {
+    --address-control-height: var(--xc-control-h-lg);
+    --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
 }
 
 /* Trailing in-field icon button, anchored over the input box only (never
  * the hint/error lines below it), keyed to the pinned label metrics
- * (20px label line + space-1 gap) and the Input size contract
- * (36px md / 48px lg). Mirrors AddressField.iconButton. */
+ * (20px label line + space-1 gap) and the selected Input size contract.
+ * Mirrors AddressField.iconButton. */
 .wrap label {
     line-height: 20px;
 }
 
 .iconButton {
-    --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     inset-inline-end: 4px;
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
+    width: var(--address-control-height);
+    height: var(--address-control-height);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
     padding: 0;
     border: none;
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-control-radius);
     background: transparent;
     color: var(--xc-text-muted);
     cursor: pointer;
-}
-
-.lg .iconButton {
-    height: 48px;
 }
 
 .noLabel .iconButton {

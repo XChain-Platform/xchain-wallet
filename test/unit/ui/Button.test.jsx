@@ -131,33 +131,95 @@ describe('<Button>', () => {
         expect(css).toMatch(/\.btn\s*\{[^}]*line-height:\s*var\(--xc-control-line,\s*1\.25\)/s);
     });
 
-    it('passes shared icon tokens through controls, adornments, rows, and tabs', () => {
+    it('aligns picker and address controls to the shared size tokens', () => {
         const readCss = (path) => readFileSync(`packages/core/src/${path}`, 'utf8');
-        const sizedControls = [
-            {
-                css: readCss('ui/ChainPicker.module.css'),
-                forwardedToken: '--chain-picker-icon-size',
-            },
-            {
-                css: readCss('shared/components/NetworkFilter.module.css'),
-                forwardedToken: '--network-filter-icon-size',
-            },
-        ];
-        const expectedSizes = { sm: 'sm', md: 'md', lg: 'md' };
+        const chainPickerCss = readCss('ui/ChainPicker.module.css');
+        const iconSelectCss = readCss('ui/IconSelect.module.css');
 
-        for (const { css, forwardedToken } of sizedControls) {
-            for (const [controlSize, iconSize] of Object.entries(expectedSizes)) {
-                const block = css.match(new RegExp(`\\.${controlSize}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
-                expect(block).toMatch(new RegExp(`--xc-icon-size:\\s*var\\(--xc-icon-${iconSize}\\)`));
-                expect(block).toMatch(new RegExp(`${forwardedToken}:\\s*var\\(--xc-icon-size\\)`));
-            }
+        for (const size of ['sm', 'md', 'lg']) {
+            const chainBlock = chainPickerCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-padding-x:\\s*var\\(--xc-control-pad-x-${size},`,
+            ));
+            expect(chainBlock).toMatch(new RegExp(
+                `--chain-picker-font-size:\\s*var\\(--xc-control-font-${size},`,
+            ));
+
+            const iconSelectBlock = iconSelectCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-padding-x:\\s*var\\(--xc-control-pad-x-${size},`,
+            ));
+            expect(iconSelectBlock).toMatch(new RegExp(
+                `--xc-control-font-size:\\s*var\\(--xc-control-font-${size},`,
+            ));
         }
 
-        for (const path of ['ui/AddressField.module.css', 'ui/AddressCombobox.module.css']) {
-            const iconButton = readCss(path).match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
-            expect(iconButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+        const chainTrigger = chainPickerCss.match(/\.trigger\s*\{[^}]*\}/s)?.[0] || '';
+        expect(chainTrigger).toMatch(/box-sizing:\s*border-box/);
+        expect(chainTrigger).toMatch(/height:\s*var\(--chain-picker-control-height\)/);
+        expect(chainTrigger).toMatch(/padding:\s*0 var\(--chain-picker-padding-x\)/);
+        expect(chainTrigger).toMatch(/font-size:\s*var\(--chain-picker-font-size\)/);
+        expect(chainTrigger).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+
+        const iconSelectTrigger = iconSelectCss.match(/\.trigger\s*\{[^}]*\}/s)?.[0] || '';
+        expect(iconSelectTrigger).toMatch(/box-sizing:\s*border-box/);
+        expect(iconSelectTrigger).toMatch(/height:\s*var\(--xc-control-height\)/);
+        expect(iconSelectTrigger).toMatch(/min-height:\s*var\(--xc-control-height\)/);
+        expect(iconSelectCss).not.toMatch(/(?:width|height):\s*26px/);
+
+        for (const component of ['AddressField', 'AddressCombobox']) {
+            const css = readCss(`ui/${component}.module.css`);
+            const source = readFileSync(`packages/core/src/ui/${component}.jsx`, 'utf8');
+            expect(source).toMatch(/styles\[size\] \|\| ''/);
+            expect(source).toMatch(
+                /paddingInlineEnd: 'calc\(var\(--address-control-height\) \+ var\(--xc-space-2\)\)'/,
+            );
+            for (const size of ['sm', 'md', 'lg']) {
+                const block = css.match(new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
+                expect(block).toMatch(new RegExp(
+                    `--address-control-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                ));
+                expect(block).toMatch(new RegExp(
+                    `--xc-icon-size:\\s*var\\(--xc-control-icon-${size},`,
+                ));
+            }
+            const iconButton = css.match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
+            expect(iconButton).toMatch(/width:\s*var\(--address-control-height\)/);
+            expect(iconButton).toMatch(/height:\s*var\(--address-control-height\)/);
+            expect(iconButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
             expect(iconButton).toMatch(/align-items:\s*center/);
             expect(iconButton).toMatch(/justify-content:\s*center/);
+        }
+
+        const addressFieldCss = readCss('ui/AddressField.module.css');
+        const readOnlyValue = addressFieldCss.match(/\.readOnlyValue\s*\{[^}]*\}/s)?.[0] || '';
+        expect(readOnlyValue).toMatch(/inset-inline-start:\s*var\(--address-control-padding-x\)/);
+        expect(readOnlyValue).toMatch(/font-size:\s*var\(--address-control-font-size\)/);
+
+        const networkFilterCss = readCss('shared/components/NetworkFilter.module.css');
+        const expectedNetworkIcons = { sm: 'sm', md: 'md', lg: 'md' };
+        for (const [size, iconSize] of Object.entries(expectedNetworkIcons)) {
+            const block = networkFilterCss.match(
+                new RegExp(`\\.${size}\\s*\\{[^}]*\\}`, 's'),
+            )?.[0] || '';
+            expect(block).toMatch(new RegExp(`--xc-icon-size:\\s*var\\(--xc-icon-${iconSize}\\)`));
+            expect(block).toMatch(/--network-filter-icon-size:\s*var\(--xc-icon-size\)/);
         }
 
         const tabCss = readCss('shared/components/BottomTabBar.module.css');

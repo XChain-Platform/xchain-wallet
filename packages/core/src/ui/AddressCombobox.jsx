@@ -50,7 +50,7 @@ const ICONS = {
  *                             trailing button when set.
  *   - onIconClick           handler for the trailing icon button.
  *   - iconLabel             accessible label override for the icon button.
- *   - size                  'md' | 'lg'; forwarded to `<Input>`.
+ *   - size                  'sm' | 'md' | 'lg'; forwarded to `<Input>`.
  *   - everything else       forwarded to `<Input>` (label, hint, error,
  *                             placeholder, autoComplete, etc.).
  *
@@ -146,7 +146,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
 
@@ -168,7 +168,10 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 size={size}
                 disabled={disabled}
                 autoComplete="off"
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
                 value={value}
                 onChange={(e) => {
                     onChange(e);

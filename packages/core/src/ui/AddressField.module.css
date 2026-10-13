@@ -7,11 +7,36 @@
 /* AddressField: Input + one trailing icon action inside the field.
  * The icon button is anchored over the input box only, never the
  * hint/error lines below it, using the pinned label metrics and the
- * shared Button/Input size contract. Adapted from Send's .inlineContactsButton, which this
- * component supersedes. */
+ * selected shared Button/Input size contract. Adapted from Send's
+ * .inlineContactsButton, which this component supersedes. */
 
 .wrap {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
+}
+
+.sm {
+    --address-control-height: var(--xc-control-h-sm);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --address-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+}
+
+.md {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+}
+
+.lg {
+    --address-control-height: var(--xc-control-h-lg);
+    --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --address-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
 }
 
 .wrap label {
@@ -19,7 +44,6 @@
 }
 
 .iconButton {
-    --xc-icon-size: var(--xc-icon-md);
     position: absolute;
     inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
@@ -44,14 +68,15 @@
 
 .readOnlyValue {
     position: absolute;
-    inset-inline-start: var(--xc-space-3);
-    inset-inline-end: 52px;
+    inset-inline-start: var(--address-control-padding-x);
+    inset-inline-end: calc(var(--address-control-height) + var(--xc-space-2));
     top: calc(20px + var(--xc-space-1));
-    min-height: var(--xc-control-h-md);
+    min-height: var(--address-control-height);
     display: flex;
     align-items: center;
     overflow: hidden;
     white-space: nowrap;
+    font-size: var(--address-control-font-size);
     pointer-events: none;
 }
 
@@ -80,16 +105,6 @@
     overflow-wrap: anywhere;
     white-space: normal;
     line-height: 1.35;
-}
-
-.lg .readOnlyValue {
-    inset-inline-start: var(--xc-space-4);
-    min-height: var(--xc-control-h-lg);
-    font-size: var(--xc-text-lg);
-}
-
-.sm .readOnlyValue {
-    min-height: var(--xc-control-h-sm);
 }
 
 .noLabel .readOnlyValue {
