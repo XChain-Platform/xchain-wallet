@@ -137,7 +137,7 @@ export function PsbtIntentPanel({
                                 {signs ? 'Signs with your key' : isOwn ? 'Your address' : 'Other signer'}
                             </span>
                             {inp.address
-                                ? <span className={styles.addr}><AddressText address={inp.address} /></span>
+                                ? <span className={styles.addr}><AddressText address={inp.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(unknown source script)</span>}
                             <span className={styles.value}>
                                 {formatExactSats(inp.value) !== null
@@ -161,7 +161,7 @@ export function PsbtIntentPanel({
                                 {isChange ? 'Change (back to you)' : 'Recipient'}
                             </span>
                             {o.address
-                                ? <span className={styles.addr}><AddressText address={o.address} /></span>
+                                ? <span className={styles.addr}><AddressText address={o.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(data / non-address output)</span>}
                             <span className={styles.value}>
                                 {formatExactSats(o.value ?? 0)} sats
