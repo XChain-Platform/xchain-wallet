@@ -122,6 +122,11 @@ export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
 }
 
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * A wallet created before the passphrase was stored is opened by the password

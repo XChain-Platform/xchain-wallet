@@ -145,6 +145,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [scanning, setScanning] = useState(false);
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
+    const adsContinuedRef = useRef(false);
 
     useEffect(() => {
         setTimeout(() => textareaRef.current?.focus(), 0);
@@ -417,12 +418,21 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             } else {
                 result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             }
-            // §19.5.2: the shells run the label-sync restore inside the import
-            // and report what came back. Say so once; silence when nothing was
-            // published is the ordinary case and needs no message.
-            const restoredMessage = labelSyncRestoredMessage(result?.labelSync);
-            if (restoredMessage) showToast({ message: restoredMessage });
             setAdsNotice(true);
+            const showRestoredLabels = (labelSync) => {
+                const restoredMessage = labelSyncRestoredMessage(labelSync);
+                if (restoredMessage) showToast({ message: restoredMessage });
+                // Home reads labels when it mounts. If the user has already
+                // continued past the notice, refresh it after the vault write.
+                if (labelSync?.restored && adsContinuedRef.current) onImported();
+            };
+            if (result?.labelSyncToken && typeof messaging.labelSyncRestoreResult === 'function') {
+                void messaging.labelSyncRestoreResult({ token: result.labelSyncToken })
+                    .then(showRestoredLabels)
+                    .catch(() => { /* the import already succeeded */ });
+            } else {
+                showRestoredLabels(result?.labelSync);
+            }
         } catch (err) {
             setError(userFacingMessage(err, 'Failed to import wallet.'));
             setBusy(false);
@@ -832,10 +842,15 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         </div>
     );
 
+    const continueAfterNotice = () => {
+        adsContinuedRef.current = true;
+        onImported();
+    };
+
     if (adsNotice) {
         const noticeBody = (
             <AdsNotice
-                onContinue={onImported}
+                onContinue={continueAfterNotice}
                 isFull={isFull}
                 headClass={headClass}
                 titleClass={titleClass}

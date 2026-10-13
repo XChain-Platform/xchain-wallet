@@ -43,6 +43,7 @@ import { createContext } from 'react';
  * @property {(opts: any) => Promise<any>} [createWallet]
  * @property {(opts: any) => Promise<any>} [importMnemonic]
  * @property {(opts: any) => Promise<any>} [addImportedWallet]
+ * @property {(opts: { token: string }) => Promise<any>} [labelSyncRestoreResult]
  * @property {(walletId: string) => Promise<any>} [listAccounts]
  * @property {(opts: any) => Promise<any>} [createAccount]
  * @property {(opts: any) => Promise<any>} [sendToken]
