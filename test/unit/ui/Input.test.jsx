@@ -37,6 +37,23 @@ describe('<Input>', () => {
         expect(screen.getByLabelText('Network').tagName).toBe('SELECT');
     });
 
+    it('uses one field-requirement convention in labels and accessibility metadata', () => {
+        render(
+            <>
+                <Input label="Account name" />
+                <Textarea label="Memo" optional />
+                <Select label="Expiration (optional)" defaultValue="none">
+                    <option value="none">No expiration</option>
+                </Select>
+            </>,
+        );
+
+        expect(screen.getByLabelText('Account name')).toHaveAttribute('aria-required', 'true');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveAttribute('aria-required', 'false');
+        expect(screen.getByLabelText('Expiration (optional)')).toHaveAttribute('aria-required', 'false');
+        expect(screen.queryByText(/\(required\)/i)).toBeNull();
+    });
+
     it('renders hint and ties it via aria-describedby', () => {
         render(<Input label="Password" hint="Min 8 chars" />);
         const input = screen.getByLabelText('Password');
@@ -232,18 +249,81 @@ describe('<Input>', () => {
         expect(zone).toHaveTextContent(`That is ${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC.`);
     });
 
+    it.each([
+        ['date', '2026-10-13', '2026-10-15'],
+        ['datetime-local', '2026-10-13T09:30', '2026-10-15T17:00'],
+        ['time', '09:30', '17:00'],
+    ])('keeps the native %s picker and keyboard entry within passed bounds', (type, min, max) => {
+        const onChange = vi.fn();
+        render(
+            <Input
+                label="When"
+                type={type}
+                min={min}
+                max={max}
+                defaultValue={min}
+                onChange={onChange}
+            />,
+        );
+        const input = screen.getByLabelText('When');
+        expect(input).toHaveAttribute('type', type);
+        expect(input).toHaveAttribute('min', min);
+        expect(input).toHaveAttribute('max', max);
+        fireEvent.change(input, { target: { value: max } });
+        expect(onChange).toHaveBeenCalledOnce();
+        expect(onChange.mock.calls[0][0].target.value).toBe(max);
+    });
+
+    it('explains date range violations and clears the error after a valid entry', () => {
+        render(
+            <Input
+                label="From date"
+                type="date"
+                min="2026-10-10"
+                max="2026-10-20"
+                defaultValue="2026-10-01"
+            />,
+        );
+        const input = screen.getByLabelText('From date');
+        fireEvent.blur(input);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Choose a date on or after 2026-10-10.',
+        );
+
+        fireEvent.change(input, { target: { value: '2026-10-21' } });
+        fireEvent.blur(input);
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Choose a date on or before 2026-10-20.',
+        );
+
+        fireEvent.change(input, { target: { value: '2026-10-15' } });
+        fireEvent.blur(input);
+        expect(input).not.toHaveAttribute('aria-invalid');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('explains a required date that is left incomplete', () => {
+        render(<Input label="Expires" type="datetime-local" required />);
+        const input = screen.getByLabelText('Expires');
+        fireEvent.invalid(input);
+        expect(screen.getByRole('alert')).toHaveTextContent('Choose a date and time.');
+        expect(input.getAttribute('aria-describedby').split(' '))
+            .toContain(screen.getByRole('alert').id);
+    });
+
     it('other field types get no time zone line', () => {
         render(<Input label="Name" />);
         expect(screen.queryByText(/local time zone/)).toBeNull();
     });
 
-    it('keeps text controls at 16px on narrow screens to prevent iOS focus zoom', () => {
+    it('keeps text controls at 16px on touch devices at every width without changing desktops', () => {
         const css = readFileSync(
             'packages/core/src/ui/tokens.css',
             'utf8',
         );
-        // The floor is scoped to phone widths (mobileFormControlFontSize
-        // pins the exact rule); 1rem is the 16px iOS needs to skip the zoom.
-        expect(css).toMatch(/@media \(max-width: 599px\)\s*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?select,[\s\S]*?textarea\s*\{\s*font-size: 1rem !important;/);
+        const touchRule = /@media \(pointer: coarse\), \(hover: none\)\s*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?select,[\s\S]*?textarea\s*\{\s*font-size: 1rem !important;/;
+        expect(css).toMatch(touchRule);
+        expect(css).not.toMatch(/@media \([^)]*(?:max|min)-width[^)]*\)[^{]*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?font-size: 1rem !important;/);
     });
 });

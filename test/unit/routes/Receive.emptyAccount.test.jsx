@@ -117,7 +117,15 @@ describe('Receive with no addresses on any chain', () => {
         fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
         fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
 
-        await waitFor(() => expect(screen.getByDisplayValue('bcrt1qexample')).toBeTruthy());
+        const address = await screen.findByDisplayValue('bcrt1qexample');
+        const addressLabel = document.querySelector(`label[for="${address.id}"]`);
+        const token = screen.getByRole('button', { name: /^Token:/ });
+        const tokenLabel = screen.getByText('Token', { selector: 'span' });
+
+        expect(addressLabel.compareDocumentPosition(address) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
         expect(screen.queryByText(/^No addresses yet$/)).toBeNull();
     });
 });

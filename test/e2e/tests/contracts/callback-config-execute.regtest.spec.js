@@ -126,7 +126,7 @@ async function readDoneTxid(page, timeoutMs = 180_000) {
 /** Opens My Tokens (via the pancake menu) filtered to one ticker, and opens it. */
 async function openManageToken(page, tick) {
     await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'My Tokens', exact: true }).click();
+    await page.getByRole('button', { name: 'My tokens', exact: true }).click();
     const main = page.getByRole('main');
     const search = main.getByLabel('Search your tokens by ticker or description');
     await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });

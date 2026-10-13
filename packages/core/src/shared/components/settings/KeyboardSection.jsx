@@ -168,7 +168,7 @@ export function KeyboardSection() {
     return (
         <div style={STACK}>
             <p style={{ ...ROW_LABEL, color: 'var(--xc-text-muted)' }}>
-                Click Rebind, then press the new key combination. Screen-specific
+                Select Rebind, then press the new key combination. Screen-specific
                 shortcuts are fixed and only work on their screen.
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
