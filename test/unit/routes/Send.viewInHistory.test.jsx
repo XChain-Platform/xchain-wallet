@@ -116,7 +116,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         // Pre-validation honesty (§7): a broadcast is not a network sighting.
         // The copy must say the merged row can still read "awaiting network"
         // for a while, and must not claim the tx is confirmed or accepted.
-        const hint = screen.getByText(/awaiting network/i);
+        const hint = screen.getByText(/already appears in History/i);
         expect(hint.textContent).toMatch(/up to a minute/i);
         expect(hint.textContent).not.toMatch(/confirmed|accepted/i);
     });
@@ -137,7 +137,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         await driveToBroadcastDone(messaging);
 
         expect(screen.queryByRole('button', { name: /View in history/i })).toBeNull();
-        expect(screen.queryByText(/awaiting network/i)).toBeNull();
+        expect(screen.queryByText(/already appears in History/i)).toBeNull();
         // The rest of the card is untouched: still exactly the two
         // pre-existing actions.
         expect(screen.getByRole('button', { name: /^Send another$/ })).toBeInTheDocument();

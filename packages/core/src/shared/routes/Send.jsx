@@ -1011,8 +1011,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
         const minimum = decimalStringFromSats(BigInt(floor), desc);
-        return `That amount is too small to send. The network requires at least ${minimum} ${ticker} `
-            + `(${formatWithThousands(String(floor))} satoshis) for a payment. Enter at least `
+        return `That amount is too small to send. The smallest ${ticker} payment the network will `
+            + `carry is ${minimum} ${ticker} (${formatWithThousands(String(floor))} sats), and anything `
+            + 'under that is refused by every node, so it can never arrive. Enter at least '
             + `${minimum} ${ticker}.`;
     }, [isNativeSend, chainId, amount, tick]);
 
@@ -1847,7 +1848,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
                 setMaxNote(floor > 0n
                     ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
-                        + `${tickerUpper} minimum payment amount, so Max cannot create a payment.`
+                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`
                     : 'The selected network fee uses the available balance, so Max cannot create a payment.');
                 setMaxBusy(false);
                 return;

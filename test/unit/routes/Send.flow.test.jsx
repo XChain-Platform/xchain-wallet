@@ -425,10 +425,10 @@ describe('Send flow with mocked messaging', () => {
         const announcement = screen.getByRole('status');
         expect(announcement).toHaveAttribute('aria-live', 'polite');
         expect(announcement).toHaveAttribute('aria-atomic', 'true');
-        expect(announcement).toHaveTextContent(/broadcast but isn't confirmed yet/i);
+        expect(announcement).toHaveTextContent(/network accepted your transaction/i);
         expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Copy transaction id' })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: /View on explorer/i })).toHaveAttribute(
+        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View in block explorer/i })).toHaveAttribute(
             'href',
             `https://explorer.xchain.io/BTC/tx/${TXID}`,
         );

@@ -291,7 +291,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         // The rows are KEPT (the typed addresses are not thrown away) and the
         // send is blocked with the reason.
         fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'BTC' } });
-        expect(screen.getByText(/BTC can only be sent to one recipient/)).toBeInTheDocument();
+        expect(screen.getByText(/BTC can be sent to only one recipient/)).toBeInTheDocument();
         expect(screen.getByLabelText('Recipient 2 address')).toHaveValue(BOB);
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -300,10 +300,10 @@ describe('Send: multi-recipient (PC-52)', () => {
     it('refuses a multi-recipient send of a gated token (each recipient needs a key handoff)', async () => {
         const messaging = mount({ gated: true });
         await fillFirst({ tick: 'GATED' });
-        expect(await screen.findByText(/This token has gated content/)).toBeInTheDocument();
+        expect(await screen.findByText(/includes protected content/)).toBeInTheDocument();
         fireEvent.click(await addRecipient());
         await fillRow(1, { to: BOB, amount: '3' });
-        expect(screen.getByText(/each recipient needs their own/)).toBeInTheDocument();
+        expect(screen.getByText(/Each recipient needs a separate unlock key/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
