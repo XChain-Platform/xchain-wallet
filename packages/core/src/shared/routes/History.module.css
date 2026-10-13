@@ -1004,7 +1004,7 @@
     z-index: 1;
     background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
     border-radius: var(--xc-radius-sm);
-    backdrop-filter: blur(2px);
+    backdrop-filter: var(--xc-backdrop-filter);
 }
 
 .empty {

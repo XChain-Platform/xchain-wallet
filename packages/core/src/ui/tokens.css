@@ -88,6 +88,13 @@
     /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
+    /* Expensive paint effects stay tokenized so accessibility preferences and
+     * low-power shells can replace them without changing desktop styling. */
+    --xc-backdrop-filter: blur(2px);
+    --xc-list-shadow: var(--xc-shadow-md);
+    --xc-privacy-filter: blur(12px);
+    --xc-privacy-opacity: 1;
+
     /* Brand accent (sampled from branding/images/xchain-color-750.png).
      * Darkened one step from the sampled brand value to clear
      * WCAG AA (4.5:1) as both a white-on-accent button label and as
@@ -276,6 +283,10 @@
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-xc-reduced-motion="no-preference"]) {
         --xc-transition: 0ms;
+        --xc-backdrop-filter: none;
+        --xc-list-shadow: none;
+        --xc-privacy-filter: none;
+        --xc-privacy-opacity: 0;
     }
 
     :root:not([data-xc-reduced-motion="no-preference"]),
@@ -291,6 +302,20 @@
 
 :root[data-xc-reduced-motion="reduce"] {
     --xc-transition: 0ms;
+    --xc-backdrop-filter: none;
+    --xc-list-shadow: none;
+    --xc-privacy-filter: none;
+    --xc-privacy-opacity: 0;
+}
+
+/* Native shells set this attribute when sustained GPU effects are too costly.
+ * It reduces the same paint and motion work without changing user settings. */
+:root[data-xc-low-power="true"] {
+    --xc-transition: 0ms;
+    --xc-backdrop-filter: none;
+    --xc-list-shadow: none;
+    --xc-privacy-filter: none;
+    --xc-privacy-opacity: 0;
 }
 
 /* The global selectors cover component styles and inline transitions that do
@@ -299,11 +324,40 @@
 :root[data-xc-reduced-motion="reduce"],
 :root[data-xc-reduced-motion="reduce"] *,
 :root[data-xc-reduced-motion="reduce"] *::before,
-:root[data-xc-reduced-motion="reduce"] *::after {
+:root[data-xc-reduced-motion="reduce"] *::after,
+:root[data-xc-low-power="true"],
+:root[data-xc-low-power="true"] *,
+:root[data-xc-low-power="true"] *::before,
+:root[data-xc-low-power="true"] *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+}
+
+/* Scrolling popovers and sheets avoid large composited shadows when reduced
+ * effects are active. Focus shadows remain intact on their controls. */
+@media (prefers-reduced-motion: reduce) {
+    :root:not([data-xc-reduced-motion="no-preference"]) :where(
+        [role="listbox"],
+        [role="dialog"],
+        [role="dialog"] > [role="presentation"]
+    ) {
+        box-shadow: none !important;
+    }
+}
+
+:root[data-xc-reduced-motion="reduce"] :where(
+    [role="listbox"],
+    [role="dialog"],
+    [role="dialog"] > [role="presentation"]
+),
+:root[data-xc-low-power="true"] :where(
+    [role="listbox"],
+    [role="dialog"],
+    [role="dialog"] > [role="presentation"]
+) {
+    box-shadow: none !important;
 }
 
 /* §53.4 / G170 - high-contrast variant. Triggered by `prefers-contrast: more`
@@ -619,6 +673,7 @@ fieldset {
  * AND the wallet's host window has lost focus. The transition is
  * suppressed under prefers-reduced-motion via the --xc-transition token. */
 html[data-xc-privacy-blur="true"] body {
-    filter: blur(12px);
-    transition: filter var(--xc-transition);
+    filter: var(--xc-privacy-filter);
+    opacity: var(--xc-privacy-opacity);
+    transition: filter var(--xc-transition), opacity var(--xc-transition);
 }
