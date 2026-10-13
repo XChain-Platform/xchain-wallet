@@ -264,6 +264,18 @@ describe('AlertsRoute alert list', () => {
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
     });
 
+    it('keeps a dismissed alert hidden when its content changes', () => {
+        const alert = { id: 'one', severity: 'info', title: 'One', message: 'First' };
+        const first = mount({ walletId: 'wallet-1', alerts: [alert] });
+        fireEvent.click(screen.getByRole('button', { name: 'Clear alerts' }));
+        first.unmount();
+
+        mount({ walletId: 'wallet-1', alerts: [{ ...alert, message: 'Updated' }] });
+
+        expect(screen.queryByRole('list')).toBeNull();
+        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+    });
+
     it('marks an alert read and opens its related screen when the row is tapped', () => {
         const onSelect = vi.fn();
         mount({ alerts: [{
@@ -278,6 +290,24 @@ describe('AlertsRoute alert list', () => {
 
         expect(onSelect).toHaveBeenCalledTimes(1);
         expect(screen.getByText('0 unread')).toBeTruthy();
+        expect(screen.getByText('Read')).toBeTruthy();
+    });
+
+    it('consumes rejected async alert actions', async () => {
+        const then = vi.fn((_resolve, reject) => reject(new Error('navigation failed')));
+        const onSelect = vi.fn(() => ({ then }));
+        mount({ alerts: [{
+            id: 'message',
+            severity: 'info',
+            title: 'Unread messages',
+            message: 'You have a message.',
+            action: { label: 'Open Messaging', onSelect },
+        }] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Messaging' }));
+
+        await waitFor(() => expect(then).toHaveBeenCalledTimes(1));
+        expect(onSelect).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Read')).toBeTruthy();
     });
 
