@@ -57,17 +57,18 @@ export function ShortcutHelp({ open, onClose, overrides }) {
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Keyboard shortcuts"
+            aria-labelledby="xc-shortcut-help-title"
+            aria-describedby="xc-shortcut-help-body"
             onMouseDown={onClose}
         >
             <div className={styles.panel} role="presentation" onMouseDown={(e) => e.stopPropagation()}>
                 <header className={styles.header}>
-                    <span className={styles.title}>Keyboard shortcuts</span>
+                    <span id="xc-shortcut-help-title" className={styles.title}>Keyboard shortcuts</span>
                     <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
                         <Icon.XIcon />
                     </button>
                 </header>
-                <div className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
+                <div id="xc-shortcut-help-body" className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (
                         <section key={group} className={styles.group}>
                             <h2 className={styles.groupTitle}>{group}</h2>

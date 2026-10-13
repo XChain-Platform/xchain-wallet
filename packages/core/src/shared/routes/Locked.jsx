@@ -516,13 +516,16 @@ export function Locked({ onUnlocked }) {
                         <div
                             id="locked-forgot-password-panel"
                             className={styles.wipeConfirm}
-                            role="dialog"
-                            aria-label="Wipe wallet data"
+                            role="alertdialog"
+                            aria-modal="false"
+                            aria-labelledby="locked-wipe-title"
+                            aria-describedby="locked-wipe-warning locked-wipe-note"
                         >
-                            <p className={styles.wipeWarning}>
-                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
+                            <p id="locked-wipe-warning" className={styles.wipeWarning}>
+                                <strong id="locked-wipe-title">Wipe wallet data</strong>
+                                {' permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.'}
                             </p>
-                            <p className={styles.wipeNote}>
+                            <p id="locked-wipe-note" className={styles.wipeNote}>
                                 Funds on the blockchain are unaffected, but you need each wallet's recovery phrase or encrypted backup file to restore access. Use this only if you have those backups, or if every wallet is empty.
                             </p>
                             <Input
@@ -548,6 +551,7 @@ export function Locked({ onUnlocked }) {
                                 variant="secondary"
                                 onClick={handleForgotPasswordCancel}
                                 disabled={wipeBusy}
+                                autoFocus
                             >
                                 Cancel
                             </Button>

@@ -177,8 +177,10 @@ export function HeaderSettingsButton({
                     style={clamp.style}
                     className={styles.popover}
                     role="dialog"
-                    aria-label="Wallet settings"
+                    aria-modal="false"
+                    aria-labelledby="xc-wallet-settings-title"
                 >
+                    <div id="xc-wallet-settings-title" className={styles.sectionLabel}>Wallet settings</div>
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
                             <button
