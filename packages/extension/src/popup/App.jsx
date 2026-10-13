@@ -79,6 +79,8 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -2618,7 +2620,20 @@ function AppInner() {
             );
             })();
             return (
-                <>
+                <FullLayoutWithNav
+                    bottomBar={(
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={setUnlockedView}
+                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onOpenSettings={() => openSettingsSection(null)}
+                            hasVmAddress={hasVmAddress}
+                            hasDexSurface
+                            isSignerMode={isSignerMode}
+                        />
+                    )}
+                >
                     <Suspense fallback={<Skeleton.List rows={5} />}>
                         <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     </Suspense>
@@ -2635,7 +2650,7 @@ function AppInner() {
                         parseQuery={paletteParseQuery}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
-                </>
+                </FullLayoutWithNav>
             );
         }
         default:
