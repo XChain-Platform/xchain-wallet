@@ -62,7 +62,7 @@ async function drain(rounds = 20) {
     }
 }
 
-function makeMessaging(settings = { walletMode: 'full' }) {
+function makeMessaging(settings = { walletMode: 'full' }, overrides = {}) {
     const calls = [];
     const log = (method, value) => (args) => {
         calls.push({ method, args });
@@ -71,11 +71,16 @@ function makeMessaging(settings = { walletMode: 'full' }) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [OWNER] }),
         getCoinpayObligationsForAddress: () => Promise.resolve([OBLIGATION]),
+        getAddressBalances: () => Promise.resolve({
+            native: { tick: 'DOGE', quantity: '2000000000', divisibility: 8 },
+            tokens: [],
+        }),
         getSettings: () => Promise.resolve(settings),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         composeForConfirm: log('composeForConfirm', COMPOSED),
         preflight: log('preflight', PASS),
+        ...overrides,
     };
     return {
         calls,
@@ -88,8 +93,8 @@ function makeMessaging(settings = { walletMode: 'full' }) {
     };
 }
 
-async function mount(settings) {
-    const { messaging, calls } = makeMessaging(settings);
+async function mount(settings, overrides) {
+    const { messaging, calls } = makeMessaging(settings, overrides);
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(
@@ -105,7 +110,7 @@ async function mount(settings) {
         ));
         await drain();
     });
-    return { utils, calls };
+    return { utils, calls, messaging };
 }
 
 async function step(fn) {
@@ -116,6 +121,34 @@ async function step(fn) {
 }
 
 describe('CoinpayForm shared confirmation', () => {
+    it('shows the payer, recipient, amount, timestamp deadline, and expiry loss warning', async () => {
+        const { utils } = await mount();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+
+        expect(utils.getByText('From').nextElementSibling.textContent).toContain(PAYER.slice(0, 6));
+        expect(utils.getByText('Paying to').nextElementSibling.textContent).toContain(PAYEE.slice(0, 6));
+        expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+        expect(utils.getByText('Payment deadline').nextElementSibling.textContent).toMatch(/\d/);
+        expect(utils.queryByText(/deadline.*block/i)).toBeNull();
+        expect(utils.getByText(/coin is still sent but you do not receive the tokens/i)).toBeTruthy();
+    });
+
+    it('blocks review and explains when the source cannot cover the payment and fee', async () => {
+        const { utils, calls } = await mount(undefined, {
+            getAddressBalances: () => Promise.resolve({
+                native: { tick: 'DOGE', quantity: '500000000', divisibility: 8 },
+                tokens: [],
+            }),
+        });
+
+        expect(utils.getByText(/Insufficient DOGE balance/).textContent)
+            .toContain('This address has 5 DOGE');
+        expect(utils.getByText(/Insufficient DOGE balance/).textContent)
+            .toContain('payment and estimated network fee require 10.25 DOGE');
+        expect(utils.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
+    });
+
     it('dry-runs the action and payment output before signing the composed PSBT', async () => {
         const { utils, calls } = await mount();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
@@ -158,5 +191,28 @@ describe('CoinpayForm shared confirmation', () => {
         });
         expect(calls.some((call) => call.method === 'buildActionPsbtRequest')).toBe(false);
         expect(calls.some((call) => call.method === 'coinpayAction')).toBe(false);
+    });
+
+    it('announces a busy state and a successful broadcast', async () => {
+        let finishCompose;
+        const composeForConfirm = vi.fn(() => new Promise((resolve) => {
+            finishCompose = resolve;
+        }));
+        const { utils } = await mount(undefined, { composeForConfirm });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Review' })));
+
+        fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
+        expect(utils.getByRole('button', { name: 'Continue to confirmation' }).getAttribute('aria-busy'))
+            .toBe('true');
+        expect(utils.getByText('Preparing payment for confirmation…')).toBeTruthy();
+
+        await domAct(async () => {
+            finishCompose(COMPOSED);
+            await drain();
+        });
+        await step(() => fireEvent.click(utils.getByTestId('confirm-approve')));
+
+        expect(utils.getByText('Payment broadcast successfully.').closest('[role="status"]')).toBeTruthy();
+        expect(utils.getByText(/Transaction:/).textContent).toContain('tx-coinpayAction');
     });
 });

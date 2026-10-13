@@ -4,7 +4,7 @@
 .overlay {
     position: absolute;
     inset: 0;
-    z-index: 60; /* above the QR scanner overlay (z-index: 50) */
+    z-index: var(--xc-z-overlay);
     background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: flex-start;
@@ -167,7 +167,7 @@
     display: none;
 }
 
-@media (max-width: 639px) {
+@media not all and (min-width: 640px) {
     .overlay {
         align-items: flex-end;
         padding: 0;

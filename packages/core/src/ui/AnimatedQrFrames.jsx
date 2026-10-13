@@ -34,8 +34,15 @@ import { useReducedMotion } from './reducedMotion.js';
  * @param {number} [props.fps]           default 3 fps, per §20.3
  * @param {number} [props.size]          QR pixel size; default 240
  * @param {string} [props.alt]           alt text for the rendered <img>
+ * @param {boolean} [props.announceLoading] expose the loading placeholder as a status
  */
-export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated QR' }) {
+export function AnimatedQrFrames({
+    frames,
+    fps = 3,
+    size = 240,
+    alt = 'Animated QR',
+    announceLoading = true,
+}) {
     const [index, setIndex] = useState(0);
     const [urls, setUrls] = useState(/** @type {Record<string, string>} */ ({}));
     const urlsRef = useRef(/** @type {Record<string, string>} */ ({}));
@@ -165,8 +172,8 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                 />
             ) : (
                 <div
-                    role="status"
-                    aria-label={`Preparing ${qrAlt}`}
+                    role={announceLoading ? 'status' : undefined}
+                    aria-label={announceLoading ? `Preparing ${qrAlt}` : undefined}
                     style={{
                         width: '100%',
                         maxWidth: normalizedSize,

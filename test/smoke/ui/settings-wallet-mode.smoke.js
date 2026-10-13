@@ -74,7 +74,8 @@ assert.match(
     /update\(\{\s*walletMode:\s*pending\s*\}\)/,
     'confirmation writes through update({ walletMode })',
 );
-assert.match(sectionSrc, /role="alertdialog"/, 'mode changes require confirmation');
+assert.match(sectionSrc, /import \{ ConfirmModal \}/, 'imports the shared keyboard-safe confirmation modal');
+assert.match(sectionSrc, /<ConfirmModal/, 'mode changes require confirmation');
 assert.match(sectionSrc, /Confirm mode change/, 'confirmation has an explicit action');
 assert.match(
     sectionSrc,

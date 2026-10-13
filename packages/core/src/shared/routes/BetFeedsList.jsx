@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import styles from './IssueTokenForm.module.css';
+import local from './BetFeedsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -205,7 +206,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             ) : null}
 
             {rows && rows.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <ul className={local.marketList}>
                     {rows.map((m) => {
                         const id = m.action_index;
                         // The market LABEL is on-chain text written by whoever created the
@@ -213,25 +214,25 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const label = m.label || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <Button
-                                key={String(id)}
-                                type="button"
-                                onClick={() => onOpenMarket(chainId, id)}
-                                className={styles.card}
-                                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
-                                    <StatusPill status={m.feed_status} />
-                                </div>
-                                <div className={styles.hint}>{String(label).slice(0, 100)}</div>
-                                {outcomes.length ? (
-                                    <div className={styles.hint}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</div>
-                                ) : null}
-                            </Button>
+                            <li key={String(id)} className={local.marketItem}>
+                                <Button
+                                    type="button"
+                                    onClick={() => onOpenMarket(chainId, id)}
+                                    className={local.marketRow}
+                                >
+                                    <span className={local.marketHeader}>
+                                        <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
+                                        <StatusPill status={m.feed_status} />
+                                    </span>
+                                    <span className={local.marketDetail}>{String(label).slice(0, 100)}</span>
+                                    {outcomes.length ? (
+                                        <span className={local.marketDetail}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
+                                    ) : null}
+                                </Button>
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             ) : null}
         </ListPage>,
     );
