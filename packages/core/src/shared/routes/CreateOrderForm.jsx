@@ -718,7 +718,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             </FormSection>
 
             <FormSection title="Expiration">
-                <Input
+                <AddressField
                     label="Receive at (optional)"
                     hint="Address where you receive the get side. Defaults to your source address."
                     value={getAddress}
@@ -729,10 +729,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 />
 
                 <label className={styles.checkRow}>
+                    {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                     <input type="radio" name="order-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                     {' '}Default window
                 </label>
                 <label className={styles.checkRow}>
+                    {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                     <input type="radio" name="order-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                     {' '}Expire at a specific time
                 </label>
@@ -772,6 +774,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 {autopayEligible ? (
                     <>
                         <label className={styles.checkRow}>
+                            {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                             <input type="checkbox" checked={autopayEnabled} onChange={(e) => setAutopayEnabled(e.target.checked)} />
                             {' '}<span><strong>Enable CoinPay auto-pay</strong><br />We watch for matches on this order and pay each one automatically.</span>
                         </label>
@@ -783,6 +786,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         ) : null}
                         {ackRequired ? (
                             <label className={styles.checkRow}>
+                                {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                                 <input type="checkbox" checked={keepOpenAck} onChange={(e) => setKeepOpenAck(e.target.checked)} />
                                 {' '}I understand this web wallet only auto-pays while it is open and unlocked.
                             </label>
@@ -817,10 +821,12 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
         <>
             {showHeading ? <p className={styles.successLabel}>{heading}</p> : null}
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name={`${heading}-type`} checked={type === 'token'} onChange={() => onType('token')} />
                 {' '}A token
             </label>
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name={`${heading}-type`} checked={type === 'coin'} onChange={() => onType('coin')} />
                 {' '}Native {coinTicker || 'coin'}
             </label>
@@ -835,6 +841,7 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
                         spellCheck={false}
                     />
                     <label className={styles.checkRow}>
+                        {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                         <input type="checkbox" checked={ownership} onChange={(e) => onOwnership(e.target.checked)} />
                         {' '}Trade ownership of this ticker (not a balance)
                     </label>

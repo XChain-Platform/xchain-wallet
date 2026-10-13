@@ -26,7 +26,7 @@
 // behind the same form surface (Phase 2 HW Sign pattern).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormPage, Input, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -514,39 +514,27 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         // a signed copy already exists (the §5.3.4 double-broadcast trap).
         if (result?.queued) {
             return (
-                <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                        border: '1px solid var(--xc-warning)',
-                        borderRadius: '4px',
-                        padding: '0.75rem',
-                    }}
-                >
-                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>{SIGNED_NOT_BROADCAST_TITLE}</p>
-                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
-                        Your order is signed but couldn&apos;t reach the network just now. It&apos;s
-                        waiting in the queued-transactions banner and only goes out when you
-                        broadcast it from there; the wallet reminds you when the network is back.
-                        Don&apos;t place it again.
-                    </p>
-                </div>
+                <EmptyState
+                    title={SIGNED_NOT_BROADCAST_TITLE}
+                    titleAs="h3"
+                    body="Your order is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there; the wallet reminds you when the network is back. Don't place it again."
+                />
             );
         }
         return (
-            <div
-                style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: '4px',
-                    padding: '0.75rem',
-                }}
-            >
-                <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>Order placed</p>
-                {txid ? (
-                    <p style={{ margin: 0, fontSize: '0.75rem' }}>
-                        <code>{txid}</code>
-                    </p>
-                ) : null}
+            <>
+                <EmptyState
+                    title="Order placed"
+                    titleAs="h3"
+                    body={txid ? <code>{txid}</code> : null}
+                    actionLabel="Place another"
+                    onAction={() => {
+                        setStage('form');
+                        setPrice('');
+                        setSize('');
+                        setResult(null);
+                    }}
+                />
                 {result?.autopayArmed === true ? (
                     <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
                         CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
@@ -557,21 +545,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
                     </p>
                 ) : null}
-                <div style={{ marginTop: '0.5rem' }}>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            setStage('form');
-                            setPrice('');
-                            setSize('');
-                            setResult(null);
-                        }}
-                    >
-                        Place another
-                    </Button>
-                </div>
-            </div>
+            </>
         );
     }
 
@@ -595,11 +569,6 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             if (feeEstimate.rate) feeDisplay += ` (${feeEstimate.rate})`;
         }
 
-        const panelStyle = {
-            border: '1px solid var(--xc-border)',
-            borderRadius: '4px',
-            padding: '0.75rem',
-        };
         const dlStyle = {
             margin: '0 0 var(--xc-space-2)',
             padding: 'var(--xc-space-2) var(--xc-space-3)',
@@ -623,10 +592,39 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         };
 
         return (
-            <div style={panelStyle}>
-                <p style={{ margin: '0 0 var(--xc-space-2)', fontSize: '0.85rem', fontWeight: 600 }}>
-                    {summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
-                </p>
+            <FormPage
+                label="Review order"
+                intro={summary || `${side === 'buy' ? 'Buy' : 'Sell'} order`}
+                onSubmit={handleSubmit}
+                noValidate
+                aria-busy={stage === 'submitting' || undefined}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setStage('form')}
+                            disabled={stage === 'submitting'}
+                        >
+                            Edit order
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            block
+                            loading={stage === 'submitting'}
+                            disabled={!isWatcherMode && hw && hwStatus !== 'available'}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : `Place ${side} order`}
+                        </Button>
+                    </>
+                )}
+            >
                 <dl style={dlStyle}>
                     <dt style={dtStyle}>Market</dt>
                     <dd style={ddStyle}>{tick1}/{tick2}</dd>
@@ -655,63 +653,32 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         {NATIVE_FEE_WARNING}
                     </p>
                 ) : null}
-                <form onSubmit={handleSubmit} noValidate>
-                    {isWatcherMode ? (
-                        <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                            Watcher mode builds an unsigned transaction for your Signer-mode wallet.
-                        </p>
-                    ) : (
-                        <SignCredentials
-                            fromAddress={fromAddress}
-                            chainId={chainId}
-                            password={password}
-                            onPasswordChange={(v) => {
-                                setPassword(v);
-                                if (submitError) setSubmitError(null);
-                            }}
-                            onStatusChange={onHwStatusChange}
-                            passwordRef={passwordRef}
-                            submitError={submitError}
-                            disabled={stage === 'submitting'}
-                            getSignerStatus={messaging.getSignerStatus}
-                        />
-                    )}
-                    {submitError && (isWatcherMode || hw) ? (
-                        <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
-                            {submitError}
-                        </p>
-                    ) : null}
-                    <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 'var(--xc-space-2)',
-                        marginTop: '0.5rem',
-                    }}>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setStage('form')}
-                            disabled={stage === 'submitting'}
-                        >
-                            Edit order
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            block
-                            loading={stage === 'submitting'}
-                            disabled={!isWatcherMode && hw && hwStatus !== 'available'}
-                        >
-                            {isWatcherMode
-                                ? 'Create unsigned transaction'
-                                : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : `Place ${side} order`}
-                        </Button>
-                    </div>
-                </form>
-            </div>
+                {isWatcherMode ? (
+                    <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                        Watcher mode builds an unsigned transaction for your Signer-mode wallet.
+                    </p>
+                ) : (
+                    <SignCredentials
+                        fromAddress={fromAddress}
+                        chainId={chainId}
+                        password={password}
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            if (submitError) setSubmitError(null);
+                        }}
+                        onStatusChange={onHwStatusChange}
+                        passwordRef={passwordRef}
+                        submitError={submitError}
+                        disabled={stage === 'submitting'}
+                        getSignerStatus={messaging.getSignerStatus}
+                    />
+                )}
+                {submitError && (isWatcherMode || hw) ? (
+                    <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+            </FormPage>
         );
     }
 
@@ -742,16 +709,27 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     }
 
     return (
-        <form
+        <FormPage
+            label="Place order"
             onSubmit={handleReview}
             noValidate
             aria-busy={accountLoading || actionConfirm.composing || undefined}
-            style={{
-                border: '1px solid var(--xc-border)',
-                borderRadius: '4px',
-                padding: '0.5rem',
-                minWidth: 0,
-            }}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    block
+                    loading={actionConfirm.composing}
+                    disabled={accountLoading || actionConfirm.composing}
+                >
+                    {accountLoading
+                        ? 'Loading wallet…'
+                        : actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? `Place ${side} order` : 'Review')}
+                </Button>
+            )}
         >
             {accountLoading ? (
                 <StatusMessage variant="status">Loading wallet balances…</StatusMessage>
@@ -778,6 +756,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 </dd>
             </dl>
             <div className={styles.sideToggle} role="group" aria-label="Order side">
+                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
                 <button
                     type="button"
                     onClick={() => setSide('buy')}
@@ -799,6 +778,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 >
                     Buy {tick1}
                 </button>
+                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
                 <button
                     type="button"
                     onClick={() => setSide('sell')}
@@ -839,46 +819,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                 />
             </div>
-            <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--xc-space-1)',
-                marginBottom: 'var(--xc-space-3)',
-            }}>
-                <label
-                    htmlFor="place-order-expiration"
-                    style={{
-                        fontSize: 'var(--xc-text-sm)',
-                        color: 'var(--xc-text-muted)',
-                        fontWeight: 500,
-                    }}
-                >
-                    Expiration
-                </label>
-                <select
-                    id="place-order-expiration"
-                    value={expirationId}
-                    onChange={(e) => setExpirationId(e.target.value)}
-                    style={{
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        fontFamily: 'var(--xc-font-sans)',
-                        fontSize: 'var(--xc-text-md)',
-                        color: 'var(--xc-text)',
-                        background: 'var(--xc-surface)',
-                        border: '1px solid var(--xc-border-strong)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        minHeight: 36,
-                        width: '100%',
-                        cursor: 'pointer',
-                        font: 'inherit',
-                    }}
-                >
-                    {EXPIRATION_PRESETS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                    <option value="custom">Custom…</option>
-                </select>
-            </div>
+            <Select
+                id="place-order-expiration"
+                label="Expiration"
+                value={expirationId}
+                onChange={(e) => setExpirationId(e.target.value)}
+            >
+                {EXPIRATION_PRESETS.map((p) => (
+                    /* Native options supply Select choices because the kit has no option primitive. */
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+                {/* Native options supply Select choices because the kit has no option primitive. */}
+                <option value="custom">Custom…</option>
+            </Select>
             {expirationId === 'custom' ? (
                 <Input
                     label="Custom expiration"
@@ -934,6 +887,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {autopayEligible ? (
                         <>
                             <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
+                                {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                                 <input
                                     type="checkbox"
                                     checked={autopayEnabled}
@@ -974,6 +928,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             })()}
                             {ackRequired ? (
                                 <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
+                                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                                     <input
                                         type="checkbox"
                                         checked={keepOpenAck}
@@ -993,27 +948,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     )}
                 </div>
             ) : null}
-            {formError ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}>
-                    {formError}
-                </p>
-            ) : null}
-            <div style={{ marginTop: '0.5rem' }}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={accountLoading || actionConfirm.composing}
-                >
-                    {accountLoading
-                        ? 'Loading wallet…'
-                        : actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? `Place ${side} order` : 'Review')}
-                </Button>
-            </div>
-        </form>
+        </FormPage>
     );
 }
 

@@ -93,6 +93,10 @@ describe('PlaceOrderPanel validation', () => {
         expect(buy.style.background).toBe('var(--xc-success)');
         expect(sell.style.background).toBe('var(--xc-danger)');
         expect(buy.style.color).toBe('var(--xc-on-accent)');
+
+        const expiration = screen.getByRole('combobox', { name: 'Expiration' });
+        fireEvent.change(expiration, { target: { value: 'custom' } });
+        expect(screen.getByLabelText('Custom expiration')).toBeInTheDocument();
     });
 
     it('renders the 360px layout hooks for stacked fields and a visible side toggle', async () => {

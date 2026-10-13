@@ -269,7 +269,7 @@ describe('DispenserForm "Another address": payload and confirm screen', () => {
         expect(note.textContent).toContain('returns to whichever one closes it');
 
         await domAct(async () => {
-            const approve = Array.from(utils.container.querySelectorAll('button'))
+            const approve = utils.getAllByRole('button')
                 .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
             if (!approve) throw new Error(`no enabled Approve button; page reads: ${utils.container.textContent}`);
             fireEvent.click(approve);
