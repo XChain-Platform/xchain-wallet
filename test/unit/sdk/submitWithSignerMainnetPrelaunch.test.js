@@ -8,6 +8,7 @@
 
 
 import { describe, it, expect, vi } from 'vitest';
+import { drainQueuedBroadcast } from '../../../packages/core/src/flows/queuedBroadcast.js';
 import { submitWithSigner } from '../../../packages/core/src/sdk/submitWithSigner.js';
 import {
     assertMainnetActionAllowed, MainnetPrelaunchError, MAINNET_LAUNCH_EPOCH,
@@ -53,6 +54,68 @@ describe('submitWithSigner on mainnet before launch', () => {
             })).rejects.toBeInstanceOf(MainnetPrelaunchError);
             expect(createTx).not.toHaveBeenCalled();
             expect(signer.signPsbt).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('drainQueuedBroadcast on mainnet before launch', () => {
+    function setup(params) {
+        const rec = {
+            id: 'ptx-m', chain: 'bitcoin', network: 'mainnet', action: 'SEND',
+            params, txHex: 'deadbeef', status: 'queued', error: null,
+        };
+        const store = new Map([[rec.id, rec]]);
+        const vault = { pendingTxs: {
+            get: async (id) => store.get(id) ?? null,
+            put: async (r) => { store.set(r.id, { ...r }); },
+        } };
+        const broadcastTx = vi.fn(async () => ({ txid: 'tx' }));
+        return {
+            store, broadcastTx, vault,
+            args: {
+                vault,
+                sdkRegistry: { get: () => ({ encoder: { broadcastTx } }) },
+                chainRegistry: { chainIdFor: () => 'bitcoin-mainnet', get: () => DESCRIPTOR },
+                pendingTxId: 'ptx-m',
+            },
+        };
+    }
+
+    it('keeps a queued token action queued and never broadcasts', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(BEFORE);
+        try {
+            const t = setup(TOKEN.params);
+            await expect(drainQueuedBroadcast(t.args)).rejects.toBeInstanceOf(MainnetPrelaunchError);
+            expect(t.broadcastTx).not.toHaveBeenCalled();
+            expect(t.store.get('ptx-m').status).toBe('queued');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('still broadcasts a queued bare native payment', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(BEFORE);
+        try {
+            const t = setup(BARE.params);
+            const r = await drainQueuedBroadcast(t.args);
+            expect(r.broadcast).toBe(true);
+            expect(t.broadcastTx).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('broadcasts a queued token action at launch', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(AT);
+        try {
+            const t = setup(TOKEN.params);
+            const r = await drainQueuedBroadcast(t.args);
+            expect(r.broadcast).toBe(true);
         } finally {
             vi.useRealTimers();
         }
