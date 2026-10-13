@@ -15,8 +15,8 @@
 // the real component: the panel must state what the paying address actually
 // holds, size Max off it, and stop an unfunded buy at the form.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -92,28 +92,46 @@ function mount({ buyerHolds, dispenser = DISPENSER }) {
     return messaging;
 }
 
-const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
+const buyButton = () => screen.getByRole('button', { name: /^Buy \d+ fills?$/ });
 
-afterEach(() => cleanup());
+async function settle() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
+
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 describe('dispenser Buy panel funding check (D-37)', () => {
     it('states what the paying address holds of the payment token', async () => {
         mount({ buyerHolds: '250' });
-        expect(await screen.findByText(/250 MEMEVALID available/)).toBeInTheDocument();
+        await settle();
+        expect(screen.getByText(/250 MEMEVALID available/)).toBeInTheDocument();
     });
 
     it('says "0 available" rather than nothing when the buyer holds none', async () => {
         mount({ buyerHolds: null });
-        expect(await screen.findByText(/0 MEMEVALID available/)).toBeInTheDocument();
+        await settle();
+        expect(screen.getByText(/0 MEMEVALID available/)).toBeInTheDocument();
     });
 
     it('blocks the buy before broadcast when the buyer holds none of the payment token', async () => {
         const messaging = mount({ buyerHolds: null });
-        await screen.findByText(/0 MEMEVALID available/);
-        const buy = await buyButton();
-        await waitFor(() => expect(buy).toBeDisabled());
+        await settle();
+        expect(screen.getByText(/0 MEMEVALID available/)).toBeInTheDocument();
+        const buy = buyButton();
+        expect(buy).toBeDisabled();
         // The pre-flight verdict is on screen, and no signing path was entered.
-        const panel = await screen.findByTestId('preflight-chip');
+        const panel = screen.getByTestId('preflight-chip');
         expect(panel).toHaveTextContent(/Will likely fail/);
         fireEvent.click(buy);
         expect(screen.queryByRole('button', { name: /Sign buy/ })).not.toBeInTheDocument();
@@ -122,29 +140,33 @@ describe('dispenser Buy panel funding check (D-37)', () => {
 
     it('blocks a fill count the balance cannot cover, and allows one it can', async () => {
         mount({ buyerHolds: '12' });
-        await screen.findByText(/12 MEMEVALID available/);
+        await settle();
+        expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
         // 3 fills = 15 MEMEVALID against a 12 balance.
-        fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '3' } });
-        await waitFor(async () => expect(await buyButton()).toBeDisabled());
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        expect(buyButton()).toBeDisabled();
         // 2 fills = 10 MEMEVALID, affordable.
-        fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '2' } });
-        await waitFor(async () => expect(await buyButton()).toBeEnabled());
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '2' } });
+        expect(buyButton()).toBeEnabled();
     });
 
     it('Max fills the largest affordable whole fill count', async () => {
         mount({ buyerHolds: '12' });
-        await screen.findByText(/12 MEMEVALID available/);
-        fireEvent.click(await screen.findByRole('button', { name: /^Max$/ }));
+        await settle();
+        expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Max$/ }));
         // floor(12 / 5) = 2, never 2.4 and never a float-misfloored 1.
-        await waitFor(() => expect(screen.getByLabelText(/Fills/i)).toHaveValue('2'));
-        expect(await buyButton()).toBeEnabled();
+        expect(screen.getByLabelText(/Fills/i)).toHaveValue('2');
+        expect(buyButton()).toBeEnabled();
     });
 
     it('lets a funded buyer reach the shared Confirm screen', async () => {
         mount({ buyerHolds: '250' });
-        await screen.findByText(/250 MEMEVALID available/);
-        fireEvent.click(await buyButton());
-        expect(await screen.findByTestId('confirm-approve')).toBeInTheDocument();
+        await settle();
+        expect(screen.getByText(/250 MEMEVALID available/)).toBeInTheDocument();
+        fireEvent.click(buyButton());
+        await settle();
+        expect(screen.getByTestId('confirm-approve')).toBeInTheDocument();
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
     });
 
@@ -157,12 +179,14 @@ describe('dispenser Buy panel funding check (D-37)', () => {
                 escrow_remaining: '900719925474099300',
             },
         });
-        await screen.findByText(/90,071,992\.54740993 MEMEVALID available/);
+        await settle();
+        expect(screen.getByText(/90,071,992\.54740993 MEMEVALID available/)).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/Fills/i), {
             target: { value: '9007199254740993' },
         });
-        fireEvent.click(await buyButton());
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
+        fireEvent.click(buyButton());
+        await settle();
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
         expect(messaging.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             amount: '90071992.54740993',
         }));

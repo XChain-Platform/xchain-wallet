@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './NetworkFilter.module.css';
@@ -31,34 +31,13 @@ import styles from './NetworkFilter.module.css';
  * @param {string[]} props.coinFamilies   coin families discovered in the active dataset, ordered for display
  * @param {string} props.value
  * @param {(coin: string) => void} props.onChange
+ * @param {string} [props.ariaLabel]
  */
-export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) {
+export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ariaLabel }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const triggerRef = useRef(null);
     const popoverRef = useRef(null);
-    // Close on outside click / Escape
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            setQuery('');
-            triggerRef.current?.focus();
-        };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
 
     const entries = useMemo(() => {
         return coinFamilies.map((coin) => {
@@ -72,6 +51,69 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
             };
         });
     }, [coinFamilies, chainRegistry]);
+
+    const close = useCallback(({ restoreFocus = false } = {}) => {
+        setOpen(false);
+        setQuery('');
+        if (restoreFocus) triggerRef.current?.focus();
+    }, []);
+
+    const focusOption = useCallback((index) => {
+        const options = Array.from(popoverRef.current?.querySelectorAll('[role="option"]') || []);
+        if (options.length === 0) return;
+        const wrapped = (index + options.length) % options.length;
+        options[wrapped]?.focus();
+    }, []);
+
+    const handleListKeyDown = useCallback((event) => {
+        const options = Array.from(popoverRef.current?.querySelectorAll('[role="option"]') || []);
+        const current = options.indexOf(document.activeElement);
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            focusOption(current + 1);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            focusOption(current < 0 ? options.length - 1 : current - 1);
+        } else if (event.key === 'Home') {
+            event.preventDefault();
+            focusOption(0);
+        } else if (event.key === 'End') {
+            event.preventDefault();
+            focusOption(options.length - 1);
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            close({ restoreFocus: true });
+        }
+    }, [close, focusOption]);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (triggerRef.current?.contains(e.target)) return;
+            if (popoverRef.current?.contains(e.target)) return;
+            close();
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') close({ restoreFocus: true });
+        };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [close, open]);
+
+    useEffect(() => {
+        if (!open || entries.length > 6) return;
+        const selectedIndex = Math.max(0, [
+            'all',
+            ...entries.map((entry) => entry.coin),
+        ].indexOf(value));
+        const options = popoverRef.current?.querySelectorAll('[role="option"]');
+        options?.[selectedIndex]?.focus();
+    }, [open, entries, value]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -103,9 +145,15 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 type="button"
                 ref={triggerRef}
                 className={styles.trigger}
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => { if (open) close(); else setOpen(true); }}
+                onKeyDown={(event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    setOpen(true);
+                }}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                aria-label={ariaLabel}
                 title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
@@ -126,7 +174,13 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 </span>
             </button>
             {open ? (
-                <div ref={popoverRef} className={styles.popover} role="listbox">
+                <div
+                    ref={popoverRef}
+                    className={styles.popover}
+                    role="listbox"
+                    aria-label="Networks"
+                    onKeyDown={handleListKeyDown}
+                >
                     {entries.length > 6 ? (
                         <div className={styles.searchWrap}>
                             <Icon.SearchIcon />
@@ -141,6 +195,12 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 aria-label="Search networks"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    focusOption(event.key === 'ArrowDown' ? 0 : -1);
+                                }}
                                 autoFocus
                             />
                         </div>
@@ -150,6 +210,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                             <button
                                 type="button"
                                 role="option"
+                                aria-label="All networks"
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => selectNetwork('all')}
@@ -169,6 +230,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                     <button
                                         type="button"
                                         role="option"
+                                        aria-label={e.label}
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
                                         onClick={() => selectNetwork(e.coin)}

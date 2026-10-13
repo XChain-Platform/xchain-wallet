@@ -66,13 +66,17 @@
 }
 
 .balanceHeroRow {
-    display: flex;
+    display: grid;
+    grid-template-areas:
+        'label controls'
+        'amount amount';
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
+    gap: 4px var(--xc-space-2);
 }
 
 .balanceHeroLabel {
+    grid-area: label;
     font-size: var(--xc-text-xs);
     font-weight: 700;
     text-transform: uppercase;
@@ -81,6 +85,7 @@
 }
 
 .balanceHeroControls {
+    grid-area: controls;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -164,6 +169,7 @@
 }
 
 .balanceHeroAmount {
+    grid-area: amount;
     font-family: var(--xc-font-mono);
     font-size: 32px;
     font-weight: 800;
@@ -536,6 +542,12 @@
     word-break: break-word;
 }
 
+.supplyState {
+    display: block;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
 .metadataHint {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-xs);
@@ -902,24 +914,6 @@
     display: flex;
     justify-content: flex-end;
     margin-bottom: var(--xc-space-1);
-}
-
-.holdersList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-.holdersRow {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    align-items: center;
-    flex-wrap: wrap;
 }
 
 .holdersAddr {

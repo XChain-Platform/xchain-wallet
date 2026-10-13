@@ -16,8 +16,8 @@
 // outside your company. Bundling that npm package into a distributed
 // SPA is therefore both a T-RSL violation and incompatible with the
 // wallet's own AGPL. So we do NOT depend on the npm package. Instead
-// we load Trezor Connect at runtime from Trezor's hosted global build
-// (`https://connect.trezor.io/9/trezor-connect.js`), which exposes
+// we load Trezor Connect at runtime from Trezor's configured hosted build
+// (https://connect.trezor.io/9/trezor-connect.js), which exposes
 // `window.TrezorConnect`. The distributed bundle contains zero
 // `@trezor/*` code; the browser fetches it from Trezor at pair time,
 // i.e. a remote service call, not redistribution. (Requires the web
@@ -35,23 +35,24 @@
 // hostBridge.js so Node smoke scripts resolve the module without the
 // pnpm workspace symlink, while Vite still bundles it cleanly.
 import { makeTrezorFactory } from '../../../core/src/signerFactories/index.js';
+import {
+    TREZOR_CONNECT_SCRIPT_URL,
+    TREZOR_MANIFEST,
+} from '../../../core/src/branding/branding.js';
 
 /**
  * Hosted Trezor Connect global build. Pinned to the 9.x line to match
  * the API surface `TrezorSigner` expects (init/getFeatures/getAddress/
  * getPublicKey/signTransaction/signMessage/dispose).
  */
-const TREZOR_CONNECT_SCRIPT_SRC = 'https://connect.trezor.io/9/trezor-connect.js';
+const TREZOR_CONNECT_SCRIPT_SRC = TREZOR_CONNECT_SCRIPT_URL;
 
 /**
  * Manifest handed to Trezor Connect at init. Required: Trezor gates
  * the popup on a recognized manifest. Both fields must be accurate;
  * Trezor Connect may block unknown-origin manifests.
  */
-const MANIFEST = {
-    email: 'support@xchain.io',
-    appUrl: 'https://xchain.io/wallet',
-};
+const MANIFEST = TREZOR_MANIFEST;
 
 /** @type {Promise<{ default: any }> | null} */
 let scriptLoadPromise = null;
