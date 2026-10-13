@@ -23,6 +23,7 @@ const background = vi.hoisted(() => {
         listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Main Wallet' }]),
         listAccounts: vi.fn(async () => [{ id: 'account-1', index: 0, name: 'Main Account' }]),
         getAddressesByChain: vi.fn(async () => ({})),
+        getWalletBalances: vi.fn(async () => ({})),
     };
 });
 
@@ -42,6 +43,7 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
     listWallets: background.listWallets,
     listAccounts: background.listAccounts,
     getAddressesByChain: background.getAddressesByChain,
+    getWalletBalances: background.getWalletBalances,
     reportAutoLock: undefined,
 }));
 
@@ -69,7 +71,7 @@ afterEach(() => {
 });
 
 describe('web create-wallet flow', () => {
-    it('requires every create step before entering Home and moves focus with the flow', async () => {
+    it('enters Home with its skeleton before post-create data loads finish', async () => {
         render(<App />);
 
         expect(await screen.findByRole('heading', { name: 'XChain Wallet' })).toBeInTheDocument();
@@ -128,9 +130,15 @@ describe('web create-wallet flow', () => {
             origin: 'created',
         }));
         expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
+        background.getSessionStatus.mockImplementation(() => new Promise(() => {}));
+        background.getAddressesByChain.mockImplementation(() => new Promise(() => {}));
+        background.getWalletBalances.mockImplementation(() => new Promise(() => {}));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-        expect(await screen.findByRole('heading', { name: 'Home' }, { timeout: 10_000 })).toBeInTheDocument();
-        expect(background.getSessionStatus).toHaveBeenCalledTimes(2);
+        expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument();
+        expect(screen.getByRole('status', { name: 'Loading balances' })).toHaveAttribute('aria-busy', 'true');
+        await waitFor(() => expect(background.getWalletBalances).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(background.getAddressesByChain).toHaveBeenCalled());
+        expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
     });
 });
