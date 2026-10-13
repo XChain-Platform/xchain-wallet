@@ -112,11 +112,9 @@ export function BalanceList({
         ]
         : visible;
     return (
-        <div
-            className={styles.list}
-            role={typeof onSelectToken === 'function' ? 'group' : 'list'}
-            aria-label="Balances"
-        >
+        // Every row is a listitem wrapper around its details button and its
+        // pin and hide controls, so the container stays a list in both modes.
+        <div className={styles.list} role="list" aria-label="Balances">
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
                 const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
