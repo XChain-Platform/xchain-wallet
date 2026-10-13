@@ -67,6 +67,8 @@ import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
+import { contactEntryChain } from '../utils/contactChain.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -541,9 +543,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return () => { cancelled = true; };
     }, [messaging]);
 
-    // Contacts UX state: picker open/close, search query, and the
-    // "save as contact" inline form (idle → naming → saving).
+    // Contacts UX state: picker open/close and the post-send save form.
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactSaveStage, setContactSaveStage] = useState(
+        /** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'),
+    );
+    const [contactName, setContactName] = useState('');
+    const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -558,7 +564,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         Promise.all(
             ownAddrs.map((addr) =>
                 messaging.getAddressHistory({ chainId, address: addr })
-                    .then((rows) => Array.isArray(rows) ? rows : [])
+                    .then((response) => {
+                        if (Array.isArray(response)) return response;
+                        if (Array.isArray(response?.data)) return response.data;
+                        if (Array.isArray(response?.rows)) return response.rows;
+                        return [];
+                    })
                     .catch(() => []),
             ),
         ).then((results) => {
@@ -590,7 +601,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         const out = [];
         for (const c of contacts) {
             for (const e of c?.entries || []) {
-                if (e?.chain === coin && e?.address) {
+                if (contactEntryChain(e) === coin && e?.address) {
                     out.push({ contact: c, entry: e });
                 }
             }
@@ -606,11 +617,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return chainContacts.find(({ entry }) => entry.address === trimmed) || null;
     }, [toAddress, chainContacts]);
 
+    const handlePickRecipient = useCallback((entry) => {
+        const address = String(entry?.address || '');
+        const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+        setToAddress(address);
+        setToError(destinationAddressError(address, selectedDescriptor));
+    }, [chainId]);
+
     const handlePickContact = useCallback((entry) => {
-        setToAddress(entry.address);
-        setToError(null);
+        handlePickRecipient(entry);
         setContactsPickerOpen(false);
-    }, []);
+    }, [handlePickRecipient]);
 
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
@@ -2245,6 +2262,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setFiatAmount('');
             setToAddress('');
             setResult(null);
+            setContactSaveStage('idle');
+            setContactName('');
+            setContactSaveError(null);
             // previewResult is a derived useMemo (no setter): clearing the
             // amount/destination above already recomputes it. The old
             // setPreviewResult(null) call referenced a non-existent setter and
@@ -2257,6 +2277,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 message: ok ? 'Transaction ID copied.' : 'Copy failed: clipboard unavailable',
                 variant: ok ? 'default' : 'error',
             });
+        };
+        const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
+        const saveRecipient = async (event) => {
+            event.preventDefault();
+            const name = contactName.trim();
+            if (!name) {
+                setContactSaveError('Name is required.');
+                return;
+            }
+            setContactSaveStage('saving');
+            setContactSaveError(null);
+            const entry = { chain: desc.coin, address: toAddress.trim(), label: '' };
+            const existing = findContactByName(contacts, name);
+            try {
+                const saved = existing
+                    ? await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) })
+                    : await messaging.saveContact({ input: { name, notes: '', entries: [entry] } });
+                if (saved) {
+                    setContacts((current) => existing
+                        ? current.map((contact) => contact.id === existing.id ? saved : contact)
+                        : [...current, saved]);
+                }
+                setContactSaveStage('saved');
+            } catch (err) {
+                setContactSaveError(err?.message || 'Save failed.');
+                setContactSaveStage('editing');
+            }
         };
 
         // §20 / G040: watcher mode result. The submit returned an unsigned
@@ -2363,7 +2410,47 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         <p className={styles.successHint}>{t('send.success.viewInHistoryHint')}</p>
                     ) : null}
                 </div>
+                {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                    <form className={styles.saveRecipient} onSubmit={saveRecipient}>
+                        <Input
+                            label="Contact name"
+                            value={contactName}
+                            onChange={(event) => {
+                                setContactName(event.target.value);
+                                if (contactSaveError) setContactSaveError(null);
+                            }}
+                            error={contactSaveError || undefined}
+                            autoComplete="off"
+                            disabled={contactSaveStage === 'saving'}
+                        />
+                        <div className={styles.saveRecipientActions}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={contactSaveStage === 'saving'}
+                                onClick={() => {
+                                    setContactSaveStage('idle');
+                                    setContactName('');
+                                    setContactSaveError(null);
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" variant="primary" disabled={contactSaveStage === 'saving'}>
+                                {contactSaveStage === 'saving' ? 'Saving…' : 'Save contact'}
+                            </Button>
+                        </div>
+                    </form>
+                ) : null}
+                {contactSaveStage === 'saved' ? (
+                    <StatusMessage variant="status">Recipient saved to contacts.</StatusMessage>
+                ) : null}
                 <div className={styles.actions}>
+                    {canSaveRecipient && contactSaveStage === 'idle' ? (
+                        <Button variant="secondary" onClick={() => setContactSaveStage('editing')}>
+                            Save recipient
+                        </Button>
+                    ) : null}
                     {onViewHistory && txid ? (
                         <Button
                             variant="secondary"
@@ -2746,6 +2833,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 }}
                 onPaste={onAddressPaste}
                 suggestions={suggestions}
+                onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
                 onIconClick={() => setContactsPickerOpen(true)}
                 placeholder={t('send.destination.placeholder')}

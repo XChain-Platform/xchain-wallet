@@ -66,6 +66,20 @@
     margin-top: var(--xc-space-4);
 }
 
+.saveRecipient {
+    margin-top: var(--xc-space-4);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+}
+
+.saveRecipientActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+}
+
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
