@@ -228,7 +228,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -246,13 +246,17 @@ function AppInner() {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
-    // Prefill helpers: surface (chainId, tick) to forms when launched
-    // from ManageToken so the LockedTokenContext chip renders instead
-    // of the ticker / chain picker.
-    const fromManage = formReturnView === 'manage-token';
+    // ManageToken and the Developer Mode faucet lock their chain and ticker
+    // into the form so the user cannot redirect the requested token action.
+    const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
+    const handleFaucetMint = ({ chainId, tick }) => {
+        setTokenDetailRef({ chainId, tick });
+        setFormReturnView('settings');
+        setUnlockedView('mint');
+    };
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
     // M2.4: the entry the History route should open on, set when the user
     // follows the send success card straight to their new transaction. It is
@@ -270,7 +274,7 @@ function AppInner() {
     // visit (e.g. entering from TokenDetail then re-entering from the
     // home menu should return to home, not back to TokenDetail).
     const [historyReturnTo, setHistoryReturnTo] = useState(
-        /** @type {'home' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'token-detail' | 'manage-token'} */ ('home'),
     );
     // Selected entry for the standalone ActionDetail view. Set when the
     // user clicks a row in History or in Home's Activity tab; cleared
@@ -2224,6 +2228,15 @@ function AppInner() {
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
+                        onBuy={() => {
+                            setMarketsAsset({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                            });
+                            setUnlockedView('markets');
+                        }}
                         // Same hop MyTokens' onSelectTick uses: tokenDetailRef
                         // already carries this tick's chainId/tick, so Manage
                         // Token only needs the view switch.
@@ -2310,7 +2323,8 @@ function AppInner() {
                             const scope = historyScopeForAsset(tokenDetailRef);
                             setHistoryInitialQuery(scope.searchQuery);
                             setHistoryInitialChainCoin(scope.chainCoin);
-                            setHistoryReturnTo('home');
+                            setHistoryInitialFocus(null);
+                            setHistoryReturnTo('manage-token');
                             setUnlockedView('history');
                         }}
                     />
@@ -2416,6 +2430,7 @@ function AppInner() {
                             } : undefined
                         }
                         initialSubpageId={settingsInitialSection}
+                        onNavigateToMint={handleFaucetMint}
                     />
                 );
             }
