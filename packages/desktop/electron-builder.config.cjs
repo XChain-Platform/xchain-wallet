@@ -614,6 +614,17 @@ const config = {
     // 'homepage'"), which is the good failure mode. It is app METADATA,
     // so it lives in packages/desktop/package.json; see the comment there.
 
+    // Disable packaged-runtime switches that can expose Node execution or debugging.
+    // Encrypt Chromium cookies with the operating system's cryptography keys.
+    // Validate the embedded ASAR on Electron 44's supported macOS and Windows builds.
+    electronFuses: {
+        runAsNode: false,
+        enableNodeOptionsEnvironmentVariable: false,
+        enableNodeCliInspectArguments: false,
+        enableCookieEncryption: true,
+        enableEmbeddedAsarIntegrityValidation: true,
+    },
+
     // Explicit asar: reduces startup I/O + lets electron-builder
     // write deterministic archive entries. THERE IS ONE NATIVE MODULE,
     // and asar already unpacks it: a Linux install compiles
