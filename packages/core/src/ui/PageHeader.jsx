@@ -68,7 +68,9 @@ export function PageHeader({
                         {titleIcon}
                     </span>
                 ) : null}
-                <span className={styles.title}>{title}</span>
+                {/* The screen's title is its one top-level heading, so a
+                    screen reader can jump to it and announce where the user is. */}
+                <h1 className={styles.title}>{title}</h1>
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

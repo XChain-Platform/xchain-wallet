@@ -81,6 +81,7 @@
 }
 
 .title {
+    margin: 0;
     font-weight: 700;
     font-size: var(--xc-text-lg);
     color: var(--xc-text);
