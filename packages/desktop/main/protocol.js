@@ -43,6 +43,7 @@
 
 import { parseBip21Uri, InvalidBip21Error } from '@xchain-wallet/core/uri/bip21.js';
 import { parseXchainUri, hardenUriIntentText } from '@xchain-wallet/core/uri/xchainUri.js';
+import { reportMainFailure } from './errorBoundary.js';
 
 /** URI schemes the app is allowed to claim. */
 export const TIER_1_SCHEME = 'xchain';
@@ -100,7 +101,7 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
  * renderer parses via its own action decoder).
  *
  * @param {import('electron').App} app
- * @param {{ onDeepLink: (evt: DeepLinkEvent) => void, onSecondInstance?: () => void }} opts
+ * @param {{ onDeepLink: (evt: DeepLinkEvent) => void, onSecondInstance?: () => void, onError?: (error: unknown) => void }} opts
  * @returns {{ gotLock: boolean }}  false means another instance already holds it and we should quit
  *
  * @typedef {Object} DeepLinkEvent
@@ -108,7 +109,11 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
  * @property {string} raw                     the URI as received
  * @property {import('@xchain-wallet/core/uri/bip21.js').Bip21Uri | null} parsed   non-null for bitcoin/litecoin/dogecoin
  */
-export function attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance }) {
+export function attachDeepLinkHandlers(app, {
+    onDeepLink,
+    onSecondInstance,
+    onError = (error) => reportMainFailure('deep-link handling', error),
+}) {
     if (typeof onDeepLink !== 'function') {
         throw new Error('attachDeepLinkHandlers: onDeepLink must be a function');
     }
@@ -119,7 +124,11 @@ export function attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance }) {
     // macOS open-url: fires on launch + while running.
     app.on('open-url', (event, url) => {
         event.preventDefault();
-        dispatch(url, onDeepLink);
+        try {
+            dispatch(url, onDeepLink);
+        } catch (error) {
+            reportDeepLinkError(error, onError);
+        }
     });
 
     // Windows/Linux subsequent launches: the OS passes the URL through
@@ -127,9 +136,13 @@ export function attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance }) {
     // schemes and dispatch. Raising the existing window is independent of
     // whether the launch carries a deep link.
     app.on('second-instance', (_event, argv, _cwd) => {
-        onSecondInstance?.();
-        const url = findDeepLinkInArgv(argv);
-        if (url) dispatch(url, onDeepLink);
+        try {
+            onSecondInstance?.();
+            const url = findDeepLinkInArgv(argv);
+            if (url) dispatch(url, onDeepLink);
+        } catch (error) {
+            reportDeepLinkError(error, onError);
+        }
     });
 
     // First-launch URL (Windows/Linux): may already be on our own argv.
@@ -137,7 +150,13 @@ export function attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance }) {
     if (initial) {
         // Queue on the next turn so main can install its lifecycle handlers.
         // Main parks the event until its first renderer can claim it.
-        setImmediate(() => dispatch(initial, onDeepLink));
+        setImmediate(() => {
+            try {
+                dispatch(initial, onDeepLink);
+            } catch (error) {
+                reportDeepLinkError(error, onError);
+            }
+        });
     }
 
     return { gotLock: true };
@@ -248,6 +267,14 @@ export function focusDeepLinkTarget(win) {
 function dispatch(url, onDeepLink) {
     const event = classifyDeepLink(url);
     if (event) onDeepLink(event);
+}
+
+function reportDeepLinkError(error, onError) {
+    try {
+        onError(error);
+    } catch (reportError) {
+        reportMainFailure('deep-link error reporting', reportError);
+    }
 }
 
 function findDeepLinkInArgv(argv) {
