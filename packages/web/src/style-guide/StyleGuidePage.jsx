@@ -211,7 +211,23 @@ export function Section({ id, title, tag, kicker, children }) {
     );
 }
 
-export function Guidance({ what, when, whenNot, sizing, variants, doRule, dontRule, supersedes }) {
+const PAGE_TEMPLATE_USAGE = Object.freeze({
+    when: <>Use it inside the template that matches the screen: <code>FormPage</code> for input and submission, <code>ListPage</code> for browsing and read-only content.</>,
+    whenNot: <>Do not add a route-specific card or width wrapper; the page template owns the responsive layout.</>,
+    doRule: <>Keep forms bare below 600px and carded above it; let lists fill the content width to the scrollbar.</>,
+    dontRule: <>Do not box a list into the 560px form column or choose the layout in JavaScript.</>,
+});
+
+export function Guidance({
+    what,
+    when = PAGE_TEMPLATE_USAGE.when,
+    whenNot = PAGE_TEMPLATE_USAGE.whenNot,
+    sizing,
+    variants,
+    doRule = PAGE_TEMPLATE_USAGE.doRule,
+    dontRule = PAGE_TEMPLATE_USAGE.dontRule,
+    supersedes,
+}) {
     return (
         <div className="sg-guide">
             <dl>
