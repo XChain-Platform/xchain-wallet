@@ -24,7 +24,7 @@
 //      nudges show the Receive CTA.
 //   4. Home.jsx threads `onReceive` into HomeTabs.
 //   5. History + AddressList accept an `onReceive` prop and render
-//      <EmptyStateNudge> with a Receive CTA in their empty states.
+//      the shared empty-state component with a Receive CTA.
 //   6. Web + extension App.jsx wire `onReceive` into both routes.
 
 import { strict as assert } from 'node:assert';
@@ -108,16 +108,16 @@ assert.ok(
 
 const historySrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\.\/components\/EmptyStateNudge\.jsx['"]/.test(historySrc),
-    'History imports EmptyStateNudge',
+    /\bEmptyState\b/.test(historySrc),
+    'History imports EmptyState',
 );
 assert.ok(
     /onReceive/.test(historySrc),
     'History accepts onReceive prop',
 );
 assert.ok(
-    (historySrc.match(/<EmptyStateNudge\b/g) || []).length >= 2,
-    'History renders <EmptyStateNudge> in both empty branches (no addresses + no entries)',
+    (historySrc.match(/<EmptyState\b/g) || []).length >= 2,
+    'History renders <EmptyState> in both empty branches (no addresses + no entries)',
 );
 
 const addrSrc = readFileSync(join(routes, 'AddressList.jsx'), 'utf8');

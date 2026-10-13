@@ -9,7 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, Skeleton, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    Icon,
+    ListPage,
+    PageHeader,
+    Screen,
+    Skeleton,
+    StatusMessage,
+    VerifiedBadge,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -25,7 +35,6 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -1177,7 +1186,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }
     };
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
@@ -1186,20 +1195,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>{children}</div>
-            <div className={styles.actions}>
-            </div>
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain) {
         return wrap(
-            <div role="status" aria-label="Loading history">
-                <Skeleton.List rows={5} />
-            </div>,
+            <ListPage>
+                <div role="status" aria-label="Loading history">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
         );
     }
     const activeChainIds = Object.entries(addressesByChain)
@@ -1207,20 +1220,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         .map(([cid]) => cid);
     if (activeChainIds.length === 0) {
         return wrap(
-            <EmptyStateNudge
-                title="No addresses yet"
-                body="Generate a receive address to populate history."
-                actionLabel={onReceive ? 'Receive' : undefined}
-                onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
-            />,
+            <ListPage>
+                <EmptyState
+                    title="No addresses yet"
+                    body="Generate a receive address to populate history."
+                    actionLabel={onReceive ? 'Receive' : undefined}
+                    onAction={onReceive}
+                    icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
+            </ListPage>,
         );
     }
 
     return wrap(
-        <>
-            {/* Unified filter card: search, chain picker, and the
-                collapsible Filters section all in one container. */}
+        <ListPage toolbar={(
             <div className={styles.filterCard} role="group" aria-label="History filters">
                 <input
                     ref={searchInputRef}
@@ -1356,6 +1369,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     </div>
                 ) : null}
             </div>
+        )}>
 
             {exportModalOpen ? (
                 <ExportModal
@@ -1403,14 +1417,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
             {visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
-                    <EmptyStateNudge
+                    <EmptyState
                         title="No matches for the current filters"
                         body="Adjust or clear the filters to see more history."
                         actionLabel="Clear filters"
                         onAction={clearAllFilters}
                     />
                 ) : (
-                    <EmptyStateNudge
+                    <EmptyState
                         title={crossChainOnly
                             ? 'No cross-chain actions yet'
                             : 'No activity yet'}
@@ -1505,7 +1519,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     );
                 })}
             </ul>
-        </>,
+        </ListPage>,
     );
 }
 
@@ -2750,7 +2764,10 @@ function RecipientsBlock({ entry }) {
                     ) : null}
                 </div>
             ) : (
-                <span style={headingStyle}>No {isDividend ? 'holders' : 'recipients'} found.</span>
+                <EmptyState
+                    title={<>No {isDividend ? 'holders' : 'recipients'} found.</>}
+                    titleAs="p"
+                />
             )}
             {recipients.length > 0 ? (
                 <div style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
