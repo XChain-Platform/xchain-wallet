@@ -118,7 +118,7 @@
 }
 
 .info     { border-inline-start-color: var(--xc-accent-primary); }
-.warning  { border-inline-start-color: #F59E0B; }
+.warning  { border-inline-start-color: var(--xc-warning); }
 .critical { border-inline-start-color: var(--xc-danger); }
 
 .alertHead {

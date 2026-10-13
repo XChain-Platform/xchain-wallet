@@ -57,6 +57,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
+    /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
     box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
     object-fit: cover;
@@ -71,7 +72,7 @@
     justify-content: center;
     border-radius: 50%;
     font-weight: 700;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-md);
 }
 
@@ -115,6 +116,7 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    /* raw-color-ok: fixed white preserves QR scanner contrast. */
     background: #FFFFFF;
     border-radius: var(--xc-radius-md);
     border: 1px solid var(--xc-border);
@@ -135,6 +137,7 @@
     height: auto;
     aspect-ratio: 1;
     border-radius: var(--xc-radius-sm);
+    /* raw-color-ok: fixed white preserves QR scanner contrast. */
     background: #FFFFFF;
 }
 
