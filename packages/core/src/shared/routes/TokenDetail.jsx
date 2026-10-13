@@ -49,6 +49,7 @@ import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { safeHttpUrl } from '../utils/externalUrl.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -1283,12 +1284,19 @@ function MediaPanel({ isNative, assetInfo, loading }) {
     const images = Array.isArray(assetInfo?.images)
         ? assetInfo.images.filter((i) => {
             const t = String(i?.type || '').toLowerCase();
-            return t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres';
+            return safeHttpUrl(i?.url)
+                && (t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres');
         })
         : [];
-    const audio = Array.isArray(assetInfo?.audio) ? assetInfo.audio : [];
-    const video = Array.isArray(assetInfo?.video) ? assetInfo.video : [];
-    const files = Array.isArray(assetInfo?.files) ? assetInfo.files : [];
+    const audio = Array.isArray(assetInfo?.audio)
+        ? assetInfo.audio.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
+    const video = Array.isArray(assetInfo?.video)
+        ? assetInfo.video.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
+    const files = Array.isArray(assetInfo?.files)
+        ? assetInfo.files.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
     const subtabs = [
         images.length > 0 ? { id: 'image', label: images.length === 1 ? 'Image' : 'Images' } : null,
         audio.length > 0 ? { id: 'audio', label: 'Audio' } : null,
@@ -1515,15 +1523,15 @@ function ContactsBlock({ contacts }) {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
                         const isMail = c.type === 'email';
                         const isPhone = c.type === 'phone';
-                        const isUrl = c.type === 'url' || /^https?:\/\//i.test(c.value);
+                        const safeUrl = safeHttpUrl(c.value);
                         let display = c.value;
                         if (isMail) {
                             display = <a href={`mailto:${c.value}`}>{c.value}</a>;
                         } else if (isPhone) {
                             display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
-                        } else if (isUrl) {
+                        } else if (safeUrl) {
                             display = (
-                                <a href={c.value} target="_blank" rel="noreferrer noopener">
+                                <a href={safeUrl} target="_blank" rel="noreferrer noopener">
                                     {c.value} <span aria-hidden="true">↗</span>
                                 </a>
                             );
@@ -1572,7 +1580,8 @@ function PgpsigBlock({ pgpsig }) {
 
 function ImageHero({ img }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
-    const failed = failedImageUrl === img.url;
+    const safeUrl = safeHttpUrl(img.url);
+    const failed = !safeUrl || failedImageUrl === safeUrl;
     const media = failed ? (
         <div
             className={styles.heroImageFallback}
@@ -1583,7 +1592,7 @@ function ImageHero({ img }) {
         </div>
     ) : (
         <a
-            href={img.url}
+            href={safeUrl}
             target="_blank"
             rel="noreferrer noopener"
             className={styles.heroImageLink}
@@ -1591,13 +1600,13 @@ function ImageHero({ img }) {
             title={img.name || ''}
         >
             <img
-                src={img.url}
+                src={safeUrl}
                 alt={img.name || ''}
                 className={styles.heroImage}
                 loading="lazy"
                 decoding="async"
                 style={{ aspectRatio: '1 / 1' }}
-                onError={() => setFailedImageUrl(img.url)}
+                onError={() => setFailedImageUrl(safeUrl)}
             />
             <span aria-hidden="true">↗</span>
         </a>
@@ -1703,10 +1712,16 @@ function LinksAndFiles({ assetInfo }) {
     // the singular `website` field for older bundles that haven't been
     // re-normalized. Files live in the Media tab's Files subtab now;
     // they're not rendered here.
-    const websites = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
+    const websiteCandidates = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
         ? assetInfo.websites
         : (assetInfo?.website ? [assetInfo.website] : []);
-    const socials = Array.isArray(assetInfo?.socials) ? assetInfo.socials : [];
+    const websites = websiteCandidates.map(safeHttpUrl).filter(Boolean);
+    const socials = Array.isArray(assetInfo?.socials)
+        ? assetInfo.socials.flatMap((social) => {
+            const url = safeHttpUrl(social?.url);
+            return url ? [{ ...social, url }] : [];
+        })
+        : [];
     const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
     const multipleWebsites = websites.length > 1;

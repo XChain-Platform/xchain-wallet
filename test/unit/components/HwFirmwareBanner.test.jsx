@@ -107,4 +107,15 @@ describe('HwFirmwareBanner verdicts', () => {
         expect(link).toHaveAttribute('target', '_blank');
         expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
+
+    it.each(['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>'])(
+        'does not link an unsafe vendor update URL: %s',
+        (updateUrl) => {
+            setVerdict('vulnerable', { updateUrl });
+            renderBanner(SIGNER_INFO);
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.queryByRole('link')).toBeNull();
+        },
+    );
 });

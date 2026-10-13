@@ -6,6 +6,7 @@
 import { defaultRegistry } from '../../registry/index.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { endpointOverridesFromSettings, joinEndpoint } from '../../sdk/SDKRegistry.js';
+import { safeHttpUrl } from './externalUrl.js';
 
 const ROUTE_SEGMENTS = Object.freeze({
     transaction: 'tx',
@@ -25,9 +26,8 @@ export function explorerBaseUrl(chainId, settings, chainRegistry = defaultRegist
     if (!descriptor) return null;
     const override = endpointOverridesFromSettings(settings, chainRegistry)[chainId]?.explorerUrl;
     const base = override || joinEndpoint(descriptor.explorer);
-    return typeof base === 'string' && base.trim()
-        ? base.trim().replace(/\/+$/, '')
-        : null;
+    const safeBase = safeHttpUrl(base);
+    return safeBase ? safeBase.replace(/\/+$/, '') : null;
 }
 
 /**
@@ -50,5 +50,5 @@ export function explorerPageUrl({
     const coin = explorerCoinCode(descriptor);
     const base = explorerBaseUrl(chainId, settings, chainRegistry);
     if (!coin || !base) return null;
-    return `${base}/${coin}/${segment}/${encodeURIComponent(identifier)}`;
+    return safeHttpUrl(`${base}/${coin}/${segment}/${encodeURIComponent(identifier)}`);
 }
