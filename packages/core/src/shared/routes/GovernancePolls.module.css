@@ -1,0 +1,16 @@
+.pollCard {
+    width: 100%;
+    padding: var(--xc-space-4);
+    text-align: left;
+    color: var(--xc-text);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-md);
+    cursor: pointer;
+}
+
+.pollCard:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

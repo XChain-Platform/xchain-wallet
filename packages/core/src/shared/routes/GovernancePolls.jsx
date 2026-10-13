@@ -9,11 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import styles from './IssueTokenForm.module.css';
+import local from './GovernancePolls.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -109,26 +112,27 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
 
     if (noChain) {
         return wrap(
-            <>
-                <p className={styles.hint}>No address on a governance-capable chain. Use Receive to generate one first.</p>
-            </>,
+            <EmptyState
+                title="No address on a governance-capable chain."
+                body="Use Receive to generate one first."
+            />,
         );
     }
-    if (!chainId && !error) return wrap(<p>Loading…</p>);
+    if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
 
     return wrap(
-        <>
-            <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            <div className={styles.actions} style={{ gap: '0.5rem' }}>
+        <ListPage toolbar={(
+            <>
+                <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                 <Button variant="primary" onClick={() => onCreate(chainId)}>Create poll</Button>
                 <Button variant="ghost" onClick={() => onDelegate(chainId)}>Delegate votes</Button>
-            </div>
+            </>
+        )}>
 
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {chainId && !rows && !error ? <p>Loading polls…</p> : null}
             {rows && rows.length === 0 ? (
-                <p className={styles.hint}>No polls on this chain yet. Create the first one.</p>
+                <EmptyState title="No polls on this chain yet." body="Create the first one." />
             ) : null}
 
             {rows && rows.length > 0 ? (
@@ -141,8 +145,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                 key={String(id)}
                                 type="button"
                                 onClick={() => onOpenPoll(chainId, id)}
-                                className={styles.card}
-                                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
+                                className={local.pollCard}
                             >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <strong>#{String(id)} · {p.tick || 'n/a'}</strong>
@@ -155,6 +158,6 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                     })}
                 </div>
             ) : null}
-        </>,
+        </ListPage>,
     );
 }

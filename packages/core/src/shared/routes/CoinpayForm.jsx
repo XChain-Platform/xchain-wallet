@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
+    ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -75,7 +78,6 @@ export function CoinpayForm({
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -345,9 +347,9 @@ export function CoinpayForm({
             title={titleText}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, template = 'list') => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.listCard}>{children}</div> : children}
+            {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );
 
@@ -416,11 +418,30 @@ export function CoinpayForm({
         })();
 
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
+            <FormPage
+                label="Review matched order payment"
+                onSubmit={handleSubmit}
+                intro={(
+                    <>
                     Pay {amountLabel} to complete
                     matched order #{summary.actionIndex}.
-                </p>
+                    </>
+                )}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting' || ownerLane.composing}
+                    >
+                        {ownerLane.isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : 'Continue to confirmation'}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <DetailRow
                         label="Chain"
@@ -455,22 +476,8 @@ export function CoinpayForm({
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
                 ) : null}
-                {submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting' || ownerLane.composing}
-                    >
-                        {ownerLane.isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : 'Continue to confirmation'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
+            'form',
         );
     }
 
@@ -482,17 +489,15 @@ export function CoinpayForm({
                 <p className={styles.hint}>Scanning for payments due…</p>
             ) : null}
             {!scanning && obligations.length === 0 ? (
-                <p className={styles.hint}>
-                    No payments due right now. When one of your orders
-                    matches, the coin payment for it appears here.
-                </p>
+                <EmptyState
+                    title="No payments due right now."
+                    body="When one of your orders matches, the coin payment for it appears here."
+                />
             ) : null}
 
             {obligations.length > 0 ? (
                 <>
-                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>
-                        Pending obligations
-                    </p>
+                    <SectionHeader title="Pending obligations" />
                     <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem' }}>
                         {obligations.map((row) => {
                             const isSelected = selected
@@ -558,7 +563,22 @@ export function CoinpayForm({
             ) : null}
 
             {selected && summary ? (
-                <form onSubmit={handleReview} noValidate>
+                <FormPage
+                    label="Selected payment obligation"
+                    onSubmit={handleReview}
+                    status={submitError ? (
+                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            disabled={!selected || !summary}
+                        >
+                            Review
+                        </Button>
+                    )}
+                >
                     <dl className={styles.detailsList}>
                         <dt className={styles.detailsLabel}>Chain</dt>
                         <dd className={styles.detailsValue}>
@@ -601,24 +621,8 @@ export function CoinpayForm({
                         />
                     ) : null}
 
-                    {submitError ? (
-                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                    ) : null}
-
-                    <div className={styles.actions}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            disabled={!selected || !summary}
-                        >
-                            Review
-                        </Button>
-                    </div>
-                </form>
-            ) : (
-                <div className={styles.actions}>
-                </div>
-            )}
+                </FormPage>
+            ) : null}
         </>,
     );
 }

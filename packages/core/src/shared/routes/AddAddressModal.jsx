@@ -31,7 +31,9 @@
 // device round-trip.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainPicker, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button, ChainPicker, EmptyState, FormPage, Icon, PageHeader, Screen, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -197,19 +199,38 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     );
     return (
         <Screen variant={variant} header={header}>
-            <>
-                {coinOptions.length === 0 ? (
-                    <>
-                        <p className={styles.empty}>
-                            No coins are available yet. Unlock the wallet, or turn on a network
-                            under Settings.
-                        </p>
-                        <div className={styles.actions}>
-                            <Button type="button" variant="primary" size="md" onClick={onClose}>Close</Button>
-                        </div>
-                    </>
-                ) : (
-                    <form onSubmit={handleGenerate} noValidate>
+            {coinOptions.length === 0 ? (
+                <EmptyState
+                    title="No coins are available yet."
+                    body="Unlock the wallet, or turn on a network under Settings."
+                    actionLabel="Close"
+                    onAction={onClose}
+                />
+            ) : (
+                <FormPage
+                    label="Add addresses"
+                    onSubmit={handleGenerate}
+                    status={(error || busy) ? (
+                        <>
+                            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+                            {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
+                        </>
+                    ) : null}
+                    actions={(
+                        // The label carries a count ("Generate 3"), so matching it by
+                        // text needs a regex that also matches any future Generate button.
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="md"
+                            loading={busy}
+                            disabled={busy || !effectiveChainId}
+                            data-testid="add-address-generate"
+                        >
+                            {generateLabel}
+                        </Button>
+                    )}
+                >
                         <ChainPicker
                             label="Coin"
                             value={effectiveChainId}
@@ -273,20 +294,8 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 disabled={busy}
                             />
                         </label>
-                        {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-                        {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
-                        <div className={styles.actions}>
-                            {/* The label carries a count ("Generate 3"), so matching it by
-                                text needs a regex that quietly also matches the wrong
-                                button the day another Generate appears. */}
-                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}
-                                data-testid="add-address-generate">
-                                {generateLabel}
-                            </Button>
-                        </div>
-                    </form>
-                )}
-            </>
+                </FormPage>
+            )}
         </Screen>
     );
 }
