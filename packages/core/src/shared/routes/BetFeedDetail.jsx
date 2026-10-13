@@ -486,7 +486,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             ? (
                                 <Button
                                     type="button"
-                                    className={styles.inlineAction}
+                                    variant="link"
+                                    size="sm"
                                     icon={null}
                                     onClick={() => onOpenOracle(chainId, feed.source)}
                                 >

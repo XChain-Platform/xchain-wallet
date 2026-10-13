@@ -55,6 +55,32 @@ describe('<Button>', () => {
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Advance');
     });
 
+    it('gives link actions the shared inline-link treatment', () => {
+        render(<Button variant="link" icon={null}>Learn more</Button>);
+        const button = screen.getByRole('button');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+        const linkRule = /\.link\s*\{([^}]*)\}/.exec(css)?.[1];
+
+        expect(button).toHaveClass(styles.btn, styles.link);
+        expect(linkRule).toMatch(/color:\s*var\(--xc-accent-text\)/);
+        expect(linkRule).toMatch(/text-decoration:\s*underline/);
+        expect(linkRule).toMatch(/text-underline-offset:\s*0\.15em/);
+        expect(linkRule).toMatch(/min-height:\s*var\(--xc-tap-min\)/);
+    });
+
+    it.each([
+        'shared/components/DraftDiscardButton.jsx',
+        'shared/components/LearnNote.jsx',
+        'shared/routes/BetFeedDetail.jsx',
+        'shared/routes/ContactsList.jsx',
+        'shared/routes/CreateOrderForm.jsx',
+        'shared/routes/Locked.jsx',
+    ])('%s uses the link variant for its text action', (path) => {
+        const source = readFileSync(`packages/core/src/${path}`, 'utf8');
+
+        expect(source).toMatch(/<Button\b[^>]*variant="link"[^>]*icon=\{null\}/);
+    });
+
     it('uses the shared size scale and hides decorative icons', () => {
         render(
             <>
