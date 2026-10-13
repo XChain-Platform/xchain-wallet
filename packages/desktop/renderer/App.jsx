@@ -349,6 +349,11 @@ function AppInner() {
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
     const [walletList, setWalletList] = useState(/** @type {Array<{ id: string, name: string }>} */ ([]));
+    const statusStateRef = useRef(status.state);
+    const walletListRef = useRef(walletList);
+    const pendingActiveWalletId = useRef(/** @type {string | null} */ (null));
+    statusStateRef.current = status.state;
+    walletListRef.current = walletList;
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -612,18 +617,24 @@ function AppInner() {
                 refresh();
                 return;
             }
-            if (change?.kind !== 'active-wallet' || status.state !== 'unlocked') return;
+            if (change?.kind !== 'active-wallet' || statusStateRef.current !== 'unlocked') return;
             const walletId = change.walletId;
-            if (typeof walletId !== 'string' || !walletList.some((wallet) => wallet.id === walletId)) return;
+            if (typeof walletId !== 'string') return;
+            if (!walletListRef.current.some((wallet) => wallet.id === walletId)) {
+                pendingActiveWalletId.current = walletId;
+                return;
+            }
             setActiveAccountId(null);
             setActiveWalletId(walletId);
             writeActiveWallet(walletId);
             setUnlockedView('home');
         });
-    }, [refresh, status.state, walletList]);
+    }, [refresh]);
 
     useEffect(() => {
         if (status.state !== 'unlocked') {
+            pendingActiveWalletId.current = null;
+            walletListRef.current = [];
             setActiveWalletId(null);
             setActiveAccountId(null);
             setWalletList([]);
@@ -634,6 +645,7 @@ function AppInner() {
             .then((list) => {
                 if (cancelled) return;
                 const arr = Array.isArray(list) ? list : [];
+                walletListRef.current = arr;
                 setWalletList(arr);
                 if (arr.length === 0) return;
                 // §24.6 / Cluster Y FU 4: when an initial route names a
@@ -650,7 +662,13 @@ function AppInner() {
                 // so a removed wallet falls back to the default.
                 const ctxWalletId = initialRoute?.initialContext?.walletId;
                 const persisted = readActiveWallet();
-                if (ctxWalletId && arr.some((w) => w.id === ctxWalletId)) {
+                const pendingWalletId = pendingActiveWalletId.current;
+                pendingActiveWalletId.current = null;
+                if (pendingWalletId && arr.some((w) => w.id === pendingWalletId)) {
+                    setActiveWalletId(pendingWalletId);
+                    writeActiveWallet(pendingWalletId);
+                    setUnlockedView('home');
+                } else if (ctxWalletId && arr.some((w) => w.id === ctxWalletId)) {
                     setActiveWalletId(ctxWalletId);
                 } else if (persisted && arr.some((w) => w.id === persisted)) {
                     setActiveWalletId(persisted);

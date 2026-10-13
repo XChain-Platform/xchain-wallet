@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boot = vi.hoisted(() => ({
@@ -218,6 +218,47 @@ describe('desktop renderer shell', () => {
         expect(bridge.sendMessage).toHaveBeenCalledWith({
             type: 'wallet.unlock',
             request: { password: 'secret' },
+        });
+    });
+
+    it('applies an active-wallet event received while the wallet list is loading', async () => {
+        let resolveWalletList;
+        const walletList = new Promise((resolve) => { resolveWalletList = resolve; });
+        const sendMessage = vi.fn(async ({ type, request }) => {
+            if (type === 'session.status') {
+                return { ok: true, result: { state: 'unlocked', hasWallet: true, hasSession: true } };
+            }
+            if (type === 'wallet.list') return walletList;
+            if (type === 'account.list') {
+                return { ok: true, result: [{ id: `${request.walletId}-account`, index: 0 }] };
+            }
+            throw new Error(`unexpected renderer IPC call: ${type}`);
+        });
+        window.xchainWalletBridge = { sendMessage };
+
+        render(<App />);
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({ type: 'wallet.list', request: undefined });
+        });
+
+        const onStateChange = window.xchainWalletWindow.onStateChange.mock.calls[0][0];
+        onStateChange({ kind: 'active-wallet', walletId: 'wallet-2' });
+        await act(async () => {
+            resolveWalletList({
+                ok: true,
+                result: [
+                    { id: 'wallet-1', name: 'Primary wallet' },
+                    { id: 'wallet-2', name: 'Second wallet' },
+                ],
+            });
+            await walletList;
+        });
+
+        await waitFor(() => {
+            expect(sendMessage).toHaveBeenCalledWith({
+                type: 'account.list',
+                request: { walletId: 'wallet-2' },
+            });
         });
     });
 });
