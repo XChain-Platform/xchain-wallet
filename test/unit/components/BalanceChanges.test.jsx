@@ -68,4 +68,22 @@ describe('BalanceChanges pre-sign audit details', () => {
         expect(screen.getAllByText('Fiat unavailable (EUR)')).toHaveLength(2);
         expect(screen.getByText('unknown TOKEN per recipient')).toBeTruthy();
     });
+
+    it('uses a plain failure sentence without exposing backend text', () => {
+        const { container } = render(
+            <BalanceChanges error="simulateAction: upstream exploded at /api/preview" />,
+        );
+
+        expect(screen.getByText('We couldn’t estimate this transaction’s effect (preview unavailable).')).toBeTruthy();
+        expect(container).not.toHaveTextContent('simulateAction');
+        expect(container.querySelector('[title*="upstream"]')).toBeNull();
+    });
+
+    it('renders no section for an empty completed result', () => {
+        const { container } = render(
+            <BalanceChanges result={{ deltas: [], sideEffects: [], notes: [] }} />,
+        );
+
+        expect(container).toBeEmptyDOMElement();
+    });
 });

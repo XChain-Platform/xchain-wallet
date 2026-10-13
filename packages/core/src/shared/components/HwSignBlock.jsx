@@ -98,7 +98,7 @@ export function HwSignBlock({
                 <div className={styles.statusRow} data-status={status} role="status">
                     <span className={styles.statusDot} aria-hidden="true" />
                     <span className={styles.statusText}>
-                        {statusCopy(status, signerKind, chainId, detail)}
+                        {statusCopy(status, signerKind, chainId)}
                     </span>
                     {status !== 'available' ? (
                         <button
@@ -119,9 +119,8 @@ export function HwSignBlock({
  * @param {string} status
  * @param {'trezor'|'ledger'} signerKind
  * @param {string | undefined} chainId
- * @param {string | null} detail
  */
-function statusCopy(status, signerKind, chainId, detail) {
+function statusCopy(status, signerKind, chainId) {
     switch (status) {
         case 'available':
             return 'Ready. 1. Select the sign button below. 2. Review every detail on your device. 3. Approve on the device only if everything matches. To cancel, reject on the device; nothing will be signed.';
@@ -134,15 +133,11 @@ function statusCopy(status, signerKind, chainId, detail) {
                 ? 'Device is locked. Enter your PIN on the Trezor.'
                 : 'Device is locked. Unlock it and try again.';
         case 'disconnected':
-            return detail
-                ? `Device not detected. ${detail}`
-                : 'Device not detected. Plug in and unlock.';
+            return 'Device not detected. Check its connection, unlock it, and try again.';
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':
-            return detail
-                ? `Couldn't reach device. ${detail}`
-                : "Couldn't reach device.";
+            return "Couldn't reach the device. Check its connection and try again.";
         default:
             return '';
     }

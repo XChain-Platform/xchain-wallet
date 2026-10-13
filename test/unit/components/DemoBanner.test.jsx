@@ -219,9 +219,16 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         const dialog = screen.getByRole('dialog');
         fireEvent.click(within(dialog).getByRole('button', { name: /exit demo/i }));
 
-        expect(await within(dialog).findByRole('alert')).toHaveTextContent('vault is busy');
-        expect(within(dialog).getByRole('button', { name: /exit demo/i })).toBeEnabled();
+        const alert = await within(dialog).findByRole('alert');
+        expect(alert).toHaveTextContent('Could not exit demo mode. Please try again.');
+        expect(alert).not.toHaveTextContent('vault is busy');
+        const retry = within(dialog).getByRole('button', { name: /exit demo/i });
+        expect(retry).toBeEnabled();
         expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+
+        fireEvent.click(retry);
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(exitDemoWallet).toHaveBeenCalledTimes(2);
     });
 
     it('still auto-wipes an expired demo, which is what the null-rendering version was kept alive to do', async () => {

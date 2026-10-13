@@ -24,7 +24,7 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
@@ -80,6 +80,7 @@ export function ListPickerScreen({
     const [counts, setCounts] = useState(/** @type {Record<string, number | null>} */ ({}));
     const [descriptions, setDescriptions] = useState(/** @type {Record<string, string | null>} */ ({}));
     const [query, setQuery] = useState('');
+    const [loadAttempt, setLoadAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -118,9 +119,9 @@ export function ListPickerScreen({
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load lists.'); });
+            .catch(() => { if (!cancelled) setLoadError('Couldn’t load lists. Check your connection and try again.'); });
         return () => { cancelled = true; };
-    }, [chainId, addresses, messaging, filterType, includeUnions]);
+    }, [chainId, addresses, messaging, filterType, includeUnions, loadAttempt]);
 
     // Best-effort member counts for the shown lists (one detail read each).
     useEffect(() => {
@@ -175,7 +176,16 @@ export function ListPickerScreen({
     const header = <PageHeader onBack={onBack} title={title} />;
 
     if (loadError) {
-        return <Screen variant={variant} header={header}><ListPage><StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage></ListPage></Screen>;
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage>
+                    <Button variant="secondary" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+                        Retry
+                    </Button>
+                </ListPage>
+            </Screen>
+        );
     }
     if (!rows) {
         return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>Loading lists…</div></ListPage></Screen>;

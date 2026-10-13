@@ -51,6 +51,24 @@ describe('ListPickerScreen description detail', () => {
         expect(title.parentElement).not.toHaveAttribute('role');
     });
 
+    it('shows a plain load failure and retries without exposing backend text', async () => {
+        const messaging = {
+            getListsForSource: vi.fn()
+                .mockRejectedValueOnce(new Error('getListsForSource: GET /api/lists failed'))
+                .mockResolvedValueOnce([]),
+            getListByActionIndex: vi.fn(),
+        };
+        renderPicker([], undefined, { messaging });
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Couldn’t load lists. Check your connection and try again.');
+        expect(alert).not.toHaveTextContent('/api/lists');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByText('No address lists yet')).toBeInTheDocument();
+        expect(messaging.getListsForSource).toHaveBeenCalledTimes(2);
+    });
+
     it('omits rejected lists from access-filter choices', async () => {
         renderPicker([
             { action_index: '10', type: '2', status: 'valid' },
