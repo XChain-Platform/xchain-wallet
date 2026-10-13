@@ -52,30 +52,42 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     const { messaging } = useMessaging();
     const { isWatcherMode } = useWalletMode();
     const emitChange = typeof onChange === 'function' ? onChange : NOOP;
-    const [signers, setSigners] = useState(/** @type {any[] | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [registry, setRegistry] = useState(/** @type {{ walletId: string, messaging: any, signers: any[] | null, error: string | null } | null} */ (null));
+    const currentRegistry = registry?.walletId === walletId && registry.messaging === messaging
+        ? registry
+        : null;
+    const signers = currentRegistry?.signers ?? null;
+    const error = currentRegistry?.error ?? null;
 
     useEffect(() => {
         let cancelled = false;
-        setSigners(null);
-        setError(null);
+        setRegistry({ walletId, messaging, signers: null, error: null });
         if (typeof messaging.listSigners !== 'function') {
             // Shell hasn't wired listSigners; treat as zero HW signers.
-            setSigners([]);
+            setRegistry({ walletId, messaging, signers: [], error: null });
             return () => { cancelled = true; };
         }
-        messaging.listSigners(walletId)
+        Promise.resolve().then(() => messaging.listSigners(walletId))
             .then((list) => {
                 if (cancelled) return;
-                setSigners(Array.isArray(list) ? list : []);
+                setRegistry({
+                    walletId,
+                    messaging,
+                    signers: Array.isArray(list) ? list : [],
+                    error: null,
+                });
             })
             .catch((err) => {
                 if (cancelled) return;
                 // Loading the registry failed; fall back to software so
                 // the parent flow stays usable. Surface the error inline
                 // for diagnostic visibility.
-                setSigners([]);
-                setError(err?.message || 'Failed to load signers.');
+                setRegistry({
+                    walletId,
+                    messaging,
+                    signers: [],
+                    error: err?.message || 'Failed to load signers.',
+                });
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
