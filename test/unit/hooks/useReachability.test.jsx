@@ -25,7 +25,7 @@
 // and one failed round-trip that is not by itself proof of being offline.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, render, screen, waitFor, act } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useReachability } from '../../../packages/core/src/shared/hooks/useReachability.js';
@@ -126,6 +126,14 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
+function setNavigatorOnline(online) {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
+}
+
+afterEach(() => {
+    delete navigator.onLine;
+});
+
 describe('useReachability', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
@@ -142,6 +150,29 @@ describe('useReachability', () => {
         expect(check).not.toHaveBeenCalled();
         expect(result.current.overall).toBe('unknown');
         expect(result.current.perChain).toEqual([]);
+    });
+
+    it('publishes the browser offline signal without a fetch and retries as soon as online returns', async () => {
+        setNavigatorOnline(false);
+        const check = vi.fn(async ({ chainIds }) => healthy(chainIds));
+        const messaging = {
+            shell: 'web',
+            getSettings: vi.fn(async () => unlockedSettings()),
+            checkReachabilityRequest: check,
+        };
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(result.current.overall).toBe('offline'));
+        expect(check).not.toHaveBeenCalled();
+
+        setNavigatorOnline(true);
+        act(() => { window.dispatchEvent(new Event('online')); });
+
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        expect(check).toHaveBeenCalledTimes(1);
     });
 
     it('probes for real, once, as soon as the vault hands over the chain set', async () => {

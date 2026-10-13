@@ -18,6 +18,7 @@ import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
+import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -172,6 +173,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const browserOnline = useOnlineStatus();
+    const { showToast } = useToast();
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     // The host owns the active wallet when it wires `activeWalletId`; Home's
@@ -294,6 +297,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // DEX-gated, so a build that hides the DEX wires none and used to open
     // the menu onto a dead "No additional actions" row. A future non-DEX
     // entry appends here and keeps More alive on its own.
+    const runNetworkAction = useCallback((label, action) => {
+        if (typeof action !== 'function') return;
+        if (!browserOnline) {
+            showToast({
+                message: `${label} needs a network connection. Your cached balances are still available.`,
+                variant: 'error',
+            });
+            return;
+        }
+        action();
+    }, [browserOnline, showToast]);
+
     const homeMoreActions = useMemo(() => {
         const out = [];
         if (onSwap) {
@@ -301,11 +316,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 id: 'swap',
                 label: 'Swap',
                 icon: <Icon.SwapIcon />,
-                onSelect: onSwap,
+                onSelect: () => runNetworkAction('Swapping', onSwap),
             });
         }
         return out;
-    }, [onSwap]);
+    }, [onSwap, runNetworkAction]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -328,7 +343,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Display. The pinned/hidden lists themselves still apply when off.
     const [showPinAffordance, setShowPinAffordance] = useState(false);
     const [showHideAffordance, setShowHideAffordance] = useState(false);
-    const { showToast } = useToast();
     // Cluster I FOLLOWUP 2: auto-hide-spam toast. We only ever nudge
     // once per (wallet, mount) tuple. Re-prompting on every balance
     // refresh would be noisy; the user explicitly opting Hide / dismissing
@@ -539,6 +553,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, []);
 
     const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+        // A browser offline event is definitive enough to avoid starting work
+        // that cannot finish. In particular, keep the last successful balance
+        // state on screen instead of replacing it with a loading skeleton.
+        if (!isNavigatorOnline()) {
+            pollThrottleRef.current.fail();
+            return;
+        }
         if (reset) {
             // A switch (or a manual reload) is about to replace everything on
             // screen, so nothing an earlier wallet polled may hold off the
@@ -715,6 +736,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // has not aged", which the beat must ignore.
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
+            if (!isNavigatorOnline()) return;
             if (pollThrottleRef.current.isInFlight()) return;
             // Claim the slot the reset path's way. `start()` alone marks a
             // load in flight only once the window has aged, and at beat time
@@ -736,6 +758,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // of the burst rides the data the beat already has.
         const onVisibilityOrFocus = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
+            if (!isNavigatorOnline()) return;
             if (!pollThrottleRef.current.start()) return;
             load();
         };
@@ -749,6 +772,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
     }, [activeWalletId, activeAccountId, loadHomeData]);
+
+    // Reconnect immediately rather than waiting for the next balance poll.
+    // The quiet refresh preserves cached rows until fresh data lands.
+    const wasBrowserOnlineRef = useRef(browserOnline);
+    useEffect(() => {
+        const reconnected = !wasBrowserOnlineRef.current && browserOnline;
+        wasBrowserOnlineRef.current = browserOnline;
+        if (!reconnected || !activeWalletId) return;
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        let cancelled = false;
+        loadHomeData(activeWalletId, activeAccountId || undefined, {
+            reset: false,
+            isCancelled: () => cancelled,
+        });
+        return () => { cancelled = true; };
+    }, [browserOnline, activeWalletId, activeAccountId, loadHomeData]);
 
     // Cancellation for the re-load the countdown fires, and it deliberately
     // does NOT ride the ticking effect's own flag: reaching zero clears
@@ -932,11 +972,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     return (
         <Screen variant={variant}>
             <ListPage className={isFull ? styles.bodyFull : undefined}>
+                {!browserOnline ? (
+                    <StatusMessage variant="warning">
+                        {balances
+                            ? 'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.'
+                            : 'You are offline. Connect to load balances and use network actions.'}
+                    </StatusMessage>
+                ) : null}
                 {loadErrorText ? (
                     <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                 ) : null}
 
-                {balances === null && !loadErrorText ? (
+                {balances === null && browserOnline && !loadErrorText ? (
                     <div role="status" aria-label="Loading balances">
                         <Skeleton.List rows={5} />
                     </div>
@@ -1069,15 +1116,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onOpenSettings={onOpenSettings}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onSend}
-                                    disabled={!onSend}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                                    <span>Send</span>
-                                </button>
+                                <SendQuickAction
+                                    onSend={onSend}
+                                    browserOnline={browserOnline}
+                                    onOffline={() => runNetworkAction('Sending', onSend)}
+                                />
                                 <button
                                     type="button"
                                     className={styles.quickAction}
@@ -1097,7 +1140,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                     <button
                                         type="button"
                                         className={styles.quickAction}
-                                        onClick={onExchange}
+                                        onClick={() => runNetworkAction('Exchange', onExchange)}
+                                        aria-disabled={!browserOnline ? 'true' : undefined}
+                                        title={!browserOnline ? 'Exchange needs a network connection' : undefined}
                                     >
                                         <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                                         <span>Exchange</span>
@@ -1277,6 +1322,38 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 />
             ) : null}
         </Screen>
+    );
+}
+
+function SendQuickAction({ onSend, browserOnline, onOffline }) {
+    const content = (
+        <>
+            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
+            <span>Send</span>
+        </>
+    );
+    if (!browserOnline && onSend) {
+        return (
+            <button
+                type="button"
+                className={styles.quickAction}
+                onClick={onOffline}
+                aria-disabled="true"
+                title="Send needs a network connection"
+            >
+                {content}
+            </button>
+        );
+    }
+    return (
+        <button
+            type="button"
+            className={styles.quickAction}
+            onClick={onSend}
+            disabled={!onSend}
+        >
+            {content}
+        </button>
     );
 }
 
