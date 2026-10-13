@@ -21,9 +21,10 @@ import {
     indexAfterNonCommaCount,
     sumDecimalStrings,
     trimAmountTail,
+    roundDecimalString,
 } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
@@ -303,8 +304,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         if (!fiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const fv = amount ? coinToFiat(amount, fiatRate) : null;
-                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                const value = amount ? coinToFiatExact(amount, fiatRate) : null;
+                setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             setFiatAmount('');

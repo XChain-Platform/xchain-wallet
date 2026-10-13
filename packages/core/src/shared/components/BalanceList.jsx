@@ -15,11 +15,12 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -742,19 +743,7 @@ function safeBigInt(v) {
 }
 
 export function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return formatAtomicAmount(quantityStr, divisibility);
 }
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -793,24 +782,7 @@ export function sumFiatValue(rows) {
  * @param {string} [currency]   ISO code; defaults to USD
  */
 export function formatFiat(value, currency = 'USD') {
-    if (value === null || value === undefined) return '';
-    let fmt;
-    try {
-        fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: String(currency || 'USD').toUpperCase(),
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    } catch {
-        // An unknown code (a custom currency) still renders, just without a symbol.
-        return `${value} ${currency}`;
-    }
-    if (compareDecimalStrings(value, '0') === 0) return fmt.format(0);
-    if (compareDecimalStrings(value, '0') === 1 && compareDecimalStrings(value, '0.01') === -1) {
-        return `<${fmt.format(0.01)}`;
-    }
-    return fmt.format(String(value));
+    return formatFiatAmount(value, currency);
 }
 
 const PALETTE = [

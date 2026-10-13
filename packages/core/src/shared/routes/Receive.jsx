@@ -20,7 +20,7 @@ import {
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -37,6 +37,7 @@ import {
     formatWithThousands,
     countNonCommaBefore,
     indexAfterNonCommaCount,
+    roundDecimalString,
 } from '../utils/amountFormat.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import styles from './Receive.module.css';
@@ -372,8 +373,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!fiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const fv = reqAmount ? coinToFiat(reqAmount, fiatRate) : null;
-                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                const value = reqAmount ? coinToFiatExact(reqAmount, fiatRate) : null;
+                setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             setFiatAmount('');

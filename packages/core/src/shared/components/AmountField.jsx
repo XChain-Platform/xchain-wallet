@@ -16,8 +16,12 @@
 // amount via priceLookup.
 
 import { Input, Icon } from '@xchain-wallet/core/ui';
-import { formatWithThousands } from '../utils/amountFormat.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import {
+    formatDecimalAmount,
+    formatWithThousands,
+    roundDecimalString,
+} from '../utils/amountFormat.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import styles from './AmountField.module.css';
 
 /**
@@ -70,9 +74,10 @@ export function AmountField({
             ? `≈ ${formatWithThousands(amount)} ${otherUnit}`.trim()
             : `≈ 0 ${otherUnit}`.trim();
     } else if (fiatRate) {
-        const fiatN = amount ? coinToFiat(amount, fiatRate) : null;
-        derivedText = fiatN != null
-            ? `≈ ${formatWithThousands(fiatN.toFixed(2))} ${otherUnit}`
+        const fiatValue = amount ? coinToFiatExact(amount, fiatRate) : null;
+        const roundedFiat = fiatValue == null ? null : roundDecimalString(fiatValue, 2);
+        derivedText = roundedFiat != null
+            ? `≈ ${formatDecimalAmount(roundedFiat)} ${otherUnit}`
             : `≈ 0.00 ${otherUnit}`;
     }
 

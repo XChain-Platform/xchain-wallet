@@ -135,7 +135,7 @@ import {
     displayRateToSettingsCustom,
     resolveFeeUnit,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
+import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate, fiatRateForTick } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
@@ -155,7 +155,9 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
     compareDecimalStrings,
+    roundDecimalString,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
@@ -854,8 +856,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!amountFiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const fv = amount ? coinToFiat(amount, amountFiatRate) : null;
-                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                const value = amount ? coinToFiatExact(amount, amountFiatRate) : null;
+                setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             // fiat -> coin: keep canonical amount, clear typed fiat
@@ -1410,8 +1412,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         }
         setAmount(display);
         if (amountInputMode === 'fiat' && amountFiatRate) {
-            const fv = coinToFiat(display, amountFiatRate);
-            setFiatAmount(fv != null ? fv.toFixed(2) : '');
+            const value = coinToFiatExact(display, amountFiatRate);
+            setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
         }
     }, [maxBusy, sourceBalance, isNativeSend, feeEstimate, quoteMaxSats, amountInputMode, amountFiatRate]);
 
@@ -2756,9 +2758,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
                     formatFiat={(coinAmount) => {
                         if (!fiatRate || !coinAmount) return null;
-                        const v = coinToFiat(String(coinAmount), fiatRate);
-                        if (v == null || !Number.isFinite(v)) return null;
-                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                        const value = coinToFiatExact(String(coinAmount), fiatRate);
+                        if (value == null) return null;
+                        return `≈ ${formatFiatAmount(value, fiatRate.fiatCurrency)}`;
                     }}
                 />
             ) : null}

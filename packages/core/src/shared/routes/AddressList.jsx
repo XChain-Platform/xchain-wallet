@@ -22,6 +22,7 @@ import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -114,15 +115,7 @@ export function deleteAddressMessage({ record, chainName, holdings = [], hidden 
 // e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
 function formatFiatAmount(value, currency) {
     if (value === null || value === undefined) return '';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'symbol' });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
-        return fmt.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
+    return formatFiatValue(String(value), currency);
 }
 
 /**

@@ -249,6 +249,7 @@ export {
     configureFiatRateSource,
     isFiatRateSourceUrl,
     coinToFiat,
+    coinToFiatExact,
     fiatToCoin,
 } from './priceLookup.js';
 export {

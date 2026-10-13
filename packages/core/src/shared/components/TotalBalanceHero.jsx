@@ -19,7 +19,7 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -285,20 +285,5 @@ function fiatValueOf(row) {
 // can be sized down to ~half the amount text.
 function formatFiatAmount(value, currency) {
     if (value === null || value === undefined) return '-';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (compareDecimalStrings(value, '0') === 1
-            && compareDecimalStrings(value, String(minorUnit)) === -1) {
-            return `<${fmt.format(minorUnit)}`;
-        }
-        return fmt.format(String(value));
-    } catch {
-        return String(value);
-    }
+    return formatFiatValue(value, currency);
 }

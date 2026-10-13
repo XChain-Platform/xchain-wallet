@@ -13,6 +13,8 @@
 // can use the same formatter when re-positioning the caret after a
 // reformat.
 
+import { getFormatLocale } from '../../i18n/index.js';
+
 // "12345.678" → "12,345.678". Preserves whatever fractional precision
 // the caller passed; the amount input uses this on both render and
 // onChange so commas appear live as the user types.
@@ -48,6 +50,41 @@ export function trimAmountTail(value) {
     const s = String(value);
     if (!/^-?\d+\.\d+$/.test(s)) return s;
     return s.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Group a plain decimal string for display without converting it to a float. */
+export function formatDecimalAmount(value, locale, options = {}) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+    if (!match) return raw;
+    const fractionDigits = match[3]?.length || 0;
+    const minimumFractionDigits = options.minimumFractionDigits ?? fractionDigits;
+    const maximumFractionDigits = options.maximumFractionDigits ?? fractionDigits;
+    try {
+        return new Intl.NumberFormat(getFormatLocale(locale), {
+            useGrouping: true,
+            minimumFractionDigits,
+            maximumFractionDigits,
+        }).format(raw);
+    } catch {
+        const sign = match[1];
+        const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return `${sign}${grouped}${match[3] === undefined ? '' : `.${match[3]}`}`;
+    }
+}
+
+/** Render an atomic integer at its divisibility using exact string arithmetic. */
+export function formatAtomicAmount(quantity, divisibility = 0, locale) {
+    const raw = String(quantity ?? '0').trim();
+    const scale = Number(divisibility);
+    if (!/^-?\d+$/.test(raw) || !Number.isInteger(scale) || scale < 0) return raw;
+    const negative = raw.startsWith('-');
+    const digits = negative ? raw.slice(1) : raw;
+    if (scale === 0) return formatDecimalAmount(raw, locale);
+    const padded = digits.padStart(scale + 1, '0');
+    const decimal = `${negative ? '-' : ''}${padded.slice(0, -scale)}.${padded.slice(-scale)}`;
+    return formatDecimalAmount(decimal, locale);
 }
 
 // Add decimal amount strings without going through a float. Token amounts
