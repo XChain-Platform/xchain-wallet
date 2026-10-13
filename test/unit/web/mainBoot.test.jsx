@@ -14,6 +14,7 @@ const boot = vi.hoisted(() => ({
     nativeShellIsBroken: vi.fn(),
     installKeyboardViewport: vi.fn(),
     installShellErrorCapture: vi.fn(),
+    idleCallbacks: [],
 }));
 
 vi.mock('react-dom/client', () => ({ createRoot: boot.createRoot }));
@@ -46,7 +47,8 @@ async function runBoot() {
 
 beforeEach(() => {
     vi.resetModules();
-    for (const mock of Object.values(boot)) mock.mockReset();
+    for (const mock of Object.values(boot)) mock?.mockReset?.();
+    boot.idleCallbacks.length = 0;
     boot.createRoot.mockReturnValue({ render: boot.render });
     boot.defaultRegistry.mockReturnValue({ kind: 'registry' });
     boot.syncRegistry.mockResolvedValue({ ok: true });
@@ -60,16 +62,20 @@ beforeEach(() => {
         configurable: true,
         value: vi.fn(),
     });
+    vi.stubGlobal('requestIdleCallback', vi.fn((callback) => {
+        boot.idleCallbacks.push(callback);
+        return boot.idleCallbacks.length;
+    }));
+    vi.stubGlobal('cancelIdleCallback', vi.fn());
 });
 
 describe('web application boot', () => {
-    it('installs shell helpers, registers URI handlers, syncs the registry, and mounts React', async () => {
+    it('mounts React before deferred registry work can run', async () => {
         await runBoot();
         const container = document.getElementById('xchain-web-root');
 
         expect(boot.installShellErrorCapture).toHaveBeenCalledTimes(1);
         expect(boot.installKeyboardViewport).toHaveBeenCalledTimes(1);
-        expect(boot.syncRegistry).toHaveBeenCalledWith({ registry: { kind: 'registry' } });
         expect(navigator.registerProtocolHandler).toHaveBeenNthCalledWith(
             1,
             'web+xchain',
@@ -82,6 +88,12 @@ describe('web application boot', () => {
         );
         expect(boot.createRoot).toHaveBeenCalledWith(container);
         expect(boot.render).toHaveBeenCalledTimes(1);
+        expect(boot.syncRegistry).not.toHaveBeenCalled();
+
+        expect(boot.idleCallbacks).toHaveLength(1);
+        boot.idleCallbacks[0]();
+
+        expect(boot.syncRegistry).toHaveBeenCalledWith({ registry: { kind: 'registry' } });
     });
 
     it('renders a plain blocking panel when required browser capabilities are missing', async () => {

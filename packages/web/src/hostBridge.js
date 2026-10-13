@@ -123,6 +123,7 @@ import { installNativeQrScanner } from './storage/nativeQrScanner.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -713,6 +714,7 @@ let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
 let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
+let cancelNotificationStart = null;
 
 const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
 
@@ -856,12 +858,21 @@ const DEADLINE_SEEN_KEY = 'xchain.deadlines.seen';
 // PC-46: chain -> announced `actionIndex:bucket` keys.
 const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 
-// §46: start the live notification watcher once a vault + host exist. All
-// three host-creation paths (create / import / unlock) call this; lock stops
-// it. Idempotent: a second call while already running is a no-op. `getFlows`
-// is hoisted (a function declaration below), so referencing it here is safe.
+// §46: queue the live notification watchers once a vault + host exist. The
+// idle boundary gives the home transition a paint before the initial price and
+// history reads. Lock cancels work that has not started.
 function startNotifications() {
-    if (notificationService || !vault) return;
+    if (notificationService || cancelNotificationStart || !vault) return;
+    const scheduledVault = vault;
+    cancelNotificationStart = deferNonCriticalWork(() => {
+        cancelNotificationStart = null;
+        if (!vault || vault !== scheduledVault || notificationService) return;
+        startNotificationsNow();
+    });
+}
+
+// `getFlows` is hoisted below, so every watcher can resolve it lazily here.
+function startNotificationsNow() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
@@ -1034,6 +1045,10 @@ function startNotifications() {
 }
 
 function stopNotifications() {
+    if (cancelNotificationStart) {
+        cancelNotificationStart();
+        cancelNotificationStart = null;
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;

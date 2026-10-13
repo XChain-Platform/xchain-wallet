@@ -24,22 +24,24 @@ import {
 import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault.js';
 import { installKeyboardViewport } from './platform/keyboardViewport.js';
 import { installShellErrorCapture } from './errorCapture.js';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
-// registry snapshot. Fire-and-forget soft enhancement: the signature must
-// verify against the pinned federation key or nothing changes, and any
-// failure (offline, tampered, unsigned) leaves the bundled descriptors
-// serving. Never blocks boot.
-try {
-    registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
-        .then((r) => {
-            if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
-        })
-        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
-} catch { /* never block app boot */ }
+// registry snapshot after the first screen paints. The signature must verify
+// against the pinned federation key or nothing changes, and any failure
+// leaves the bundled descriptors serving.
+function syncChainRegistry() {
+    try {
+        registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
+            .then((r) => {
+                if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
+            })
+            .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+}
 
 // §47.1 / G143: register this origin as a handler for `xchain:` URIs so
 // the OS / browser can open the web wallet when the user clicks an
@@ -128,4 +130,5 @@ if (globalThis.__xchainBootFloor?.blocked) {
         console.warn(`[web] ${floorStaleMessage(floor)}`);
     }
     createRoot(container).render(<App />);
+    deferNonCriticalWork(syncChainRegistry);
 }
