@@ -39,7 +39,7 @@ import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import * as branding from '../../branding/branding.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
@@ -288,6 +288,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
     const { settings } = useSettings();
+    const dispenserExplorerUrl = explorerPageUrl({
+        chainId,
+        kind: 'dispenser',
+        value: actionIndex,
+        settings,
+    });
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const feeFiatRate = useFiatRate({
         chainCoin: descriptor?.coin,
@@ -2005,21 +2011,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         </button>
                     </>
                 )}
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => {
-                        const base = descriptor?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-                        // The explorer base is bare; append the coin path segment.
-                        const code = explorerCoinCode(descriptor);
-                        const path = code ? `/${code}/action/${actionIndex}` : `/action/${actionIndex}`;
-                        try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
-                    }}
-                    title="View on the XChain explorer"
-                >
-                    <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
-                    <span>XChain</span>
-                </button>
+                {dispenserExplorerUrl ? (
+                    <a
+                        className={local.quickAction}
+                        href={dispenserExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View on the XChain explorer"
+                    >
+                        <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
+                        <span>XChain</span>
+                    </a>
+                ) : null}
                 <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
                     <button
                         type="button"

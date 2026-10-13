@@ -65,6 +65,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -1687,6 +1688,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
+    const { settings } = useSettings();
     const [balancesHidden] = useBalancesHidden();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
@@ -1787,7 +1789,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         balancesHidden,
         fiatCurrency,
     );
-    const explorerButtons = explorerLinksFor(entry);
+    const explorerButtons = explorerLinksFor(entry, settings);
 
     const fullRows = fullDetailRows(entry, balancesHidden);
     // Redact entry + peer raw payloads before stringifying. Cheap walk;
@@ -1892,7 +1894,12 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // Universal option: every entry can have a sharable link copied,
     // so the menu is never empty (DeFi rows, in particular, hit this
     // path since they don't have a peer or replaceable state).
-    const shareUrl = xchainActionUrl(entry?.chainId, entry?.actionIndex);
+    const shareUrl = explorerPageUrl({
+        chainId: entry?.chainId,
+        kind: 'action',
+        value: entry?.actionIndex,
+        settings,
+    });
     if (shareUrl) {
         moreOptions.push({
             id: 'copy-link',
@@ -1975,12 +1982,10 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 every action type; when no actions apply, the menu
                 surfaces a placeholder message instead.
 
-                The row also renders with no explorer links at all, which
-                is the normal case for a pending entry: it has no action
-                index for the XChain link and regtest has no third-party
-                explorer, and gating the whole row on those links took
-                Speed up and Cancel away from exactly the transactions
-                they exist for. */}
+                The row also renders with no explorer links when an entry
+                has neither an action index nor a transaction id. Keeping
+                the More menu independent preserves Speed up and Cancel for
+                incomplete pending records. */}
             {explorerButtons.length > 0 || moreOptions.length > 0 ? (
                 <div className={styles.detailActions} role="group" aria-label="Action options">
                     {explorerButtons.map((link) => (
@@ -2686,77 +2691,33 @@ function formatNumberWithCommas(value) {
 }
 
 /**
- * Map a wallet chainId ("bitcoin-mainnet" / "bitcoin-regtest" / …)
- * to the ticker code XChain Explorer uses in its URL path:
- *
- *     /{COIN}/action/{action_index}
- *
- * where COIN is the network-prefixed ticker:
- *   - mainnet   → BTC,  LTC,  DOGE
- *   - testnet   → TBTC, TLTC, TDOGE
- *   - regtest   → RBTC, RLTC, RDOGE
- *
- * Returns null when the chainId is malformed or the coin family isn't
- * in the XChain explorer's recognized list; the caller skips the
- * XChain button in that case.
- */
-function xchainCoinForChainId(chainId) {
-    if (typeof chainId !== 'string' || !chainId.includes('-')) return null;
-    const [coin, network = 'mainnet'] = chainId.split('-');
-    const ticker = ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[coin];
-    if (!ticker) return null;
-    if (network === 'mainnet') return ticker;
-    if (network === 'testnet') return `T${ticker}`;
-    if (network === 'regtest') return `R${ticker}`;
-    return null;
-}
-
-/**
- * Build a full XChain explorer action URL from the chain descriptor.
- * The explorer base URL is bare on EVERY network (see the note on
- * `explorerCoinCode` in registry/coinTicker.js), so the coin segment is
- * always ours to append: `<base>[:port]/<COIN>/action/<index>`. Only the
- * port differs, and a standard 80/443 is left implicit.
- * Returns null when the descriptor or coin ticker is unavailable.
- */
-function xchainActionUrl(chainId, actionIndex) {
-    const desc = chainRegistry.get(chainId);
-    const ex = desc?.explorer;
-    if (!ex || !actionIndex) return null;
-    const coin = xchainCoinForChainId(chainId);
-    if (!coin) return null;
-    const standardPort = ex.defaultPort === 80 || ex.defaultPort === 443;
-    const origin = standardPort ? ex.defaultUrl : `${ex.defaultUrl}:${ex.defaultPort}`;
-    return `${origin}/${coin}/action/${actionIndex}`;
-}
-
-/**
  * Per-chain block-explorer link list. Demo entries (synthesized
  * tx hashes) get no links since they wouldn't resolve. Always
- * surfaces the XChain explorer when an action_index is available.
+ * surfaces the XChain explorer when an action index or transaction id
+ * is available.
  */
-function explorerLinksFor(entry) {
+function explorerLinksFor(entry, settings) {
     const links = [];
     if (!entry) return links;
     const txHash = entry.txHash;
     const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
 
-    // XChain explorer first: addresses ACTIONs by `coin/action/index`
-    // where `coin` is the XChain ticker code for the (chain, network)
-    // pair: BTC/LTC/DOGE for mainnet, T-prefix for testnet, R-prefix
-    // for regtest. Works for demo / regtest data too. Naked favicon
-    // (no circular icon-wrap), just the chain-link glyph above the
-    // label.
-    if (entry.actionIndex) {
-        const xchainUrl = xchainActionUrl(entry.chainId, entry.actionIndex);
-        if (xchainUrl) {
-            links.push({
-                id: 'xchain',
-                label: 'XChain',
-                iconImg: branding.faviconUrl(),
-                url: xchainUrl,
-            });
-        }
+    // XChain actions have their own detail page. Plain transfers keep the
+    // third-party transaction links below when that network has coverage.
+    const hasActionIndex = entry.actionIndex != null && entry.actionIndex !== '';
+    const xchainUrl = hasActionIndex ? explorerPageUrl({
+        chainId: entry.chainId,
+        kind: 'action',
+        value: entry.actionIndex,
+        settings,
+    }) : null;
+    if (xchainUrl) {
+        links.push({
+            id: 'xchain',
+            label: 'XChain',
+            iconImg: branding.faviconUrl(),
+            url: xchainUrl,
+        });
     }
 
     // External chain explorers: only mainnet and testnet have

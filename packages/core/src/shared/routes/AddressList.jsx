@@ -27,7 +27,8 @@ import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
-import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import {
     feePreferenceLabel,
     requireMemoLabel,
@@ -1032,14 +1033,12 @@ export function AddressList({
                 hint: 'Where this account sits inside your recovery phrase. Different paths produce different addresses from the same phrase; it is a technical detail you rarely need to change.',
             });
         }
-        const openXchain = () => {
-            const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-            if (!base) return;
-            // The explorer base is bare; append the coin path segment.
-            const code = explorerCoinCode(d);
-            const path = code ? `/${code}/address/${selected.address}` : `/address/${selected.address}`;
-            try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
-        };
+        const explorerUrl = explorerPageUrl({
+            chainId: selected.chainId,
+            kind: 'address',
+            value: selected.address,
+            settings,
+        });
         const saveLabel = async () => {
             if (!selected.record?.id || labelSaving) return;
             setLabelSaving(true);
@@ -1269,14 +1268,18 @@ export function AddressList({
                             <span>Secret</span>
                         </button>
                     ) : null}
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={openXchain}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                        <span>XChain</span>
-                    </button>
+                    {explorerUrl ? (
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => {
+                                try { window.open(explorerUrl, '_blank', 'noopener,noreferrer'); } catch { /* no-op */ }
+                            }}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                            <span>XChain</span>
+                        </button>
+                    ) : null}
                     {canDelete ? (
                         <button
                             type="button"

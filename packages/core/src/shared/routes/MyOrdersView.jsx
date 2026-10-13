@@ -43,7 +43,8 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
@@ -178,13 +179,6 @@ function withFormattedExpiration(confirmAction) {
             decoded: { ...decoded, summary, details },
         },
     };
-}
-
-function explorerTxUrl(descriptor, txid) {
-    const base = descriptor?.explorer?.defaultUrl;
-    if (!base || !txid) return null;
-    const code = explorerCoinCode(descriptor);
-    return `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
 }
 
 /**
@@ -451,6 +445,7 @@ function OrderActionPanel({
     type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
 }) {
     const { chainId, owner, row } = item;
+    const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
     const isCancel = type === 'cancel';
     const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
@@ -573,7 +568,12 @@ function OrderActionPanel({
 
     if (done) {
         const txid = result.txid || result.broadcast?.txid;
-        const explorerUrl = explorerTxUrl(descriptor, txid);
+        const explorerUrl = explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        });
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(

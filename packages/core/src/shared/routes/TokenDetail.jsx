@@ -42,6 +42,7 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './TokenDetail.module.css';
 
@@ -367,6 +368,12 @@ export function TokenDetail({
         };
     }, [moreOpen]);
     const moreOptions = [];
+    const tokenExplorerUrl = !isNative ? explorerPageUrl({
+        chainId,
+        kind: 'token',
+        value: tick,
+        settings,
+    }) : null;
     if (typeof onViewActivity === 'function') {
         moreOptions.push({
             id: 'history',
@@ -576,6 +583,17 @@ export function TokenDetail({
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                             <span>Sell on DEX</span>
                         </button>
+                    ) : null}
+                    {tokenExplorerUrl ? (
+                        <a
+                            className={styles.quickAction}
+                            href={tokenExplorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                            <span>Explorer</span>
+                        </a>
                     ) : null}
                     {moreOptions.length > 0 ? (
                         <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
