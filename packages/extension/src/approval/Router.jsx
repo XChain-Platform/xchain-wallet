@@ -65,14 +65,14 @@ function ApprovalRoute() {
 
     if (error) {
         return (
-            <Screen variant="popup">
+            <Screen variant="small">
                 <div role="alert" className={styles.error}>{error}</div>
             </Screen>
         );
     }
     if (!data) {
         return (
-            <Screen variant="popup">
+            <Screen variant="small">
                 <p aria-live="polite">Loading approval request…</p>
             </Screen>
         );

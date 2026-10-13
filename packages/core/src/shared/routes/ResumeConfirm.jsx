@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -178,7 +178,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
 
     if (isWatcherMode) {
         return (
-            <Screen variant={variant} title="Unsigned transaction">
+            <Screen variant={variant} header={<PageHeader title="Unsigned transaction" />}>
                 {composed?.psbt ? (
                     <WatcherResultPanel
                         result={{
