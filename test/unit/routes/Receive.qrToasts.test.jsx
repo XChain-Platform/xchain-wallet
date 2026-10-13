@@ -107,12 +107,13 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
-    it('never renders fee estimate availability notices', async () => {
+    it('does not render fee controls or fee estimates', async () => {
         renderReceive();
 
-        expect(await screen.findByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
-        expect(screen.queryByText(/fee estimate unavailable/i)).toBeNull();
-        expect(screen.queryByText(/safe default rates/i)).toBeNull();
+        expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
+        expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
+        expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
+        expect(screen.queryByText('0.000015 BTC')).toBeNull();
     });
 
     it.each([320, 360])('keeps the receive request usable at %ipx', async (viewportWidth) => {
@@ -262,7 +263,7 @@ describe('Receive QR copy and share toasts', () => {
         )[0];
 
         expect(paymentRequest).toMatch(
-            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001&label=Daily%20deposits$/,
+            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&amount=0\.00000001&label=Daily%20deposits$/,
         );
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
 
@@ -355,7 +356,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(share).toHaveBeenCalledWith({
             title: 'Receive BTC with XChain',
             text: 'Send 0.00000001 BTC to this XChain wallet.',
-            url: 'bitcoin:bcrt1qexample?chain=bitcoin-regtest&feePriority=normal&amount=0.00000001&label=Daily%20deposits',
+            url: 'bitcoin:bcrt1qexample?chain=bitcoin-regtest&amount=0.00000001&label=Daily%20deposits',
         });
         expect(writeText).not.toHaveBeenCalled();
         expect(showToast).not.toHaveBeenCalled();
