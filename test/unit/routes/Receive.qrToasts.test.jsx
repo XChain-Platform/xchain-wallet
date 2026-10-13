@@ -11,6 +11,7 @@
 // 'Clipboard': Document is not focused.") is developer text, so it goes to
 // the log and the toast says what failed in the user's terms.
 
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -53,6 +54,16 @@ const ADDRESS = {
 };
 const MOBILE_ADDRESS = 'bcrt1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 const BROWSER_TEXT = "Failed to execute 'write' on 'Clipboard': Document is not focused.";
+const PHONE_QR_CARD_PX = 14 * 16;
+const PHONE_QR_SURFACE_PX = PHONE_QR_CARD_PX - 2 * 8 - 2;
+const receiveCss = readFileSync(
+    'packages/core/src/shared/routes/Receive.module.css',
+    'utf8',
+);
+
+function precedes(first, second) {
+    return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
 
 function renderReceive(overrides = {}, props = {}) {
     const messaging = {
@@ -119,7 +130,7 @@ describe('Receive QR copy and share toasts', () => {
     it.each([320, 360])('keeps the receive request usable at %ipx', async (viewportWidth) => {
         const originalInnerWidth = window.innerWidth;
         const originalResizeObserver = globalThis.ResizeObserver;
-        const measuredQrWidth = viewportWidth - 42;
+        const measuredQrWidth = PHONE_QR_SURFACE_PX;
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
         globalThis.ResizeObserver = class ResizeObserver {
             constructor(callback) { this.callback = callback; }
@@ -155,6 +166,51 @@ describe('Receive QR copy and share toasts', () => {
                 configurable: true,
                 value: originalInnerWidth,
             });
+        }
+    });
+
+    it('puts the compact receive hero above the request fields at 360x800', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        const heightDescriptor = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+        Object.defineProperties(window, {
+            innerWidth: { configurable: true, value: 360 },
+            innerHeight: { configurable: true, value: 800 },
+        });
+
+        try {
+            renderReceive({
+                getAddressesByChain: async () => ({
+                    'bitcoin-regtest': [{ ...ADDRESS, address: MOBILE_ADDRESS }],
+                }),
+                getNewestAddress: async () => ({ ...ADDRESS, address: MOBILE_ADDRESS }),
+            });
+
+            const qr = await screen.findByAltText(`QR code for ${MOBILE_ADDRESS}`);
+            const address = screen.getByText(MOBILE_ADDRESS);
+            const copy = screen.getByRole('button', { name: 'Copy payment link' });
+            const share = screen.getByRole('button', { name: 'Share QR payment link' });
+            const generate = screen.getByRole('button', { name: 'Generate new address' });
+            const token = screen.getByRole('button', { name: /^Token:/ });
+
+            expect(precedes(qr, address)).toBe(true);
+            expect(precedes(address, copy)).toBe(true);
+            expect(precedes(copy, share)).toBe(true);
+            expect(precedes(share, generate)).toBe(true);
+            expect(precedes(generate, token)).toBe(true);
+
+            const phoneRules = receiveCss.slice(receiveCss.indexOf('@media (max-width: 420px)'));
+            expect(phoneRules).toMatch(
+                /\.receiveQrBox\s*\{[^}]*max-width:\s*14rem;/,
+            );
+            expect(phoneRules).toMatch(
+                /\.qrActions\s*\{[^}]*margin-top:\s*0;/,
+            );
+            expect(PHONE_QR_CARD_PX).toBeLessThan(360 - 2 * 16);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            else delete window.innerWidth;
+            if (heightDescriptor) Object.defineProperty(window, 'innerHeight', heightDescriptor);
+            else delete window.innerHeight;
         }
     });
 

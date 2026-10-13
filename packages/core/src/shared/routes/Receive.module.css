@@ -238,6 +238,23 @@
     margin-bottom: var(--xc-space-3);
 }
 
+/* The phone hero keeps the complete address and its actions above the fold.
+   Tablet and desktop retain the field-first request layout above 420px. */
+@media (max-width: 420px) {
+    .receiveQrBox {
+        width: 100%;
+        max-width: 14rem;
+        margin-inline: auto;
+        padding: var(--xc-space-2);
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .qrActions {
+        margin-top: 0;
+        margin-bottom: var(--xc-space-3);
+    }
+}
+
 /* §17.6 hardware receive-address confirmation block. */
 .hwVerify {
     display: flex;

@@ -47,6 +47,43 @@ import styles from './Receive.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
 const QR_FALLBACK_PIXEL_SIZE = 512;
+const PHONE_RECEIVE_QUERY = '(max-width: 420px)';
+
+function phoneReceiveLayoutMatches() {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.matchMedia === 'function') {
+        return window.matchMedia(PHONE_RECEIVE_QUERY).matches;
+    }
+    return window.innerWidth <= 420;
+}
+
+function usePhoneReceiveLayout() {
+    const [matches, setMatches] = useState(phoneReceiveLayoutMatches);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        if (typeof window.matchMedia !== 'function') {
+            const onResize = () => setMatches(phoneReceiveLayoutMatches());
+            window.addEventListener('resize', onResize);
+            return () => window.removeEventListener('resize', onResize);
+        }
+
+        const query = window.matchMedia(PHONE_RECEIVE_QUERY);
+        const onChange = (event) => setMatches(event.matches);
+        setMatches(query.matches);
+        if (typeof query.addEventListener === 'function') {
+            query.addEventListener('change', onChange);
+            return () => query.removeEventListener('change', onChange);
+        }
+        if (typeof query.addListener === 'function') {
+            query.addListener(onChange);
+            return () => query.removeListener(onChange);
+        }
+        return undefined;
+    }, []);
+
+    return matches;
+}
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
     const width = Number(cssWidth);
@@ -122,6 +159,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // signer mode. Refused here as well as in the nav, because the palette and
     // `xchain:` URI intents both reach this route without a nav click.
     const { isSignerMode } = useWalletMode();
+    const phoneReceiveLayout = usePhoneReceiveLayout();
 
     const [chainsByWallet, setChainsByWallet] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -877,6 +915,52 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         );
     }
 
+    const qrActionsContent = address ? (
+        <div className={styles.qrActions}>
+            <Button
+                variant="secondary"
+                onClick={copyQrImage}
+                disabled={!qrDataUrl}
+                icon={<Icon.CopyIcon />}
+            >
+                {canCopyImages ? 'Copy QR code' : 'Copy payment link'}
+            </Button>
+            <Button
+                variant="secondary"
+                onClick={shareQrImage}
+                disabled={!qrDataUrl}
+                icon={<Icon.UploadIcon />}
+            >
+                Share QR payment link
+            </Button>
+            {addressExplorerUrl ? (
+                <a
+                    className={styles.explorerLink}
+                    href={addressExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    View address in block explorer <span aria-hidden="true">↗</span>
+                </a>
+            ) : null}
+        </div>
+    ) : null;
+
+    const generateAddressContent = descriptor && addressType ? (
+        <div className={styles.generateAddressAction}>
+            <Button
+                type="button"
+                variant="secondary"
+                onClick={generateNewAddress}
+                loading={generating}
+                disabled={generating}
+                icon={<Icon.PlusIcon />}
+            >
+                Generate new address
+            </Button>
+        </div>
+    ) : null;
+
     const body = (
         <>
             {loadError ? (
@@ -906,20 +990,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 </Select>
             ) : null}
 
-            {descriptor && addressType ? (
-                <div className={styles.generateAddressAction}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={generateNewAddress}
-                        loading={generating}
-                        disabled={generating}
-                        icon={<Icon.PlusIcon />}
-                    >
-                        Generate new address
-                    </Button>
-                </div>
-            ) : null}
+            {!phoneReceiveLayout ? generateAddressContent : null}
 
             {generateError ? (
                 <StatusMessage variant="error" className={styles.error}>{generateError}</StatusMessage>
@@ -932,7 +1003,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {address ? (
-                <div className={styles.qrBox}>
+                <div className={`${styles.qrBox} ${styles.receiveQrBox}`}>
                     <div ref={qrSurfaceRef} className={styles.qrSurface}>
                         {qrDataUrl ? (
                             <img
@@ -968,6 +1039,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"
                 />
+            ) : null}
+
+            {phoneReceiveLayout ? (
+                <>
+                    {qrActionsContent}
+                    {generateAddressContent}
+                </>
             ) : null}
 
             {address?.id ? (
@@ -1031,34 +1109,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {amountError ? (
                         <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
                     ) : null}
-                    <div className={styles.qrActions}>
-                        <Button
-                            variant="secondary"
-                            onClick={copyQrImage}
-                            disabled={!qrDataUrl}
-                            icon={<Icon.CopyIcon />}
-                        >
-                            {canCopyImages ? 'Copy QR code' : 'Copy payment link'}
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={shareQrImage}
-                            disabled={!qrDataUrl}
-                            icon={<Icon.UploadIcon />}
-                        >
-                            Share QR payment link
-                        </Button>
-                        {addressExplorerUrl ? (
-                            <a
-                                className={styles.explorerLink}
-                                href={addressExplorerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                View address in block explorer <span aria-hidden="true">↗</span>
-                            </a>
-                        ) : null}
-                    </div>
+                    {!phoneReceiveLayout ? qrActionsContent : null}
 
                     {isHwAddress ? (
                         <section
