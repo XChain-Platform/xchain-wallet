@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -209,6 +209,17 @@ export function ConfirmActionModal({
     // the signer has produced it. We approximate "signature exists" as any
     // non-pre-sign, non-terminal signing phase where reject is unsafe.
     const exitsLocked = signaturePhase && !terminal;
+
+    useEffect(() => {
+        if (!open || exitsLocked) return undefined;
+        const handleEscape = (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            onReject();
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [exitsLocked, onReject, open]);
 
     // Approve disables SYNCHRONOUSLY in the click handler's tick, before any
     // await (§5.1). The parent's onApprove runs the async signing.
