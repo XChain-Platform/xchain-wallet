@@ -51,6 +51,7 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
+import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -624,15 +625,9 @@ function AppInner() {
     const [executePrefill, setExecutePrefill] = useState(
         /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
-    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
-    // handler routes immediately, but `refresh()` (fired by Locked's
-    // onUnlocked) resets the view to 'home', which stomped the route on
-    // every locked boot: on web the session never survives a reload, so
-    // that was every deep-link open. Re-applied once the session reports
-    // unlocked, then cleared.
-    const pendingUriView = useRef(
-        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
-    );
+    // The launch guard keeps a URI authoritative through both unlock and the
+    // later per-wallet last-view restore.
+    const launchRouteState = useRef(createLaunchRouteState());
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -641,10 +636,8 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
-                if (next?.state === 'unlocked' && pendingUriView.current) {
-                    setUnlockedView(pendingUriView.current);
-                    pendingUriView.current = null;
-                }
+                const launchView = launchRouteState.current.takeForSession(next);
+                if (launchView) setUnlockedView(launchView);
                 // Settings are only decryptable once unlocked. Notify
                 // useSettings instances mounted above this boundary (e.g.
                 // GatedDevVariantBadge) so they re-read now that the vault
@@ -679,8 +672,7 @@ function AppInner() {
     // one of those would eventually be forgotten.
     //
     // Nothing here unlocks anything or submits anything. Every branch ends at
-    // a prefilled FORM the user still has to act on, and `pendingUriView` is
-    // only applied once the session reports unlocked (see `refresh`).
+    // a prefilled form the user still has to act on.
     const applyUriIntent = useCallback((raw) => {
         try {
             // The mapping is shared with the desktop shell; it parses with
@@ -690,7 +682,7 @@ function AppInner() {
             if (!route) return;
             if (route.view === 'deep-link-error') {
                 setDeepLinkNotice(route.message);
-                pendingUriView.current = null;
+                launchRouteState.current.clear();
                 return;
             }
             if (route.view === 'send') setSendPrefill(route.sendPrefill);
@@ -699,12 +691,12 @@ function AppInner() {
                 setExecutePrefill(route.executePrefill);
             }
             setUnlockedView(route.view);
-            pendingUriView.current = route.view;
+            launchRouteState.current.remember(route.view, status.state);
         } catch {
             // The shared router returns an error route for malformed input;
             // this remains defensive against an unexpected parser failure.
         }
-    }, []);
+    }, [status.state]);
 
     // §47 / Cluster L FOLLOWUP 1: consume `?uri=` from location.search
     // when the SPA boots (e.g. after the user clicked an `xchain:` link
@@ -884,7 +876,11 @@ function AppInner() {
             if (view === 'market' && params) setActiveMarket(params);
         },
         onResume: setUnlockedView,
+        skip: launchRouteState.current.shouldSkipLastViewResume(),
     });
+    useEffect(() => {
+        if (activeWalletId) launchRouteState.current.walletActivated();
+    }, [activeWalletId]);
 
     // §26: idle auto-lock. Mounted HERE, above the view switch,
     // so one timer spans the whole unlocked session. It used to live in

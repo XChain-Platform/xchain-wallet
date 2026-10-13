@@ -6,6 +6,10 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
+import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
+
+export { createLaunchRouteState };
+
 const FULL_LAYOUT_SHELL = 'web';
 const COMPACT_LAYOUT_SHELL = 'popup';
 const COMPACT_FALLBACK_MAX_WIDTH = 600;
@@ -40,38 +44,4 @@ export function shellForExtensionView(
     return Number(view.innerWidth) > COMPACT_FALLBACK_MAX_WIDTH
         ? FULL_LAYOUT_SHELL
         : COMPACT_LAYOUT_SHELL;
-}
-
-/**
- * Keep an extension URI route authoritative through a locked launch. Consuming
- * the route on unlock does not release the guard: wallet activation triggers
- * last-view restoration later, so that first restoration must still be skipped.
- */
-export function createLaunchRouteState() {
-    let pendingView = null;
-    let skipNextLastViewResume = false;
-
-    return {
-        /** @param {'send' | 'receive' | 'contract-execute'} view */
-        remember(view) {
-            pendingView = view;
-            skipNextLastViewResume = true;
-        },
-
-        /** @param {{ state?: string } | null | undefined} session */
-        takeForSession(session) {
-            if (session?.state !== 'unlocked' || !pendingView) return null;
-            const view = pendingView;
-            pendingView = null;
-            return view;
-        },
-
-        shouldSkipLastViewResume() {
-            return skipNextLastViewResume;
-        },
-
-        walletActivated() {
-            skipNextLastViewResume = false;
-        },
-    };
 }
