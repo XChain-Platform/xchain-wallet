@@ -1091,6 +1091,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 value={addText}
                 onChange={(e) => setAddText(e.target.value)}
                 rows={6}
+                autoComplete="off"
                 spellCheck={false}
                 autoCapitalize={isTick ? 'characters' : 'off'}
                 autoCorrect="off"

@@ -2594,6 +2594,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         type="text"
                         label={t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
                         enterKeyHint="go"
+                        autoComplete="off"
                         value={contactName}
                         onChange={(e) => setContactName(e.target.value)}
                         autoFocus
