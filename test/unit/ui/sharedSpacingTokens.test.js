@@ -27,6 +27,14 @@ const cardModules = [
     'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
+const tokenCleanupModules = [
+    'EmptyStateNudge.module.css',
+    'GatedFileViewer.module.css',
+    'HeaderActionMenu.module.css',
+    'HwFirmwareBanner.module.css',
+    'HwSignBlock.module.css',
+    'LayoutModeToggle.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -120,6 +128,36 @@ it('uses spacing tokens for matching shared module margins and paddings', () => 
     }
 
     expect(violations).toEqual([]);
+});
+
+it('uses shared dimension tokens across the empty, gated, menu, hardware, and layout controls', () => {
+    const modules = Object.fromEntries(tokenCleanupModules.map((file) => [
+        file,
+        readFileSync(join(componentsRoot, file), 'utf8'),
+    ]));
+
+    expect(modules['HeaderActionMenu.module.css']).toContain(
+        'transform: translateX(var(--xc-space-5))',
+    );
+    expect(modules['HeaderActionMenu.module.css']).toMatch(
+        /\.close\s*\{[^}]*width:\s*var\(--xc-control-h-sm\);[^}]*height:\s*var\(--xc-control-h-sm\)/s,
+    );
+    expect(modules['HeaderActionMenu.module.css']).toMatch(
+        /\.rowIcon\s*\{[^}]*width:\s*var\(--xc-icon-xl\);[^}]*height:\s*var\(--xc-icon-xl\)/s,
+    );
+    expect(modules['HeaderActionMenu.module.css']).toMatch(
+        /\.rowChevron\s*\{[^}]*width:\s*var\(--xc-icon-sm\);[^}]*height:\s*var\(--xc-icon-sm\)/s,
+    );
+    expect(modules['HwSignBlock.module.css']).toContain(
+        'padding: var(--xc-space-1) var(--xc-space-2);',
+    );
+    expect(modules['LayoutModeToggle.module.css']).toContain('gap: var(--xc-space-2);');
+
+    for (const [file, css] of Object.entries(modules)) {
+        expect(withoutComments(css), file).not.toMatch(
+            /(?:gap|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?|border-radius|font-size)\s*:[^;}]*\d+(?:\.\d+)?(?:px|rem)/,
+        );
+    }
 });
 
 it('lists raw pixel paddings on card-like module CSS rules', () => {

@@ -35,8 +35,9 @@
 
 .statusDot {
     display: inline-block;
-    width: 0.625rem;
-    height: 0.625rem;
+    /* Status dot has no matching token and stays compact beside the label. */
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: var(--xc-bg-muted);
     flex: 0 0 auto;
@@ -67,7 +68,7 @@
     border: 1px solid var(--xc-border);
     background: var(--xc-surface);
     color: var(--xc-text);
-    padding: 0.25rem 0.6rem;
+    padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     cursor: pointer;

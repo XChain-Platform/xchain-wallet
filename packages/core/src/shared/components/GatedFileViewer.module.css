@@ -7,15 +7,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
-        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0));
 }
 
 .panel {
     box-sizing: border-box;
     width: 100%;
+    /* Viewer width has no matching token and bounds long file content. */
     max-width: 520px;
     max-height: 85vh;
     display: flex;
