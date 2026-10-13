@@ -475,14 +475,18 @@ describe('desktop preload: signer-bridge duplex port', () => {
 
 /**
  * Every channel main pushes to a renderer on, read off main's own source:
- * the quoted literal of each `webContents.send('...'` and
- * `broadcastToWindows('...'`. The signer listener pushes from its own module
+ * the quoted literal of each `webContents.send('...'`,
+ * `broadcastToWindows('...'` and `sendToWindow(<window>, '...'`. The signer listener pushes from its own module
  * on a constant, so that channel is added by identity.
  */
 function mainPushedChannels() {
     const src = readFileSync(MAIN_PATH, 'utf8');
     const channels = new Set([SIGNER_BRIDGE_CHANNEL]);
     for (const m of src.matchAll(/(?:webContents\.send|broadcastToWindows)\(\s*'([^']+)'/g)) {
+        channels.add(m[1]);
+    }
+    // The guarded single-window helper takes the target window first.
+    for (const m of src.matchAll(/sendToWindow\(\s*[^,()]+,\s*'([^']+)'/g)) {
         channels.add(m[1]);
     }
     return channels;
