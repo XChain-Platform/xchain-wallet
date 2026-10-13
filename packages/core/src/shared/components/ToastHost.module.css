@@ -80,12 +80,13 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+    line-height: 1.4;
     box-shadow: var(--xc-shadow-toast);
     animation: toast-in 160ms ease-out;
 }
@@ -162,7 +163,8 @@
     font-family: inherit;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
