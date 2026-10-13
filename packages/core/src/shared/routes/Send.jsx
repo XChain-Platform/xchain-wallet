@@ -31,7 +31,12 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { coinFromChainId, formatFiat, tickerColor } from '../components/BalanceList.jsx';
+import {
+    coinFromChainId,
+    formatFiat,
+    isAssetImageSourceAllowed,
+    tickerColor,
+} from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -278,6 +283,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast } = useToast();
     const haptic = useHaptic();
     const [undoHoldActive, setUndoHoldActive] = useState(false);
@@ -2623,6 +2630,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 tick={tick}
                 descriptor={descriptor}
                 prefill={prefill}
+                allowRemoteImages={allowRemoteImages}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
             {/*
@@ -3070,7 +3078,7 @@ function DetailRow({ label, value }) {
 // The prefill's imageUrl only applies when the form's current
 // (chainId, tick) still matches what the user picked; if they retype
 // the tick to something else, fall back to the letter-badge style.
-function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }) {
+function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, allowRemoteImages }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
     const nativeTicker = nativeTickerFor(descriptor);
@@ -3080,8 +3088,11 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
     const prefillMatches = prefill
         && prefill.chainId === chainId
         && (prefill.tick || '').trim().toUpperCase() === tickTrim.toUpperCase();
-    const imageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
+    const candidateImageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
         ? prefill.imageUrl
+        : null;
+    const imageUrl = isAssetImageSourceAllowed(candidateImageUrl, allowRemoteImages)
+        ? candidateImageUrl
         : null;
     const heroName = prefillMatches && typeof prefill?.displayName === 'string' && prefill.displayName
         ? prefill.displayName
@@ -3099,28 +3110,32 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
     return (
         <div className={styles.heroWrap}>
             <IconTag {...iconProps}>
+                <span
+                    className={styles.heroIconLetter}
+                    style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+                    aria-hidden="true"
+                >
+                    {tickTrim.slice(0, 1).toUpperCase()}
+                </span>
                 {isNative && chainIconLarge ? (
                     <img
                         src={chainIconLarge}
                         alt=""
+                        aria-hidden="true"
                         className={styles.heroIconImg}
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 ) : imageUrl ? (
                     <img
                         src={imageUrl}
                         alt=""
+                        aria-hidden="true"
                         className={styles.heroIconImg}
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
-                ) : (
-                    <span
-                        className={styles.heroIconLetter}
-                        style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
-                    >
-                        {tickTrim.slice(0, 1).toUpperCase()}
-                    </span>
-                )}
+                ) : null}
                 {!isNative && chainIconUrl ? (
                     <img
                         src={chainIconUrl}

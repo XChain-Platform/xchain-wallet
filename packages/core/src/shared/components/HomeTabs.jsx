@@ -17,6 +17,7 @@ import {
     buildPlatformTokenRow,
     sortByChainThenAsset,
     coinFromChainId,
+    isAssetImageSourceAllowed,
     tickerColor,
 } from './BalanceList.jsx';
 import balanceStyles from './BalanceList.module.css';
@@ -103,6 +104,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // so an opted-out user does not reach the CoinGecko fallback before
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
     const nativeCoins = useMemo(() => {
         if (settingsLoading || isDemo) return [];
         return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
@@ -304,6 +307,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             hideSmallBalances={hideSmallBalances}
                             smallBalanceThreshold={settings?.smallBalanceThreshold}
                             numberFormat={settings?.numberFormat}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     )
                 ) : null}
@@ -332,6 +336,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         hideSmallBalances={hideSmallBalances}
                         smallBalanceThreshold={settings?.smallBalanceThreshold}
                         numberFormat={settings?.numberFormat}
+                        allowRemoteImages={allowRemoteImages}
                     />
                     {issuedUnheld.length > 0 ? (
                         <section aria-label="Issued by you" data-testid="issued-unheld">
@@ -346,6 +351,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                                 onToggleHide={onToggleHide}
                                 verifyMap={verifyMap}
                                 numberFormat={settings?.numberFormat}
+                                allowRemoteImages={allowRemoteImages}
                             />
                         </section>
                     ) : null}
@@ -378,6 +384,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             onTogglePin={onTogglePin}
                             hiddenKeys={hiddenKeys}
                             onToggleHide={onToggleHide}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     </>
                 ) : null}
@@ -390,6 +397,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             networkFilter={networkFilter}
                             walletId={walletId}
                             onSelectEntry={onSelectEntry}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
                         <Placeholder
@@ -415,6 +423,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             networkFilter={networkFilter}
                             balances={balances}
                             onSelectEntry={onSelectEntry}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
                         <Placeholder
@@ -561,13 +570,16 @@ const ACTION_ICON = {
 //   1. action icon + action label + status pill (right)
 //   2. amount + tick (primary content)
 //   3. Block N + Confirms pill + relative time (right)
-function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick }) {
+function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
     const tick = entry.raw?.tick || entry.raw?.TICK || '';
     const chainIconUrl = branding.chainIconSmallUrl(entry.chainId);
     const tokenInfo = tick ? (assetLookup.get(`${entry.chainId}|${tick}`) || null) : null;
+    const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
+        ? tokenInfo.imageUrl
+        : null;
     const nativeTicker = (entry.chainId.split('-')[0] || '').toUpperCase()
         .replace('BITCOIN', 'BTC')
         .replace('LITECOIN', 'LTC')
@@ -599,25 +611,31 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                 className={styles.demoRowButton}
             >
                 <div className={balanceStyles.iconWrap}>
+                    <span
+                        className={balanceStyles.iconLetter}
+                        style={{ background: tickerColor(tick || 'X'), color: 'var(--xc-on-accent)' }}
+                        aria-hidden="true"
+                    >
+                        {(tick || '?').slice(0, 1)}
+                    </span>
                     {isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
-                    ) : tokenInfo?.imageUrl ? (
                         <img
-                            src={tokenInfo.imageUrl}
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={balanceStyles.iconImg}
+                            style={{ position: 'absolute', inset: 0 }}
+                        />
+                    ) : tokenImageUrl ? (
+                        <img
+                            src={tokenImageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.tokenIconSquare}
+                            style={{ position: 'absolute', inset: 0 }}
                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
-                    ) : (
-                        <span
-                            className={balanceStyles.iconLetter}
-                            style={{ background: tickerColor(tick || 'X'), color: 'var(--xc-on-accent)' }}
-                            aria-hidden="true"
-                        >
-                            {(tick || '?').slice(0, 1)}
-                        </span>
-                    )}
+                    ) : null}
                     {!isNative && chainIconUrl ? (
                         <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} />
                     ) : null}
@@ -658,7 +676,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
-function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry }) {
+function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry, allowRemoteImages }) {
     void walletId;
     const walletAddresses = useMemo(() => new Set(['demo-address']), []);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
@@ -717,6 +735,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
                     walletAddresses={walletAddresses}
                     assetLookup={assetLookup}
                     chainTip={chainTips[e.chainId] || null}
+                    allowRemoteImages={allowRemoteImages}
                     onClick={() => {
                         if (typeof onSelectEntry === 'function') onSelectEntry(e);
                     }}
@@ -753,7 +772,7 @@ function defiPositionToEntry(position, idx) {
     };
 }
 
-function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
+function DemoDefiList({ networkFilter, balances, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const positions = useMemo(() => {
         const all = synthesizeDemoDefiPositions();
@@ -797,6 +816,9 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                 const tokenInfo = (!isStake && tick && !isNativeAsset)
                     ? assetLookup.get(`${p.chainId}|${tick}`)
                     : null;
+                const tokenImageUrl = isAssetImageSourceAllowed(tokenInfo?.imageUrl, allowRemoteImages)
+                    ? tokenInfo.imageUrl
+                    : null;
                 return (
                     <li key={p.id}>
                         <button
@@ -809,6 +831,15 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                             }}
                         >
                             <div className={balanceStyles.iconWrap}>
+                                {!isStake ? (
+                                    <span
+                                        className={balanceStyles.iconLetter}
+                                        style={{ background: tickerColor(tick || p.action), color: 'var(--xc-on-accent)' }}
+                                        aria-hidden="true"
+                                    >
+                                        {(tick || p.action).slice(0, 1).toUpperCase()}
+                                    </span>
+                                ) : null}
                                 {isStake ? (
                                     <img
                                         src={branding.faviconUrl()}
@@ -818,25 +849,24 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     />
                                 ) : isNativeAsset ? (
                                     chainIconUrl ? (
-                                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
+                                        <img
+                                            src={chainIconUrl}
+                                            alt=""
+                                            aria-hidden="true"
+                                            className={balanceStyles.iconImg}
+                                            style={{ position: 'absolute', inset: 0 }}
+                                        />
                                     ) : null
-                                ) : tokenInfo?.imageUrl ? (
+                                ) : tokenImageUrl ? (
                                     <img
-                                        src={tokenInfo.imageUrl}
+                                        src={tokenImageUrl}
                                         alt=""
                                         aria-hidden="true"
                                         className={styles.tokenIconSquare}
+                                        style={{ position: 'absolute', inset: 0 }}
                                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                     />
-                                ) : (
-                                    <span
-                                        className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action), color: 'var(--xc-on-accent)' }}
-                                        aria-hidden="true"
-                                    >
-                                        {(tick || p.action).slice(0, 1).toUpperCase()}
-                                    </span>
-                                )}
+                                ) : null}
                                 {!isNativeAsset && chainIconUrl ? (
                                     <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} />
                                 ) : null}
