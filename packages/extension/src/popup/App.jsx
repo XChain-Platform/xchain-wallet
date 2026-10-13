@@ -2661,6 +2661,7 @@ function AppInner() {
             })();
             return (
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
