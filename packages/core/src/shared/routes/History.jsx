@@ -4302,15 +4302,18 @@ function ExportModal({
 
                 {exporting ? (
                     <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                        Preparing {progress.completed} of {progress.total} rows…
+                        {t('history.export.progress', {
+                            completed: progress.completed,
+                            total: progress.total,
+                        })}
                         {operationTime.showElapsed
-                            ? ` ${operationTime.elapsedSeconds} seconds elapsed.`
+                            ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
                             : ''}
                     </p>
                 ) : null}
                 {operationTime.timedOut ? (
                     <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
-                        Export is taking longer than expected. Cancel, narrow the history filters, and try again.
+                        {t('history.export.slow')}
                     </p>
                 ) : null}
                 {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
@@ -4323,7 +4326,7 @@ function ExportModal({
                         onClick={onConfirm}
                         disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >
-                        {exporting ? 'Preparing…' : t('history.export.confirm')}
+                        {exporting ? t('history.export.preparing') : t('history.export.confirm')}
                     </button>
                 </div>
             </div>

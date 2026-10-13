@@ -331,6 +331,10 @@ export const en = {
     'history.export.rowCount':
         '{count, plural, one {# filtered row will be exported.} other {# filtered rows will be exported.}}',
     'history.export.confirm': 'Export',
+    'history.export.preparing': 'Preparing…',
+    'history.export.progress': 'Preparing {completed} of {total} rows…',
+    'history.export.elapsed': '{seconds} seconds elapsed.',
+    'history.export.slow': 'Export is taking longer than expected. Cancel, narrow the history filters, and try again.',
 
     // --- pending (unconfirmed) transactions -----------------------
     // Terminology is fixed: "pending" in every string a user reads,
