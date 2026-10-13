@@ -35,15 +35,31 @@
 // `chromeMessaging.sendMessage` wrapper). Keeps the route-level
 // messaging helpers nearly identical across shells.
 
+import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../core/src/crypto/kdf.js';
+import { defaultRegistry } from '../../core/src/registry/index.js';
+import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
+import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
+import { SignerPool } from '../../core/src/signers/SignerPool.js';
+import { Vault } from '../../core/src/storage/Vault.js';
+import { VaultEvictedError } from '../../core/src/storage/backend.js';
+import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
+import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
+import { NotificationService } from '../../core/src/notifications/NotificationService.js';
+import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
+import { GovernancePollWatcher } from '../../core/src/notifications/GovernancePollWatcher.js';
+import { DeadlineWatcher } from '../../core/src/notifications/DeadlineWatcher.js';
+import { DispenserEscrowWatcher } from '../../core/src/notifications/DispenserEscrowWatcher.js';
+import { CoinpayAutopayWatcher } from '../../core/src/notifications/CoinpayAutopayWatcher.js';
+import { getActiveAddresses } from '../../core/src/notifications/getActiveAddresses.js';
 import {
-    crypto as cryptoLib,
-    registry as registryLib,
-    sdk as sdkLib,
-    signers as signersLib,
-    storage as storageLib,
-    notifications as notificationsLib,
-    flows as flowsLib,
-} from '@xchain-wallet/core';
+    SOUND_PREVIEW_EVENT,
+    withNotificationSound,
+} from '../../core/src/notifications/notificationSounds.js';
+import {
+    getBroadcastTxids,
+    markPendingTxIndexed,
+    markPendingTxMempoolSeen,
+} from '../../core/src/notifications/pendingTxBridge.js';
 import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
 // this module resolves under Node without the pnpm workspace symlink
@@ -124,7 +140,7 @@ import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 // Dev-mode SDK stub: fallback when `xchain-sdk` isn't resolvable.
 //
@@ -159,7 +175,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // production builds.
 if (!import.meta.env?.PROD) {
     const rates = fakeNativeFiatRates();
-    flowsLib.configureFiatRateSource({
+    configureFiatRateSource({
         fetch: async (url) => {
             const u = String(url);
             if (u.includes('simple/price')) {
@@ -364,7 +380,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             deriveAddress(publicKeyHex, opts) {
                 // No fallback type: mockDeriveAddress reads the chain
                 // descriptor's default, which is p2pkh on dogecoin.
-                return sdkLib.mockDeriveAddress(chainId, opts?.type, publicKeyHex);
+                return mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
             signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
@@ -410,7 +426,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         encoder: {
             async createTx({ data, pubkey, customOutputs, change }) {
                 const changeAddr = change
-                    || sdkLib.mockDeriveAddress(chainId, undefined, pubkey);
+                    || mockDeriveAddress(chainId, undefined, pubkey);
                 const outputs = [
                     // Inline OP_RETURN action carrier (zero value) - but ONLY
                     // when there is an action.: a plain native-coin
@@ -515,7 +531,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // this venue is concerned). Any real address is one this venue has
         // never seen, which is what first contact means.
         getPublicKey(address) {
-            return Promise.resolve(sdkLib.isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
+            return Promise.resolve(isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
         },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
@@ -563,14 +579,14 @@ const createLoadingSdk = () => makeLoadingSdkSurface();
 // post-resolution calls (Send) get the real SDK. For a clean production
 // run users should onboard AFTER the swap; the `sdkResolved` promise
 // below gives callers a handle on that.
-let sdkRegistry = new sdkLib.SDKRegistry({
+let sdkRegistry = new SDKRegistry({
     chainRegistry,
     sdkFactory: createDevMockSdk ?? createLoadingSdk,
 });
 
 export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
     .then((result) => {
-        sdkRegistry = new sdkLib.SDKRegistry({
+        sdkRegistry = new SDKRegistry({
             chainRegistry,
             sdkFactory: result.factory,
         });
@@ -865,15 +881,15 @@ function startNotifications() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
-    const notify = notificationsLib.withNotificationSound(createWebNotifyAdapter(), async () => {
+    const notify = withNotificationSound(createWebNotifyAdapter(), async () => {
         const flowsNs = await getFlows();
         return flowsNs.getSettings(vault);
     });
-    notificationService = new notificationsLib.NotificationService({
+    notificationService = new NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
             const settings = await flowsNs.getSettings(vault);
-            return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+            return getActiveAddresses(vault, chainRegistry, {
                 activeNetwork: settings.activeNetwork,
             });
         },
@@ -883,9 +899,9 @@ function startNotifications() {
             return flowsNs.getSettings(vault);
         },
         notify,
-        getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
-        onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
-        onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
+        getPendingTxids: () => getBroadcastTxids(vault),
+        onTxConfirmed: (txid) => markPendingTxIndexed(vault, txid),
+        onMempoolSeen: (txid) => markPendingTxMempoolSeen(vault, txid),
         logger: console,
     });
     notificationService.start().catch((err) => {
@@ -894,7 +910,7 @@ function startNotifications() {
 
     // §46 price-alert poll watcher: same lifecycle, same notify adapter.
     if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
-        priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+        priceAlertWatcher = new PriceAlertWatcher({
             getNativePrices: async ({ chainIds, fiatCurrency }) => {
                 if (!priceOracleInstance) {
                     const flowsNs = await getFlows();
@@ -921,11 +937,11 @@ function startNotifications() {
     // held token (binding polls flagged). Same lifecycle, same notify adapter;
     // seen-state persists in localStorage so a reload doesn't re-baseline.
     if (!governancePollWatcher) {
-        governancePollWatcher = new notificationsLib.GovernancePollWatcher({
+        governancePollWatcher = new GovernancePollWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -951,11 +967,11 @@ function startNotifications() {
     // PC-45: deadline watcher. COINPAY obligations (PC-15) and unstake
     // cooldowns (PC-47) own their own timers; this deep-links to them.
     if (!deadlineWatcher) {
-        deadlineWatcher = new notificationsLib.DeadlineWatcher({
+        deadlineWatcher = new DeadlineWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -982,11 +998,11 @@ function startNotifications() {
     // PC-46: low-escrow alert. Auto-refill stays deferred (no per-event
     // consent); this deep-links to PC-19's refill stage instead.
     if (!dispenserEscrowWatcher) {
-        dispenserEscrowWatcher = new notificationsLib.DispenserEscrowWatcher({
+        dispenserEscrowWatcher = new DispenserEscrowWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -1014,7 +1030,7 @@ function startNotifications() {
     // open. The payer lease in the vault keeps two tabs from paying the
     // same match twice.
     if (!coinpayAutopayWatcher && host) {
-        coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
+        coinpayAutopayWatcher = new CoinpayAutopayWatcher({
             vault,
             sdkRegistry,
             chainRegistry,
@@ -1130,7 +1146,7 @@ export async function getSessionStatus() {
             // Unreadable meta says nothing either way; fall through to the
             // factual no-wallet answer rather than inventing an eviction.
         }
-        if (meta && meta.kdfParams) throw new storageLib.VaultEvictedError();
+        if (meta && meta.kdfParams) throw new VaultEvictedError();
     }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
@@ -1354,10 +1370,10 @@ export async function createWalletLocal(req) {
     let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -1378,7 +1394,7 @@ export async function createWalletLocal(req) {
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         await signerPool.populate({
             vault,
@@ -1459,10 +1475,10 @@ export async function importMnemonicLocal(req) {
     let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
         const result = await flowsNs.importMnemonic({
@@ -1483,7 +1499,7 @@ export async function importMnemonicLocal(req) {
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         await signerPool.populate({
             vault,
@@ -1631,10 +1647,10 @@ export async function importBackupLocal(req) {
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
         const common = {
@@ -1664,7 +1680,7 @@ export async function importBackupLocal(req) {
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
@@ -1761,9 +1777,9 @@ export async function unlockWalletLocal(req) {
     let ownPool = null;
     let ownHost = null;
     try {
-        masterKey = await cryptoLib.deriveMasterKeyAsync(password, meta.kdfParams);
+        masterKey = await deriveMasterKeyAsync(password, meta.kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         try {
             await v.open();
         } catch (err) {
@@ -1778,7 +1794,7 @@ export async function unlockWalletLocal(req) {
         // for software signers) reuse pre-unlocked signers without
         // re-prompting. Pool is cleared in lockWalletLocal.
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         // Best-effort, as in the shared handleWalletUnlock: a populate
         // failure must not block an unlock whose password was right. The
@@ -1809,7 +1825,7 @@ export async function unlockWalletLocal(req) {
         // out until the next unlock, exactly as if no passphrase was typed.
         if (bip39Passphrase && pooled
             && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
-            throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
+            throw new PassphraseMismatchError(pooled.passphraseMismatchNames);
         }
         // Legacy passphrase wallets the password opened but that hold no
         // stored 25th word yet. The pool reports them as two parallel arrays;
@@ -1908,7 +1924,7 @@ export async function sendMessage(type, request) {
 // no listener (ruling I-34b) and the section hides Preview there.
 const previewAdapter = createWebNotifyAdapter();
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener(notificationsLib.SOUND_PREVIEW_EVENT, (e) => {
+    window.addEventListener(SOUND_PREVIEW_EVENT, (e) => {
         const soundId = e && e.detail && e.detail.soundId;
         if (typeof soundId === 'string') previewAdapter.playSound(soundId);
     });

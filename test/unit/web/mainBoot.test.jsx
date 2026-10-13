@@ -17,11 +17,11 @@ const boot = vi.hoisted(() => ({
 }));
 
 vi.mock('react-dom/client', () => ({ createRoot: boot.createRoot }));
-vi.mock('@xchain-wallet/core', () => ({
-    registry: {
-        syncChainRegistryFromHub: boot.syncRegistry,
-        defaultRegistry: boot.defaultRegistry,
-    },
+vi.mock('../../../packages/core/src/registry/index.js', () => ({
+    defaultRegistry: boot.defaultRegistry,
+}));
+vi.mock('../../../packages/core/src/registry/remote.js', () => ({
+    syncChainRegistryFromHub: boot.syncRegistry,
 }));
 vi.mock('../../../packages/web/src/App.jsx', () => ({ App: () => null }));
 vi.mock('../../../packages/web/src/platform/webviewFloor.js', () => ({

@@ -14,14 +14,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { populate, flowBehaviour, built } = vi.hoisted(() => ({
-    populate: vi.fn(),
-    flowBehaviour: {},
-    built: [],
-}));
-
-vi.mock('@xchain-wallet/core', async (importOriginal) => {
-    const actual = await importOriginal();
+const { populate, flowBehaviour, built, hoisted } = vi.hoisted(() => {
+    const populate = vi.fn();
+    const built = [];
     class FakeSignerPool {
         populate(...args) { return populate(...args); }
         lockAll() { /* nothing pooled */ }
@@ -42,31 +37,61 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
         async save() { /* accepted */ }
         close() { this.closes += 1; this.key.fill(0); }
     }
+    return { populate, flowBehaviour: {}, built, hoisted: { FakeSignerPool, InertWatcher, RecordingVault } };
+});
+
+// hostBridge imports these modules directly (not through the core barrel),
+// so each seam is mocked at its own file.
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    makeFreshKdfParams: () => ({ algorithm: 'argon2id' }),
+    deriveMasterKeyAsync: async () => new Uint8Array(32).fill(9),
+}));
+vi.mock('../../../packages/core/src/storage/Vault.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    Vault: hoisted.RecordingVault,
+}));
+vi.mock('../../../packages/core/src/signers/SignerPool.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    SignerPool: hoisted.FakeSignerPool,
+}));
+vi.mock('../../../packages/core/src/notifications/NotificationService.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    NotificationService: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/PriceAlertWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    PriceAlertWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/GovernancePollWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    GovernancePollWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/CoinpayAutopayWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    CoinpayAutopayWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/DeadlineWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    DeadlineWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/DispenserEscrowWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    DispenserEscrowWatcher: hoisted.InertWatcher,
+}));
+
+// Flows still reach hostBridge through the lazily loaded core barrel.
+vi.mock('@xchain-wallet/core', async (importOriginal) => {
+    const actual = await importOriginal();
     const scripted = (name) => (...args) => flowBehaviour[name](...args);
     return {
         ...actual,
-        crypto: {
-            ...actual.crypto,
-            makeFreshKdfParams: () => ({ algorithm: 'argon2id' }),
-            deriveMasterKeyAsync: async () => new Uint8Array(32).fill(9),
-        },
-        storage: { ...actual.storage, Vault: RecordingVault },
-        signers: { ...actual.signers, SignerPool: FakeSignerPool },
         flows: {
             ...actual.flows,
             createWallet: scripted('createWallet'),
             importMnemonic: scripted('importMnemonic'),
             importBackupFile: scripted('importBackupFile'),
             restoreLabelSyncAfterImport: scripted('restoreLabelSyncAfterImport'),
-        },
-        notifications: {
-            ...actual.notifications,
-            NotificationService: InertWatcher,
-            PriceAlertWatcher: InertWatcher,
-            GovernancePollWatcher: InertWatcher,
-            CoinpayAutopayWatcher: InertWatcher,
-            DeadlineWatcher: InertWatcher,
-            DispenserEscrowWatcher: InertWatcher,
         },
     };
 });

@@ -13,6 +13,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.jsx'), 'utf8');
+const messagingSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/messaging.js'),
+    'utf8',
+);
 
 const deferredRoutes = [
     'Home',
@@ -27,6 +31,14 @@ const deferredRoutes = [
     'ManageToken',
     'PsbtSignForm',
     'MessagingInbox',
+    'AddAccountForm',
+    'WalletPicker',
+    'AccountPicker',
+    'WalletDetails',
+    'RenameWalletForm',
+    'RenameAccountForm',
+    'MenuRoute',
+    'AlertsRoute',
 ];
 
 describe('web startup imports', () => {
@@ -58,5 +70,24 @@ describe('web startup imports', () => {
             );
             expect(appSource).not.toContain(`const ${routeName} = lazyRoute(`);
         }
+    });
+
+    it('loads the QR encoder only when the private-key route renders it', () => {
+        expect(appSource).toContain(
+            "import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';",
+        );
+        expect(appSource).not.toContain("from '@xchain-wallet/core/ui';");
+        expect(appSource).toContain(
+            "const KeyQR = lazyRoute(() => import('@xchain-wallet/core/shared/components/KeyQR.jsx'), 'KeyQR');",
+        );
+        expect(appSource).not.toContain(
+            "import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';",
+        );
+    });
+
+    it('loads the in-page background host through one cached dynamic import', () => {
+        expect(messagingSource).toContain("import('./hostBridge.js')");
+        expect(messagingSource).toContain('hostBridgePromise ??=');
+        expect(messagingSource).not.toMatch(/from ['"]\.\/hostBridge\.js['"]/);
     });
 });
