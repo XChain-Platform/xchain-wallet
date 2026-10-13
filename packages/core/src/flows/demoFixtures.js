@@ -185,7 +185,10 @@ export function synthesizeDemoBalances(addressesByChain) {
             addressType: a.addressType,
             derivationPath: a.derivationPath ?? null,
             balances: idx === 0 && fixture
-                ? { native: fixture.native, tokens: fixture.tokens }
+                ? {
+                    native: fixture.native ? { ...fixture.native } : null,
+                    tokens: fixture.tokens.map((token) => ({ ...token })),
+                }
                 : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, tokens: [] },
             error: null,
             // The typed failure fields beside `error` (see `AddressBalancesEntry`
@@ -865,18 +868,15 @@ const DEMO_COIN_UNIT_PRICE = { BTC: 0.00002, LTC: 0.004, DOGE: 0.6 };
  * by {@link synthesizeDemoHistory} so the demo wallet shows a populated
  * Marketplace instead of hitting a live explorer it has no backend for.
  *
- * The token is matched against the mainnet balance fixtures; searching
- * any token the demo wallet can hold (e.g. PEPECASH, RAREPEPE, XCP on
- * Bitcoin; OMNILITE, MWEB on Litecoin; DOGI, WOW on Dogecoin) returns
- * activity on that token's home chain. An unrecognized ticker returns
- * empty feeds, exactly as a real explorer would for a token with no
- * market.
+ * The token is matched against the caller's visible chain fixtures, or
+ * mainnet when no chain list is supplied. Tokens without a matching holding
+ * use the visible Bitcoin chain so the demo marketplace remains populated.
  *
  * Each feed entry is already wrapped as `{ chainId, row }`, the shape
  * MarketActivity builds per-chain, so the caller can set state directly.
  *
  * @param {string} token  ticker the user searched for
- * @param {{ now?: number }} [opts]
+ * @param {{ now?: number, chainIds?: string[] }} [opts]
  * @returns {{ offers: Array<{chainId: string, row: any}>, sales: Array<{chainId: string, row: any}>, dexOrders: Array<{chainId: string, row: any}>, dexSwaps: Array<{chainId: string, row: any}> }}
  */
 export function synthesizeDemoMarketActivity(token, opts = {}) {
@@ -887,12 +887,17 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
-    // Locate the mainnet chain whose fixture lists this token. Mainnet
-    // only; that's the network the demo balances (and the chain badge
-    // the user is looking at) are on.
+    const requestedChainIds = Array.isArray(opts.chainIds)
+        ? opts.chainIds.filter((chainId) => (
+            typeof chainId === 'string' && PER_CHAIN_DEFAULTS[chainId]
+        ))
+        : Object.keys(PER_CHAIN_DEFAULTS).filter((chainId) => chainId.endsWith('-mainnet'));
+
+    // Locate a visible chain whose fixture lists this token so the rows and
+    // badges stay on the network the caller is currently displaying.
     let chainId = null;
-    for (const [cid, fix] of Object.entries(PER_CHAIN_DEFAULTS)) {
-        if (!cid.endsWith('-mainnet')) continue;
+    for (const cid of requestedChainIds) {
+        const fix = PER_CHAIN_DEFAULTS[cid];
         if ((fix.tokens || []).some((t) => t.tick.toUpperCase() === tick)) {
             chainId = cid;
             break;
@@ -902,9 +907,8 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // doesn't hold still get a demo market, homed on Bitcoin, so the
     // Marketplace landing page is never empty in the demo.
     if (!chainId) {
-        chainId = PER_CHAIN_DEFAULTS['bitcoin-mainnet']
-            ? 'bitcoin-mainnet'
-            : Object.keys(PER_CHAIN_DEFAULTS).find((cid) => cid.endsWith('-mainnet'));
+        chainId = requestedChainIds.find((cid) => cid.startsWith('bitcoin-'))
+            || requestedChainIds[0];
     }
     if (!chainId) return empty;
 
