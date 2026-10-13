@@ -232,6 +232,26 @@ describe('BroadcastForm builds a sendable MEMO', () => {
     });
 });
 
+describe('BroadcastForm validates decimal fields before compose', () => {
+    it.each(['Infinity', '1e3', '0x10'])('rejects value %s', async (value) => {
+        mountForm();
+        await fill({ body: 'price update', value });
+        submit();
+
+        expect(await screen.findByText('Value must be a number.')).toBeTruthy();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each(['Infinity', '1e3', '0x10', '-0.1'])('rejects feed fee %s', async (fee) => {
+        mountForm();
+        await fill({ body: 'price update', fee });
+        submit();
+
+        expect(await screen.findByText('Feed fee must be a non-negative number.')).toBeTruthy();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
 // (wallet E2E session 25, D-114). BROADCAST has no gas-schedule entry:
 // `/RLTC/api/feequote?action=BROADCAST` answers `xchainFee 0.00000000`,
 // `requiredFeeSats 0`, and applyNativeFeePreflight builds no fee output for it.

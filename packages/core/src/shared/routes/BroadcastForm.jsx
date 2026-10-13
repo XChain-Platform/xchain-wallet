@@ -63,6 +63,7 @@ const RESERVED_DELIMITERS = /[|;]/;
 // BROADCAST MESSAGE uses the same 250-character ceiling as MEMO, but the
 // indexer validates it under its own field-specific setting.
 const MAX_BROADCAST_MESSAGE_LENGTH = 250;
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 
 /**
  * BROADCAST form (§40.6).
@@ -308,13 +309,13 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             setFormError('Enter a feed name or a message.');
             return;
         }
-        if (value.trim() && Number.isNaN(Number(value.trim()))) {
+        if (value.trim() && !DECIMAL_NUMBER.test(value.trim())) {
             setFormError('Value must be a number.');
             return;
         }
         if (feedFee.trim()) {
-            const n = Number(feedFee.trim());
-            if (Number.isNaN(n) || n < 0) {
+            const fee = feedFee.trim();
+            if (!DECIMAL_NUMBER.test(fee) || fee.startsWith('-')) {
                 setFormError('Feed fee must be a non-negative number.');
                 return;
             }
