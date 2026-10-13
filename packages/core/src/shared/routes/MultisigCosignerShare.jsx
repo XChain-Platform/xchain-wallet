@@ -9,7 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { CopyButton, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    CopyButton,
+    FormPage,
+    FormSection,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { KeyQR } from '../components/KeyQR.jsx';
 import { useMessaging } from '../useMessaging.js';
@@ -72,8 +77,10 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
     }, [walletId, addressId, messaging]);
 
     return (
-        <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
+        <FormPage as="div" sectioned label={t('multisig.share.title')}>
+            <FormSection title={t('multisig.share.title')}>
+                <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
                 {t('multisig.share.instructions')}
             </p>
@@ -131,7 +138,9 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
                     </p>
                 </>
             ) : null}
-        </details>
+                </details>
+            </FormSection>
+        </FormPage>
     );
 }
 

@@ -181,6 +181,21 @@ describe('<FormPage>', () => {
         expect(ref.current).toBeInstanceOf(HTMLFormElement);
     });
 
+    it('renders a reusable form fragment without nesting another form', () => {
+        render(
+            <form aria-label="Parent form">
+                <FormPage as="div" label="Embedded fields">
+                    <input aria-label="Name" />
+                </FormPage>
+            </form>,
+        );
+
+        const fragment = screen.getByRole('group', { name: 'Embedded fields' });
+        expect(fragment.tagName).toBe('DIV');
+        expect(within(fragment).queryByRole('form')).toBeNull();
+        expect(within(fragment).getByLabelText('Name')).toBeInTheDocument();
+    });
+
     it('renders the same DOM whatever the viewport or shell says', () => {
         // The width rule is CSS only: a JS width check would flash the wrong
         // layout on first paint and could disagree with the stylesheet.
@@ -247,9 +262,16 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
     });
 
     it('stacks one card per section for a sectioned form when wide', () => {
-        const card = ruleBody(wide, '.sectioned .section');
+        const card = ruleBody(wide, '.sectioned > .body > .section');
         expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
+    });
+
+    it('flattens a reusable form fragment inside its parent form card', () => {
+        expect(ruleBody(wide, 'form .form')).toMatch(/max-width:\s*none/);
+        const section = ruleBody(wide, 'form .form.sectioned > .body > .section');
+        expect(section).toMatch(/background:\s*transparent/);
+        expect(section).toMatch(/box-shadow:\s*none/);
     });
 
     it('lets the action row wrap', () => {

@@ -8,7 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { ListPage } from '@xchain-wallet/core/ui';
 import { TokenPicker } from './TokenPicker.jsx';
+
+function SendListPage(props) {
+    return <ListPage {...props} />;
+}
 
 /**
  * Send picker: landing screen for the Send quick-action. Thin wrapper
@@ -28,5 +33,12 @@ export function SendPicker(props) {
     // eslint-disable-next-line no-unused-vars -- drop legacy prop, forward rest
     const { hideOwnFilter, ...rest } = props;
     const walletScope = JSON.stringify([rest.walletId ?? null, rest.accountId ?? null]);
-    return <TokenPicker key={walletScope} {...rest} purpose="send" />;
+    return (
+        <TokenPicker
+            key={walletScope}
+            {...rest}
+            purpose="send"
+            listPageComponent={SendListPage}
+        />
+    );
 }
