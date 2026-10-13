@@ -66,7 +66,10 @@ export function originHostEnding(origin) {
     try {
         const hostname = new URL(String(origin)).hostname;
         const labels = hostname.split('.').filter(Boolean);
-        return neutralizeControlText(labels.slice(-3).join('.') || hostname, { maxLength: 255 });
+        const visibleHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+            ? hostname
+            : labels.slice(-3).join('.') || hostname;
+        return neutralizeControlText(visibleHost, { maxLength: 255 });
     } catch {
         return '';
     }
