@@ -53,10 +53,12 @@ import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccou
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
+import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
+import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -228,7 +230,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
@@ -257,6 +259,9 @@ function AppInner() {
     const [resumeAirdropId, setResumeAirdropId] = useState(
         /** @type {string | null} */ (null),
     );
+    const [resumeConfirmSession, setResumeConfirmSession] = useState(
+        /** @type {any | null} */ (null),
+    );
     const [resumeCoinpay, setResumeCoinpay] = useState(
         /** @type {{ chainId: string, address: string, orderMatchActionIndex: string, from?: 'obligations' } | null} */ (null),
     );
@@ -279,6 +284,9 @@ function AppInner() {
     // submit / back to avoid leaking a stale prefill into a future Send.
     const [sendPrefill, setSendPrefill] = useState(
         /** @type {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string } | null} */ (null),
+    );
+    const [executePrefill, setExecutePrefill] = useState(
+        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
     // The transaction a scan just produced, handed to the Sign panel so
     // the scan delivers its payload rather than only its destination. Mirrors
@@ -401,10 +409,15 @@ function AppInner() {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
-    const fromManage = formReturnView === 'manage-token';
+    const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
+    const handleFaucetMint = ({ chainId, tick }) => {
+        setTokenDetailRef({ chainId, tick });
+        setFormReturnView('settings');
+        setUnlockedView('mint');
+    };
     // `origin` remembers which flow opened the contract-stake form so its
     // back button returns there ('contracts-browse' when reached via normal
     // contract browsing, 'stake-picker' from the new-stake chooser,
@@ -468,6 +481,9 @@ function AppInner() {
     // ActionDetail, so there is no second origin to remember yet.)
     const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(
         /** @type {any | null} */ (null),
+    );
+    const [actionDetailReturnTo, setActionDetailReturnTo] = useState(
+        /** @type {'history' | 'home'} */ ('history'),
     );
     // Lock in "this window was detached" at mount; the resume-skip
     // gate stays on for the lifetime of the window even after we
@@ -643,6 +659,7 @@ function AppInner() {
         apply: (route) => {
             if (route.sendPrefill) setSendPrefill(route.sendPrefill);
             if (route.contractRef) setContractRef(route.contractRef);
+            if (route.executePrefill) setExecutePrefill(route.executePrefill);
             setUnlockedView(route.view);
         },
     });
@@ -1157,6 +1174,21 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                    />
+                );
+            }
+            if (unlockedView === 'resume-confirm' && activeWalletId && resumeConfirmSession) {
+                return (
+                    <ResumeConfirm
+                        session={resumeConfirmSession}
+                        onDone={() => {
+                            setResumeConfirmSession(null);
+                            setUnlockedView('home');
+                        }}
+                        onCancel={() => {
+                            setResumeConfirmSession(null);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -1744,6 +1776,10 @@ function AppInner() {
                             setUnlockedView('compose-message');
                         }}
                         onBack={() => setUnlockedView('actions')}
+                        onOpenBackup={() => {
+                            setSettingsInitialSection('backup');
+                            setUnlockedView('settings');
+                        }}
                     />
                 );
             }
@@ -1822,7 +1858,9 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
-                        onBack={() => setUnlockedView('contract-detail')}
+                        initialMethod={executePrefill?.method}
+                        initialParamsText={executePrefill?.paramsText}
+                        onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );
             }
@@ -2012,9 +2050,15 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         initialSearchQuery={historyInitialQuery}
                         initialChainCoin={historyInitialChainCoin}
                         initialFocus={historyInitialFocus}
+                        onSelectEntry={(entry) => {
+                            setSelectedHistoryEntry(entry);
+                            setActionDetailReturnTo('history');
+                            setUnlockedView('action-detail');
+                        }}
                     />
                 );
             }
@@ -2023,7 +2067,7 @@ function AppInner() {
                     <ActionDetail
                         entry={selectedHistoryEntry}
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(actionDetailReturnTo)}
                     />
                 );
             }
@@ -2064,9 +2108,9 @@ function AppInner() {
                             setUnlockedView('receive');
                         }}
                         onViewActivity={() => {
-                            const coin = String(tokenDetailRef.chainId || '').split('-')[0] || '';
-                            setHistoryInitialQuery('');
-                            setHistoryInitialChainCoin(coin);
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
                         }}
@@ -2160,6 +2204,14 @@ function AppInner() {
                         }}
                         onIssuerResolved={(creator) => {
                             setTokenDetailRef(withResolvedIssuer(creator));
+                        }}
+                        onViewActivity={() => {
+                            const scope = historyScopeForAsset(tokenDetailRef);
+                            setHistoryInitialQuery(scope.searchQuery);
+                            setHistoryInitialChainCoin(scope.chainCoin);
+                            setHistoryInitialFocus(null);
+                            setHistoryReturnTo('manage-token');
+                            setUnlockedView('history');
                         }}
                     />
                 );
@@ -2262,6 +2314,7 @@ function AppInner() {
                             activeWalletId ? () => setUnlockedView('account-picker') : undefined
                         }
                         initialSubpageId={settingsSubpage}
+                        onNavigateToMint={handleFaucetMint}
                     />
                 );
             }
@@ -2418,9 +2471,15 @@ function AppInner() {
                     } : undefined}
                     onSelectEntry={activeWalletId ? (entry) => {
                         setSelectedHistoryEntry(entry);
+                        setActionDetailReturnTo('home');
                         setUnlockedView('action-detail');
                     } : undefined}
                     onAddresses={activeWalletId ? () => setUnlockedView('addresses') : undefined}
+                    onResumeConfirm={activeWalletId ? (session) => {
+                        if (!session) return;
+                        setResumeConfirmSession(session);
+                        setUnlockedView('resume-confirm');
+                    } : undefined}
                     onResumeAirdrop={activeWalletId ? (id) => {
                         setResumeAirdropId(id);
                         setUnlockedView('airdrop');
@@ -2430,17 +2489,6 @@ function AppInner() {
                         setUnlockedView('coinpay');
                     } : undefined}
                     onMigrateToBip39={activeWalletId ? () => setUnlockedView('migrate-bip39') : undefined}
-                    // No onMyTokens / onMarketActivity / onCrossChain /
-                    // onContacts / onMultisig here. Home takes an explicit
-                    // parameter list with no rest-spread and reads none of
-                    // those five, so they rendered nothing: four are
-                    // MenuRoute props (only the web shell mounts MenuRoute)
-                    // and the fifth misspells MenuRoute's `onTokens`. This
-                    // shell reaches those surfaces from its Actions menu
-                    // (cross-chain templates, contacts, multisig-create) and
-                    // its Cmd/Ctrl+K palette (`nav-my-tokens`). The one route
-                    // with no desktop caller either way is 'market-activity';
-                    // giving it one is a product decision, not a rename.
                     onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                     onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
                     onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}

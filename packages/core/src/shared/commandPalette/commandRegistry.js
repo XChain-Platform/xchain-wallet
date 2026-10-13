@@ -165,6 +165,7 @@ export function buildCommands(ctx) {
         // other build has stays exactly as it was.
         ...(hasDex ? [
             { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
+            { id: 'nav-marketplace', category: 'Navigate', title: 'Marketplace', subtitle: 'Dispensers and exchange activity', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.DollarIcon, run: go('market-activity') },
             { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
             { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
