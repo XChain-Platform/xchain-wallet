@@ -23,7 +23,6 @@ const messagingSource = readFileSync(
 );
 
 const deferredRoutes = [
-    'Home',
     'Settings',
     'TokenDetail',
     'Send',
@@ -67,8 +66,8 @@ describe('web startup imports', () => {
         },
     );
 
-    it('keeps the first onboarding and lock screens synchronous', () => {
-        for (const routeName of ['Onboarding', 'Locked']) {
+    it('keeps every cold-start route synchronous', () => {
+        for (const routeName of ['Onboarding', 'Locked', 'Home']) {
             expect(appSource).toContain(
                 `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
             );

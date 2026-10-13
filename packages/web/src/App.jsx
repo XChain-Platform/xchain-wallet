@@ -52,6 +52,7 @@ import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js'
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
+import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
@@ -117,7 +118,6 @@ const KeyQR = lazyRoute(() => import('@xchain-wallet/core/shared/components/KeyQ
 const CreateWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateWallet.jsx'), 'CreateWallet');
 const ImportWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ImportWallet.jsx'), 'ImportWallet');
 const PairPartnerWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairPartnerWallet.jsx'), 'PairPartnerWallet');
-const Home = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Home.jsx'), 'Home');
 const Settings = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Settings.jsx'), 'Settings');
 const TokenDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenDetail.jsx'), 'TokenDetail');
 const ResumeConfirm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ResumeConfirm.jsx'), 'ResumeConfirm');

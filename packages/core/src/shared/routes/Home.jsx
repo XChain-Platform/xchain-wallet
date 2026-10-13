@@ -195,7 +195,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const isFull = variant === 'full';
     const browserOnline = useOnlineStatus();
     const { overall: reachabilityOverall } = useReachability({});
-    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
+    // Treat a corroborated service outage as offline even when the device
+    // still has a live Wi-Fi or Ethernet interface.
+    const offline = !browserOnline || reachabilityOverall === 'offline';
+    const networkActionsAvailable = !offline;
     const { showToast } = useToast();
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
@@ -636,10 +639,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         let freshBalances = null;
         let freshFetchedAt = null;
         let freshBalancesCacheable = false;
-        // A browser offline event is definitive enough to avoid starting work
-        // that cannot finish. In particular, keep the last successful balance
-        // state on screen instead of replacing it with a loading skeleton.
-        if (!isNavigatorOnline()) {
+        // A device-offline signal or corroborated service outage avoids work
+        // that cannot finish and keeps saved balances in place.
+        if (offline || !isNavigatorOnline()) {
             pollThrottleRef.current.fail();
             if (!isCancelled()) setCachedBalancesUpdating(false);
             return;
@@ -817,14 +819,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             } catch { /* non-fatal */ }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messaging]);
+    }, [messaging, offline]);
 
     // The one manual refresh on Home (the hero's button): reloads balances,
     // and with them the prices, quietly over what is on screen. A failure is a
     // toast, never a skeleton or a banner over balances that are still good.
     // A load already in flight (a poll, a focus refresh) is not doubled up.
     const refreshPortfolio = useCallback(async () => {
-        if (!activeWalletId || portfolioRefreshing || !browserOnline || !isNavigatorOnline()) return;
+        if (!activeWalletId || portfolioRefreshing || offline || !isNavigatorOnline()) return;
         if (pollThrottleRef.current.isInFlight()) return;
         const refreshId = portfolioRefreshIdRef.current + 1;
         portfolioRefreshIdRef.current = refreshId;
@@ -840,7 +842,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         } finally {
             if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
         }
-    }, [activeWalletId, activeAccountId, browserOnline, loadHomeData, portfolioRefreshing]);
+    }, [activeWalletId, activeAccountId, offline, loadHomeData, portfolioRefreshing]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -884,7 +886,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // has not aged", which the beat must ignore.
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            if (!isNavigatorOnline()) return;
+            if (offline || !isNavigatorOnline()) return;
             if (pollThrottleRef.current.isInFlight()) return;
             // Claim the slot the reset path's way. `start()` alone marks a
             // load in flight only once the window has aged, and at beat time
@@ -908,7 +910,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // of the burst rides the data the beat already has.
         const onVisibilityOrFocus = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            if (!isNavigatorOnline()) return;
+            if (offline || !isNavigatorOnline()) return;
             if (!pollThrottleRef.current.start()) return;
             load();
         };
@@ -921,14 +923,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             window.removeEventListener('focus', onVisibilityOrFocus);
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
-    }, [activeWalletId, activeAccountId, loadHomeData]);
+    }, [activeWalletId, activeAccountId, loadHomeData, offline]);
 
-    // Reconnect immediately rather than waiting for the next balance poll.
+    // Reconnect immediately after either the device or wallet services recover.
     // The quiet refresh preserves cached rows until fresh data lands.
-    const wasBrowserOnlineRef = useRef(browserOnline);
+    const wasOfflineRef = useRef(offline);
     useEffect(() => {
-        const reconnected = !wasBrowserOnlineRef.current && browserOnline;
-        wasBrowserOnlineRef.current = browserOnline;
+        const reconnected = wasOfflineRef.current && !offline;
+        wasOfflineRef.current = offline;
         if (!reconnected || !activeWalletId) return;
         if (pollThrottleRef.current.isInFlight()) return;
         pollThrottleRef.current.reset();
@@ -939,7 +941,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             isCancelled: () => cancelled,
         });
         return () => { cancelled = true; };
-    }, [browserOnline, activeWalletId, activeAccountId, loadHomeData]);
+    }, [offline, activeWalletId, activeAccountId, loadHomeData]);
 
     // Cancellation for the re-load the countdown fires, and it deliberately
     // does NOT ride the ticking effect's own flag: reaching zero clears
@@ -1233,7 +1235,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">{t('home.title')}</h1>
-                {!browserOnline ? (
+                {offline ? (
                     <StatusMessage variant="warning">
                         {balances
                             ? t('home.offline.cached')
@@ -1248,7 +1250,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <StatusMessage variant="status">{t('home.updatingBalances')}</StatusMessage>
                 ) : null}
 
-                {balances === null && browserOnline && !loadErrorText ? (
+                {balances === null && !offline && !loadErrorText ? (
                     <div role="status" aria-label={t('home.loadingBalances')} aria-busy="true">
                         <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
                     </div>
