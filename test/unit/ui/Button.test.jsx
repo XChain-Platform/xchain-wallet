@@ -200,6 +200,13 @@ describe('<Button>', () => {
                 ));
             }
             const iconButton = css.match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
+            expect(iconButton).toMatch(/align-items:\s*center/);
+            expect(iconButton).toMatch(/justify-content:\s*center/);
+            if (component === 'AddressField') {
+                // AddressField wraps the kit Button, which takes its square box from the size prop.
+                expect(source).toMatch(/<Button[\s\S]*?size=\{size\}/);
+                continue;
+            }
             expect(iconButton).toMatch(/width:\s*var\(--address-control-height\)/);
             expect(iconButton).toMatch(/height:\s*var\(--address-control-height\)/);
             expect(iconButton).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
