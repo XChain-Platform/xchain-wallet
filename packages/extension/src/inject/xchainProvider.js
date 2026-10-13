@@ -195,7 +195,15 @@
             const handlers = listeners.get(data.event);
             if (!handlers) return;
             for (const fn of handlers) {
-                try { fn(data.payload); } catch { /* isolate listener errors */ }
+                try {
+                    const result = fn(data.payload);
+                    // Event callbacks are user code. Isolate rejected async
+                    // handlers as well as synchronous throws so one listener
+                    // cannot create a page-level unhandled rejection.
+                    if (result && typeof result.catch === 'function') {
+                        result.catch(() => {});
+                    }
+                } catch { /* isolate listener errors */ }
             }
         }
     });

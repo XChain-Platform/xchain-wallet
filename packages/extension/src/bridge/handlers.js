@@ -499,19 +499,23 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signMessage');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        const signWalletId = decision.walletId ?? walletId;
-        // Seed the cache from this real approval so the NEXT localhost sign
-        // can auto-sign. Inert unless auto-sign is enabled.
-        rememberSignPassword(req.origin, settings, signWalletId, decision);
         const result = await invokeSignMessage(deps, {
             ...req,
-            walletId: signWalletId,
+            // The vault record owns the signing key. The approval window's
+            // wallet picker is presentation state and cannot redirect a
+            // request for one address to another wallet.
+            walletId,
             password: decision.password,
         });
+        const success = signMessageSuccess(req, result);
+        // Cache credentials and widen permissions only after signing produced
+        // a valid result. A bad password or signer failure must leave no state
+        // that changes how the next request is authorized.
+        rememberSignPassword(req.origin, settings, walletId, decision);
         if (!site.permissions.canSignMessage && decision.savePermanent) {
             await updateSitePermissions(deps.vault, site, { canSignMessage: true }, { events });
         }
-        return signMessageSuccess(req, result);
+        return success;
     });
 
     register('bridge.signAction', async (req, deps) => {
@@ -553,21 +557,24 @@ export function registerBridgeHandlers(host, opts = {}) {
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
         if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
-        const signingPaths = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
+        const resolved = await resolveBridgeSigningPaths(deps, site, req.chainId, req.signingPaths);
         const signed = await signPsbtFlow({
             vault: deps.vault,
-            walletId: decision.walletId,
+            walletId: resolved.walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             psbtHex: req.psbtHex,
-            signingPaths,
+            signingPaths: resolved.signingPaths,
         });
         // SignPsbtSuccess: signedPsbtHex always, txHex only when the wallet
         // finalized, txid only when it broadcast. Copied field by field rather
         // than spread so an internal field the signer grows later cannot leak
         // to a page by default.
+        if (typeof signed?.signedPsbtHex !== 'string' || signed.signedPsbtHex.length === 0) {
+            throw bridgeError('UNREACHABLE', 'signPsbt returned no signed PSBT');
+        }
         return {
             ok: true,
             signedPsbtHex: signed?.signedPsbtHex,
@@ -633,15 +640,16 @@ export function registerBridgeHandlers(host, opts = {}) {
                 inputs: req.inputs,
             },
         });
+        if (!validCoSignOutcome(outcome)) {
+            throw bridgeError('UNREACHABLE', 'coSign returned an invalid outcome');
+        }
         // Both CoSignApprovedSuccess and CoSignRefused are `ok: true`: a policy
         // refusal is a well-formed answer to a well-formed request, distinct
         // from a BridgeErrorResult, so the flow's own `approved` flag carries
         // through unchanged and only the missing `ok` is added.
         return {
             ok: true,
-            ...(outcome && typeof outcome === 'object'
-                ? outcome
-                : { approved: false, reason: 'INTERNAL_ERROR' }),
+            ...outcome,
         };
     });
 
@@ -983,25 +991,26 @@ async function executeSignAction(req, deps, ctx) {
     if (!decision?.approved) throw new UserRejectedError('signAction');
     if (!decision.password) throw bridgeError('NO_PASSWORD', 'approvals must return password');
 
-    // savePermanent is a single-action affordance (the per-action prompt's
-    // "always allow" checkbox). A reused groupDecision (parallel) never offers
-    // it, and a cache-synthesized decision never sets it, so neither can
-    // silently escalate a site to 'always'.
-    if (!preDecision && !fromCache && decision.savePermanent) {
-        await updateSitePermissions(deps.vault, site, {
-            canSignAction: {
-                ...site.permissions.canSignAction,
-                [actionName]: 'always',
-            },
-        }, { events });
-    }
-
-    // Seed the cache from a fresh single-action approval so the next localhost
-    // sign can auto-sign. Skipped for a parallel batch (preDecision) and for a
-    // decision that itself came from the cache. Inert unless auto-sign is on.
-    if (!preDecision && !fromCache && typeof rememberSignPassword === 'function') {
-        rememberSignPassword(req.origin, settings, decision.walletId ?? walletId, decision);
-    }
+    const finish = async (submitted) => {
+        const success = signActionSuccess(req.chainId, submitted);
+        // savePermanent is a single-action affordance. Persist it only after
+        // the approved action returns a valid success, so a signer or broadcast
+        // failure cannot silently authorize the next attempt.
+        if (!preDecision && !fromCache && decision.savePermanent) {
+            await updateSitePermissions(deps.vault, site, {
+                canSignAction: {
+                    ...site.permissions.canSignAction,
+                    [actionName]: 'always',
+                },
+            }, { events });
+        }
+        // The password cache follows the same commit point. A failed unlock
+        // must prompt again rather than replaying a known-bad credential.
+        if (!preDecision && !fromCache && typeof rememberSignPassword === 'function') {
+            rememberSignPassword(req.origin, settings, walletId, decision);
+        }
+        return success;
+    };
 
     // dApp-controlled params spread FIRST, trusted keys after: the approval
     // popup and assertChainPermitted validated req.chainId, so params must
@@ -1044,14 +1053,14 @@ async function executeSignAction(req, deps, ctx) {
             tick: sendTick,
             amount: sendAmount,
             vault: deps.vault,
-            walletId: decision.walletId ?? walletId,
+            walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             chainId: req.chainId,
             trackPendingTx: true,
         });
-        return signActionSuccess(req.chainId, submitted);
+        return finish(submitted);
     }
     if (actionName === 'SWEEP') {
         // SweepActionParams' optional single-asset `asset` has no consumer:
@@ -1063,14 +1072,14 @@ async function executeSignAction(req, deps, ctx) {
             from: fromSource,
             to: toAddress,
             vault: deps.vault,
-            walletId: decision.walletId ?? walletId,
+            walletId,
             password: decision.password,
             chainRegistry: deps.chainRegistry,
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
             chainId: req.chainId,
         });
-        return signActionSuccess(req.chainId, submitted);
+        return finish(submitted);
     }
     throw bridgeError('UNREACHABLE', 'supported action fell through');
 }
@@ -1287,6 +1296,9 @@ function connectSuccess(accounts, permissions) {
 
 /** SignMessageSuccess (§43.2). `signedMessage` is the exact bytes signed. */
 function signMessageSuccess(req, result) {
+    if (typeof result?.signature !== 'string' || result.signature.length === 0) {
+        throw bridgeError('UNREACHABLE', 'signMessage returned no signature');
+    }
     return {
         ok: true,
         address: req.address,
@@ -1308,6 +1320,9 @@ function signMessageSuccess(req, result) {
  * bridge-spec now declares the field optional for this reason.
  */
 function signActionSuccess(chainId, submitted) {
+    if (typeof submitted?.txid !== 'string' || submitted.txid.length === 0) {
+        throw bridgeError('UNREACHABLE', 'signAction returned no transaction id');
+    }
     const raw = submitted?.actionIndex ?? submitted?.action_index;
     const actionIndex = Number(raw);
     return {
@@ -1619,7 +1634,7 @@ async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
         ? all.filter((a) => a.chain === descriptor.coin && a.network === descriptor.networkKind)
         : [];
     const accountIds = new Set(site?.permissions?.accounts ?? []);
-    return entries.map((entry) => {
+    const resolved = entries.map((entry) => {
         const addr = typeof entry.address === 'string' && entry.address.length > 0
             ? onChain.find((a) => a.address === entry.address) ?? null
             : onChain.find((a) => a.derivationPath === entry.derivationPath) ?? null;
@@ -1629,14 +1644,42 @@ async function resolveBridgeSigningPaths(deps, site, chainId, entries) {
         if (accountIds.size > 0 && !(addr.accountId && accountIds.has(addr.accountId))) {
             throw bridgeError('ADDRESS_NOT_PERMITTED', entry.address ?? entry.derivationPath ?? '');
         }
-        return {
+        return { entry, addr };
+    });
+    const walletIds = new Set((await Promise.all(
+        resolved.map(({ addr }) => walletIdForAddress(deps.vault, addr.id)),
+    )).filter(Boolean));
+    if (walletIds.size !== 1) {
+        throw bridgeError('INVALID_PARAMS', 'signingPaths must resolve to exactly one wallet');
+    }
+    return {
+        walletId: [...walletIds][0],
+        signingPaths: resolved.map(({ entry, addr }) => ({
             inputIndex: entry.inputIndex,
             // The identical mapping the sign-in and signMessage paths use.
             path: addr.derivationPath ?? undefined,
             addressId: addr.derivationPath ? undefined : addr.id,
             ...(entry.sighashType !== undefined ? { sighashType: entry.sighashType } : {}),
-        };
-    });
+        })),
+    };
+}
+
+function validCoSignOutcome(outcome) {
+    if (!outcome || typeof outcome !== 'object' || typeof outcome.approved !== 'boolean') {
+        return false;
+    }
+    if (!outcome.approved) return typeof outcome.reason === 'string' && outcome.reason.length > 0;
+    const single = ['publicNonce', 'sig', 'msg'].every(
+        (field) => typeof outcome[field] === 'string' && outcome[field].length > 0,
+    );
+    const multiple = Array.isArray(outcome.signatures) && outcome.signatures.length > 0
+        && outcome.signatures.every((signature) => (
+            Number.isInteger(signature?.index)
+            && ['publicNonce', 'sig', 'msg'].every(
+                (field) => typeof signature[field] === 'string' && signature[field].length > 0,
+            )
+        ));
+    return single || multiple;
 }
 
 async function invokeSignMessage(deps, req) {
