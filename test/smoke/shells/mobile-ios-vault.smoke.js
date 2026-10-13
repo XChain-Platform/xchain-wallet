@@ -39,7 +39,7 @@
 //      that is what makes re-enrolment destroy it.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -209,6 +209,96 @@ assert.match(
     'the backend factory must refuse a broken native shell rather than downgrade it to IndexedDB',
 );
 
+// --- 5. The native QR scanner (qrScanStart / qrScanStop) --------------------
+//
+// WKWebView has no BarcodeDetector, so on iOS the only camera path is this
+// plugin pair. These checks hold the strings the SPA matches on, the Apple-only
+// detector, the threading rules, and the rule that a scanned value is never logged.
+
+const qrScan = codeOnly(readFileSync(join(iosApp, 'vault', 'VaultQrScan.swift'), 'utf8'));
+const qrView = codeOnly(readFileSync(join(iosApp, 'vault', 'VaultQrScannerViewController.swift'), 'utf8'));
+
+// Both methods are exposed to the bridge; the loop above proves each has an @objc func.
+for (const method of ['qrScanStart', 'qrScanStop']) {
+    assert.ok(declared.has(method), `${method} is not declared to the bridge, so the SPA cannot open the scanner`);
+}
+
+// The event names, close reasons and reject messages are strings the SPA matches on.
+const qrEvents = new Set([...qrScan.matchAll(/emit\?\("([A-Za-z]+)"/g)].map((m) => m[1]));
+assert.deepEqual([...qrEvents].sort(), ['qrFrame', 'qrScanClosed'], 'the scanner sends exactly qrFrame and qrScanClosed');
+const enumBody = (name) => new RegExp(`enum ${name}\\b[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(qrScan)?.[1] ?? '';
+for (const reason of ['cancelled', 'interrupted', 'error']) {
+    assert.match(enumBody('QrScanCloseReason'), new RegExp(`case ${reason}\\b`), `qrScanClosed can say ${reason}`);
+}
+for (const refusal of ['denied', 'unavailable', 'busy']) {
+    assert.match(enumBody('QrScanRefusal'), new RegExp(`case ${refusal}\\b`), `qrScanStart can reject ${refusal}`);
+}
+
+// Apple's own QR detector, asked for QR only, and no third-party scanner module.
+assert.match(qrView, /AVCaptureMetadataOutput\(\)/, 'the scanner reads codes with AVCaptureMetadataOutput');
+assert.match(qrView, /metadataObjectTypes = \[\.qr\]/, 'QR is the only code type the detector is asked for');
+for (const [name, text] of [['VaultQrScan.swift', qrScan], ['VaultQrScannerViewController.swift', qrView]]) {
+    for (const [, mod] of text.matchAll(/^import (\w+)/gm)) {
+        assert.ok(
+            ['AVFoundation', 'UIKit', 'Foundation'].includes(mod),
+            `${name} imports ${mod}; the scanner uses only AVFoundation and UIKit`,
+        );
+    }
+    // A scanned value can be an address, a payment request or a signed transaction, so nothing is logged.
+    assert.ok(
+        !/\b(print|NSLog|os_log|debugPrint|dump)\(|\bCAPLog\b|\bLogger\(/.test(text),
+        `${name} must not log; a scanned value could end up in the device log`,
+    );
+}
+
+// The camera starts and stops on its own queue, never on the main thread.
+for (const op of ['startRunning', 'stopRunning']) {
+    const uses = [...qrView.matchAll(new RegExp(`\\.${op}\\(\\)`, 'g'))];
+    assert.ok(uses.length >= 1, `the scanner calls ${op}`);
+    for (const use of uses) {
+        const before = qrView.slice(Math.max(0, use.index - 120), use.index);
+        assert.match(before, /sessionQueue\.async \{/, `${op} runs on the session queue; on the main thread it blocks the UI`);
+    }
+}
+
+// Each way the scanner closes on its own is wired: backgrounding, a camera error, the Cancel button.
+assert.match(
+    qrScan, /UIApplication\.didEnterBackgroundNotification[\s\S]{0,200}?\.interrupted/,
+    'backgrounding closes the scan as interrupted',
+);
+assert.match(
+    qrView, /\.AVCaptureSessionRuntimeError[\s\S]{0,200}?onClose\?\(\.error\)/,
+    'a camera session error closes the scan as error',
+);
+assert.match(qrView, /cancelTapped\(\) \{\s*onClose\?\(\.cancelled\)/, 'the Cancel button closes the scan as cancelled');
+assert.match(
+    qrView, /modalPresentationStyle = \.fullScreen/,
+    'full screen, so no swipe can dismiss the scanner without the plugin knowing',
+);
+
+// Wherever the SPA names a QR method or event, the plugin answers to that exact string.
+function sourcesUnder(dir) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourcesUnder(path);
+        return /\.(js|jsx)$/.test(entry.name) ? [path] : [];
+    });
+}
+const spaQrNames = new Set();
+for (const dir of [join(wsRoot, 'packages', 'core', 'src'), join(wsRoot, 'packages', 'web', 'src')]) {
+    for (const file of sourcesUnder(dir)) {
+        for (const m of readFileSync(file, 'utf8').matchAll(/['"](qr(?:Scan[A-Z][A-Za-z]*|Frame))['"]/g)) {
+            spaQrNames.add(m[1]);
+        }
+    }
+}
+for (const name of spaQrNames) {
+    assert.ok(
+        declared.has(name) || qrEvents.has(name),
+        `the SPA uses "${name}", which the iOS plugin neither declares nor emits`,
+    );
+}
+
 console.log(
     'OK: iOS vault smoke (S2: jsName XChainVault matches nativeVault.js PLUGIN_NAME;'
     + ` all ${calledByJs.size} SPA-called methods are both declared to the bridge and @objc-implemented;`
@@ -217,5 +307,9 @@ console.log(
     + ' vault key pinned WhenUnlockedThisDeviceOnly + non-synchronizable with no weaker class present;'
     + ' biometric wrap uses biometryCurrentSet, no biometryAny, no reuse window, no evaluatePolicy gate.'
     + ' the shared SPA refuses to boot a native shell whose plugin never registered, checked'
-    + ' before React mounts, and the backend factory throws rather than downgrading to IndexedDB)',
+    + ' before React mounts, and the backend factory throws rather than downgrading to IndexedDB.'
+    + ' QR: qrScanStart/qrScanStop declared, events qrFrame and qrScanClosed with reasons cancelled,'
+    + ' interrupted and error, rejects denied/unavailable/busy, AVCaptureMetadataOutput for .qr only, no'
+    + ' third-party import, no logging, camera start/stop on the session queue, full-screen presentation,'
+    + ` and ${spaQrNames.size} QR name(s) the SPA uses all answered by the plugin)`,
 );
