@@ -53,7 +53,6 @@
 .search {
     flex: 1 1 auto;
     min-width: 160px;
-    max-width: 320px;
 }
 
 /* `<Input>` wraps its native <input> in a column-flex `.field` that

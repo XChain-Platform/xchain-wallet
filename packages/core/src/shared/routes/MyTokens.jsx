@@ -15,6 +15,8 @@ import {
     Input,
     Skeleton,
     Icon,
+    ListPage,
+    EmptyState,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -184,40 +186,39 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
-                <div className={styles.toolbar}>
-                    <div className={styles.filters}>
-                        <div className={styles.search}>
-                            <Input
-                                type="search"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Search tokens"
-                                aria-label="Search your tokens by ticker or description"
-                            />
-                        </div>
-                        <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
-                            <button
-                                type="button"
-                                role="radio"
-                                aria-checked={mode === 'all'}
-                                className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
-                                onClick={() => setMode('all')}
-                            >
-                                All
-                            </button>
-                            <button
-                                type="button"
-                                role="radio"
-                                aria-checked={mode === 'owned'}
-                                className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
-                                onClick={() => setMode('owned')}
-                            >
-                                Holding
-                            </button>
-                        </div>
+            <ListPage toolbar={(
+                <>
+                    <div className={styles.search}>
+                        <Input
+                            type="search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search tokens"
+                            aria-label="Search your tokens by ticker or description"
+                        />
                     </div>
-                </div>
+                    <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === 'all'}
+                            className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
+                            onClick={() => setMode('all')}
+                        >
+                            All
+                        </button>
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === 'owned'}
+                            className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
+                            onClick={() => setMode('owned')}
+                        >
+                            Holding
+                        </button>
+                    </div>
+                </>
+            )}>
 
                 {loadError ? (
                     <p className={styles.error}>{loadError}</p>
@@ -236,17 +237,14 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 ) : null}
 
                 {isEmpty ? (
-                    <p className={styles.empty}>
-                        You don&apos;t own any tokens yet. Tap
-                        &ldquo;Issue new token&rdquo; to create one, or have
-                        someone transfer one to you.
-                    </p>
+                    <EmptyState
+                        title="You don't own any tokens yet."
+                        body="Tap “Issue new token” to create one, or have someone transfer one to you."
+                    />
                 ) : null}
 
                 {isFilteredEmpty ? (
-                    <p className={styles.empty}>
-                        No tokens match your filter.
-                    </p>
+                    <EmptyState title="No tokens match your filter." />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (
@@ -290,7 +288,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         ))}
                     </ul>
                 ) : null}
-            </div>
+            </ListPage>
         </Screen>
     );
 }

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -85,7 +85,6 @@ const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim()) && Number(
 export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialFromAddress, onManageOrders }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // The give chain is the one chain this form signs on; useActionForm owns
     // it, the source address on it and the three-way signer dispatch.
@@ -360,33 +359,35 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
-    if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
-    if (!addressesByChain || !giveChainId) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loadError) return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
+    if (!addressesByChain || !giveChainId) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
 
     const chainIds = chainsWithAddresses.length ? chainsWithAddresses : [giveChainId];
     const distinctCoins = new Set(chainIds.map((cid) => chainRegistry.get(cid)?.coin).filter(Boolean));
     if (distinctCoins.size < 2) {
         return wrap(
-            <StatusMessage variant="error" className={styles.error}>
-                A cross-chain order needs addresses on two different chains. Use Receive on a second chain and try again.
-            </StatusMessage>,
+            <ListPage>
+                <StatusMessage variant="error" className={styles.error}>
+                    A cross-chain order needs addresses on two different chains. Use Receive on a second chain and try again.
+                </StatusMessage>
+            </ListPage>,
         );
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
+            return wrap(<ListPage><WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>);
         }
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain order" unsaved={result.unsaved} />);
+            return wrap(<ListPage><QueuedResultPanel onDone={onBack} what="cross-chain order" unsaved={result.unsaved} /></ListPage>);
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Cross-chain order broadcast</h2>
                 {txid ? (
                     <>
@@ -403,7 +404,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -444,7 +445,28 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review cross-chain order"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="secondary" onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode ? 'Create unsigned transaction'
+                                : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : (giveDescriptor ? `Place order on ${giveDescriptor.displayName}` : 'Place order')}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Offer {giveOwnership ? `ownership of ${giveTick}` : `${giveAmount} ${giveTick}`} on {giveDescriptor?.displayName || giveChainId} for
                     {' '}{getOwnership ? `ownership of ${getTick}` : `${getAmount} ${getTick}`} on {getDescriptor?.displayName || getChainId}.
@@ -478,38 +500,43 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
-                <div className={styles.actions}>
-                    <Button variant="secondary" onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction'
-                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (giveDescriptor ? `Place order on ${giveDescriptor.displayName}` : 'Place order')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.hint}>
-                Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
-                as matching offers arrive.
-                For an all-or-nothing single fill use Cross-chain swap.
-            </p>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
-                gap: 'var(--xc-space-3)',
-            }}>
-                <fieldset style={fieldsetStyle}>
-                    <legend style={legendStyle}>You give</legend>
+        <FormPage
+            label="Create cross-chain order"
+            onSubmit={handleReview}
+            sectioned
+            intro={(
+                <>
+                    Your order waits on the network&apos;s order book and fills automatically, possibly in parts,
+                    as matching offers arrive.
+                    For an all-or-nothing single fill use Cross-chain swap.
+                </>
+            )}
+            status={validationError || formError ? (
+                <>
+                    {validationError ? <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage> : null}
+                    {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                </>
+            ) : null}
+            actions={(
+                <>
+                    {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={confirmAction.composing}
+                        disabled={!fromAddress || !!validationError || confirmAction.composing}
+                    >
+                        {singleEncode ? 'Place order' : 'Preview'}
+                    </Button>
+                </>
+            )}
+        >
+            <FormSection title="You give">
                     <ChainPicker
                         label="Give chain"
                         value={giveChainId || ''}
@@ -559,10 +586,9 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                                 : null}
                         />
                     ) : null}
-                </fieldset>
+            </FormSection>
 
-                <fieldset style={fieldsetStyle}>
-                    <legend style={legendStyle}>You get</legend>
+            <FormSection title="You get">
                     <ChainPicker
                         label="Get chain"
                         value={getChainId || ''}
@@ -604,57 +630,43 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                             }}
                         />
                     ) : null}
-                </fieldset>
-            </div>
+            </FormSection>
 
-            <p className={styles.successLabel}>Expiration</p>
-            <label className={styles.checkRow}>
-                <input type="radio" name="xorder-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.checkRow}>
-                <input type="radio" name="xorder-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
-            {expMode === 'custom' ? (
-                <Input
-                    label="Expires"
-                    type="datetime-local"
-                    hint="The order is valid until this wall-clock time. Must be in the future."
-                    value={expInput}
-                    onChange={(e) => setExpInput(e.target.value)}
-                />
-            ) : null}
+            <FormSection title="Order settings">
+                    <p className={styles.successLabel}>Expiration</p>
+                    <label className={styles.checkRow}>
+                        <input type="radio" name="xorder-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
+                        {' '}Default window
+                    </label>
+                    <label className={styles.checkRow}>
+                        <input type="radio" name="xorder-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
+                        {' '}Expire at a specific time
+                    </label>
+                    {expMode === 'custom' ? (
+                        <Input
+                            label="Expires"
+                            type="datetime-local"
+                            hint="The order is valid until this wall-clock time. Must be in the future."
+                            value={expInput}
+                            onChange={(e) => setExpInput(e.target.value)}
+                        />
+                    ) : null}
 
-            <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={giveCoinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveCoinTicker} />
-
-            {validationError ? <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage> : null}
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                {onManageOrders ? <Button variant="secondary" onClick={onManageOrders}>My orders</Button> : null}
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || !!validationError || confirmAction.composing}
-                >
-                    {singleEncode ? 'Place order' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+                    {feeTiers ? (
+                        <FeeSelector
+                            label="Network fee"
+                            coinTicker={giveCoinTicker}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={setFeePick}
+                            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                        />
+                    ) : null}
+                    <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveCoinTicker} />
+            </FormSection>
+        </FormPage>,
     );
 }
 
@@ -666,16 +678,3 @@ function DetailRow({ label, value }) {
         </>
     );
 }
-
-const fieldsetStyle = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-3)',
-    margin: 0,
-    background: 'var(--xc-bg-muted)',
-};
-
-const legendStyle = {
-    fontWeight: 600,
-    padding: '0 var(--xc-space-2)',
-};

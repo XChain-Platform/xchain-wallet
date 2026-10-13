@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -85,7 +85,6 @@ function isValidIssueAddress(value, descriptor) {
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -533,15 +532,15 @@ export function TokenWizard({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
     // confirm page, rendered in place of the wizard step (the overlay
@@ -692,11 +691,13 @@ export function TokenWizard({ walletId, onBack }) {
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="token creation" unsaved={result.unsaved} />,
+                <ListPage>
+                    <QueuedResultPanel onDone={onBack} what="token creation" unsaved={result.unsaved} />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Token created</h2>
                 {txid ? (
                     <>
@@ -709,13 +710,26 @@ export function TokenWizard({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     // stage === 'preview' or 'sign'
     return wrap(
-        <form onSubmit={handleSign} noValidate>
+        <FormPage
+            label="Review token creation"
+            onSubmit={handleSign}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={stage === 'sign'}
+                    disabled={password.length === 0}
+                >
+                    Create token
+                </Button>
+            )}
+        >
             <p className={styles.summary}>{decoded?.summary}</p>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
@@ -760,17 +774,7 @@ export function TokenWizard({ walletId, onBack }) {
                 disabled={stage === 'sign'}
                 error={submitError || undefined}
             />
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={stage === 'sign'}
-                    disabled={password.length === 0}
-                >
-                    Create token
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -1021,8 +1025,7 @@ const TEMPLATES = [
 
 function renderTemplateStage({ onPick }) {
     return (
-        <>
-            <p className={styles.stageHint}>Choose a template.</p>
+        <ListPage intro="Choose a template.">
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
                     <li key={t.id}>
@@ -1057,7 +1060,7 @@ function renderTemplateStage({ onPick }) {
                 Any token you create here can pay dividends to its holders later.
                 That is a property of every token, not something a template turns on.
             </p>
-        </>
+        </ListPage>
     );
 }
 
@@ -1066,8 +1069,21 @@ function renderChainStage({
     subtoken, onPickSource, onBack, onNext,
 }) {
     return (
-        <>
-            <p className={styles.stageHint}>Which chain should this token live on?</p>
+        <FormPage
+            label="Choose token chain"
+            onSubmit={(event) => event.preventDefault()}
+            intro="Which chain should this token live on?"
+            actions={(
+                <Button
+                    type="button"
+                    variant="primary"
+                    onClick={onNext}
+                    disabled={!fromAddress}
+                >
+                    Next
+                </Button>
+            )}
+        >
             <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
@@ -1088,18 +1104,7 @@ function renderChainStage({
                     No address on this chain. Use Receive to generate one first.
                 </StatusMessage>
             )}
-
-            <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="primary"
-                    onClick={onNext}
-                    disabled={!fromAddress}
-                >
-                    Next
-                </Button>
-            </div>
-        </>
+        </FormPage>
     );
 }
 
@@ -1160,10 +1165,19 @@ function renderDetailsStage({
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
     const isEdition = resolved === 'edition';
     return (
-        <form onSubmit={onSubmit} noValidate>
-            <p className={styles.stageHint}>
-                Template: <strong>{resolved}</strong>
-            </p>
+        <FormPage
+            label="Token details"
+            onSubmit={onSubmit}
+            intro={<>Template: <strong>{resolved}</strong></>}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button type="submit" variant="primary" loading={submitLoading}>
+                    {submitLabel}
+                </Button>
+            )}
+        >
             {show.parentToken ? (
                 <Input
                     label="Parent ticker"
@@ -1327,15 +1341,7 @@ function renderDetailsStage({
                 coinTicker={coinTicker}
                 mandatory={nativeFeeMandatory}
             />
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button type="submit" variant="primary" block loading={submitLoading}>
-                    {submitLabel}
-                </Button>
-            </div>
-        </form>
+        </FormPage>
     );
 }
 

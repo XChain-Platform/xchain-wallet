@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -223,7 +223,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{noticeBody}</div> : noticeBody}
+                <FormPage label="Automatic Donation System">
+                    {noticeBody}
+                </FormPage>
             </Screen>
         );
     }
@@ -241,14 +243,49 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{persistingBody}</div> : persistingBody}
+                <FormPage label="Wallet creation status">
+                    {persistingBody}
+                </FormPage>
             </Screen>
         );
     }
 
     if (stage === 'verify') {
         const verifyBody = (
-            <>
+            <FormPage
+                label="Verify recovery phrase"
+                onSubmit={handleSubmitVerify}
+                status={(
+                    <>
+                        {quizError ? (
+                            <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
+                        ) : null}
+                        {persistError ? (
+                            <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
+                        ) : null}
+                    </>
+                )}
+                actions={(
+                    <>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={() => { setQuizError(null); setStage('mnemonic'); }}
+                            disabled={stage === 'persisting'}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'persisting'}
+                            icon={<Icon.CheckIcon />}
+                        >
+                            Create wallet
+                        </Button>
+                    </>
+                )}
+            >
                 <header className={headClass}>
                     <h1 className={titleClass}>
                         {isFull ? 'Verify your recovery phrase' : 'Verify phrase'}
@@ -259,66 +296,52 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             : 'Type the words at these positions to confirm.'}
                     </p>
                 </header>
-                <form onSubmit={handleSubmitVerify} noValidate>
-                    <ol className={styles.quizList}>
-                        {quizPositions.map((p) => (
-                            <li key={p} className={styles.quizRow}>
-                                <Input
-                                    label={`Word ${p}`}
-                                    value={quizAnswers[p] || ''}
-                                    onChange={(e) => {
-                                        setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
-                                        if (quizError) setQuizError(null);
-                                    }}
-                                    autoComplete="off"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    disabled={stage === 'persisting'}
-                                />
-                            </li>
-                        ))}
-                    </ol>
-                    {quizError ? (
-                        <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
-                    ) : null}
-                    {persistError ? (
-                        <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                    ) : null}
-                    <div className={actionsClass}>
-                        <Button
-                            variant="secondary"
-                            type="button"
-                            onClick={() => { setQuizError(null); setStage('mnemonic'); }}
-                            disabled={stage === 'persisting'}
-                            size={isFull ? undefined : 'sm'}
-                        >
-                            Back
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={stage === 'persisting'}
-                            block={!isFull}
-                            size={isFull ? undefined : 'sm'}
-                            icon={<Icon.CheckIcon />}
-                        >
-                            Create wallet
-                        </Button>
-                    </div>
-                </form>
-            </>
+                <ol className={styles.quizList}>
+                    {quizPositions.map((p) => (
+                        <li key={p} className={styles.quizRow}>
+                            <Input
+                                label={`Word ${p}`}
+                                value={quizAnswers[p] || ''}
+                                onChange={(e) => {
+                                    setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
+                                    if (quizError) setQuizError(null);
+                                }}
+                                autoComplete="off"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                disabled={stage === 'persisting'}
+                            />
+                        </li>
+                    ))}
+                </ol>
+            </FormPage>
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{verifyBody}</div> : verifyBody}
+                {verifyBody}
             </Screen>
         );
     }
 
     if (stage === 'mnemonic') {
         const mnemonicBody = (
-            <>
+            <FormPage
+                label="Recovery phrase"
+                status={persistError ? (
+                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        variant="primary"
+                        onClick={handleStartVerify}
+                        disabled={!saved}
+                        icon={<Icon.CheckIcon />}
+                    >
+                        Verify recovery phrase
+                    </Button>
+                )}
+            >
                 <header className={headClass}>
                     <h1 className={titleClass}>
                         {isFull
@@ -358,32 +381,30 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             : "I've saved my recovery phrase."}
                     </span>
                 </label>
-                {persistError ? (
-                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                ) : null}
-                <div className={actionsClass}>
-                    <Button
-                        variant="primary"
-                        onClick={handleStartVerify}
-                        disabled={!saved}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                        icon={<Icon.CheckIcon />}
-                    >
-                        Verify recovery phrase
-                    </Button>
-                </div>
-            </>
+            </FormPage>
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{mnemonicBody}</div> : mnemonicBody}
+                {mnemonicBody}
             </Screen>
         );
     }
 
     const formBody = (
-        <form onSubmit={handlePasswordSubmit} noValidate>
+        <FormPage
+            label="Create wallet"
+            onSubmit={handlePasswordSubmit}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={password.length === 0 || confirm.length === 0}
+                    icon={<Icon.MigrateIcon />}
+                >
+                    Next
+                </Button>
+            )}
+        >
             <header className={headClass}>
                 {isFull ? (
                     <img
@@ -509,23 +530,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </>
                 ) : null}
             </div>
-            <div className={actionsClass}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={password.length === 0 || confirm.length === 0}
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.MigrateIcon />}
-                >
-                    Next
-                </Button>
-            </div>
-        </form>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={screenHeader}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }
