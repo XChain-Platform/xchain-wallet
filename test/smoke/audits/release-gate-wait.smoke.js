@@ -78,6 +78,13 @@ const server = http.createServer((req, res) => {
                 html_url: 'https://example.invalid/run/777',
             }],
         };
+    } else if (path === '/repos/' + REPO + '/commits/${SHA}/status') {
+        body = { statuses: [{
+            context: 'license/cla',
+            state: 'success',
+            updated_at: '2026-08-14T10:00:00Z',
+            target_url: 'https://example.invalid/status/cla',
+        }] };
     } else if (path === '/repos/' + REPO + '/actions/runs/777/jobs') {
         body = { jobs: world.jobs || [] };
     } else if (path.startsWith('/repos/' + REPO + '/check-runs/')) {

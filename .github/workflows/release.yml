@@ -97,6 +97,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      statuses: read
     outputs:
       version: ${{ steps.check.outputs.version }}
       lockfile-sha256: ${{ steps.lockfile.outputs.sha256 }}
