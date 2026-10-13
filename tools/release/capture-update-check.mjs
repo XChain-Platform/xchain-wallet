@@ -22,9 +22,13 @@
 //
 //   --listen   Stand up a plain HTTP origin, record every request in
 //              full, and write them to a capture file. Point a REAL
-//              packaged build at it (build a rehearsal variant whose
-//              staging feed URL is this server) and you have a capture
-//              of the shipped app. This is the authoritative mode.
+//              packaged build at it and you have a capture of the
+//              shipped app. This is the authoritative mode. The route
+//              in is the packaged `app-update.yml`, rewritten by hand to
+//              a generic provider at this origin (the file --drive
+//              writes for its stub), and NOT XCHAIN_STAGING_FEED_URL:
+//              the build config refuses any feed URL that is not
+//              https://.../desktop/, and this origin is plain HTTP.
 //
 //   --drive    Stand up that same origin AND point the REAL
 //              `electron-updater` at it, with a stub app adapter instead
@@ -70,8 +74,8 @@
 // locally built bundle, not in this tool. The cheapest next probes: read
 // the updater events the app already broadcasts to its windows
 // (`broadcastToWindows('xchain:updater', ...)`) via devtools, or simply
-// take the capture against a CI-produced, Developer-ID-signed build once
-// ceremony A lands - which is the authoritative artifact anyway.
+// take the capture against a CI-produced, Developer-ID-signed build from
+// the release pipeline - which is the authoritative artifact anyway.
 //
 // THE DIFFERENCE BETWEEN THE MODES IS THE TRANSPORT, and it is stated in
 // the capture itself rather than left for a reader to infer. In a
@@ -124,12 +128,38 @@ async function listen(out, port) {
     });
     await new Promise((r) => server.listen(port, '127.0.0.1', r));
     const { port: actual } = server.address();
-    process.stderr.write(
-        `capture-update-check: listening on http://127.0.0.1:${actual}/\n`
-        + '  Build a rehearsal variant with XCHAIN_STAGING_FEED_URL pointed here,\n'
-        + `  install it, and let it check for updates. Writing to ${out}.\n`
-        + '  Ctrl-C when done.\n',
-    );
+    process.stderr.write(listenInstructions(actual, out));
+}
+
+/**
+ * What --listen tells the operator to do, given the port it bound.
+ *
+ * The packaged `app-update.yml` is the only feed a real build will take a
+ * plain-HTTP origin from: XCHAIN_STAGING_FEED_URL is refused at build time
+ * unless it is https://.../desktop/.
+ *
+ * @param {number} port
+ * @param {string} out
+ * @returns {string}
+ */
+export function listenInstructions(port, out) {
+    return `capture-update-check: listening on http://127.0.0.1:${port}/\n`
+        + '  Install a REAL packaged build (a target build, not dist:unpacked), then\n'
+        + '  overwrite its app-update.yml with exactly:\n'
+        + '      provider: generic\n'
+        + `      url: http://127.0.0.1:${port}/desktop/\n`
+        + '      channel: stable\n'
+        + '  It lives in the app\'s resources directory:\n'
+        + '    macOS     <App>.app/Contents/Resources/app-update.yml, then re-sign ad hoc\n'
+        + '              (codesign --force --deep -s - <App>.app): the edit breaks the seal\n'
+        + '    Windows   <install dir>\\resources\\app-update.yml\n'
+        + '    deb       <install dir under /opt>/resources/app-update.yml\n'
+        + '    AppImage  run it with --appimage-extract, edit\n'
+        + '              squashfs-root/resources/app-update.yml, launch squashfs-root/AppRun\n'
+        + '  Launch it and let it check for updates. This captures the update CHECK only:\n'
+        + '  every request is answered 404, so nothing is downloaded.\n'
+        + `  Writing to ${out}.\n`
+        + '  Ctrl-C when done.\n';
 }
 
 /**
@@ -269,9 +299,11 @@ function driveLibrary(out) {
     // The real function. Resolved from the installed tree rather than
     // copied, so a dependency bump changes the capture instead of
     // silently invalidating it.
+    // Resolved from this file, not from the CWD, the same tree drive() and --out use.
+    const desktopDir = fileURLToPath(new URL('../../packages/desktop/', import.meta.url));
     const httpExecutorPath = require.resolve('builder-util-runtime/out/httpExecutor.js', {
         paths: [require.resolve('electron-updater/package.json', {
-            paths: ['packages/desktop'],
+            paths: [desktopDir],
         })],
     });
     const { configureRequestOptions } = require(httpExecutorPath);
@@ -288,7 +320,7 @@ function driveLibrary(out) {
     // request, and a page claiming "nothing but IP and user agent" would
     // be wrong about it.
     const utilPath = require.resolve('electron-updater/out/util.js', {
-        paths: ['packages/desktop'],
+        paths: [desktopDir],
     });
     const { newUrlFromBase, getChannelFilename } = require(utilPath);
     const exampleUrl = newUrlFromBase(
@@ -338,7 +370,9 @@ Modes:
              the library-policy half without a packaged app, and is honest
              about being only that half.
   --listen   Stand up a plain HTTP origin, record every request in full, and
-             write them out. Point a REAL packaged build at it. This is the
+             write them out. Point a REAL packaged build at it by rewriting
+             its app-update.yml (printed on start), not through
+             XCHAIN_STAGING_FEED_URL, which must be https. This is the
              authoritative mode.
   --drive    That same origin, with the REAL electron-updater pointed at it
              behind a stub app adapter. Sees headers the UPDATER adds, which

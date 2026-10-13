@@ -77,7 +77,7 @@ export function MultisigCosignerShare({ walletId, addresses }) {
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {info ? (
                 <dl className={styles.detailsList}>
-                    <ShareRow label="xpub" value={info.xpub} note={info.accountPath ? `Account ${info.accountPath}` : null} />
+                    <ShareRow label="xpub" value={info.xpub} hint={info.accountPath ? `Account ${info.accountPath}` : null} />
                     <ShareRow label="Public key" value={info.pubkey} />
                     <ShareRow label="Master fingerprint" value={info.fingerprint} />
                     <ShareRow label="Derivation path" value={info.derivationPath} />
@@ -87,7 +87,7 @@ export function MultisigCosignerShare({ walletId, addresses }) {
     );
 }
 
-function ShareRow({ label, value, note = null }) {
+function ShareRow({ label, value, hint = null }) {
     return (
         <>
             <dt className={styles.detailsLabel}>{label}</dt>
@@ -95,7 +95,7 @@ function ShareRow({ label, value, note = null }) {
                 {value ? (
                     <>
                         <code style={monoStyle} data-testid={`cosigner-share-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</code>
-                        {note ? <span style={{ display: 'block', color: 'var(--xc-text-muted)' }}>{note}</span> : null}
+                        {hint ? <span style={{ display: 'block', color: 'var(--xc-text-muted)' }}>{hint}</span> : null}
                         <CopyButton value={value} ariaLabel={`Copy ${label}`} />
                     </>
                 ) : 'Not available from this signer'}

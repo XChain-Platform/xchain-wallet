@@ -29,6 +29,7 @@ import {
     FAMILY_MAINNET_COIN_TYPE_SLOT,
     FAMILY_NETWORK_WIF_BYTE,
     FAMILY_RBF_SUPPORTED,
+    FAMILY_FEE_UNIT,
 } from '../../../packages/core/src/registry/index.js';
 
 const btcMainnet = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-mainnet');
@@ -112,12 +113,6 @@ describe('validateChainDescriptor: family coin-type slot parity', () => {
         }
     });
 
-    // The per-template loops above `continue` when a bundled coin has no map
-    // entry, so a NEW bundled family added without registering it in the family
-    // maps would be pinned by nothing and still pass. This dedicated
-    // completeness check fails loud instead: every bundled coin MUST appear in
-    // both the coin-type slot map and the WIF-byte map. Genuinely custom /
-    // non-bundled chains stay intentionally unconstrained and are not checked.
     // A reserved bundled id must not be overridable with a mismatched coin,
     // which would dodge both coin-keyed parity pins.
     it('rejects a reserved id (bitcoin-mainnet) carrying a mismatched coin', () => {
@@ -145,6 +140,9 @@ describe('validateChainDescriptor: family coin-type slot parity', () => {
         }
     });
 
+    // This completeness check fails loud when a bundled family is missing from either
+    // family map: the slot loop above and the WIF-byte loop in the next block skip
+    // such a coin and pass (custom, non-bundled chains stay unconstrained).
     it('every bundled coin family is registered in both family maps', () => {
         const coins = [...new Set(BUNDLED_DESCRIPTORS.map((d) => d.coin))];
         for (const coin of coins) {
@@ -235,6 +233,35 @@ describe('validateChainDescriptor: family RBF capability pin', () => {
             expect(d.feeStrategy.rbfSupported, d.id).toBe(FAMILY_RBF_SUPPORTED[d.coin]);
         }
         expect(FAMILY_RBF_SUPPORTED.dogecoin).toBe(false);
+    });
+});
+
+describe('validateChainDescriptor: family fee-unit pin', () => {
+    const withUnit = (d, unit) => ({ ...d, feeStrategy: { ...d.feeStrategy, unit } });
+
+    it('rejects a dogecoin descriptor that declares sats-per-vbyte', () => {
+        const res = validateChainDescriptor(withUnit(dogeMainnet, 'sats-per-vbyte'));
+        expect(res.ok).toBe(false);
+        expect(res.errors.join(' ')).toMatch(/feeStrategy\.unit/);
+    });
+
+    it('refuses a remote sync that flips a dogecoin descriptor to sats-per-vbyte', () => {
+        const reg = new ChainRegistry();
+        expect(() => reg.applyRemoteDescriptors([withUnit(dogeMainnet, 'sats-per-vbyte')]))
+            .toThrow(/feeStrategy\.unit/);
+    });
+
+    it('leaves bitcoin free to declare sats-per-kbyte', () => {
+        const res = validateChainDescriptor(withUnit(btcMainnet, 'sats-per-kbyte'));
+        expect(res.ok, res.errors?.join('; ')).toBe(true);
+    });
+
+    it('the fee-unit map matches the bundled descriptors', () => {
+        for (const d of BUNDLED_DESCRIPTORS) {
+            if (!(d.coin in FAMILY_FEE_UNIT)) continue;
+            expect(d.feeStrategy.unit, d.id).toBe(FAMILY_FEE_UNIT[d.coin]);
+        }
+        expect(FAMILY_FEE_UNIT.dogecoin).toBe('sats-per-kbyte');
     });
 });
 

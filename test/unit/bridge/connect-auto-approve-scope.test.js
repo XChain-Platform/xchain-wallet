@@ -136,9 +136,10 @@ describe('bridge.connect: Developer-Mode auto-approve grants a concrete scope', 
         expect(res.ok).toBe(true);
         // Off-network and unknown chains are dropped; only the real intersection survives.
         expect(res.result.chains).toEqual(['bitcoin-regtest']);
-        // A non-existent account id cannot conjure a grant.
-        expect(res.result.permissions.accounts).toEqual(['acct-second']);
-        expect(res.result.accounts).toEqual([{ id: 'acct-second', name: 'Account 2' }]);
+        // The page names no accounts in ConnectOpts: a requested id is
+        // ignored and the grant is the primary account alone.
+        expect(res.result.permissions.accounts).toEqual(['acct-primary']);
+        expect(res.result.accounts).toEqual([{ id: 'acct-primary', name: 'Account 1' }]);
     });
 
     it('falls back to the approval prompt when no concrete scope resolves', async () => {

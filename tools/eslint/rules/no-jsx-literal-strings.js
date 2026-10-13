@@ -35,8 +35,9 @@
 //     iconLabel, aria, headline, statusLabel, allLabel, summaryNoun,
 //     menuHeader, emptyTitle, emptyBody, confirmLabel, cancelLabel,
 //     copyLabel, balanceText, submitLabel, what, prefix, noun, summary,
-//     error (the USER_FACING_ATTRS set below is the authority; keep this
-//     list in step with it). The last twenty-six are component props rather
+//     error, recovery, feeText, emptyActionLabel, warningNoun (the
+//     USER_FACING_ATTRS set below is the authority; keep this list in step
+//     with it). The last thirty are component props rather
 //     than DOM attributes: shipping components render copy through them,
 //     so a DOM-only set left that copy out of the translator index.
 //   - Destructured prop defaults  function C({ label = 'Copy' })  → flagged
@@ -49,6 +50,13 @@
 //     English in an interpolated aria-label as invisible, so that copy
 //     never reached the translator index. Pure-interpolation templates
 //     like {`${a}/${b}`} stay silent: every static chunk is trivial.
+//   - A ternary or `||` branch holding a literal or template wrapped in
+//     `.trim()`, `.trimStart()` or `.trimEnd()` is judged as the bare
+//     value:  feeText={fee ? `Network fee: ${fee}`.trim() : undefined}.
+//   - JSXAttribute inline object  recovery={{ label: 'Restore' }}  → flagged
+//     for those same attribute names, written directly or as a ternary /
+//     `||` branch, when a property whose KEY is in the set holds copy.
+//     style={{ color: 'red' }} stays silent because `style` is not in it.
 //   - JSXExpressionContainer in JSX content, holding a Literal, a
 //     template or a ternary / `||` fallback:
 //                              <span>{'literal'}</span>          → flagged
@@ -76,9 +84,15 @@
 //   - Tables imported from another module, e.g. a `*Copy.js` file
 //     consumed as hint={RESTORE_PASSWORD_HINTS.file}.
 //   - Copy returned by a helper call, or built inside a component (a
-//     descriptor array that is filtered and mapped before it renders).
+//     descriptor array that is filtered and mapped before it renders, or
+//     a function-local `const retry = { label: 'Try again' }` passed as
+//     recovery={retry}).
 //   - Descriptor keys outside USER_FACING_ATTRS, such as `description`,
 //     wherever the copy is written.
+//   - Copy passed through a `value` prop, e.g. a row component that
+//     renders <DetailRow label="x" value="Default window" /> as text.
+//     `value` stays unchecked because CopyButton and form controls carry
+//     data under it; give a copy-rendering prop a name in the set instead.
 //
 // What the rule allows:
 //
@@ -101,7 +115,7 @@
 //     `.smoke.js` or `.test.js` / `.jsx` / `.ts` / `.tsx`, or a path
 //     through a `/test/`, `/tools/`, `/claude/`, `/dist/` or
 //     `/node_modules/` directory) or an `ignoreFiles` entry. Each entry
-//     is a regular-expression source (or a RegExp) tested against the
+//     is a regular-expression source string tested against the
 //     absolute filename ESLint passes, so anchor on a directory, not the
 //     repo root: `ignoreFiles: ['/src/legacy/']`. Glob notation such as
 //     `src/legacy/**` or `src/*.jsx` is refused with an error naming the
@@ -216,10 +230,14 @@ const USER_FACING_ATTRS = new Set([
     // out of both gates' reach. `value` still stays out of the set, because
     // CopyButton takes its clipboard payload under that name.
     //
-    // The style guide's `kicker` and `note` are deliberately NOT here: both
-    // occur only under packages/web/src/style-guide, a developer surface no
-    // route outside that directory mounts, so their prose documents
-    // components rather than addressing a wallet user. If that surface is
+    // The style guide's `kicker` and `note` are deliberately NOT here: as
+    // JSX attributes both are kept to packages/web/src/style-guide, a
+    // developer surface no route outside that directory mounts, so their
+    // prose documents components rather than addressing a wallet user. A
+    // shipped component that renders copy through a prop uses a name in
+    // this set instead (MultisigCosignerShare's row takes `hint`), and the
+    // smoke test fails on a `note=` or `kicker=` attribute outside the style
+    // guide, so this paragraph cannot go stale silently. If that surface is
     // ever meant to be in scope, the lever is the set AND a decision about
     // translating developer documentation, not one without the other.
     'what',
@@ -234,6 +252,19 @@ const USER_FACING_ATTRS = new Set([
     // (`error={err}`, `error={x || undefined}`), which no gate reports, and no
     // ObjectPattern gives `error` a string default.
     'error',
+    // StatusMessage renders `recovery.label` as its button text and accessible
+    // name. Call sites write the copy inside an inline object, which objectCopy judges.
+    'recovery',
+    // ConfirmActionModal renders `feeText` verbatim as the fee line, and the
+    // forms write it as a `Network fee: …` template; no prop default or
+    // attribute uses the name technically (the same-named locals are plain consts).
+    'feeText',
+    // BalanceList forwards `emptyActionLabel` to EmptyState's button text,
+    // the one-hop-earlier shape of `emptyBody`.
+    'emptyActionLabel',
+    // SignApproval interpolates `warningNoun` into the sentence under the
+    // signed text, the same shape as `noun` and `what`.
+    'warningNoun',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -288,6 +319,29 @@ export function templateCopy(node, allow = [], minLength = 2) {
     return null;
 }
 
+const TRIM_METHODS = new Set(['trim', 'trimStart', 'trimEnd']);
+
+/**
+ * Return the literal or template a bare `.trim()` / `.trimStart()` /
+ * `.trimEnd()` call wraps, or the node itself for any other shape.
+ *
+ * The forms trim their `Network fee: …` template inside a ternary branch.
+ * Any other call stays in the documented "copy returned by a helper call" blind spot.
+ *
+ * @param {object} node
+ * @returns {object}
+ */
+function unwrapTrim(node) {
+    if (node?.type !== 'CallExpression' || (node.arguments ?? []).length !== 0) return node;
+    const callee = node.callee;
+    if (callee?.type !== 'MemberExpression' || callee.computed) return node;
+    if (!TRIM_METHODS.has(callee.property?.name)) return node;
+    const receiver = callee.object;
+    const isCopyShape = receiver?.type === 'TemplateLiteral'
+        || (receiver?.type === 'Literal' && typeof receiver.value === 'string');
+    return isCopyShape ? receiver : node;
+}
+
 /**
  * Return the first non-trivial copy carried by a ternary or a `||` / `??`
  * fallback, or null.
@@ -315,7 +369,8 @@ function branchCopy(node, allow = [], minLength = 2) {
     const branches = node.type === 'ConditionalExpression'
         ? [node.consequent, node.alternate]
         : [node.left, node.right];
-    for (const branch of branches) {
+    for (const raw of branches) {
+        const branch = unwrapTrim(raw);
         if (branch?.type === 'Literal' && typeof branch.value === 'string'
             && !isTrivialString(branch.value, allow, minLength)) {
             return branch.value;
@@ -329,10 +384,73 @@ function branchCopy(node, allow = [], minLength = 2) {
 }
 
 /**
+ * Return the first non-trivial copy an inline object holds under a
+ * USER_FACING_ATTRS key, or null.
+ *
+ * StatusMessage takes `recovery={{ label: 'Restore', onAction }}`, so the
+ * button's English sits inside an object no other gate opens. Keys decide,
+ * as in propDefaultViolations: `label` and `ariaLabel` count, `onAction`
+ * and `details` do not. Each value is judged as a literal, a template or
+ * a ternary / `||` fallback, and only the FIRST hit is returned.
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+function objectCopy(node, allow = [], minLength = 2) {
+    if (node?.type !== 'ObjectExpression') return null;
+    for (const prop of node.properties ?? []) {
+        // Accept both parsers' property shapes; skip spreads and computed keys.
+        if (prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') continue;
+        if (prop.computed) continue;
+        const keyName = prop.key?.type === 'Identifier' ? prop.key.name
+            : prop.key?.type === 'Literal' ? prop.key.value : undefined;
+        if (!USER_FACING_ATTRS.has(keyName)) continue;
+        const value = prop.value;
+        if (value?.type === 'Literal' && typeof value.value === 'string'
+            && !isTrivialString(value.value, allow, minLength)) {
+            return value.value;
+        }
+        const fromTemplate = templateCopy(value, allow, minLength);
+        if (fromTemplate !== null) return fromTemplate;
+        const fromBranch = branchCopy(value, allow, minLength);
+        if (fromBranch !== null) return fromBranch;
+    }
+    return null;
+}
+
+/**
+ * Return the first copy an attribute's inline object carries, written
+ * directly or as a ternary / `||` branch, or null.
+ *
+ * Only the two attribute paths call this. Constant tables keep judging
+ * strings alone, so a nested object in a table stays silent as documented.
+ *
+ * @param {object} node
+ * @param {string[]} allow
+ * @param {number} minLength
+ * @returns {string | null}
+ */
+function inlineObjectCopy(node, allow = [], minLength = 2) {
+    const direct = objectCopy(node, allow, minLength);
+    if (direct !== null) return direct;
+    if (node?.type !== 'ConditionalExpression' && node?.type !== 'LogicalExpression') return null;
+    const branches = node.type === 'ConditionalExpression'
+        ? [node.consequent, node.alternate]
+        : [node.left, node.right];
+    for (const branch of branches) {
+        const nested = inlineObjectCopy(branch, allow, minLength);
+        if (nested !== null) return nested;
+    }
+    return null;
+}
+
+/**
  * Files we never check (tests, tools, claude/, dist/, etc).
  *
  * @param {string} filename
- * @param {Array<RegExp | string>} extra
+ * @param {string[]} extra
  */
 export function shouldSkipFile(filename, extra = []) {
     if (typeof filename !== 'string') return true;
@@ -347,12 +465,17 @@ export function shouldSkipFile(filename, extra = []) {
  * the wrong files), and `**` or a leading `*` does not compile at all;
  * either way the author meant a glob, so say what the option takes.
  *
- * @param {RegExp | string} entry
+ * @param {string} entry
  * @returns {RegExp}
  */
 function ignorePattern(entry) {
-    if (entry instanceof RegExp) return entry;
-    const source = String(entry);
+    // Refuse a non-string loudly, matching meta.schema (String() of a RegExp keeps its slashes and never matches).
+    if (typeof entry !== 'string') {
+        throw new TypeError(
+            `no-jsx-literal-strings: ignoreFiles entries must be regex source strings (e.g. "/src/legacy/"), got ${entry instanceof RegExp ? 'a RegExp' : typeof entry}`,
+        );
+    }
+    const source = entry;
     const refuse = () => new Error(
         `no-jsx-literal-strings: ignoreFiles entry "${source}" is not a regular-expression source; `
         + 'ignoreFiles takes regex sources tested against the full filename (e.g. "/src/legacy/"), not globs',
@@ -551,10 +674,17 @@ export function findViolations(node, options = {}) {
                 } else if (v?.type === 'JSXExpressionContainer') {
                     // Toggle copy in a ternary / `||` fallback. See branchCopy.
                     const copy = branchCopy(v.expression, allow, minLength);
+                    // Copy inside an inline object, e.g. recovery={{ label: 'Restore' }}. See objectCopy.
+                    const objCopy = copy === null ? inlineObjectCopy(v.expression, allow, minLength) : null;
                     if (copy !== null) {
                         out.push({
                             node: v.expression,
                             message: `Inline ${attrName} branch copy "${truncate(copy)}" should use t('key').`,
+                        });
+                    } else if (objCopy !== null) {
+                        out.push({
+                            node: v.expression,
+                            message: `Inline ${attrName} object copy "${truncate(objCopy)}" should use t('key').`,
                         });
                     }
                     out.push(...tableViolations(v.expression, attrName, tables, judged, allow, minLength));
@@ -706,6 +836,13 @@ function create(context) {
             if (v?.type === 'JSXExpressionContainer'
                 && branchCopy(v.expression, allow, minLength) !== null) {
                 context.report({ node: v.expression, message: `Inline ${attrName} branch copy should use t('key')` });
+            }
+            // Copy inside an inline object, e.g. recovery={{ label: 'Restore' }}.
+            // Mirrors the findViolations branch: one report per attribute.
+            if (v?.type === 'JSXExpressionContainer'
+                && branchCopy(v.expression, allow, minLength) === null
+                && inlineObjectCopy(v.expression, allow, minLength) !== null) {
+                context.report({ node: v.expression, message: `Inline ${attrName} object copy should use t('key')` });
             }
             if (v?.type === 'JSXExpressionContainer') reportTables(v.expression, attrName);
         },

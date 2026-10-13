@@ -86,6 +86,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 compose: () => Promise.resolve(composed),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // A resumed confirm is by construction the oldest PSBT
                 // in the wallet, so it is the likeliest of all to be carrying a
                 // native-coin fee the oracle price has moved out from under.

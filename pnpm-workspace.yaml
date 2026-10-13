@@ -120,8 +120,10 @@ overrides:
   # proxy-addr below 2.0.8 mishandles trusted-proxy address matching
   # (GHSA-jqcg-44mw-7w3h); express pulls it in under the SDK and the MCP SDK.
   proxy-addr: ^2.0.8
+  ip-address: ^10.5.1
   # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
   '@modelcontextprotocol/sdk': ^1.31.0
+  'undici@7': ^7.29.1
 
 # "Lifecycle scripts disabled or allowlisted". This is the
 # allowlist. Anything NOT named here has its preinstall/install/postinstall
@@ -195,3 +197,9 @@ allowBuilds:
 # is (release-management.md section 6, amendment v12).
 minimumReleaseAgeExclude:
   - '@dankest-llc/*'
+
+# A headless CI runner has no TTY, and pnpm asks for confirmation
+# before purging node_modules when the modules directory no longer matches
+# the install. With nobody to answer, `pnpm install` aborts. Turning the
+# prompt off lets the purge proceed unattended.
+confirmModulesPurge: false

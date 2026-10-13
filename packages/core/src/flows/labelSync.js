@@ -291,6 +291,8 @@ export async function applyLabelSyncPayload({
  * @property {{ id?: string, address?: string }} [activeEntry]   the chain's active address (addressSelection.js's `getActiveAddresses()[chainId]`); when it resolves to an eligible address it wins over the newest-HD default, same as Send
  * @property {number} [fee]
  * @property {number} [feePerKb]
+ * @property {import('./submitAction.js').SubmitActionOpts['onBroadcastFailure']} [onBroadcastFailure]   host queue hook for signed bytes whose broadcast failed transiently
+ * @property {boolean} [trackPendingTx]   false skips the PendingTx record (default: tracked)
  */
 
 /**
@@ -310,6 +312,7 @@ export async function applyLabelSyncPayload({
  * @property {string} discoveryName
  * @property {number} sizeBytes
  * @property {string} fromAddress
+ * @property {string | null} pendingTxId   the PendingTx record this publish stamped, when tracked
  */
 
 export class NoFundedAddressError extends Error {
@@ -444,25 +447,36 @@ export async function prepareLabelsPublication({
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
  * @param {PublishLabelsPreparation} opts.preparation
  * @param {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [opts.prebuiltPsbt]
+ * @param {PublishLabelsNowOpts['onBroadcastFailure']} [opts.onBroadcastFailure]
+ * @param {boolean} [opts.trackPendingTx]
  * @returns {Promise<PublishLabelsNowResult>}
  */
-export async function submitLabelsPublication({
-    vault,
-    walletId,
-    password,
-    signer,
-    bip39Passphrase = '',
-    chainRegistry,
-    sdkRegistry,
-    preparation,
-    prebuiltPsbt,
-}) {
+export async function submitLabelsPublication(opts) {
+    const {
+        vault,
+        walletId,
+        password,
+        signer,
+        bip39Passphrase = '',
+        chainRegistry,
+        sdkRegistry,
+        preparation,
+        prebuiltPsbt,
+    } = opts;
     if (!preparation?.from || !preparation?.actionData || !preparation?.encoderOpts) {
         throw new Error('submitLabelsPublication: preparation is required');
     }
     if (!sdkRegistry) throw new Error('submitLabelsPublication: sdkRegistry is required');
 
     const { chainId, from, actionData, encoderOpts, discoveryName, sizeBytes } = preparation;
+    // Keep the signed bytes durable on a transient broadcast failure, as every
+    // other lane does: the confirm modal then tells the user the tx is queued,
+    // so the vault record and the host queue entry must both exist.
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: from.address,
+        toAddress: null,
+        actionSummary: `Publish wallet labels (${sizeBytes} bytes)`,
+    };
     const result = await submitAction({
         vault,
         walletId,
@@ -478,6 +492,8 @@ export async function submitLabelsPublication({
             ? { inputIndex: 0, path: from.derivationPath }
             : { inputIndex: 0, addressId: from.id }],
         prebuiltPsbt,
+        pendingTxMeta,
+        onBroadcastFailure: opts.onBroadcastFailure,
     });
 
     return {
@@ -486,6 +502,7 @@ export async function submitLabelsPublication({
         discoveryName,
         sizeBytes,
         fromAddress: from.address,
+        pendingTxId: result.pendingTxId ?? null,
     };
 }
 

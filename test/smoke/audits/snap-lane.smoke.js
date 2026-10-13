@@ -91,7 +91,7 @@ const targets = (cfg) => cfg.linux.target.map((t) => (typeof t === 'string' ? t 
 {
     const staging = loadConfig({
         XCHAIN_BUILD_SNAP: '1',
-        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/feed/',
+        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/wallet/desktop/',
     });
     assert.ok(!targets(staging).includes('snap'),
         'a staging build must never emit a store package');

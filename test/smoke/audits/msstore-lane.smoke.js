@@ -96,7 +96,7 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
 {
     const staging = loadConfig({
         XCHAIN_BUILD_APPX: '1',
-        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/feed/',
+        XCHAIN_STAGING_FEED_URL: 'https://staging.invalid/wallet/desktop/',
     });
     assert.ok(!targets(staging).includes('appx'),
         'a staging build must never emit a store package');
@@ -128,7 +128,7 @@ const targets = (cfg) => cfg.win.target.map((t) => (typeof t === 'string' ? t : 
     assert.ok(cfg.appx.identityName, 'identityName must be pinned, not left to the package name');
     assert.match(cfg.appx.identityName, /^[A-Za-z0-9][A-Za-z0-9.-]{2,49}$/,
         'and must satisfy the AppX identity character set and length');
-    assert.equal(cfg.appx.publisherDisplayName, 'Dankest, LLC',
+    assert.equal(cfg.appx.publisherDisplayName, 'Dankest LLC',
         'the friendly publisher name is the company name users see in the Store');
     assert.match(cfg.appx.applicationId, /^[A-Za-z]/,
         'applicationId must begin with an alphabetic character');

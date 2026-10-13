@@ -421,7 +421,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         // for sale" would tell the user an irreversible sale is open when it
         // is not.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="ownership sale" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="ownership sale" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

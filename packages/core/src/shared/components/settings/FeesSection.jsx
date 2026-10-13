@@ -31,7 +31,7 @@ import {
     settingsCustomToDisplayRate,
 } from '../../../flows/feeEstimate.js';
 import { useSettings } from '../../hooks/useSettings.js';
-import { INPUT, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -68,7 +68,7 @@ export function FeesSection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const chainIds = Object.keys(settings.fees).sort();

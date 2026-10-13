@@ -116,6 +116,7 @@ export function useActionConfirmFlow({ messaging, walletId, slice = 'actionForms
             // §4.6: every migrated form gets the input-liveness half of the
             // Approve-time re-check, not just the pre-flight half.
             checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+            releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
             // And the native-fee half. A fee-bearing action on LTC/DOGE
             // pays its protocol fee as a real output sized at compose, so every
             // migrated form needs the same "is that amount still acceptable"

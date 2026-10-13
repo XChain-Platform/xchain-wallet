@@ -56,7 +56,9 @@ import { preferredSourceId } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AUTHORABLE_ACTIONS } from '../../registry/actions.js';
+import {
+    AUTHORABLE_ACTIONS, isActionDataOfferedInBuild, isActionOfferedInBuild, isActionOfferedOnChain,
+} from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -89,6 +91,12 @@ function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
 }
 
+/** The raw error text for the collapsed details, or '' when the shown sentence already carries it. */
+function technicalDetails(err, shown) {
+    const raw = String(err?.message || '').trim();
+    return raw && !String(shown || '').includes(raw) ? raw : '';
+}
+
 /** Parse one row's params; returns { params } or { error }. */
 function parseRowParams(json) {
     if (typeof json !== 'string' || json.trim().length === 0) {
@@ -109,8 +117,9 @@ function parseRowParams(json) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; ORDER and SWAP are then absent from the picker
  */
-export function BatchComposerForm({ walletId, onBack }) {
+export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
@@ -134,9 +143,11 @@ export function BatchComposerForm({ walletId, onBack }) {
     const [stage, setStage] = useState(/** @type {'compose'|'review'|'submitting'|'done'} */ ('compose'));
     const [composed, setComposed] = useState(/** @type {{command:string,subStrings:string[]}|null} */ (null));
     const [buildError, setBuildError] = useState(/** @type {string | null} */ (null));
+    const [buildErrorDetails, setBuildErrorDetails] = useState('');
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [submitErrorDetails, setSubmitErrorDetails] = useState('');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     // HwSignBlock reports `{ status, detail, refresh }`, so the raw setter
@@ -160,7 +171,8 @@ export function BatchComposerForm({ walletId, onBack }) {
             setAddressesByChain(byChain || {});
             setActiveByChain(active || {});
             const raw = (Array.isArray(actions) && actions.length > 0) ? actions : FALLBACK_ACTIONS;
-            setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())));
+            setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())
+                && isActionOfferedInBuild(a, { hasDexSurface })));
             const chains = Object.entries(byChain || {})
                 .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                 .map(([cid]) => cid);
@@ -174,7 +186,7 @@ export function BatchComposerForm({ walletId, onBack }) {
             if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
         });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, hasDexSurface]);
 
     useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
@@ -224,6 +236,14 @@ export function BatchComposerForm({ walletId, onBack }) {
             const pr = parsedRows[i];
             if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
             if (pr.error) return `Step ${i + 1}: ${pr.error}`;
+            // Recheck the chain here, since a chain switch keeps the rows already queued.
+            if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
+                const chainName = chainRegistry.get(chainId)?.displayName || chainId;
+                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on ${chainName}.`;
+            }
+            if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
+                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
+            }
         }
         // Pass params through (same shape goReview sends the SDK at compose
         // time, ~line 216): validateBatchConstraints classifies ISSUE by
@@ -234,7 +254,7 @@ export function BatchComposerForm({ walletId, onBack }) {
         const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
         const constraintErrors = flowsLib.validateBatchConstraints(subActions);
         return constraintErrors.length > 0 ? constraintErrors[0] : null;
-    }, [parsedRows]);
+    }, [parsedRows, hasDexSurface, chainId]);
 
     const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addRow = () => setRows((rs) => [...rs, blankRow()]);
@@ -243,6 +263,7 @@ export function BatchComposerForm({ walletId, onBack }) {
     async function goReview() {
         if (composeError) return;
         setBuildError(null);
+        setBuildErrorDetails('');
         setStage('review');
         setComposed(null);
         try {
@@ -250,7 +271,13 @@ export function BatchComposerForm({ walletId, onBack }) {
             const res = await messaging.buildBatchCommand({ chainId, subActions });
             setComposed({ command: res.command, subStrings: res.subStrings || String(res.command).split(';') });
         } catch (err) {
-            setBuildError(err?.message || 'Failed to compose the batch.');
+            // Show a sentence, never the composer's own error text; that text moves to the collapsed details.
+            const shown = submitFailureMessage(err, {
+                chainId, coinTicker, verb: 'build this batch',
+                fallback: 'Couldn\'t build this batch. Check each step\'s action and parameters, then try again.',
+            });
+            setBuildError(shown);
+            setBuildErrorDetails(technicalDetails(err, shown));
         }
     }
 
@@ -274,6 +301,7 @@ export function BatchComposerForm({ walletId, onBack }) {
 
     async function openConfirmScreen(from, params) {
         setSubmitError(null);
+        setSubmitErrorDetails('');
         try {
             const res = await actionConfirm.run({
                 chainId,
@@ -308,6 +336,7 @@ export function BatchComposerForm({ walletId, onBack }) {
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
         setStage('submitting');
         setSubmitError(null);
+        setSubmitErrorDetails('');
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -344,7 +373,11 @@ export function BatchComposerForm({ walletId, onBack }) {
             setStage('done');
         } catch (err) {
             const bad = err?.name === 'InvalidPasswordError';
-            setSubmitError(bad ? 'Incorrect password.' : (err?.message || 'Batch failed.'));
+            const shown = bad ? 'Incorrect password.' : submitFailureMessage(err, {
+                chainId, coinTicker, fallback: err?.message || 'Batch failed.',
+            });
+            setSubmitError(shown);
+            setSubmitErrorDetails(bad ? '' : technicalDetails(err, shown));
             setStage('review');
             if (!isWatcherMode && !isHwSource(fromAddress)) {
                 passwordRef.current?.focus();
@@ -405,7 +438,9 @@ export function BatchComposerForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and "Batch
         // broadcast" would report N sub-actions as sent when none are.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="batch" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="batch" unsaved={result?.unsaved} />,
+            );
         }
         return wrap(
             <>
@@ -439,7 +474,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
                 </dl>
 
-                {buildError ? <StatusMessage variant="error" className={styles.error}>{buildError}</StatusMessage> : null}
+                {buildError ? <StatusMessage variant="error" className={styles.error} details={buildErrorDetails || undefined}>{buildError}</StatusMessage> : null}
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
                 {composed ? (
                     <>
@@ -479,7 +514,7 @@ export function BatchComposerForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 ) : null}
-                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
+                {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>{submitError}</StatusMessage> : null}
 
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
@@ -558,7 +593,8 @@ export function BatchComposerForm({ walletId, onBack }) {
                                     onChange={(e) => updateRow(i, { action: e.target.value })}
                                 >
                                     <option value="">Select action</option>
-                                    {actionsList.map((a) => (
+                                    {/* One SDK list serves every chain; drop what the picked chain refuses at every version. */}
+                                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, chainId, a)).map((a) => (
                                         <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
                                     ))}
                                 </select>

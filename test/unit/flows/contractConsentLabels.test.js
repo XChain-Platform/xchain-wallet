@@ -43,6 +43,10 @@ describe('permissionsToVerbs', () => {
         expect(permissionsToVerbs(['EXECUTE'])).toEqual(['call other contracts']);
     });
 
+    it('words a SLEEP grant as the lock or pause it allows', () => {
+        expect(permissionsToVerbs(['SLEEP'])).toEqual(['pause tokens it controls or lock its own address']);
+    });
+
     it('is case-insensitive on the action token', () => {
         expect(permissionsToVerbs(['send'])).toEqual(['send your tokens']);
         expect(permissionsToVerbs([' Mint '])).toEqual(['mint tokens']);

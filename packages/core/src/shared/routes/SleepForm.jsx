@@ -119,7 +119,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     // Address self-lock is irreversible: gate it behind a typed confirm.
     const [typedConfirm, setTypedConfirm] = useState('');
-    const typedConfirmOk = isTick || typedConfirm.trim().toUpperCase() === 'SLEEP';
+    const typedConfirmOk = isTick || typedConfirm.trim().toUpperCase() === 'LOCK';
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
 
@@ -265,6 +265,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // §4.7: reserve the debited balance on the host-shared ledger,
                 // so two windows cannot both approve against the same balance.
                 reservationLedger: {
@@ -300,7 +301,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: humanizeError(err, 'sleep').message,
+                fallback: humanizeError(err, titleNoun.toLowerCase()).message,
             }));
         }
     }
@@ -345,7 +346,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
                 chainId,
-                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Sleep failed.',
+                coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || `${titleNoun} failed.`,
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
@@ -378,7 +379,13 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
         // Signed but not broadcast, which is the exact opposite of
         // what "<noun> broadcast" claims.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what={titleNoun.toLowerCase()} />);
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onBack}
+                    what={titleNoun.toLowerCase()}
+                    unsaved={result.unsaved}
+                />,
+            );
         }
         return wrap(
             <>
@@ -462,7 +469,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 {(isWatcherMode || isHwSource) && submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
                 {!isTick ? (
                     <Input
-                        label="Type SLEEP to confirm"
+                        label="Type LOCK to confirm"
                         hint="This locks your address and cannot be undone before the resume block."
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}

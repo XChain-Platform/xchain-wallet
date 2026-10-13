@@ -323,15 +323,25 @@ export function deactivatePanicMode() {
     writeState(emptyPanicModeState());
 }
 
-/** Reset for tests. */
+/** Clear the active freeze while keeping the configured persistence backend. */
 export function clearPanicModeState() {
     memoryFallback = null;
-    persistentStore = null;
     awaitingHydration = false;
+    if (persistentStore) {
+        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        return;
+    }
     const store = getStorage();
     if (store) {
         try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
     }
+}
+
+/** Test seam: forget any injected persistence. */
+export function __resetPanicModePersistenceForTests() {
+    persistentStore = null;
+    memoryFallback = null;
+    awaitingHydration = false;
 }
 
 /**

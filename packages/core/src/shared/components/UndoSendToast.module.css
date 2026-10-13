@@ -1,0 +1,59 @@
+/* Countdown toast card for a held send. Same card look as the toast
+ * host: raised surface, subtle slide-in, instantaneous under reduced
+ * motion. The parent decides where it sits on screen.
+ */
+.toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    animation: undo-toast-in 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
+}
+
+@keyframes undo-toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.message {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.cancelBtn {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    color: var(--xc-accent-primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--xc-text-xs);
+    cursor: pointer;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    font-family: inherit;
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.cancelBtn:hover {
+    background: var(--xc-bg-muted);
+}
+.cancelBtn:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

@@ -79,7 +79,31 @@ const PROD_CHANNEL = 'stable';
 // mean the last build silently wins and a staging binary could be signed and
 // published as the real one.
 const STAGING_FEED_URL = process.env.XCHAIN_STAGING_FEED_URL || null;
+assertStagingFeedUrlShape(STAGING_FEED_URL);
 const isStaging = Boolean(STAGING_FEED_URL);
+
+/**
+ * Refuse a staging feed URL that is not `https://<host>/<path>/desktop/`.
+ * (The updater, the install gate, publish.sh and rehearse.mjs all rebuild
+ * pointer and manifest URLs as `<base>desktop/`, so any other shape bakes a
+ * rehearsal build whose every install fails as a 404 at the pointer fetch.)
+ *
+ * @param {string | null} url
+ */
+function assertStagingFeedUrlShape(url) {
+    if (url === null) return;
+    const problems = [];
+    if (!url.startsWith('https://')) problems.push('it is not https://');
+    if (!url.endsWith('/desktop/')) problems.push('it does not end in /desktop/');
+    if (problems.length === 0) return;
+    const err = new Error(
+        `XCHAIN_STAGING_FEED_URL is malformed: ${problems.join(' and ')}. `
+        + 'The required shape is https://<host>/<path>/desktop/ (installers and channel '
+        + 'pointers live at <base>desktop/, signed manifests at <base>RELEASE_HASHES/).',
+    );
+    err.name = 'StagingFeedUrlMalformed';
+    throw err;
+}
 
 // Every architecture we ship (§2 matrix). No 32-bit anywhere: win-ia32 is
 // declined by policy (its only audience is 32-bit Windows 10, out of
@@ -949,31 +973,10 @@ const config = {
     appx: {
         artifactName: 'xchain-wallet-${version}-${arch}-appx.${ext}',
 
-        // IDENTITY IS ASSIGNED BY PARTNER CENTER, AND EVERY DEFAULT HERE
-        // IS WRONG IN A DIFFERENT WAY.
-        //
-        // `identityName` defaults to the package.json name, which is
-        // `@xchain-wallet/desktop`. AppX identity must be alphanumeric,
-        // period and dash only, 3-50 characters, so that default fails the
-        // manifest write outright - the same shape as the Linux
-        // `executableName` defect in §5, and the same good failure mode.
-        //
-        // `publisher` is worse, because its default SUCCEEDS. With no
-        // code-signing certificate present, `computePublisherName` returns
-        // the literal string `CN=ms` and logs "AppX is not signed"; with a
-        // certificate present but no explicit publisher, it uses that
-        // CERTIFICATE's subject, which is the Authenticode identity and
-        // not necessarily the Store one. Either way the package builds and
-        // is then rejected at ingestion for an identity mismatch, which is
-        // the expensive place to learn it.
-        //
-        // Both are env-driven because both are account-specific values
-        // nobody holds yet (ceremony A). The defaults below are valid
-        // shapes so a local smoke can build; they are NOT submission
-        // values, and §15 says so in the same words.
-        identityName: process.env.APPX_IDENTITY_NAME || 'DankestLLC.XChainWallet',
-        publisher: process.env.APPX_PUBLISHER || null,
-        publisherDisplayName: 'Dankest, LLC',
+        // AppX identity values must match the Microsoft Partner Center reservation.
+        identityName: process.env.APPX_IDENTITY_NAME || '61007DankestLLC.XChainWallet',
+        publisher: process.env.APPX_PUBLISHER || 'CN=FCB33573-3137-45EC-AE57-9AC66E6DE49A',
+        publisherDisplayName: 'Dankest LLC',
         applicationId: 'XChainWallet',
         languages: ['en-US'],
 

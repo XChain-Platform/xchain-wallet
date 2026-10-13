@@ -70,12 +70,21 @@ describe('humanizeError', () => {
         expect(out.cause).to.equal('backend_behind');
     });
 
-    it('keeps the raw detail in the message for unrecognized errors', () => {
+    it('moves a function-prefixed flow error out of the message and into details', () => {
         const out = humanizeError(new Error('sendToken: params.TICK is required'), 'send');
         expect(out.cause).to.equal('unknown');
-        expect(out.message).to.equal("Couldn't send. sendToken: params.TICK is required");
-        expect(out.details).to.equal('');
+        expect(out.message).to.equal("Couldn't send. Something went wrong. Try again.");
+        expect(out.details).to.equal('sendToken: params.TICK is required');
         expect(out.raw).to.equal('sendToken: params.TICK is required');
+    });
+
+    it.each([
+        'stakeAction: SIGNING_PUBKEY must be 64 hex chars',
+        'addresses.newest: unknown chain',
+    ])('keeps a prefixed flow error off the message: %s', (raw) => {
+        const out = humanizeError(new Error(raw), 'stake');
+        expect(out.message).to.equal("Couldn't stake. Something went wrong. Try again.");
+        expect(out.details).to.equal(raw);
     });
 
     it('uses the verb in the fallback copy', () => {

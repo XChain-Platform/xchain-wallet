@@ -142,7 +142,8 @@ export function bridgeLegFor({ tick, sourceCoin }) {
  * "unchanged" rather than "none" (token-bridge section 7, D9/D34), so an empty
  * string here is read as "the issuer never set one" and answers null rather
  * than an empty list. Null and [] are different answers and the callers below
- * say different things about them.
+ * say different things about them. Entries keep their stored spelling, because
+ * the network compares the list verbatim and a lower-case entry opens nothing.
  *
  * @param {string|null|undefined} raw
  * @returns {string[] | null}  null when the field is absent/unknown
@@ -153,8 +154,20 @@ export function bridgeChainsList(raw) {
     if (!s) return null;
     if (s === '-') return [];
     return s.split(',')
-        .map((c) => c.trim().toUpperCase())
+        .map((c) => c.trim())
         .filter((c) => c.length > 0);
+}
+
+/**
+ * Whether one stored opt-in entry opens a chain on the network: a lock names its
+ * destination as an upper-case coin ticker, so only that exact spelling matches.
+ *
+ * @param {string} entry
+ * @returns {boolean}
+ */
+export function isReachableBridgeChain(entry) {
+    const c = String(entry || '');
+    return c === c.toUpperCase() && isProtocolCoinTicker(c);
 }
 
 /**
@@ -190,9 +203,15 @@ export function bridgeDestinationError({ tick, sourceCoin, destCoin, bridgeChain
         if (bridgeChains.length === 0) {
             return `${tick}'s issuer has not opened it to the bridge, so it cannot be moved off ${coinDisplay(source)}.`;
         }
+        // Match exactly, as the network does, and offer only entries a lock can actually reach.
         if (!bridgeChains.includes(dest)) {
+            const reachable = bridgeChains.filter(isReachableBridgeChain);
+            if (reachable.length === 0) {
+                return `${tick}'s issuer opened it to ${bridgeChains.map((c) => `"${c}"`).join(', ')},`
+                    + ` a spelling the network does not accept, so it cannot be moved off ${coinDisplay(source)}.`;
+            }
             return `${tick}'s issuer has not opened it to ${coinDisplay(dest)}.`
-                + ` It can be moved to: ${bridgeChains.map(coinDisplay).join(', ')}.`;
+                + ` It can be moved to: ${reachable.map(coinDisplay).join(', ')}.`;
         }
     }
     return null;

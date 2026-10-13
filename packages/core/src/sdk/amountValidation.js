@@ -19,11 +19,30 @@ export class NonFiniteAmountError extends TypeError {
     }
 }
 
-export function finiteResponseAmount(value, { source, field }) {
-    const amount = Number(value);
+export class InvalidSatsAmountError extends TypeError {
+    constructor({ source, field, value }) {
+        super(`${source} returned ${field} that is not a whole, non-negative satoshi amount`);
+        this.name = 'InvalidSatsAmountError';
+        this.code = 'INVALID_SATS_AMOUNT';
+        this.source = source;
+        this.field = field;
+        this.value = value;
+    }
+}
+
+// Read a server-quoted satoshi amount, accepting only what the encoder will accept as an output.
+export function satsResponseAmount(value, { source, field }) {
     // Refuse non-finite numbers before they enter encoder output math.
-    if (!Number.isFinite(amount)) {
+    if (typeof value === 'number' && !Number.isFinite(value)) {
         throw new NonFiniteAmountError({ source, field, value });
+    }
+    // Accept only a number or an all-digit string (Number() reads null, '' and ' ' as 0, a silent fee skip).
+    const amount = typeof value === 'number' ? value
+        : (typeof value === 'string' && /^\d+$/.test(value)) ? Number(value)
+        : NaN;
+    // Refuse fractional, negative or beyond-2^53 amounts, as the encoder's satoshi parser does.
+    if (!Number.isSafeInteger(amount) || amount < 0) {
+        throw new InvalidSatsAmountError({ source, field, value });
     }
     return amount;
 }

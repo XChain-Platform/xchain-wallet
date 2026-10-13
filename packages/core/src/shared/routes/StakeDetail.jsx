@@ -30,6 +30,7 @@ import {
     isPendingContractUnstake,
     sumStakingAmounts,
 } from '../../flows/stakingDashboard.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 import local from './StakeDetail.module.css';
 
@@ -187,7 +188,7 @@ export function StakeDetail({
                 setLoading(false);
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Failed to load staking position.');
+                    setLoadError(readFailureMessage(err, 'load this staking position'));
                     setLoading(false);
                 }
             }

@@ -275,6 +275,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId: giveChainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // §4.7: reserve the debited balance on the host-shared ledger,
                 // so two windows cannot both approve against the same balance.
                 reservationLedger: {
@@ -382,7 +383,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain order" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="cross-chain order" unsaved={result.unsaved} />);
         }
         return wrap(
             <>

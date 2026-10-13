@@ -36,10 +36,11 @@ import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativ
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
 import { applyAdsPlanToEncoderOpts } from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
-import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
-import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
+import { MAX_COMPILED_ACTION_BYTES } from './fileSizeLimits.js';
+import { isBareNativePayment, withNativePaymentOutput } from './nativePayment.js';
 import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js';
-import { envelopeEncoderOpts } from './envelopeSelection.js';
+import { compiledPayloadByteLen, envelopeEncoderOpts, rawDataByteLen } from './envelopeSelection.js';
+import { capRbfToDescriptor } from './rbfCap.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -96,50 +97,6 @@ function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
     return { actionString: written, rawData: stored, compressed: true };
 }
 
-// UTF-8 byte length of a string, portable across the host (Node) and any
-// worker/browser build of core. Used to size the expected carrier-output count
-// for chunk-lane encodings (D-24); the base64 CODE in a DEPLOY is ASCII, but a
-// MEMO or FILE payload can be multi-byte, and undercounting would reject a
-// legitimate deploy.
-function byteLen(s) {
-    const str = String(s);
-    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str).length;
-    if (typeof Buffer !== 'undefined') return Buffer.byteLength(str, 'utf8');
-    return str.length; // last-resort (ASCII-equivalent)
-}
-
-// Byte length of a rawData payload as the ENCODER will count it. It reads the
-// string with Buffer.from(rawData,'binary'), one character per byte, so the
-// count is the string length. Routing it through byteLen would double every
-// byte >= 0x80 (gated ciphertext, deflate output) and inflate the carrier
-// allowance, which loosens the tamper gate rather than tightening it.
-function rawDataByteLen(raw) {
-    if (raw == null) return 0;
-    if (typeof raw.byteLength === 'number') return raw.byteLength; // Buffer / TypedArray
-    return String(raw).length;
-}
-
-// The compiled-push byte count the encoder chunks into data carriers:
-// bitcoin.script.compile([actionString, rawData]), each push carrying its own
-// minimal length prefix. pushPrefixSize is imported rather than mirrored - it
-// is pinned against bitcoinjs in fileSizeLimits.test.js - and over-counting at
-// a chunk boundary only over-allows, which is safe by design (see
-// expectedCarrierAllowance).
-//
-// Transparent compression shrinks the stored payload, and the reported length
-// is CLAMPED to what the wallet handed over: the encoder is the artifact this
-// allowance polices, so it may only ever make the bound tighter, never wider.
-function compiledPayloadByteLen(actionString, raw, compression) {
-    const a = actionString == null ? 0 : byteLen(actionString);
-    if (raw == null) return a + pushPrefixSize(a);
-    let r = rawDataByteLen(raw);
-    const stored = compression && compression.compressed === true
-        ? Number(compression.storedLength)
-        : NaN;
-    if (Number.isFinite(stored) && stored >= 0) r = Math.min(r, stored);
-    return a + pushPrefixSize(a) + r + pushPrefixSize(r);
-}
-
 /**
  * The INTERNAL compose result, host-side only.
  *
@@ -188,10 +145,12 @@ function compiledPayloadByteLen(actionString, raw, compression) {
  * @returns {Promise<ComposedAction>}
  */
 export async function composeForConfirm({
-    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: requestedEncoderOpts, source, signal, signer = null,
+    sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: callerEncoderOpts, source, signal, signer = null,
 }) {
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
+    // Cap RBF before anything reads the options, so the preview and the signed bytes agree.
+    const requestedEncoderOpts = capRbfToDescriptor(descriptor, callerEncoderOpts);
     const sdk = sdkRegistry.get(chainId);
     if (!sdk.encoder) {
         throw new Error('composeForConfirm: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first');
@@ -231,11 +190,16 @@ export async function composeForConfirm({
     }
     const encoderOpts = envelopeRequest ? { ...requestedEncoderOpts, ...envelopeRequest } : requestedEncoderOpts;
 
+    // 1c. Pay a native-coin SEND's recipient with a real output (its OP_RETURN moves
+    // no value), once even if the caller supplied it. Folded before every fee and
+    // the donation, where sendToken puts it, so both routes build one output order.
+    const withNativeOut = withNativePaymentOutput({ actionData, descriptor, encoderOpts });
+
     // 2. Native-coin fee pre-flight (folds the FEE_DESTINATION output into
     // customOutputs when payFeeInNativeCoin is set; throws NativeFeeForfeitError
     // when the action can't be safely priced). No-op otherwise.
     const feePreflight = await applyNativeFeePreflight({
-        sdk, actionData, encoderOpts, source, signal,
+        sdk, actionData, encoderOpts: withNativeOut, source, signal,
     });
 
     // 2b. PRICE v1 oracle usage fee: a Mode B dispenser pays its oracle
@@ -254,23 +218,7 @@ export async function composeForConfirm({
     const { encoderOpts: encoderOptsWithAds, adsPlan } = applyAdsPlanToEncoderOpts(
         settingsSnapshot, chainId, chainRegistry, oraclePreflight.encoderOpts);
 
-    // 3b. D-9: a native-coin SEND ("SEND BTC ...") writes only an OP_RETURN, which
-    // moves no value (the indexer has no native-coin ledger to credit). Append a
-    // real destination payment output so the recipient is actually paid; the
-    // encoder folds its value into the change math. Token sends return null here
-    // and are unchanged. The output is added to the SAME customOutputs the tamper
-    // matcher reads below, so the built PSBT and the expected set stay in sync.
-    const nativeOut = nativePaymentOutput({
-        tick: actionData?.params?.TICK,
-        amount: actionData?.params?.AMOUNT,
-        destination: actionData?.params?.DESTINATION,
-        descriptor,
-    });
-    const withNativeOut = nativeOut
-        ? { ...encoderOptsWithAds, customOutputs: [ ...(encoderOptsWithAds.customOutputs || []), nativeOut ] }
-        : encoderOptsWithAds;
-
-    // 3c. The protocol fee must ride the transaction that carries the
+    // 3b. The protocol fee must ride the transaction that carries the
     // ACTION, which on the two-phase lane is the phase-2 REVEAL, not the
     // phase-1 commit this function builds. Leaving it on phase 1 spends the fee
     // on a transaction with no action and the action is rejected for not paying
@@ -290,7 +238,7 @@ export async function composeForConfirm({
     // does not carry the output. Which transaction pays it is decided after the
     // build from the encoding the encoder chose, so no prediction can be wrong.
     const feeOutput = nativeFeeOutputOf(feePreflight.quote);
-    const finalEncoderOpts = withNativeOut;
+    const finalEncoderOpts = encoderOptsWithAds;
 
     // 4. Encode to the ONE PSBT the modal previews and the signer signs.
     // D-7: give the encoder the spender address so it can build the tx:

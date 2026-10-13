@@ -44,6 +44,7 @@ import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta, shortAddress,
 } from '../utils/dispenserCloseWindow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { dispenserPriceFloor } from '../../flows/dispenserDustFloor.js';
 import {
     buyerListMessage,
@@ -454,7 +455,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }
         }).catch((err) => {
             if (!cancelled) {
-                setLoadError(err?.message || 'Failed to load dispenser.');
+                setLoadError(readFailureMessage(err, 'load this dispenser'));
                 setLoading(false);
             }
         });
@@ -1335,7 +1336,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // A watcher build or a signed-but-queued broadcast is not a success:
     // nothing reached the chain yet, so neither gets the "submitted" copy.
     const ownerPendingPanel = (res, onDone) => {
-        if (res?.queued) return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" />);
+        if (res?.queued) {
+            return wrap(<QueuedResultPanel onDone={onDone} what="dispenser update" unsaved={res.unsaved} />);
+        }
         if (res?.psbtHex && !(res.txid || res.broadcast?.txid)) {
             return wrap(<WatcherResultPanel result={res} onDone={onDone} />);
         }

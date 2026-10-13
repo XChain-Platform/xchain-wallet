@@ -51,6 +51,8 @@ import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { humanizeError } from './humanizeError.js';
+import { actionDisplayLabel } from './actionDisplayLabel.js';
+import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -99,7 +101,7 @@ export function isWatcherChunkLane(err) {
     // Same shape: a single-encode compose refused a TAPROOT envelope it cannot
     // carry (submitWithSigner.js#EnvelopeConfirmLaneError).
     if (e.name === 'EnvelopeConfirmLaneError') return true;
-    return /too large for one transaction: the network carries it as a/.test(String(e.message || ''));
+    return CHUNK_LANE_OPENER_RE.test(String(e.message || ''));
 }
 
 /**
@@ -126,6 +128,29 @@ export const SIGNED_NOT_BROADCAST_MESSAGE =
     + 'queued-transactions banner and only goes out when you broadcast it from there; the '
     + 'wallet reminds you when the network is back. Do not submit this again.';
 
+/**
+ * The warning for a signed transaction that could not be saved to the queue
+ * and exists only in the current window until the user preserves it.
+ */
+export const SIGNED_NOT_BROADCAST_UNSAVED_WARNING =
+    'Your signed transaction could not be saved to the queue. It is held only in this window '
+    + 'and will be lost if the window closes. Broadcast it now from the queued-transactions '
+    + 'banner, or copy the signed bytes first.';
+
+let queuedResultHandoff = null;
+
+export function setQueuedResultHandoff(result) {
+    queuedResultHandoff = result;
+}
+
+export function readQueuedResultHandoff() {
+    return queuedResultHandoff;
+}
+
+export function clearQueuedResultHandoff() {
+    queuedResultHandoff = null;
+}
+
 const NETWORK_FEE_TOO_LOW_MESSAGE =
     'The network rejected this transaction because its fee is too low.';
 
@@ -135,6 +160,47 @@ function isCommitFeeTooLowBroadcast(err) {
         : (typeof err === 'string' ? err : '');
     return /^broadcast failed \(commit\):/i.test(message.trim())
         && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low)\b/i.test(message);
+}
+
+// Read the per-chain action gates' refusals (registry/actions.js and the nested
+// BATCH check) off the message alone, since only `{ name, message }` crosses the
+// messaging boundary; the thrown text keeps the composer name and chain id for logs.
+const CHAIN_GATE_PREFIX = '^[A-Za-z][A-Za-z0-9]*: ';
+const BITCOIN_ONLY_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version (\\d+) is accepted on Bitcoin only, not on \\S+$`);
+const NOT_ON_BITCOIN_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version (\\d+) is not accepted on Bitcoin$`);
+const VALIDATOR_LANE_RE = new RegExp(`${CHAIN_GATE_PREFIX}validator staking actions are accepted on Bitcoin only, not on \\S+$`);
+const NESTED_VERSION_RE = new RegExp(`${CHAIN_GATE_PREFIX}([A-Z_]+) version is unreadable in a nested sub-action$`);
+
+/**
+ * The sentence for a per-chain action-gate refusal, or null for any other error.
+ *
+ * @param {unknown} err
+ * @returns {string | null}
+ */
+export function chainGateErrorMessage(err) {
+    const message = (err && typeof err === 'object')
+        ? String(/** @type {any} */ (err).message || '').trim()
+        : (typeof err === 'string' ? err.trim() : '');
+    if (!message) return null;
+    let m = BITCOIN_ONLY_RE.exec(message);
+    if (m) {
+        return `${actionDisplayLabel(m[1])} version ${m[2]} works only on Bitcoin. `
+            + 'Send it from a Bitcoin address, or remove that action.';
+    }
+    m = NOT_ON_BITCOIN_RE.exec(message);
+    if (m) {
+        return `${actionDisplayLabel(m[1])} version ${m[2]} cannot be sent from a Bitcoin address. `
+            + 'Send it from an address on another chain, or remove that action.';
+    }
+    if (VALIDATOR_LANE_RE.test(message)) {
+        return 'Validator staking works only on Bitcoin. Send it from a Bitcoin address.';
+    }
+    m = NESTED_VERSION_RE.exec(message);
+    if (m) {
+        return `A ${actionDisplayLabel(m[1])} step in this batch has no readable version. `
+            + 'Check the VERSION value in that step\'s parameters.';
+    }
+    return null;
 }
 
 /**
@@ -174,6 +240,9 @@ export function submitFailureMessage(
     if (broadcastKind === null) {
         const encoderCopy = encoderErrorMessage(err, { coinTicker, requiredNative });
         if (encoderCopy) return encoderCopy;
+        // Name a per-chain gate refusal ahead of the params-builder check below.
+        const chainGateCopy = chainGateErrorMessage(err);
+        if (chainGateCopy) return chainGateCopy;
         // A params-builder refusal happens BEFORE the encoder is called at all,
         // so it can only be reached here - and it is checked after the encoder
         // for the same reason the encoder is checked after broadcast: the more

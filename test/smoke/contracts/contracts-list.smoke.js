@@ -13,7 +13,7 @@
 //
 // Asserts:
 //   1. ContractsList.jsx exists and is a single-component named export.
-//   2. Three sections render: "My contracts (deployed by me)",
+//   2. Three sections render: "My contracts (published by me)",
 //      "My interactions (deposits / withdrawals)", "Browse all contracts".
 //   3. Wiring uses messaging.getContractsForSource per BTC address,
 //      getDepositsForAddress + getWithdrawalsForAddress for the
@@ -63,7 +63,7 @@ assert.equal(
 
 // --- 2. Three sections ------------------------------------------------
 
-assert.ok(/My contracts \(deployed by me\)/.test(listSrc), 'My contracts section title');
+assert.ok(/My contracts \(published by me\)/.test(listSrc), 'My contracts section title');
 assert.ok(/My interactions \(deposits \/ withdrawals\)/.test(listSrc), 'My interactions section title');
 assert.ok(/Browse all contracts/.test(listSrc), 'Browse all section title');
 
@@ -125,8 +125,19 @@ assert.ok(
     /need an\s*\n?\s*address on a chain that supports them/.test(listSrc),
     'ContractsList explains the no-address state without naming a single coin',
 );
+// Action labels are names, not sentence parts: a parenthesised list of them or
+// a label with "-only" glued on reads as jargon once rendered.
 assert.ok(
-    /No contracts deployed from this chain/.test(listSrc),
+    !/\(\{actionDisplayLabel\('DEPLOY'\)\}/.test(listSrc)
+        && !/\{actionDisplayLabel\('EXECUTE'\)\}-only/.test(listSrc),
+    'ContractsList does not build its explanatory sentences out of action labels',
+);
+assert.ok(
+    /Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
+    'ContractsList says in plain words that fund-neutral calls are not listed yet',
+);
+assert.ok(
+    /No contracts published from this chain/.test(listSrc),
     'ContractsList surfaces the empty "My contracts" state per chain',
 );
 assert.ok(

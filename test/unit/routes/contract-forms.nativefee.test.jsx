@@ -222,7 +222,7 @@ describe('DEPLOY carries the native-coin fee lane', () => {
         });
         expect(utils.container.textContent).toContain(NATIVE_FEE_UNVERIFIED_NOTICE);
 
-        await reviewAndApprove(utils, /^Deploy/);
+        await reviewAndApprove(utils, /^Publish/);
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.action).toBe('DEPLOY');
@@ -236,7 +236,7 @@ describe('DEPLOY carries the native-coin fee lane', () => {
         const { messaging, calls } = harness(BTC_CHAIN);
         const utils = await mountDeploy(messaging);
 
-        await reviewAndApprove(utils, /^Deploy/);
+        await reviewAndApprove(utils, /^Publish/);
 
         expect(calls.find((c) => c.method === 'composeForConfirm').args.encoderOpts.payFeeInNativeCoin)
             .toBeUndefined();

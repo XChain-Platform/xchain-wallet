@@ -315,6 +315,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // §4.7: reserve the debited balance on the host-shared ledger,
                 // so two windows cannot both approve against the same balance.
                 reservationLedger: {
@@ -490,7 +491,9 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
         // A queued result is signed and NOT broadcast, so "Minted"
         // would claim the one thing that has not happened yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="mint" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="mint" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

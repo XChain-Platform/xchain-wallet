@@ -258,7 +258,6 @@ export function registerBridgeHandlers(host, opts = {}) {
             const accountIds = (await deps.vault.accounts.list()).map((a) => a.id);
             const scope = resolveAutoApproveScope({
                 requestedChains,
-                requestedAccounts: req.accounts,
                 activeChainIds,
                 accountIds,
             });
@@ -274,24 +273,29 @@ export function registerBridgeHandlers(host, opts = {}) {
         }
         const autoApproved = decision !== null;
         if (!decision) {
+            // ConnectOpts has no account field, so the page never names
+            // accounts. The prompt offers the wallet's own list, primary
+            // first, and the user ticks what this site may see. A read failure
+            // offers nothing and the grant below narrows to the primary account.
+            const accountOptions = await deps.vault.accounts.list()
+                .then((list) => list.map((a) => ({ id: a.id, name: a.name })))
+                .catch(() => []);
             decision = await approvals.connect({
                 origin,
                 appName,
                 appIcon,
                 requestedChains,
-                requestedAccounts: req.accounts,
+                accountOptions,
             });
         }
         if (!decision || !decision.approved) {
             throw new UserRejectedError('connect');
         }
-        // The approval screen echoes back the dApp's own requested account
-        // list verbatim (ConnectApproval.jsx has no account selector to
-        // correct it against), so `decision.accounts` is still page-supplied
-        // input at this point. Drop any id that is not a real vault account
-        // before it can become a grant: otherwise a page naming a foreign or
-        // made-up id would get it stored in site.permissions.accounts and
-        // handed back unchanged by every reader that trusts that list.
+        // `decision.accounts` is the user's selection from the prompt, but it
+        // crosses a message boundary, so drop any id that is not a real vault
+        // account before it can become a grant: a foreign or made-up id stored
+        // in site.permissions.accounts would be handed back unchanged by every
+        // reader that trusts that list.
         const vaultAccounts = await deps.vault.accounts.list();
         const knownAccountIds = new Set(vaultAccounts.map((a) => a.id));
         const permissions = {
@@ -304,11 +308,11 @@ export function registerBridgeHandlers(host, opts = {}) {
         };
         // §43.3 reads an empty account list as a WILDCARD: getAccounts and
         // getAddresses fall back to every account, and assertAddressPermitted
-        // returns "all permitted". The connect approval screen has no account
-        // selector and ConnectOpts has no account field, so the prompt path
-        // approved a chain and stored `accounts: []`, handing the site every
-        // account and address with no account review. Narrow an
-        // empty grant (also reached when every requested id above was
+        // returns "all permitted". A prompt that offered no accounts (the
+        // account read failed) answers `accounts: []`, which stored as-is
+        // would hand the site every account and address with no account
+        // review. Narrow an
+        // empty grant (also reached when every selected id above was
         // dropped as unknown) to the primary account, which is exactly what
         // resolveAutoApproveScope already does on the auto-approve path and for
         // the same reason. Left empty when the vault has no accounts: there is

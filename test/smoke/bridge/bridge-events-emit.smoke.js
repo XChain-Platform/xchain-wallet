@@ -162,12 +162,16 @@ function fakeRegistry(map) {
     const events = createBridgeEventBroadcaster({});
     assert.deepEqual(
         Object.keys(events).sort(),
-        ['accountsChanged', 'chainChanged', 'disconnect'],
+        ['accountsChanged', 'chainChanged', 'disconnect', 'walletSwitched'],
         'the full event surface exists even with no chrome.tabs behind it',
     );
     assert.equal(await events.disconnect('https://dapp.example'), undefined);
     assert.equal(await events.accountsChanged('https://dapp.example', []), undefined);
     assert.equal(await events.chainChanged('https://dapp.example', 'bitcoin'), undefined);
+    assert.equal(
+        await events.walletSwitched([{ id: 'a' }], [{ origin: 'https://dapp.example' }]),
+        undefined,
+    );
 
     // The observable that "no-op" actually names: a tabs surface with no
     // sendMessage (what a shell exposing a partial chrome namespace hands over)
@@ -210,6 +214,7 @@ function fakeRegistry(map) {
     assert.equal(await noopBridgeEvents.disconnect('https://dapp.example'), undefined);
     assert.equal(await noopBridgeEvents.accountsChanged('https://dapp.example', []), undefined);
     assert.equal(await noopBridgeEvents.chainChanged('https://dapp.example', 'bitcoin'), undefined);
+    assert.equal(await noopBridgeEvents.walletSwitched([], []), undefined);
 }
 
 // --- 4. emitPermissionDiff fires events on diff -----------------------

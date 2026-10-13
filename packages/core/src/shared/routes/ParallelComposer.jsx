@@ -27,7 +27,12 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
-import { AUTHORABLE_ACTIONS, isActionOfferedOnChain } from '../../registry/actions.js';
+import {
+    AUTHORABLE_ACTIONS,
+    isActionDataOfferedInBuild,
+    isActionOfferedInBuild,
+    isActionOfferedOnChain,
+} from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -69,8 +74,9 @@ const newRowId = () => `row-${++nextRowId}`;
  * @param {string} props.walletId
  * @param {() => void} props.onBack
  * @param {Array<{ chainId: string, action: string, params: Record<string, string>, note?: string }>} [props.initialRows]
+ * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; ORDER and SWAP are then absent from the picker and refused in a row
  */
-export function ParallelComposer({ walletId, onBack, initialRows }) {
+export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -108,13 +114,13 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 setAddressesByChain(byChain || {});
                 setActiveByChain(active || {});
                 if (Array.isArray(actions) && actions.length > 0) {
-                    setActionsList(actions);
+                    setActionsList(actions.filter((a) => isActionOfferedInBuild(a, { hasDexSurface })));
                 } else {
                     // Fallback when SDK introspection fails: the registry's
                     // authorable set, so it covers the §40.x and §42.x writes
                     // and never drifts behind it. The row picker still filters
                     // each entry per chain with isActionOfferedOnChain.
-                    setActionsList([...AUTHORABLE_ACTIONS]);
+                    setActionsList(AUTHORABLE_ACTIONS.filter((a) => isActionOfferedInBuild(a, { hasDexSurface })));
                 }
                 const chains = Object.entries(byChain || {})
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
@@ -147,7 +153,7 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, hasDexSurface]);
 
     const chainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
@@ -180,11 +186,19 @@ export function ParallelComposer({ walletId, onBack, initialRows }) {
                 const chainName = chainRegistry.get(r.chainId)?.displayName || r.chainId;
                 return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available on ${chainName}.`;
             }
+            // A prefilled row skips the picker, so the build check repeats here.
+            if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
+                return `Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`;
+            }
             const parseErr = parseParamsJson(r.paramsJson);
             if (parseErr) return `Row ${i + 1}: ${parseErr}`;
+            // A BATCH row carries its legs in params, which no picker filtered.
+            if (!isActionDataOfferedInBuild({ action: r.action, params: JSON.parse(r.paramsJson) }, { hasDexSurface })) {
+                return `Row ${i + 1}: a BATCH step is not available in this build.`;
+            }
         }
         return null;
-    }, [rows]);
+    }, [rows, hasDexSurface]);
 
     const goReview = () => {
         if (composeError) return;

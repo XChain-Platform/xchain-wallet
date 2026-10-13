@@ -600,7 +600,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        }
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel

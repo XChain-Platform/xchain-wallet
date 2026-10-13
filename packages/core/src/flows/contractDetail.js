@@ -138,6 +138,10 @@ const UNAVAILABLE_MANIFEST = /** @type {ContractManifest} */ ({
  * row proves the explorer answered, and only then is a null
  * `permissions` meaningful.
  *
+ * A permissions value that is present but malformed, or a row the explorer
+ * flags with `permissions_error` / `manifest_error`, is unavailable: it
+ * proves the explorer answered but not what the contract may emit.
+ *
  * `permissions` arrives as a JSON string or an already-parsed array
  * depending on the explorer build (mirrors ContractClient.parseManifest,
  * which we cannot reuse here because the row itself is what carries the
@@ -163,15 +167,18 @@ export async function contractManifestFor({ sdkRegistry, chainId, contractAction
     }
     if (!row || typeof row !== 'object') return UNAVAILABLE_MANIFEST;
 
+    if (row.permissions_error || row.manifest_error) return UNAVAILABLE_MANIFEST;
+
     let permissions = null;
-    const raw = row.permissions;
+    let raw = row.permissions;
+    if (typeof raw === 'string' && raw.length) {
+        try { raw = JSON.parse(raw); } catch { return UNAVAILABLE_MANIFEST; }
+    }
     if (Array.isArray(raw)) {
-        permissions = raw.every((p) => typeof p === 'string') ? raw : null;
-    } else if (typeof raw === 'string' && raw.length) {
-        try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.every((p) => typeof p === 'string')) permissions = parsed;
-        } catch { permissions = null; }
+        if (!raw.every((p) => typeof p === 'string')) return UNAVAILABLE_MANIFEST;
+        permissions = raw;
+    } else if (raw !== null && raw !== undefined && raw !== '') {
+        return UNAVAILABLE_MANIFEST;
     }
 
     const rawCap = row.max_take_bps;

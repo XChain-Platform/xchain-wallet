@@ -26,7 +26,7 @@ export class RevealInputsRefusedError extends Error {
      *   phase1TxHex: string, chainId: string, encoding: string }} fields
      */
     constructor({ reason, inputIndex, phase1Txid, phase1TxHex, chainId, encoding }) {
-        super(`The revealing transaction built for this ${encoding} action was not signed: `
+        super('The revealing transaction built for this action was not signed: '
             + `${inputIndex === null ? 'it' : `its input ${inputIndex}`} ${reason}. The commit `
             + `${phase1Txid} is on chain and its data outputs stay unspent until a revealing `
             + 'transaction that spends only them is signed.');

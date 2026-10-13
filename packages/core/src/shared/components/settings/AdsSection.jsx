@@ -25,7 +25,7 @@ import { InfoTip } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { ADS_DONATION_ADDRESS_PLACEHOLDER } from '../../../registry/validate.js';
 import { resolveAdsChainConfig } from '../../../schemas/settings.js';
-import { INPUT, ROW, ROW_HINT, ROW_LABEL, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -62,7 +62,7 @@ const ADDRESS_BOX = {
 export function AdsSection() {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const chainIds = Object.keys(settings.ads.perChain).filter((cid) => {

@@ -521,7 +521,9 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         // pipeline resolves that case rather than throwing, so without this
         // branch it renders as a completed broadcast.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="broadcast" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="broadcast" unsaved={result?.unsaved} />,
+            );
         }
         return wrap(
             <>

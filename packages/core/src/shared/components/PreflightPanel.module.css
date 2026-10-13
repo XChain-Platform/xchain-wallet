@@ -122,6 +122,12 @@
     font-size: var(--xc-text-xs);
 }
 
+/* A warning's detail sits on the warning fill, where the muted text colour is
+   not guaranteed to hold contrast; the smaller size alone marks it secondary. */
+.findingWarning .noticeDetail {
+    color: var(--xc-warning-text);
+}
+
 .findingMsg {
     display: block;
 }

@@ -34,7 +34,7 @@
 // Both build paths (submitWithSigner for sign+broadcast; buildActionPsbt for watcher/unsigned) call
 // this single helper, so the guardrail covers every action surface.
 
-import { finiteResponseAmount } from './amountValidation.js';
+import { satsResponseAmount } from './amountValidation.js';
 
 /**
  * Thrown to refuse a native-coin-fee transaction that would forfeit the fee on-chain.
@@ -309,7 +309,7 @@ export async function applyNativeFeePreflight({ sdk, actionData, encoderOpts = {
     // Relay policy rejects a positive output below dust, while protocol validation requires
     // only a minimum payment. Raise a small quote to the relay floor and carry both amounts so
     // approval-time re-quoting can distinguish necessary dust rounding from an accidental overpay.
-    const quotedFeeSats = finiteResponseAmount(quote.requiredFeeSats, {
+    const quotedFeeSats = satsResponseAmount(quote.requiredFeeSats, {
         source: 'native fee quote',
         field: 'requiredFeeSats',
     });

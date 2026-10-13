@@ -322,9 +322,10 @@ function buildRuntime() {
         // enforces the same pre-KDF lockout the extension ships (persisted
         // under userData; survives restart so a relaunch can't reset it).
         unlockThrottleStore: new FileUnlockThrottleStore(unlockThrottlePathFor(userData)),
-        // §26: restart-surviving auto-lock record. The renderer arms it via
-        // `autolock.report`; enforceLaunchAutoLock below reads it before the
-        // boot auto-unlock, so the configured window bounds the cached key.
+        // §26: restart-surviving auto-lock record. The renderer arms it via the
+        // `session.autolock` message (AUTO_LOCK_REPORT_TYPE in runtime.js);
+        // enforceLaunchAutoLock below reads it before the boot auto-unlock, so
+        // the configured window bounds the cached key.
         autoLockStore: new FileAutoLockStore(autoLockStatePathFor(userData)),
         chainRegistry,
         sdkRegistry: new sdkLib.SDKRegistry({

@@ -58,9 +58,11 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
  * host-side build material the popup neither needs nor can act on), carries
  * every other one (the envelope-shape tests hold each `ComposedAction`
- * property to "carried or on the drop list"), and adds
- * twelve the compose step never had (the fee lane, the deferred reveal set,
- * the exact fees, the projection, the decoded intent). Declaring it as
+ * property to "carried or on the drop list"), and adds the fields the
+ * compose step never had: the target `chainId`, the exact fees
+ * (`envelopeFees`, `networkFeeSats`, `protocolFeeSats`, `xchainFee`), the
+ * projection (`simulation`), the decoded intent (`decoded`) and
+ * `tamperVerified`. Declaring it as
  * `ComposedAction & { tamperVerified: true }` was wrong in both directions at
  * once, and the three shells each restated a nine-field subset of it whose
  * types also denied the nullability the bare-payment lane relies on. There is
@@ -98,6 +100,13 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  * @property {{ deltas: object[], sideEffects: object[], notes: string[] }|null} simulation  NULL when uncomputable
  * @property {object|null} decoded           the intent described from the action string; NULL when undescribable
  * @property {true} tamperVerified           reaching the caller at all means the checks passed
+ */
+
+/**
+ * The envelope as a shell receives it: MessageHost swaps the release function for a
+ * single-use token, redeemed with `action.releaseEncoderInputs` (messaging.releaseEncoderInputs).
+ *
+ * @typedef {Omit<HostComposeEnvelope, 'releaseEncoderInputs'> & { releaseEncoderInputsToken?: string }} HostComposeWireEnvelope
  */
 
 /**

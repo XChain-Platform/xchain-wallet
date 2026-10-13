@@ -325,7 +325,7 @@ export function ContractStakeForm({
             return;
         }
         if (!actionParams.SIGNING_PUBKEY || !/^[0-9a-fA-F]{64}$/.test(actionParams.SIGNING_PUBKEY)) {
-            setFormError('Signing pubkey must be 64 hex characters (Ed25519).');
+            setFormError(`${mode === 'delegate' ? 'The new signing public key' : 'The signing public key'} must be exactly 64 characters, using only the digits 0-9 and the letters a-f (upper or lower case).`);
             return;
         }
         if (!actionParams.TICK) {
@@ -396,7 +396,7 @@ export function ContractStakeForm({
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: wireAction, params: { VERSION: wireVersion, ...actionParams } },
+                actionData: { action: wireAction, params: { ...actionParams, VERSION: wireVersion } },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 // The flow builds its own wire params from mode + params, so
                 // the submit keeps the LEGACY shape; only the compose above
@@ -456,7 +456,7 @@ export function ContractStakeForm({
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action, params: { VERSION: version, ...actionParams } },
+                    actionData: { action, params: { ...actionParams, VERSION: version } },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
@@ -530,7 +530,9 @@ export function ContractStakeForm({
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} />);
+        if (result?.queued) {
+            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result?.unsaved} />);
+        }
         if (result?.psbtHex && !txid) {
             return wrap(
                 <WatcherResultPanel
@@ -579,7 +581,7 @@ export function ContractStakeForm({
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
-                    <dt className={styles.detailsLabel}>Signing pubkey</dt>
+                    <dt className={styles.detailsLabel}>{mode === 'delegate' ? 'New signing public key' : 'Signing public key'}</dt>
                     <dd className={styles.detailsValue}>
                         <code style={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>{actionParams.SIGNING_PUBKEY}</code>
                     </dd>

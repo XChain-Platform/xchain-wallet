@@ -55,9 +55,10 @@ describe('LOCK_FLAGS', () => {
     // The hint renders as body copy under the checkbox in both matrices
     // (TokenAdminForm Locks mode, TokenWizard advanced panel), directly
     // below the humanized `label`. A wire param shouted there gives the
-    // owner two names for one control. MINT and SLEEP are protocol
-    // COMMAND names the wallet uses with users elsewhere, so they stay.
-    const COMMAND_NAMES = new Set(['MINT', 'SLEEP']);
+    // owner two names for one control. MINT is the one protocol COMMAND name
+    // the wallet shows users elsewhere (the Mint feature), so it alone stays;
+    // token pausing is "Pause token" on screen, never SLEEP.
+    const COMMAND_NAMES = new Set(['MINT']);
 
     it('keeps ISSUE wire parameter names out of the visible hint copy', () => {
         const leaks = [];
@@ -70,6 +71,16 @@ describe('LOCK_FLAGS', () => {
             'a LOCK_FLAGS hint is body copy under its own humanized label; say it in the ' +
             "label's words rather than echoing the wire param (which stays on `field`)."
         ).toEqual([]);
+    });
+
+    // The lock blocks every token SLEEP, a resume included, so the copy must
+    // say both and use the pause screen's own word for the feature.
+    it('names the pause lock in the words of the Pause token screen', () => {
+        const pause = LOCK_FLAGS.find((f) => f.field === 'LOCK_SLEEP');
+        expect(pause.key).toBe('sleep');
+        expect(pause.label).toBe('Pausing');
+        expect(pause.hint).toMatch(/pause or resume/);
+        expect(pause.hint).not.toMatch(/sleep/i);
     });
 
     // The "permanently locked" warnings on the admin and pause screens are the

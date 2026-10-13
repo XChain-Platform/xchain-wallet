@@ -34,10 +34,12 @@
 //     polkit prompt cannot be answered on a headless box. The shim proves
 //     WHICH command line would have been escalated, and then runs it, so
 //     the install that follows is real.
-//   - It does not run our `updateVerify.js` gate: that gate refuses
-//     everything until K1 is pinned (ceremony A), so a drill that included
-//     it could only ever prove the refusal. The ordering of the gate is
-//     covered by test/unit/desktop/updaterInstallGate.test.js.
+//   - It does not run our `updateVerify.js` gate: that gate admits only
+//     bytes listed in a K1-signed manifest, and K1 never sits in the
+//     throwaway container this drill runs in, so its pair is in no such
+//     manifest and a drill that included the gate could only ever prove the
+//     refusal. The ordering of the gate is covered by
+//     test/unit/desktop/updaterInstallGate.test.js.
 //
 // USAGE (inside a throwaway container - it installs and upgrades a system
 // package, and it will refuse to run outside one):

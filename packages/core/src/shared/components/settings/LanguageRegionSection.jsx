@@ -21,6 +21,7 @@
 // Both fields exist on the v1 Settings schema; no migration needed.
 
 import { useSettings } from '../../hooks/useSettings.js';
+import { settingsLoadErrorText } from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
 
 // Friendly display names for known locales; we extend this map as
@@ -106,7 +107,7 @@ export function LanguageRegionSection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <Status text={settingsLoadErrorText(error)} tone="error" />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const knownCurrency = FIAT_CURRENCIES.some((c) => c.value === settings.fiatCurrency);

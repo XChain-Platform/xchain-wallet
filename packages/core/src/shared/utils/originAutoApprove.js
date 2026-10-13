@@ -101,31 +101,29 @@ export function shouldAutoApproveSign({ origin, settings }) {
  * `getAccounts` / `getAddresses` fall back to every account when the account set
  * is empty. Auto-approve therefore must never store an empty list. Echoing the
  * dApp's request back verbatim has the same defect from the other side: a
- * `connect()` that names no chains or accounts (the common case) would persist a
- * wildcard read grant over every chain and every account, without a prompt.
+ * `connect()` that names no chains (the common case) would persist a wildcard
+ * read grant over every chain, without a prompt.
  *
  * So the scope is resolved from the WALLET's state, then narrowed by the
  * request, never widened by it:
  *   - chains:   the request intersected with the user's active-network chains,
  *               or all active-network chains when the request names none.
- *   - accounts: the request intersected with real account ids, or the primary
- *               account alone when the request names none. A dApp cannot
- *               enumerate the user's other accounts by asking for nothing.
+ *   - accounts: the primary account alone. ConnectOpts has no account field and
+ *               no prompt runs here, so the page has no say in which accounts
+ *               it sees; a wider grant takes the prompt's account selector.
  *
  * Returns null when no meaningful grant can be synthesized (no active chains, no
- * accounts, or the request asks only for things the wallet doesn't have). The
+ * accounts, or the request asks only for chains the wallet doesn't have). The
  * caller falls back to the approval prompt rather than guessing.
  *
  * @param {object} args
  * @param {unknown} args.requestedChains     req.chains as received from the dApp
- * @param {unknown} args.requestedAccounts   req.accounts as received from the dApp
  * @param {string[]} args.activeChainIds     chain ids on the user's active network
  * @param {string[]} args.accountIds         account ids that exist in the vault, primary first
  * @returns {{ chains: string[], accounts: string[] } | null}
  */
 export function resolveAutoApproveScope({
     requestedChains,
-    requestedAccounts,
     activeChainIds,
     accountIds,
 }) {
@@ -139,11 +137,6 @@ export function resolveAutoApproveScope({
         ? active.filter((c) => wantChains.includes(c))
         : [...active];
 
-    const wantAccounts = ids(requestedAccounts);
-    const granted = wantAccounts.length > 0
-        ? accounts.filter((a) => wantAccounts.includes(a))
-        : [accounts[0]];
-
-    if (chains.length === 0 || granted.length === 0) return null;
-    return { chains, accounts: granted };
+    if (chains.length === 0) return null;
+    return { chains, accounts: [accounts[0]] };
 }

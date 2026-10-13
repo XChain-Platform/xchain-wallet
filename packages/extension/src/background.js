@@ -65,7 +65,7 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop, createHostBuildFlight } from './background/walletLock.js';
+import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -636,6 +636,13 @@ const lockBackstop = createLockBackstop({
 
 const { lockWalletNow, maybeAutoLock } = lockBackstop;
 
+// The idle-lock check runs before the notification refresh, never behind its network I/O.
+const keepaliveTick = createKeepaliveTick({
+    ensureHost: () => ensureHost(),
+    maybeAutoLock,
+    refresh: () => notificationService && notificationService.refresh(),
+});
+
 // Pre-host listener runs before the vault is open so the popup can ask
 // "no-wallet / locked / unlocked?" and perform `wallet.unlock`. Both
 // of those need to work when the vault is still encrypted. The host
@@ -693,13 +700,10 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
     chrome.alarms.create('xchain-ws-keepalive', { periodInMinutes: 0.4 });
     chrome.alarms.onAlarm.addListener((alarm) => {
         if (alarm.name !== 'xchain-ws-keepalive') return;
-        ensureHost()
-            .then(() => notificationService && notificationService.refresh())
-            // §26 auto-lock backstop: every keepalive tick (~24s) also checks
-            // whether the unlocked session has gone idle past the configured
-            // timeout with the popup closed, and locks if so.
-            .then(() => maybeAutoLock())
-            .catch((err) => console.error('[xchain] keepalive ensureHost failed:', err));
+        // §26 auto-lock backstop: every keepalive tick (~24s) also checks
+        // whether the unlocked session has gone idle past the configured
+        // timeout with the popup closed, and locks if so.
+        void keepaliveTick();
     });
 }
 

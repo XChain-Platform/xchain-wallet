@@ -130,9 +130,9 @@ function hasOutput(customOutputs, output) {
  * (`sendToken`, `buildSendPsbt`, `composeForConfirm`) keep their bytes.
  *
  * Idempotence is by address AND value, so a send whose destination and amount
- * both equal an output already present (an ADS donation of exactly the sent
- * amount, to the donation address the user is sending to) folds nothing and
- * pays once. Accepted: it underpays the project, never the user.
+ * both equal an output the caller already supplied folds nothing and pays once.
+ * Every route folds the payment before the ADS donation, so a donation that
+ * happens to equal the payment is still paid beside it.
  *
  * @param {object} args
  * @param {{ action?: string, params?: Record<string, any> } | null} args.actionData

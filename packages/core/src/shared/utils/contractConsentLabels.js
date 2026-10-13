@@ -57,7 +57,8 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
     ORDER: 'place orders',
     PRICE: 'publish prices',
     SEND: 'send your tokens',
-    SLEEP: 'schedule delays',
+    // Say what a SLEEP grant can freeze (only a token's owner may pause it).
+    SLEEP: 'pause tokens it controls or lock its own address',
     SWAP: 'swap tokens',
     SWEEP: 'sweep balances',
     VOTE: 'cast votes',

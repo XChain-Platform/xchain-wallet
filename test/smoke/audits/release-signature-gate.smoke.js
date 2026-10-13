@@ -173,7 +173,7 @@ function makePE({ certAddr = 0, certSize = 0, numRva = 16, magic = 0x20b } = {})
         checkArtifact(goodExe, 'authenticode'),
         checkArtifact(badExe, 'authenticode'),
         checkArtifact(goodZip, 'codesign'),
-        checkArtifact(join(work, 'xchain-wallet-0.335.0.AppImage'), 'none'),
+        checkArtifact(join(work, 'xchain-wallet-0.335.0-x86_64.AppImage'), 'none'),
         // The dmg is CHECKED now (row 140), so it is driven here on a
         // stubbed assessment rather than counted as recorded. The stub is
         // the real spctl output shape, verbatim from the published

@@ -698,7 +698,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the review stage does not state that this costs two signatures')
                 .toContainText('Airdrop is a two-transaction flow');
 
-            const submit = main.getByRole('button', { name: /^Sign LIST/ });
+            const submit = main.getByRole('button', { name: /^Sign address list/ });
             await submit.click();
             await expectConfirmModal(page, submit);
             listTxid = await approveAndGetTxid(page);
@@ -738,7 +738,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText(new RegExp(`recipients\\s*${recipients.length}\\b`, 'i'),
                     { useInnerText: true });
 
-            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
             await submit.click();
             await expectConfirmModal(page, submit);
 
@@ -943,7 +943,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'back to the address-list wording, which would mean the wrong LIST TYPE)')
                 .toBeVisible({ timeout: 30_000 });
 
-            const submit = page.getByRole('main').getByRole('button', { name: /^Sign LIST/ });
+            const submit = page.getByRole('main').getByRole('button', { name: /^Sign token list/ });
             await submit.click();
             await expectConfirmModal(page, submit);
             listTxid = await approveAndGetTxid(page);
@@ -993,7 +993,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('sign the AIRDROP against the token list', async () => {
             const main = page.getByRole('main');
-            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
             await submit.click();
             await expectConfirmModal(page, submit);
             airdropTxid = await approveAndGetTxid(page, listTxid);
@@ -1135,7 +1135,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the existing-list mode is waiting on an indexer it has no reason to wait for')
                 .toBe(0);
 
-            const submit = main.getByRole('button', { name: /^Sign AIRDROP/ });
+            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
             await submit.click();
             await expectConfirmModal(page, submit);
             airdropTxid = await approveAndGetTxid(page);

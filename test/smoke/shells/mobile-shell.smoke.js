@@ -952,6 +952,21 @@ assert.match(ceremony, /if \[ -n "\$\{XCHAIN_BUILD_ANDROID_FULL:-\}" \]/,
     }
     assert.doesNotMatch(ceremony, /intact in the work directory/,
         'no failure message claims signed artifacts survive in WORK_DIR, which the EXIT trap deletes');
+
+    // The closing instruction. A rehearsal exits before any sign.sh command is
+    // printed, and a set holding the full APK names both lanes it needs.
+    const closing = ceremonyCode.slice(ceremonyCode.lastIndexOf('if [ "$REHEARSAL" -eq 1 ]; then'));
+    const firstSign = closing.indexOf('tools/release/sign.sh');
+    assert.ok(firstSign > closing.indexOf('exit 0') && closing.indexOf('exit 0') > 0,
+        'a rehearsal exits before the closing block prints a sign.sh command for its bytes');
+    assert.ok(closing.includes('--lane android,android-full')
+        && closing.indexOf('--lane android,android-full') < closing.indexOf('--lane android \\\\"'),
+    'a ceremony that staged the full APK prints both lanes, and the store-only path keeps --lane android');
+    const failed = ceremonyCode.slice(ceremonyCode.indexOf('full_leg_failed() {'),
+        ceremonyCode.indexOf('if [ -n "${XCHAIN_BUILD_ANDROID_FULL:-}" ]'));
+    assert.ok(failed.indexOf('REHEARSAL') > 0
+        && failed.indexOf('REHEARSAL') < failed.indexOf('tools/release/sign.sh'),
+    'a rehearsal whose full leg fails is not told to sign the pair it staged');
 }
 
 const expectedArtifacts = readFileSync(

@@ -8,16 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// BET (parimutuel betting) composers. The wire-level BET action has four
+// BET (parimutuel betting) composers. The wire-level BET action has five
 // formats (spec: xchain-documentation/protocol/actions/BET.md):
 //   v0: create a market   v1: cancel a market
 //   v2: place a bet       v3: resolve a market to its winning outcome
+//   v4: edit an open market's allow/block list references
 //
 // The BET-shape knowledge (outcome indexing, DETAILS schema, size caps, fee
-// formatting) lives in the SDK's betting helpers, so each composer takes the
-// UI-level camelCase object, runs it through the matching sdk.betting.*Params
-// builder, then hands it to submitAction like every other single-action flow.
-// Mirrors voteActions.js.
+// formatting) lives in the SDK. Formats 0 through 3 use the matching
+// sdk.betting.*Params helper; format 4 is validated by the SDK's raw BET
+// composer because it has no separate params helper. The resulting params then
+// go to submitAction like every other single-action flow. Mirrors voteActions.js.
 //
 // The builders PIN the format version rather than letting anything infer it.
 // That is load-bearing here: a resolve and a place-bet differ on the wire only
@@ -39,7 +40,7 @@ import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
  * @property {string} chainId
  * @property {import('./sendToken.js').SourceRef | import('../schemas/address.js').Address} from
- * @property {object} params            UI-level camelCase params for the matching sdk.betting builder
+ * @property {object} params            UI-level camelCase params for the selected BET format
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
@@ -106,11 +107,50 @@ function submitBet(opts, builderName, buildInput, summary) {
 }
 
 /**
+ * Build BET v4 params and make the SDK validate the exact payload that will be
+ * handed to the encoder. The v4 SDK contract is exposed by the raw BET action
+ * composer rather than a `sdk.betting.*Params` convenience helper.
+ *
+ * Empty list fields retain the current reference, `0` detaches it, and a
+ * positive action index replaces it.
+ *
+ * @param {object} sdk
+ * @param {{ feedActionIndex: string|number, allowList?: string|number, blockList?: string|number, memo?: string }} input
+ */
+export function buildEditFeedListsParams(sdk, input = {}) {
+    if (input.feedActionIndex === undefined || input.feedActionIndex === null) {
+        throw new Error('editBetFeedListsAction: params.feedActionIndex is required');
+    }
+    if (!sdk?.actions || typeof sdk.actions.createAction !== 'function') {
+        throw new Error('editBetFeedListsAction: sdk.actions.createAction is unavailable');
+    }
+    const allowList = input.allowList === undefined || input.allowList === null
+        ? '' : String(input.allowList).trim();
+    const blockList = input.blockList === undefined || input.blockList === null
+        ? '' : String(input.blockList).trim();
+    if (!allowList && !blockList) {
+        throw new Error('editBetFeedListsAction: enter an allow-list or block-list change');
+    }
+    const params = {
+        version: 4,
+        feedActionIndex: String(input.feedActionIndex).trim(),
+        allowList,
+        blockList,
+        ...(input.memo !== undefined && input.memo !== null && String(input.memo) !== ''
+            ? { memo: String(input.memo) }
+            : {}),
+    };
+    sdk.actions.createAction({ action: 'BET', params });
+    return params;
+}
+
+/**
  * Open a betting market (BET v0). `opts.params` is the sdk.betting.createMarketParams
  * input: { label, outcomes, tick, fee?, deadline, refundWindow?, minAmount?,
  * allowList?, blockList?, details?, memo? }.
  *
- * Markets are immutable from creation: there is no edit format, by design.
+ * Market terms are immutable after creation. BET v4 can change only its allow
+ * and block list references while it remains open.
  * @param {BetActionOpts} opts
  */
 export async function createMarketAction(opts) {
@@ -156,4 +196,52 @@ export async function cancelMarketAction(opts) {
         throw new Error('cancelMarketAction: params.feedActionIndex is required');
     }
     return submitBet(opts, 'cancelMarketParams', opts.params, `Cancel market ${opts.params.feedActionIndex}`);
+}
+
+/**
+ * Edit an open betting market's membership-list references (BET v4).
+ * Market ownership and open status are stateful checks enforced by the chain;
+ * the wallet editor exposes this only for open feeds owned by the active wallet.
+ *
+ * @param {BetActionOpts} opts
+ */
+export async function editBetFeedListsAction(opts) {
+    if (!opts) throw new Error('betActions: opts is required');
+    if (!opts.sdkRegistry) throw new Error('betActions: sdkRegistry is required');
+    if (!opts.chainId) throw new Error('betActions: chainId is required');
+    const sdk = opts.sdkRegistry.get(opts.chainId);
+    const params = buildEditFeedListsParams(sdk, opts.params);
+    const source = normalizeSource(opts.from, 'betActions');
+    const pendingTxMeta = opts.trackPendingTx === false ? undefined : {
+        fromAddress: source.address,
+        toAddress: null,
+        actionSummary: `Edit lists for market ${params.feedActionIndex}`,
+    };
+    return submitAction({
+        vault: opts.vault,
+        walletId: opts.walletId,
+        password: opts.password,
+        signer: opts.signer,
+        bip39Passphrase: opts.bip39Passphrase,
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        actionData: { action: 'BET', params },
+        encoderOpts: {
+            pubkey: source.publicKey,
+            ...fundingEncoderOpts(source),
+            ...(opts.fee !== undefined && { fee: opts.fee }),
+            ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+        },
+        signingPaths: [source.derivationPath
+            ? { inputIndex: 0, path: source.derivationPath }
+            : { inputIndex: 0, addressId: source.addressId }],
+        prebuiltPsbt: opts.prebuiltPsbt,
+        pendingTxMeta,
+        waitForTxid: opts.waitForTxid,
+        waitOpts: opts.waitOpts,
+        onProgress: opts.onProgress,
+        onBroadcastFailure: opts.onBroadcastFailure,
+    });
 }

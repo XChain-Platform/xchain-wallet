@@ -3,11 +3,11 @@
 
 # Chrome Web Store publish log
 
-**Status:** SCAFFOLD. No real publish has happened yet; the row below is a worked EXAMPLE only, not a real entry.  
-**Last updated:** 2026-07-31  
+**Status:** ACTIVE. The log includes live Chrome Web Store uploads; the EXAMPLE row remains a formatting guide only.
+**Last updated:** 2026-10-09
 **Source item:** (`wallet-publishing-chrome-extension.md` (platform tree)), §2 "Publish monitoring", stage S1.  
 **Canonical item name:** `io.xchain.wallet.extension` (spec §2, decided 2026-07-31), matching the desktop `io.xchain.wallet.desktop`, Android `io.xchain.wallet.android`, and iOS `io.xchain.wallet.ios`. This is the name we use for the item in writing. It is not the Chrome extension ID: Chrome derives that from the item's public key at first upload, and it goes in the row below and in the rails K7 row once it exists.  
-**Store-assigned extension IDs:** main `<pending first upload>`, beta `<pending first upload>`.
+**Store-assigned extension IDs:** main `hpgekccmlajjbeckcjbldjinajmhchfp`, beta `<pending first upload>`.
 
 ## Purpose and rule of use
 
@@ -32,4 +32,5 @@ Do not compare a live version against "the latest release tag" instead of this l
 
 | version | zip sha256 | item | operator | date |
 |---|---|---|---|---|
+| 0.341.2 | `a800f465a0bd15ce01c5eff78bc72644b434a2c295a6714bfd462f7e60c08b68` | main | Dankest, LLC | 2026-10-09 |
 | 0.0.0-EXAMPLE | `0000000000000000000000000000000000000000000000000000000000000000` | main | EXAMPLE-operator (not a real entry) | 2026-01-01 |

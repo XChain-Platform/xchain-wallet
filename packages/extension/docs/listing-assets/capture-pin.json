@@ -1,32 +1,33 @@
 {
-    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write), normally from the end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set extension), normally from the end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "set": "extension",
     "capturedFrom": {
-        "commit": "42bda8b1365545412f3881fedf4654c9ced26093",
-        "version": "0.337.0",
+        "commit": "786ce0790d1f94f0aef3d054d7510bc4e5bca1c7",
+        "version": "0.341.2",
         "how": "capture"
     },
-    "observedAt": "2026-08-07T14:53:24.200Z",
+    "observedAt": "2026-10-08T12:43:43.049Z",
     "assets": {
         "screenshot-popup.png": {
-            "sha256": "e593c787057d6bccad09e0919f5d62e59ca20dbe496bd4b8f5e2ab401a6be6b1",
+            "sha256": "0f0ebe6e8d8679314838f33d82a56d53fd228a54dd46314af59966a7c6957efa",
             "width": 1280,
             "height": 800,
             "shows": "Toolbar popup, Home view"
         },
         "screenshot-sidepanel.png": {
-            "sha256": "8054adb7e6d1b243f72aaaa81df1b326bad4933aa79c914eff63b29cfba23ca8",
+            "sha256": "55c0d2ffeced9820cd46075ef2d8948816997f006dcfcef34ceadd54ed7326dd",
             "width": 1280,
             "height": 800,
             "shows": "Side panel, Tokens view"
         },
         "screenshot-sign-approval.png": {
-            "sha256": "1c18626f3ffdc84e46b77bc77b36e3db4c27b5bafc663b4c025601c693830fa7",
+            "sha256": "c9e7d618ef31b33923cafd5ef48dc9a6ca7929a872be3d1e109ea4a7c43f2f56",
             "width": 1280,
             "height": 800,
             "shows": "Sign-approval window (dApp message signature)"
         },
         "promo-tile-440x280.png": {
-            "sha256": "d6b039f0390969f3c8945cb379e2cf5d71b9b9fd7a899b2f18d805204fa929b2",
+            "sha256": "e02213324b4727ad0b9c2203382ecc65ad1580435ee0a160beb662de0edc7c5f",
             "width": 440,
             "height": 280,
             "shows": "Brand logo and wordmark on the accent gradient"

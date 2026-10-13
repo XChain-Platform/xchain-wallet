@@ -204,7 +204,9 @@ export function ListPickerScreen({
                                     {status && status !== 'valid' ? ` (${status})` : ''}
                                 </span>
                                 <span className={styles.abAddr}>
-                                    {description ? `${countText} · ${description}` : countText}
+                                    {description && count !== undefined
+                                        ? `${countText} · ${description}`
+                                        : countText}
                                 </span>
                             </button>
                         </li>

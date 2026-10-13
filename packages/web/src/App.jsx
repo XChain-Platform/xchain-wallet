@@ -28,7 +28,8 @@
 // need to know about web-only chrome. Auto-hides when `window.xchain`
 // isn't injected, or when the user dismisses it for the session.
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -79,7 +80,6 @@ import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
-const APP_COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -94,6 +94,7 @@ import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
+import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
@@ -356,6 +357,14 @@ function AppInner() {
     // historically owned, and so flipping the filter on TokenDetail
     // affects Home and vice-versa.
     const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
+    // Header filter coins come from the live registry, so custom and
+    // hub-synced chains appear without a restart (regtest stays dev-only).
+    const supportedChains = useSupportedChains(APP_CHAIN_REGISTRY);
+    const developerMode = Boolean(settings?.developerMode);
+    const headerCoinFamilies = useMemo(
+        () => registryLib.coinFamiliesForUser(supportedChains, { developerMode }),
+        [supportedChains, developerMode],
+    );
     // Free-text token filter: lifted alongside the network filter so the
     // AppHeader popover and Home's HomeTabs share one source of truth.
     // The Send and Receive pickers keep their own search text: sharing this
@@ -793,24 +802,13 @@ function AppInner() {
     // reaching into that effect's control flow.
     const headerAccounts = useAccountList(activeWalletId);
 
-    // Wallet-level alerts surfaced in the pancake menu's Alerts panel.
-    // Mirrors Home.jsx's `alerts` array so the web MenuRoute shows the
-    // same signals (the menu lives at the App level here, not in Home).
-    // Computed each render from walletList; future alerts append here.
+    // Build the pancake menu's Alerts panel from the shared list in core
+    // (walletAlerts.js); the menu lives at the App level here, not in Home.
     const activeWallet = walletList.find((w) => w.id === activeWalletId) || null;
-    const menuAlerts = [];
-    if (activeWallet?.format === 'counterwallet-legacy') {
-        menuAlerts.push({
-            id: 'legacy-format',
-            severity: 'info',
-            title: 'Legacy FreeWallet format',
-            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for wider compatibility with other wallets and stronger security.',
-            action: {
-                label: 'Migrate to BIP39',
-                onSelect: () => setUnlockedView('migrate-bip39'),
-            },
-        });
-    }
+    const menuAlerts = buildWalletAlerts({ activeWallet, messagingUnread }, {
+        onMessaging: () => { setMessagingThread(null); setUnlockedView('messaging'); },
+        onMigrateToBip39: () => setUnlockedView('migrate-bip39'),
+    });
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -1408,6 +1406,7 @@ function AppInner() {
                 return (
                     <AdvancedActionsForm
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         onBack={formBack}
                     />
                 );
@@ -1602,6 +1601,7 @@ function AppInner() {
                 return (
                     <BatchComposerForm
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         onBack={() => setUnlockedView('actions')}
                     />
                 );
@@ -1610,6 +1610,7 @@ function AppInner() {
                 return (
                     <ParallelComposer
                         walletId={activeWalletId}
+                        hasDexSurface={DEX_SURFACE_ENABLED}
                         initialRows={parallelPrefill || undefined}
                         onBack={() => {
                             setParallelPrefill(null);
@@ -2760,7 +2761,7 @@ function AppInner() {
                                     walletNonDefault={headerWalletNonDefault}
                                     accountNonDefault={headerAccountNonDefault}
                                     chainRegistry={APP_CHAIN_REGISTRY}
-                                    coinFamilies={APP_COIN_FAMILIES}
+                                    coinFamilies={headerCoinFamilies}
                                     networkFilter={globalNetworkFilter}
                                     onNetworkFilterChange={setGlobalNetworkFilter}
                                     // Cross-site navigation for the *.xchain.io family.

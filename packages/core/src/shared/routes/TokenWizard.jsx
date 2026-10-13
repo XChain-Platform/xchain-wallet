@@ -659,7 +659,9 @@ export function TokenWizard({ walletId, onBack }) {
         const txid = result?.txid || result?.broadcast?.txid;
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="token creation" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="token creation" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

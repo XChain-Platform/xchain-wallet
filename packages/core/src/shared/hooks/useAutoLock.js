@@ -57,6 +57,9 @@ export function useAutoLock(
 
     useEffect(() => {
         if (!enabled) return undefined;
+        // Start every arm with a full idle window: while disabled the listeners
+        // are detached, so the clock still holds the moment of the last lock.
+        lastActivity.current = Date.now();
         const bump = () => { lastActivity.current = Date.now(); };
         const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
         for (const ev of events) {

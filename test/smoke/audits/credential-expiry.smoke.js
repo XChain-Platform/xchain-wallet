@@ -34,8 +34,8 @@
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -99,6 +99,18 @@ assert.equal(k1.fingerprint, keyPin.fingerprint, 'the K1 row names the pinned pr
 assert.equal(k1.signingSubkey, keyPin.signingSubkey, 'the K1 row names the pinned signing subkey');
 assert.ok(existsSync(resolveVerifyFrom(k1.verifyFrom)),
     `K1's verifyFrom (${k1.verifyFrom}) resolves to the committed public key`);
+
+// The tag-signing key gates every release run, so its row is pinned to the
+// fingerprint and key path the release workflow's verify-tag step reads.
+const tagKey = declared.credentials.find((c) => c.id === 'TAG-KEY');
+assert.ok(tagKey, 'TAG-KEY, the release tag-signing key, must stay on the clock');
+const tagFpr = readFileSync(join(root, 'tools/release/tag-signing-fingerprint.txt'), 'utf8').replace(/[\s]/g, '');
+assert.equal(tagKey.fingerprint, tagFpr, 'the TAG-KEY row names the pinned tag-signing fingerprint');
+assert.ok(existsSync(resolveVerifyFrom(tagKey.verifyFrom)),
+    `TAG-KEY's verifyFrom (${tagKey.verifyFrom}) resolves to the committed public key`);
+assert.ok(readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
+    .includes(`KEY="${tagKey.verifyFrom.replace(/^\.\//, '')}"`),
+'the TAG-KEY row names the key file the verify-tag step imports');
 
 // --- the calendar branches -------------------------------------------------
 
@@ -211,6 +223,32 @@ assert.ok(existsSync(resolveVerifyFrom(k1.verifyFrom)),
     assert.equal(f.measured, true);
 }
 
+// --- an unparseable artifact date is unmeasured, never a measurement --------
+
+{
+    // An Invalid Date is truthy: read as a date it would skip the drift check and
+    // pass --require-measured on the declared date alone.
+    const garbage = { run: () => 'notAfter=not a date at all\n', home: '/' };
+    const row = { id: 'GARBLED', what: 'x', expires: '2027-02-01T22:12:15Z', verifyFrom: DECL, breaks: 'x' };
+    const loose = assessOne(row, at('2026-08-08T00:00:00Z'), 60, garbage);
+    assert.equal(loose.measured, false, 'an unparseable notAfter is not a measurement');
+    assert.match(loose.reason, /unparseable/);
+    const strict = assessOne(row, at('2026-08-08T00:00:00Z'), 60, { ...garbage, requireMeasured: true });
+    assert.equal(strict.state, 'unmeasured');
+    assert.equal(readActualExpiry(DECL, { run: () => 'notAfter=garbage\n' }).date, null);
+
+    const dir = mkdtempSync(join(tmpdir(), 'credential-expiry-smoke-'));
+    try {
+        const file = join(dir, 'x.provisionprofile');
+        writeFileSync(file, '');
+        const profile = readActualExpiry(file, { run: () => '<key>ExpirationDate</key><date>garbage</date>' });
+        assert.equal(profile.date, null, 'an unparseable profile ExpirationDate is not a measurement');
+        assert.match(profile.reason, /unparseable/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
 // --- the two artifact shapes are read differently --------------------------
 
 {
@@ -301,8 +339,12 @@ if (spawnSync('gpg', ['--version'], { encoding: 'utf8' }).status === 0) {
     assert.ok(real.date, `gpg could not read the committed K1 key: ${real.reason}`);
     assert.ok(Math.abs(real.date.getTime() - Date.parse(k1.expires)) <= 1000,
         `the committed K1 key carries ${real.date.toISOString()}, the row declares ${k1.expires}`);
+    const tag = readActualExpiry(resolveVerifyFrom(tagKey.verifyFrom), { fingerprint: tagKey.fingerprint });
+    assert.ok(tag.date, `gpg could not read the committed tag-signing key: ${tag.reason}`);
+    assert.ok(Math.abs(tag.date.getTime() - Date.parse(tagKey.expires)) <= 1000,
+        `the committed tag-signing key carries ${tag.date.toISOString()}, the row declares ${tagKey.expires}`);
 } else {
-    console.log('credential-expiry smoke: gpg is not installed, so the real read of the committed K1 key '
+    console.log('credential-expiry smoke: gpg is not installed, so the real reads of the committed K1 and tag-signing keys '
         + 'did not run (the fake-gpg cases above still did).');
 }
 

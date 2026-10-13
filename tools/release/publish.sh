@@ -379,6 +379,19 @@ if [[ -n "$COVERAGE_LANES" && "$STAGING" -eq 1 ]]; then
     printf '%s\n' "$DIRECT_FEEDS" | sed 's/^/  /' >&2
 fi
 
+# WHERE THE SIGNED MANIFEST LANDS. Production and the desktop rehearsal set
+# keep RELEASE_HASHES/<tag>.txt: the shipped updater composes that path from
+# its feed base and version, so an installed rehearsal build reads it during
+# the swap (dq-13 kept it fixed for that reason). The staged direct-lane
+# partial is a second, separately signed set for the SAME tag on the same
+# feed, so it takes its own path under RELEASE_HASHES/android/, which
+# `rehearse.mjs run` reads for the direct lanes. On one shared name the
+# set staged last would erase the other's proof.
+MANIFEST_REL="RELEASE_HASHES/$TAG.txt"
+if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
+    MANIFEST_REL="RELEASE_HASHES/android/$TAG.txt"
+fi
+
 # Are these the bytes for the feed we are about to write to? The
 # installers cannot answer that (identical names either way), the
 # pointers can.
@@ -469,7 +482,7 @@ echo "publish.sh: verifying the signed release before upload ..." >&2
 bash "$HERE/verify.sh" --input "$INPUT_DIR" --tag "$TAG" >&2
 
 BASE="$(target_path)"
-MANIFEST_REMOTE="$BASE/RELEASE_HASHES/$TAG.txt"
+MANIFEST_REMOTE="$BASE/$MANIFEST_REL"
 
 # The other half of the prod/rehearsal guard, and the half that does not
 # depend on the input being what it claims. `.staging-feed` is written
@@ -521,7 +534,7 @@ fi
 # publish still passes verify.sh, still asserts the channel of what it is
 # handed, and still refuses a target that carries no .staging-feed marker.
 # What it may now do is replace a rehearsal that has been superseded.
-if target_exists "RELEASE_HASHES/$TAG.txt"; then
+if target_exists "$MANIFEST_REL"; then
     if [[ "$STAGING" == 1 ]]; then
         echo "publish.sh: replacing the superseded $TAG rehearsal on the staging feed (§7.5)." >&2
     else
@@ -563,12 +576,12 @@ for rel in "${BINARIES[@]}"; do
     fi
 done
 
-# THE DIRECT FEED POINTER, staging only. It names this version to every
-# install that reads it, so it goes up LAST and only beside exactly one APK
-# per direct lane: a feed naming a version nobody can download is an alarm
-# with no exit.
+# THE DIRECT FEED POINTER. It names this version to every install that reads
+# it, so both production and staging publish it LAST and only beside exactly
+# one APK per direct lane: a feed naming a version nobody can download is an
+# alarm with no exit.
 DIRECT_POINTERS=()
-if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
+if [[ "$COVERAGE_DIRECT" == "yes" ]]; then
     apk_count=0
     for rel in "${BINARIES[@]}"; do
         if [[ "${rel#./}" == *.apk ]]; then apk_count=$((apk_count + 1)); fi
@@ -581,10 +594,10 @@ if [[ "$STAGING" -eq 1 && "$COVERAGE_DIRECT" == "yes" ]]; then
         [[ " ${DIRECT_POINTERS[*]-} " == *" $feed "* ]] || DIRECT_POINTERS+=("$feed")
     done <<< "$DIRECT_FEEDS"
     if [[ "$apk_count" -ne "$direct_count" || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "publish.sh: refusing to stage a direct feed for $TAG over $apk_count .apk file(s)" \
+        echo "publish.sh: refusing to publish a direct feed for $TAG over $apk_count .apk file(s)" \
              "for $direct_count direct lane(s)." >&2
         echo "  Each direct lane is exactly one universal APK, and its feed names a" >&2
-        echo "  plain vMAJOR.MINOR.PATCH; anything else stages a notice for a" >&2
+        echo "  plain vMAJOR.MINOR.PATCH; anything else publishes a notice for a" >&2
         echo "  download that is not there." >&2
         exit 1
     fi
@@ -624,6 +637,22 @@ elif [[ ${#YMLS[@]} -eq 0 ]]; then
     exit 1
 fi
 
+# Every pointer must be one the client will install: its version is this tag's,
+# and every file it names is in this release's signed manifest. A stale pointer
+# freezes its fleet on the old version, and an uncovered one is downloaded,
+# refused and deleted by every client; both would otherwise publish green.
+# The set must also be exactly what the signed header's lanes need: a missing
+# per-arch pointer leaves that fleet on the old release with nothing logged.
+if [[ ${#YMLS[@]} -gt 0 ]]; then
+    if ! node "$HERE/pointer-gate.mjs" "$INPUT_DIR" --tag "$TAG" --manifest "$MANIFEST" \
+            --channel "$EXPECT_CHANNEL" --lanes "$LANES" >&2; then
+        echo "publish.sh: refusing to publish $TAG: the channel pointer(s) above are stale," >&2
+        echo "  uncovered, missing or unexpected. Nothing was uploaded. Collect exactly the" >&2
+        echo "  pointers this build emitted for $TAG and sign again if anything else changed." >&2
+        exit 1
+    fi
+fi
+
 # The plan used to print the manifest's artifact count as if every one of
 # them landed on the feed. For an Android release that is wrong by half:
 # the .aab is refused by name in Phase 1 below, so a plan reading
@@ -647,7 +676,7 @@ if [[ "$STORE_BOUND_COUNT" -gt 0 ]]; then
 else
     echo "  1. ${#BINARIES[@]} artifact(s)" >&2
 fi
-echo "  2. signed manifest as RELEASE_HASHES/$TAG.txt (+ .asc)" >&2
+echo "  2. signed manifest as $MANIFEST_REL (+ .asc)" >&2
 if [[ "$EDGE_VERIFY" -eq 1 && -n "$PUBLIC_BASE" ]]; then
     echo "  3. edge check: every artifact must return 200 via $PUBLIC_BASE" >&2
 elif [[ "$EDGE_VERIFY" -eq 0 ]]; then
@@ -740,9 +769,9 @@ done
 #
 # The versioned name is what lets verify.sh anchor a manifest to a
 # release without being told which one it is.
-echo "publish.sh: uploading the signed manifest as RELEASE_HASHES/$TAG.txt" >&2
-copy_to "$MANIFEST" "$BASE/RELEASE_HASHES/$TAG.txt"
-copy_to "$MANIFEST.asc" "$BASE/RELEASE_HASHES/$TAG.txt.asc"
+echo "publish.sh: uploading the signed manifest as $MANIFEST_REL" >&2
+copy_to "$MANIFEST" "$BASE/$MANIFEST_REL"
+copy_to "$MANIFEST.asc" "$BASE/$MANIFEST_REL.asc"
 
 # --- Phase 2b: prove the edge serves what the origin now holds ----------
 #
@@ -809,7 +838,7 @@ for rel in "${YMLS[@]}"; do
     copy_to "$INPUT_DIR/$name" "$BASE/desktop/$name"
 done
 
-# --- Phase 3b: the direct feed pointer, LAST (staging only) -------------
+# --- Phase 3b: the direct feed pointer, LAST ----------------------------
 #
 # The one field the shipped client reads. Written world-readable before the
 # copy, because copy_to preserves mode and mktemp creates 0600.

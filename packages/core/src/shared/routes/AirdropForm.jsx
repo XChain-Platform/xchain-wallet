@@ -616,6 +616,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     // decode/broadcast a LIST, so this is simply unused there.
     const listItems = sourceMode === 'holders' ? memberTicks : recipients.valid;
     const listType = sourceMode === 'holders' ? '1' : '2';
+    // Name the list the way the review title does, never by its opcode
+    const listNoun = sourceMode === 'holders' ? 'token list' : 'address list';
     const listParams = useMemo(() => {
         /** @type {Record<string, string | string[]>} */
         const p = {
@@ -1313,9 +1315,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 ) : null}
                 <p className={styles.hint}>
                     Airdrop is a two-transaction flow. Step 1 broadcasts the
-                    {sourceMode === 'holders' ? ' token' : ' address'}
-                    {' '}list; once it's indexed, step 2 signs the AIRDROP
-                    that references it. {hw
+                    {' '}{listNoun}; once the network has recorded it, step 2
+                    signs the airdrop that references it. {hw
                         ? 'You will confirm on your hardware device twice.'
                         : signerReady ? 'You will approve each one; the wallet is unlocked, so no password is needed.' : 'You will enter your password twice.'}
                 </p>
@@ -1353,8 +1354,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             : (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0))}
                     >
                         {hw
-                            ? `Sign LIST on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign LIST on ${descriptor.displayName}` : 'Sign LIST')}
+                            ? `Sign ${listNoun} on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign ${listNoun} on ${descriptor.displayName}` : `Sign ${listNoun}`)}
                     </Button>
                 </div>
             </form>,
@@ -1498,8 +1499,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         }
                     >
                         {hw
-                            ? `Sign AIRDROP on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : (descriptor ? `Sign AIRDROP on ${descriptor.displayName}` : 'Sign AIRDROP')}
+                            ? `Sign airdrop on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : (descriptor ? `Sign airdrop on ${descriptor.displayName}` : 'Sign airdrop')}
                     </Button>
                 </div>
             </form>,

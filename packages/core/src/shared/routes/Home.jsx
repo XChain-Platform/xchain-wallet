@@ -25,6 +25,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
 import { DemoBanner } from '../components/DemoBanner.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
+import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
@@ -287,7 +288,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [homeMoreOpen]);
     // The overflow menu's entries as data, so an empty list can
     // drop the "More" button itself. Every entry it holds today is
-    // DEX-gated, so a store build wires none and used to open
+    // DEX-gated, so a build that hides the DEX wires none and used to open
     // the menu onto a dead "No additional actions" row. A future non-DEX
     // entry appends here and keeps More alive on its own.
     const homeMoreActions = useMemo(() => {
@@ -825,32 +826,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
 
-    // Wallet-level alerts surfaced in the pancake's Alerts panel.
-    // Computed each render from the available signals; future alerts
-    // (incoming message, order match settled, MuSig2 round needs
-    // attention, etc.) drop into this array as they wire through
-    // their own sources.
-    const alerts = [];
-    if (messagingUnread > 0 && onMessaging) {
-        alerts.push({
-            id: 'unread-messages',
-            severity: 'info',
-            title: 'Unread messages',
-            message: messagingUnread === 1
-                ? 'You have 1 conversation with unread messages.'
-                : `You have ${messagingUnread} conversations with unread messages.`,
-            action: { label: 'Open Messaging', onSelect: onMessaging },
-        });
-    }
-    if (activeWallet?.format === 'counterwallet-legacy' && onMigrateToBip39) {
-        alerts.push({
-            id: 'legacy-format',
-            severity: 'info',
-            title: 'Legacy FreeWallet format',
-            message: 'This wallet uses the 12-word Counterwallet format. Migrate to BIP39 for wider compatibility with other wallets and stronger security.',
-            action: { label: 'Migrate to BIP39', onSelect: onMigrateToBip39 },
-        });
-    }
+    // Build the wallet-level alerts from the one shared list (walletAlerts.js);
+    // a new alert is added there, never here.
+    const alerts = buildWalletAlerts({ activeWallet, messagingUnread }, { onMessaging, onMigrateToBip39 });
 
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on

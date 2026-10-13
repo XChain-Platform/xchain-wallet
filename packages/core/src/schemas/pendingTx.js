@@ -90,6 +90,11 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @property {number | null} [confirmedBlockIndex]  the block that carries it,
  *          when the proving source named one; null when only inclusion is
  *          known (a confirmed descendant proves the parent is in SOME block)
+ * @property {boolean} [commitLanded]  a queued reveal or phase-2 spend whose
+ *          commit is already on the network, so no retry or discard may retire
+ *          it as 'failed' or delete it. Additive and undefined-tolerant
+ * @property {string | null} [commitTxid]  that landed commit's txid, which
+ *          the queued record's own txid (the reveal's) no longer names
  */
 
 /**
@@ -213,6 +218,19 @@ export function validatePendingTx(record) {
         r.confirmedBlockIndex === undefined || r.confirmedBlockIndex === null
             || (Number.isInteger(r.confirmedBlockIndex) && r.confirmedBlockIndex > 0),
         'must be null or a positive integer',
+    );
+    // Commit-landed marker, written only on a queued reveal or phase-2 spend.
+    check(
+        errors,
+        'commitLanded',
+        r.commitLanded === undefined || typeof r.commitLanded === 'boolean',
+        'must be a boolean',
+    );
+    check(
+        errors,
+        'commitTxid',
+        r.commitTxid === undefined || r.commitTxid === null || isNonEmptyString(r.commitTxid),
+        'must be null or a non-empty string',
     );
     return result(errors);
 }

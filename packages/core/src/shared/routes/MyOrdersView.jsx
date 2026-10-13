@@ -544,7 +544,15 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
         const txid = result.txid || result.broadcast?.txid;
         const explorerUrl = explorerTxUrl(descriptor, txid);
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
-        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'order cancel' : 'order edit'} />);
+        if (result.queued) {
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onDone}
+                    what={isCancel ? 'order cancel' : 'order edit'}
+                    unsaved={result.unsaved}
+                />,
+            );
+        }
         if (result.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
         }

@@ -58,17 +58,18 @@ for (const theme of schemaThemes) {
 // ─── 3. Loading / error / no-settings status surfaces ────────────────
 
 assert.match(src, /loading\)\s*return\s*<Status/, 'loading state renders Status');
-assert.match(src, /error\)\s*return\s*<Status/, 'error state renders Status');
+assert.match(src, /error\)\s*return\s*<SettingsLoadError error=\{error\}/, 'error state renders Status');
+assert.doesNotMatch(src, /error\.message/, 'error state never shows the raw error message');
 
-// ─── 4. Reduced motion is live (schema v2); accent color still deferred
+// ─── 4. Reduced motion is live (schema v2); no accent row until it exists
 
 assert.match(src, /Reduced motion/, 'Reduced motion row present');
 assert.match(src, /update\(\{\s*reducedMotion:\s*next\s*\}\)/, 'reducedMotion writes through update');
 assert.match(src, /value:\s*'auto'/, 'auto option present');
 assert.match(src, /value:\s*'always'/, 'always option present');
 assert.match(src, /value:\s*'never'/, 'never option present');
-assert.match(src, /Accent color/, 'Accent color row present');
-assert.match(src, /finalized at brand cut/, 'accent-color deferral copy');
+assert.doesNotMatch(src, /finalized at brand cut/, 'an internal roadmap note is not shipped as UI copy');
+assert.doesNotMatch(src, /<span[^>]*>\s*Accent color\s*<\/span>/, 'no Accent color row until the feature exists');
 
 // ─── 5. Settings.jsx wires AppearanceSection as the appearance panel ─
 

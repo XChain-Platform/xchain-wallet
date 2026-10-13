@@ -36,7 +36,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildActionPsbt, WatcherChunkLaneError } from '../../../packages/core/src/flows/buildActionPsbt.js';
 import { humanizeError } from '../../../packages/core/src/shared/utils/humanizeError.js';
-import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import { submitFailureMessage, isWatcherChunkLane } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
+import {
+    HardwareChunkLaneError,
+    EnvelopeConfirmLaneError,
+    assertCompleteEnvelope,
+} from '../../../packages/core/src/sdk/submitWithSigner.js';
 
 const SOURCE = {
     address: 'rltc1qexampleexampleexampleexampleexampleex',
@@ -164,18 +169,18 @@ describe('the refusal survives the trip to the form', () => {
     // tidier. The six forms behind `useActionForm` (Mint, Destroy, Sweep,
     // CreateOrder, Callback, Sleep) do not pass a plain fallback string: they
     // pass `humanizeError(err, <verb>).message`, which classifies by KEYWORD -
-    // and this error's own wording says "the network carries it as a P2SH
+    // and this error's wording once said "the network carries it as a P2SH
     // pair". So it matched `network` and came out as a CONNECTIVITY failure,
     // telling the user to check their connection and try again: the one
     // instruction that spends the coin a second time. Without the branch above,
     // the more carefully this sentence was written the worse it read.
     it('is not reclassified as a connection failure by the forms that humanize', () => {
-        // THE TRAP, pinned on a bare copy of the same sentence so a later
-        // rewording of either side cannot hide it: the keyword chain reads
-        // "network" out of the explanation itself.
+        // THE TRAP, pinned on a bare copy of the same sentence: with the marker
+        // lost, the keyword chain must still not read a connectivity failure
+        // out of the explanation itself.
         const bare = new Error(new WatcherChunkLaneError({ action: 'MINT', encoding: 'P2SH' }).message);
-        expect(humanizeError(bare, 'mint').cause).toBe('network');
-        expect(humanizeError(bare, 'mint').message).toMatch(/check your connection/i);
+        expect(humanizeError(bare, 'mint').cause).not.toBe('network');
+        expect(humanizeError(bare, 'mint').message).not.toMatch(/check your connection/i);
 
         // The real error carries D-160's `userFacing` marker, so it is exempt
         // from that chain, and `submitFailureMessage` returns it whole either
@@ -196,5 +201,47 @@ describe('the refusal survives the trip to the form', () => {
         // must still get its form's fallback.
         expect(submitFailureMessage(new Error('boom'), { fallback: 'Dispenser creation failed.' }))
             .toBe('Dispenser creation failed.');
+    });
+});
+
+// The refusal is shown word for word, so it has to read as plain language:
+// the action by its display label, no script-type token, and a device name
+// spelled the way the device is sold.
+describe('the refusal names things the way the wallet does', () => {
+    const TOKENS = /DISPENSER|DEPLOY|P2SH|P2WSH|TAPROOT/;
+
+    it('names the action by its display label and the encoding not at all', () => {
+        const dispenser = new WatcherChunkLaneError({ action: 'DISPENSER', encoding: 'P2SH' });
+        expect(dispenser.message).toMatch(/^This Dispenser action is too large for one transaction/);
+        expect(dispenser.message).not.toMatch(TOKENS);
+        const deploy = new WatcherChunkLaneError({ action: 'DEPLOY', encoding: 'P2WSH' });
+        expect(deploy.message).toMatch(/^This Publish contract action is too large/);
+        expect(deploy.message).not.toMatch(TOKENS);
+        expect(deploy.action).toBe('DEPLOY');
+        expect(deploy.encoding).toBe('P2WSH');
+    });
+
+    it('reads "This action" when the action name is missing', () => {
+        let thrown = null;
+        try { assertCompleteEnvelope({ encoding: 'TAPROOT' }, undefined); } catch (e) { thrown = e; }
+        expect(thrown).toBeInstanceOf(EnvelopeConfirmLaneError);
+        expect(thrown.message).toMatch(/^This action is too large for one transaction/);
+        expect(thrown.message).not.toMatch(TOKENS);
+    });
+
+    it('is recognised from the message alone for every chunk-lane refusal', () => {
+        const errs = [
+            new HardwareChunkLaneError({ action: 'FILE', encoding: 'P2SH', signerKind: 'ledger' }),
+            new EnvelopeConfirmLaneError({ action: 'FILE', encoding: 'TAPROOT', commitMismatch: true }),
+        ];
+        for (const err of errs) {
+            expect(err.message).not.toMatch(TOKENS);
+            expect(isWatcherChunkLane({ message: err.message })).toBe(true);
+        }
+    });
+
+    it('keeps a bare copy out of the connection-failure class', () => {
+        const bare = new Error(new HardwareChunkLaneError({ action: 'FILE', encoding: 'P2SH' }).message);
+        expect(humanizeError(bare, 'publish').cause).not.toBe('network');
     });
 });

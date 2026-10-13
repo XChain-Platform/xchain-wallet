@@ -14,7 +14,7 @@
  * The one place this mapping is written: every form, the shared confirm hook
  * and the resume screen call it, so a field compose adds reaches them all.
  *
- * @param {any} composed  the ComposedAction the confirm page previewed
+ * @param {any} composed  the HostComposeWireEnvelope the confirm page previewed (see ./composeActionForConfirm.js)
  * @returns {import('../sdk/submitWithSigner.js').PrebuiltPsbt}
  */
 export function prebuiltPsbtFromComposed(composed) {

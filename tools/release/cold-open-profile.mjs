@@ -133,7 +133,7 @@ export const ZONE_RULES = Object.freeze([
     Object.freeze({
         name: 'API Rate Limit',
         expression: `(http.host in ${hostSet(API_HOSTS)})`,
-        threshold: 564,
+        threshold: 168,
         periodSec: 10,
         action: 'Block 429, 10 seconds',
         // By HOST, not by path: the wallet's explorer reads are /{COIN}/api/...

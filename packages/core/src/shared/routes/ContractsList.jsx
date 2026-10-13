@@ -39,7 +39,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * Contracts browse landing (§42.2).
  *
  * Three sections:
- *   1. "My contracts (deployed by me)": sdk.getContracts(addr, 'source').
+ *   1. "My contracts (published by me)": sdk.getContracts(addr, 'source').
  *   2. "My interactions (deposits/withdrawals/executes)": union of
  *      getDeposits + getWithdrawals by address, deduped by
  *      CONTRACT_ACTION_INDEX. Executions-by-address is not yet wired
@@ -311,8 +311,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     if (vmChainsWithAddresses.length === 0) {
         return wrap(
             <p className={styles.entryDescription}>
-                Contracts ({actionDisplayLabel('DEPLOY')} / {actionDisplayLabel('EXECUTE')} /
-                {' '}{actionDisplayLabel('DEPOSIT')} / {actionDisplayLabel('WITHDRAW')}) need an
+                To use contracts, you need an
                 address on a chain that supports them. Use Receive to generate one first.
             </p>,
         );
@@ -336,18 +335,18 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 />
                 {onDeploy ? (
                     <Button variant="primary" onClick={onDeploy}>
-                        + Deploy new contract
+                        + Publish contract
                     </Button>
                 ) : null}
             </div>
-            <Section title="My contracts (deployed by me)">
+            <Section title="My contracts (published by me)">
                 {activeChains.map((cid) => {
                     const d = chainRegistry.get(cid);
                     const state = myByChain[cid] || { loading: true, rows: [], error: null };
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyText="No contracts deployed from this chain's addresses yet."
+                                    emptyText="No contracts published from this chain's addresses yet."
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
@@ -370,9 +369,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     reason (SDK getExecutions is contract-scoped today) lives in
                     the header comment at the top of this file. */}
                 <p className={styles.entryDescription}>
-                    {actionDisplayLabel('EXECUTE')}-only interactions (method
-                    calls that don&apos;t move funds) aren&apos;t listed here
-                    yet. Open a contract to see its call history.
+                    Contract calls that don&apos;t move funds aren&apos;t listed
+                    here yet. Open a contract to see its call history.
                 </p>
             </Section>
             <Section title="Browse all contracts">

@@ -52,7 +52,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
-import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -74,7 +74,7 @@ const AUTO_SIGN_LABELS = {
 export function DeveloperModeSection({ onNavigateToMint } = {}) {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onToggle = async (field, next) => {

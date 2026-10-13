@@ -25,7 +25,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FileUnlockThrottleStore } from '../../../packages/desktop/main/unlockThrottle.js';
-import { checkUnlockAllowed } from '../../../packages/extension/src/background/unlockThrottle.js';
+import {
+    checkUnlockAllowed,
+    recordFailure,
+} from '../../../packages/extension/src/background/unlockThrottle.js';
 
 let dir;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'xchain-unlock-throttle-')); });
@@ -60,6 +63,21 @@ describe('desktop unlock-throttle store', () => {
         await new FileUnlockThrottleStore(path).save({ failCount: 7, lockedUntil: 12345 });
         expect(statSync(path).mode & 0o777).toBe(0o600);
         expect(await new FileUnlockThrottleStore(path).load()).toEqual({ failCount: 7, lockedUntil: 12345 });
+    });
+
+    it('persists the first background ladder penalty after two free failures', async () => {
+        const path = join(dir, 'unlock-throttle.json');
+        const store = new FileUnlockThrottleStore(path);
+        let state = null;
+        state = recordFailure(state, 1_000);
+        state = recordFailure(state, 1_000);
+        state = recordFailure(state, 1_000);
+        await store.save(state);
+
+        expect(await new FileUnlockThrottleStore(path).load()).toEqual({
+            failCount: 3,
+            lockedUntil: 6_000,
+        });
     });
 
     it('clear removes the record and is safe to repeat', async () => {

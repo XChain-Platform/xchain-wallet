@@ -33,6 +33,14 @@
     text-align: center;
 }
 
+.unsavedWarning {
+    margin: 0;
+    color: var(--xc-warning, #b8860b);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    text-align: center;
+}
+
 .actions {
     display: flex;
     gap: var(--xc-space-2);

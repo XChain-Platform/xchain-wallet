@@ -8,8 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { clearLockoutState } from '../../flows/lockoutTracking.js';
+import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
+import { clearPanicModeState } from '../../flows/panicMode.js';
+
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
+
+/** Prefix of the queue's pruned-wallet ledger, one key per walletId; the wipe sweeps the whole range. */
+export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
 
 /**
  * Nuke every store that answers "a wallet already exists on this
@@ -32,13 +39,30 @@ export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
  *     trips the existence check and the demo flow can't restart.
  *   - localStorage `xchain.broadcastQueue` (BROADCAST_QUEUE_STORAGE_KEY): the
  *     queued signed txs and settlement journal of a web or native-mobile host.
+ *   - localStorage `xchain.broadcastQueue.pruned.*`
+ *     (BROADCAST_QUEUE_PRUNED_PREFIX): the walletIds of that queue's
+ *     pruned-wallet ledger, swept by prefix since a page that never built a
+ *     queue store has nothing to seal them.
+ *   - localStorage `xchain-wallet:lockout` (LOCKOUT_STORAGE_KEY in
+ *     flows/lockoutTracking.js, or the injected guard slot on native): the
+ *     Locked screen's failed-unlock ladder. An inherited ladder would punish
+ *     the next wallet's user for the old one's typos, the same reason the
+ *     shells clear their own unlock throttle. It goes only after the shell
+ *     wipe succeeds, so a failed wipe keeps the throttle on a surviving vault.
+ *   - localStorage `xchain-wallet:panic` and `xchain-wallet:duress` (or their
+ *     injected stores): the signing freeze and the configured duress password.
+ *     Both belong to the erased wallet, so a successful wipe removes them and
+ *     a failed shell wipe keeps them guarding the wallet that survived.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
- * shell keeps its vault blob, kdfParams meta, cached session key and
- * unlock throttle in files under `app.getPath('userData')`, and the
- * extension keeps the same four plus the cached signing secret in
- * `chrome.storage`. No renderer API reaches either, so clearing
- * localStorage + IndexedDB is a silent no-op there and the user lands
+ * shell keeps its vault blob, kdfParams meta, cached session key, unlock
+ * throttle and auto-lock record in files under `app.getPath('userData')`
+ * (the `targets` of `wipeRuntimeStores` in packages/desktop/main/runtime.js
+ * are the full list), and the extension keeps those and more in
+ * `chrome.storage` (`WALLET_LOCAL_KEYS` and the session-area clear in
+ * packages/extension/src/background/wipeExtensionStorage.js). No renderer
+ * API reaches either, so clearing localStorage + IndexedDB is a silent
+ * no-op there and the user lands
  * back on an unlock screen for the vault they just wiped. When a shell
  * publishes a `wipeStorage` hook on the bridge we hand the job to the
  * process that owns those stores.
@@ -63,6 +87,31 @@ export async function wipeWalletStorage() {
     // Drop the queue only after the shell wipe succeeds, so a failed wipe keeps a live wallet's signed txs.
     try {
         globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
+    } catch { /* ignore */ }
+    sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
+    // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
+    clearLockoutState();
+    clearPanicModeState();
+    clearDuressPassphrase();
+}
+
+/**
+ * Remove every localStorage key under `prefix`, best-effort like the other
+ * renderer stores. Keys are collected first because removing while indexing
+ * shifts `localStorage.key(i)`.
+ *
+ * @param {string} prefix
+ */
+function sweepLocalStoragePrefix(prefix) {
+    try {
+        const store = globalThis.localStorage;
+        if (!store) return;
+        const keys = [];
+        for (let i = 0; i < store.length; i++) {
+            const k = store.key(i);
+            if (k && k.startsWith(prefix)) keys.push(k);
+        }
+        for (const k of keys) store.removeItem(k);
     } catch { /* ignore */ }
 }
 

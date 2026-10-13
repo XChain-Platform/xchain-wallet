@@ -557,8 +557,12 @@ function AppInner() {
     // open returns to it instead of snapping back to the first wallet. Twin of
     // `handleSwitchAccount` one level down.
     const handleSwitchWallet = (id) => {
+        // Only a real change is announced to connected dApps; a restore never comes through here.
+        const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveWalletId(id);
         if (id) writeActiveWallet(id);
+        // Best-effort: a failed notice must never undo the switch itself.
+        if (changed) messaging.setActiveWallet(id).catch(() => {});
     };
 
     // Load BIP44 accounts for the active wallet and pick the first

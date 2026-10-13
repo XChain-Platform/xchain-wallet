@@ -72,7 +72,7 @@ for (const fn of [
 
 for (const label of [
     'Owner:',
-    'Deployed:',
+    'Published:',
     'Gas limit:',
     'Status:',
     'Code hash:',

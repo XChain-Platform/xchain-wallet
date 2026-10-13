@@ -40,14 +40,23 @@
 // ever following). Two indexOf() calls give the identical "first
 // appears, then second appears later, case-insensitively" match in
 // linear time.
-function orderedSubstringMatcher(first, second) {
+//
+// `secondStartsWord` counts the second literal only where no letter
+// precedes it, so "unconfirmed" never reads as "confirmed". The scan
+// moves forward through occurrences, so it stays linear.
+function orderedSubstringMatcher(first, second, { secondStartsWord = false } = {}) {
     const needleA = first.toLowerCase();
     const needleB = second.toLowerCase();
     return {
         test(reason) {
             const haystack = String(reason).toLowerCase();
             const atA = haystack.indexOf(needleA);
-            return atA !== -1 && haystack.indexOf(needleB, atA + needleA.length) !== -1;
+            if (atA === -1) return false;
+            let atB = haystack.indexOf(needleB, atA + needleA.length);
+            while (secondStartsWord && atB > 0 && /[a-z]/.test(haystack[atB - 1])) {
+                atB = haystack.indexOf(needleB, atB + 1);
+            }
+            return atB !== -1;
         },
     };
 }
@@ -64,7 +73,8 @@ const PERMANENT_PATTERNS = [
     // in its mempool); submitWithSigner and the queue lanes check isAlreadyOnNetworkRejection first.
     /txn-already-known/i,
     /txn-already-in-mempool/i,
-    orderedSubstringMatcher('conflict', 'confirmed'),
+    // A conflict with an UNconfirmed tx may still clear, so it stays transient.
+    orderedSubstringMatcher('conflict', 'confirmed', { secondStartsWord: true }),
     /already\s+spent/i,
     // A dust output is a property of the signed BYTES, not of the node's mood: every node
     // on every relay policy rejects the same transaction, so re-queuing it retries forever.
@@ -92,6 +102,7 @@ const TRANSIENT_PATTERNS = [
 // these before rethrowing; the confirm hook reads it back.
 export const BROADCAST_FAILED_PERMANENT_NAME = 'BroadcastFailedPermanentError';
 export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
+export const BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME = 'BroadcastFailedTransientUnsavedError';
 
 /**
  * Recover the broadcast-failure permanence from an error that may have
@@ -103,7 +114,8 @@ export const BROADCAST_FAILED_TRANSIENT_NAME = 'BroadcastFailedTransientError';
 export function broadcastFailureKindFromError(err) {
     const name = err && /** @type {any} */ (err).name;
     if (name === BROADCAST_FAILED_PERMANENT_NAME) return 'permanent';
-    if (name === BROADCAST_FAILED_TRANSIENT_NAME) return 'transient';
+    if (name === BROADCAST_FAILED_TRANSIENT_NAME
+        || name === BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME) return 'transient';
     return null;
 }
 

@@ -220,7 +220,7 @@ test.describe('passive co-signer, in a browser', () => {
         await page.getByLabel('Account name').fill('E2E agent');
         // The policy needs at least one allowed action or the form refuses to
         // compose. SEND is the canonical co-signable shape.
-        await page.getByLabel('Actions').fill('SEND');
+        await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
 
         await page.getByRole('button', { name: 'Create agent account' }).click();
 
@@ -334,7 +334,7 @@ test.describe('passive co-signer, in a browser', () => {
         await page.getByLabel("This wallet's key").selectOption({ index: 1 });
         await page.getByLabel(/Agent public key/).fill(agentPk.toString('hex'));
         await page.getByLabel('Account name').fill('E2E agent');
-        await page.getByLabel('Actions').fill('SEND');          // SEND only
+        await page.getByRole('checkbox', { name: 'Send', exact: true }).check();          // SEND only
         await page.getByRole('button', { name: 'Create agent account' }).click();
 
         await expect(page.getByText('Agent account created')).toBeVisible({ timeout: 60_000 });

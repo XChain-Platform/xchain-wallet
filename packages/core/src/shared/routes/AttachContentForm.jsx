@@ -129,7 +129,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // A leg that was SIGNED but never reached the network. The confirm
     // lane resolves that case rather than throwing, and the next leg is
     // keyed on this one's action index, so the flow stops here.
-    const [queuedLeg, setQueuedLeg] = useState(false);
+    const [queuedLeg, setQueuedLeg] = useState(/** @type {any | null} */ (null));
     const [fileTxid, setFileTxid] = useState(/** @type {string | null} */ (null));
     const [fileActionIndex, setFileActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
@@ -364,7 +364,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             // Signed but never broadcast: each later leg is keyed on an
             // earlier one's action index, so the chain cannot continue and
             // saying it did would be the worse of the two wrong answers.
-            if (res?.queued) { setQueuedLeg(true); return; }
+            if (res?.queued) { setQueuedLeg(res); return; }
             onBroadcast(res);
         } catch (err) {
             if (isUserRejection(err)) return;
@@ -686,7 +686,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // says so and deliberately offers no retry (re-signing while a signed
     // copy is queued is the double-broadcast trap).
     if (queuedLeg) {
-        return wrap(<QueuedResultPanel onDone={onBack} what="attachment" />);
+        return wrap(
+            <QueuedResultPanel
+                onDone={onBack}
+                what="attachment"
+                unsaved={queuedLeg?.unsaved}
+            />,
+        );
     }
 
     // Confirm page for whichever leg is in flight, rendered in place of that

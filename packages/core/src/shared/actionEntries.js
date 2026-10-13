@@ -155,7 +155,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'create-order',
         handler: 'onCreateOrder',
         label: 'Create order',
-        description: 'Place a DEX limit order on any pair, including native-coin sides, with expiration and allow/block lists.',
+        description: 'Place an order to trade at the price you set, token for token or token for coin (such as BTC), with an optional expiry and allow/block lists.',
     },
     {
         id: 'my-orders',
@@ -167,7 +167,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'my-swaps',
         handler: 'onMySwaps',
         label: 'My swaps',
-        description: 'View, edit, and cancel your open atomic swaps across every pair.',
+        description: 'View, edit, and cancel your open swaps across every pair.',
     },
     {
         id: 'publish-file',
@@ -179,7 +179,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
         id: 'link',
         handler: 'onLink',
         label: 'Link cross-chain actions',
-        description: 'Anchor two existing actions across chains. Both sides thread together in History.',
+        description: 'Connect two existing actions on different chains so History shows them as linked.',
     },
     {
         id: 'parallel',

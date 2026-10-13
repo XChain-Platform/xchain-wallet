@@ -12,10 +12,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ListPickerScreen } from '@xchain-wallet/core/shared/components/ListPickerScreen.jsx';
 
-function renderPicker(rows) {
+function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }) {
     const messaging = {
         getListsForSource: vi.fn().mockResolvedValue(rows),
-        getListByActionIndex: vi.fn().mockResolvedValue({ type: '2', list: ['a', 'b'] }),
+        getListByActionIndex: vi.fn().mockResolvedValue(detail),
     };
     render(
         <ListPickerScreen
@@ -33,13 +33,20 @@ function renderPicker(rows) {
 async function detailText(idx) {
     const title = await screen.findByText(new RegExp(`list #${idx}`));
     const button = title.closest('button');
-    await waitFor(() => expect(button.lastChild.textContent).not.toBe('counting…'));
+    await waitFor(() => expect(button.lastChild.textContent).not.toMatch(/^counting…/));
     return button.lastChild.textContent;
 }
 
 describe('ListPickerScreen description detail', () => {
     it('shows a described row description after the member count', async () => {
-        renderPicker([{ action_index: '10', type: '2', description: 'Holders of the gold tier' }]);
+        const detail = Promise.withResolvers();
+        renderPicker(
+            [{ action_index: '10', type: '2', description: 'Holders of the gold tier' }],
+            detail.promise,
+        );
+        const title = await screen.findByText(/list #10/);
+        expect(title.closest('button').lastChild.textContent).toBe('counting…');
+        detail.resolve({ type: '2', list: ['a', 'b'] });
         expect(await detailText('10')).toBe('2 members · Holders of the gold tier');
     });
 

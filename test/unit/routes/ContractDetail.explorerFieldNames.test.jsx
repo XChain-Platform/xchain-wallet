@@ -307,7 +307,7 @@ describe('A failed contract read is shown in plain words', () => {
             await drain();
         });
         const shown = utils.container.textContent;
-        for (const verb of ['load the deploy details', 'load the contract state', 'load the contract balances', 'load the execution history']) {
+        for (const verb of ['load the publication details', 'load the contract state', 'load the contract balances', 'load the execution history']) {
             expect(shown).toContain(`Couldn't ${verb}.`);
         }
         expect(shown).not.toContain('/RBTC/api');

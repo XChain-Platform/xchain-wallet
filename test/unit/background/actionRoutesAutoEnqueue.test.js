@@ -33,9 +33,11 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
     const failing = {};
     for (const name of ['issueToken', 'sweepToken', 'dividendAction', 'orderAction', 'createPollAction',
-        'placeBetAction', 'depositAction', 'deployChunkedRun']) {
+        'placeBetAction', 'depositAction', 'deployChunkedRun', 'submitLabelsPublication', 'publishLabelsNow']) {
         failing[name] = (...args) => stubs.run(name, ...args);
     }
+    // The one-shot label publish resolves the active address first; the stub vault has none.
+    failing.resolveActiveAddresses = async () => ({});
     return { ...actual, flows: { ...actual.flows, ...failing } };
 });
 
@@ -77,7 +79,42 @@ function makeHost() {
     return async (type, request) => host.handle({ type, request });
 }
 
+// Fail the way submitAction does on a transient broadcast: stamp, enqueue, throw.
+function failTransiently(flowName) {
+    return async (name, opts) => {
+        expect(name).toBe(flowName);
+        expect(typeof opts.onBroadcastFailure).toBe('function');
+        await opts.vault.pendingTxs.put({ id: `p-${name}`, status: 'queued', txHex: `hex-${name}` });
+        await opts.onBroadcastFailure({
+            chainId: CHAIN,
+            signedTxHex: `hex-${name}`,
+            summary: name,
+            signedAt: 1,
+            txid: `tx-${name}`,
+            pendingTxId: `p-${name}`,
+            adsCommit: null,
+        });
+        throw Object.assign(new Error('ECONNREFUSED'), { name: 'BroadcastFailedTransientError' });
+    };
+}
+
 describe('a transient broadcast failure on any action joins the queue at once', () => {
+    // Both wallet.publishLabels branches: the confirmed preparation, and the one-shot publish.
+    it.each([
+        ['with a confirmed preparation', { preparation: { chainId: CHAIN } }, 'submitLabelsPublication'],
+        ['as a one-shot publish', {}, 'publishLabelsNow'],
+    ])('wallet.publishLabels %s hands the flow the enqueue hook', async (_label, extra, flowName) => {
+        stubs.run = failTransiently(flowName);
+        const call = makeHost();
+
+        const res = await call('wallet.publishLabels', { walletId: W, chainId: CHAIN, password: 'pw', ...extra });
+        expect(res.ok).toBe(false);
+
+        const listed = (await call('broadcast.queue.list', { walletId: W })).result;
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({ signedTxHex: `hex-${flowName}`, pendingTxId: `p-${flowName}` });
+    });
+
     it.each(ROUTES)('%s hands %s the enqueue hook', async (route, flowName) => {
         stubs.run = async (name, opts) => {
             expect(name).toBe(flowName);

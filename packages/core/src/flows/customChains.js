@@ -82,6 +82,14 @@ export async function listCustomChains({ vault }) {
 }
 
 /**
+ * Result of addCustomChain and of the chainRegistry.addCustomChain route.
+ * @typedef {object} AddCustomChainResult
+ * @property {object} descriptor  The registered descriptor (the stored row when `restored`).
+ * @property {true} [restored]    A valid stored same-id row was registered instead; nothing written.
+ * @property {true} [replaced]    Invalid stored same-id rows were replaced by the pasted descriptor.
+ */
+
+/**
  * Validate, persist, and register a user-supplied ChainDescriptor.
  *
  * When the id is already persisted but not registered, the first stored row
@@ -90,7 +98,7 @@ export async function listCustomChains({ vault }) {
  * (`replaced: true`). Either way the vault and the registry agree.
  *
  * @param {{ vault: any, chainRegistry: any, descriptor: object, sdkRegistry?: any }} args
- * @returns {Promise<{ descriptor: object, restored?: true, replaced?: true }>}
+ * @returns {Promise<AddCustomChainResult>}
  */
 export async function addCustomChain({ vault, chainRegistry, descriptor, sdkRegistry }) {
     if (!descriptor || typeof descriptor !== 'object') {
@@ -166,6 +174,24 @@ function withoutEndpointOverride(settings, chainId) {
 }
 
 /**
+ * Return `settings` without its `fees[chainId]` entry, leaving every other
+ * chain's entry untouched; left behind, it renders with no descriptor to give
+ * it a unit, and a re-added chain of the same id inherits its custom rate.
+ *
+ * @param {Record<string, any>} settings
+ * @param {string} chainId
+ * @returns {Record<string, any>}
+ */
+function withoutFeeEntry(settings, chainId) {
+    const fees = settings?.fees;
+    if (!fees || typeof fees !== 'object' || !Object.hasOwn(fees, chainId)) {
+        return settings;
+    }
+    const { [chainId]: _dropped, ...rest } = fees;
+    return { ...settings, fees: rest };
+}
+
+/**
  * Re-derive the live endpoint override map from a persisted Settings record,
  * so the running session matches what the next boot computes.
  *
@@ -209,6 +235,9 @@ export async function removeCustomChain({ vault, chainRegistry, chainId, sdkRegi
     let persisted = settings;
     if (persistedRemoved) {
         persisted = withoutEndpointOverride({ ...settings, customChains: next }, chainId);
+        // Keep the fee entry of a bundled chain that shares this id: that chain stays.
+        const live = chainRegistry?.get?.(chainId);
+        if (!live || live.isUserAdded) persisted = withoutFeeEntry(persisted, chainId);
         await writeSettings(vault, persisted);
     }
     let registryRemoved = false;

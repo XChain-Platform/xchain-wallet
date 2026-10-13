@@ -611,7 +611,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: DeployContractForm,
             props: {},
-            actionLabel: 'Deploy',
+            actionLabel: 'Publish',
             fill: (utils) => {
                 const code = utils.container.querySelector('textarea');
                 if (!code) throw new Error('no contract-code textarea');
@@ -684,7 +684,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: AirdropForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: /^Sign LIST/,
+            actionLabel: /^Sign address list/,
             steps: [
                 (utils) => {
                     setValue(utils, /^Per-recipient amount/, '5');
@@ -730,7 +730,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     }]),
                 },
             },
-            actionLabel: /^Sign AIRDROP/,
+            actionLabel: /^Sign airdrop/,
         });
         expectSingleEncode(calls, {
             action: 'AIRDROP',
@@ -824,6 +824,32 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             params: { VERSION: '0', COMMAND: 'SEND|0|JDOG|1|bc1qdest' },
             submitMethod: 'advancedAction',
         });
+    });
+
+    // A refused compose shows a sentence; the composer's own text sits only in the collapsed details.
+    it('BatchComposerForm shows a refused compose in plain words, raw text only in details', async () => {
+        const raw = 'buildBatchCommand: STAKE version 1 is accepted on Bitcoin only, not on litecoin-mainnet';
+        const { messaging } = recordingMessaging({
+            buildBatchCommand: () => Promise.reject(new Error(raw)),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
+                React.createElement(BatchComposerForm, { walletId: 'w', chainId: CHAIN, onBack() {} })));
+            await drainMicrotasks();
+        });
+        for (const step of [
+            (u) => fireEvent.change(u.getByLabelText('Action'), { target: { value: 'SEND' } }),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Review' })),
+        ]) {
+            // eslint-disable-next-line no-await-in-loop
+            await domAct(async () => { step(utils); await drainMicrotasks(); });
+        }
+        const alert = utils.getByText(/works only on Bitcoin/);
+        expect(alert.textContent).not.toMatch(/buildBatchCommand|litecoin-mainnet/);
+        const details = utils.container.querySelector('details');
+        expect(details, 'the raw refusal is kept in a collapsed disclosure').toBeTruthy();
+        expect(details.textContent).toContain(raw);
     });
 
     it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {

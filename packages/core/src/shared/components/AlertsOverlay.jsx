@@ -16,7 +16,7 @@ import styles from './AlertsOverlay.module.css';
  * Full-overlay alerts panel. Surfaces wallet-level notifications that
  * the user should see but that don't belong inline above the balance
  * list (where they pile up and become noise). The first inhabitants:
- *   - Legacy FreeWallet format → migrate
+ *   - Older recovery phrase format (FreeWallet) → upgrade recovery phrase
  *   - (future) inbound message
  *   - (future) order-match settled
  *   - (future) MuSig2 signing round needs attention

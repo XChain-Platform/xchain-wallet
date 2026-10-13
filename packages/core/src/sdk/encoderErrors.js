@@ -21,12 +21,12 @@
 //
 // Two design points, both forced by how these errors actually travel:
 //
-//   1. `code` does NOT survive the messaging boundary. A form running in the
+//   1. `details` does NOT survive the messaging boundary. A form running in the
 //      popup receives the error through MessageHost.serializeError, whose
-//      envelope carries only `{ name, message }`. `name` survives ('SDKEncoderError'),
-//      the code does not, so the code is recovered from the message text as
-//      well - the same message-parsing trick nativeFeePreflight uses to get its
-//      refusal reason back.
+//      envelope carries `name`, `message` and `code` but nothing from `details`,
+//      so an ENCODER_RPC_ERROR loses its `data.reason` and the reason is
+//      recovered from the message text - the same message-parsing trick
+//      nativeFeePreflight uses to get its refusal reason back.
 //
 //   2. The amount rides in the message too. The one thing that makes the
 //      NO_UTXOS sentence genuinely useful is the amount the address is short:
@@ -48,10 +48,11 @@ const FEE_REQUIREMENT_RE = /; protocol fee requires ([0-9]+(?:\.[0-9]+)?) in nat
 
 // Match the encoder's own wording for NO_UTXOS / UTXO_TRACKER_STALE, which it
 // forwards as an ENCODER_RPC_ERROR carrying the code in `data.reason` (the SDK
-// pre-check wording is above). The stale pattern must miss HALTED/NOT_READY.
+// pre-check wording is above). Stale patterns miss HALTED/NOT_READY and SYNC_MISSING.
 const ENCODER_REASON_WORDING = [
     [/no utxos were provided and no utxos found on the blockchain/i, 'NO_UTXOS'],
     [/utxo-tracker view is stale\b/i, 'UTXO_TRACKER_STALE'],
+    [/utxo-tracker did not assert that it is synced\b/i, 'UTXO_TRACKER_STALE'],
 ];
 const LIFTED_RPC_REASONS = new Set(ENCODER_REASON_WORDING.map(([, code]) => code));
 

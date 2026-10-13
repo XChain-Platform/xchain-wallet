@@ -309,6 +309,8 @@ const ARTIFACTS = [
     // The next lane to flip adds its artifacts here in the same commit.
     'xchain-wallet-android-v9.9.9.aab',
     'xchain-wallet-v9.9.9.apk',
+    // android-full shipped in v0.341.3.
+    'xchain-wallet-v9.9.9-full.apk',
 ];
 
 const work = mkdtempSync(join(tmpdir(), 'xc-rel-'));
@@ -1030,6 +1032,30 @@ try {
             unasked.status === 0, `${unasked.stdout}${unasked.stderr}`);
         check('and still says out loud that the manifest has no header',
             /no header/.test(unasked.stderr), unasked.stderr);
+
+        const askedByFlag = sh([VERIFY, '--input', bare, '--tag', TAG, '--no-sig'], { env });
+        check('a headerless manifest cannot answer an explicit tag anchor',
+            askedByFlag.status === 1, `${askedByFlag.stdout}${askedByFlag.stderr}`);
+        check('the explicit-tag refusal names the requested release',
+            askedByFlag.stderr.includes(TAG), askedByFlag.stderr);
+
+        const askedByEnv = sh([VERIFY, '--input', bare, '--no-sig'], {
+            env: { ...env, XCHAIN_RELEASE_TAG: TAG },
+        });
+        check('a headerless manifest cannot answer the environment tag fallback',
+            askedByEnv.status === 1, `${askedByEnv.stdout}${askedByEnv.stderr}`);
+        check('the environment-tag refusal names the requested release',
+            askedByEnv.stderr.includes(TAG), askedByEnv.stderr);
+
+        const namedBarePath = join(bare, `${TAG}.txt`);
+        cpSync(barePath, namedBarePath);
+        const askedByName = sh([
+            VERIFY, '--input', bare, '--manifest', namedBarePath, '--no-sig',
+        ], { env });
+        check('a headerless manifest cannot answer a versioned filename anchor',
+            askedByName.status === 1, `${askedByName.stdout}${askedByName.stderr}`);
+        check('the filename-anchor refusal names the requested release',
+            askedByName.stderr.includes(TAG), askedByName.stderr);
 
         // --- verify.sh must be able to read what verify.sh writes -------
         //

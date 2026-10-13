@@ -45,7 +45,7 @@ import {
     SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
-import { ROW, ROW_HINT, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const TIME_INPUT = {
     background: 'var(--xc-surface-2, transparent)',
@@ -186,7 +186,7 @@ export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onToggle = async (key, next) => {

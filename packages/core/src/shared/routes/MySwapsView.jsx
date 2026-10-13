@@ -466,7 +466,15 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
         const txid = result.txid || result.broadcast?.txid;
         const explorerUrl = explorerTxUrl(descriptor, txid);
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
-        if (result.queued) return wrap(<QueuedResultPanel onDone={onDone} what={isCancel ? 'swap cancel' : 'swap edit'} />);
+        if (result.queued) {
+            return wrap(
+                <QueuedResultPanel
+                    onDone={onDone}
+                    what={isCancel ? 'swap cancel' : 'swap edit'}
+                    unsaved={result.unsaved}
+                />,
+            );
+        }
         if (result.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onDone={onDone} />);
         }

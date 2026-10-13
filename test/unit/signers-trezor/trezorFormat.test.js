@@ -48,7 +48,10 @@ describe('chainIdToTrezorCoin', () => {
         try { chainIdToTrezorCoin('bitcoin-regtest'); } catch (e) { regtestMsg = e.message; }
         expect(testnetMsg).toBeTruthy();
         expect(regtestMsg).toBeTruthy();
-        expect(regtestMsg.replace('bitcoin-regtest', 'bitcoin-testnet')).toBe(testnetMsg);
+        expect(regtestMsg.replace('Bitcoin regtest', 'Bitcoin testnet')).toBe(testnetMsg);
+        expect(testnetMsg).toContain("can't be used on Bitcoin testnet - ");
+        expect(testnetMsg).not.toContain('bitcoin-testnet');
+        expect(regtestMsg).not.toContain('bitcoin-regtest');
     });
 
     it('maps litecoin-mainnet to ltc', () => {
@@ -124,6 +127,7 @@ describe('toTrezorSignTransaction', () => {
                 scriptPubKeyHex: '0014' + 'c'.repeat(40),
                 address: 'bc1qrecipient',
             }],
+            txVersion: 2,
         };
     }
 
@@ -152,6 +156,37 @@ describe('toTrezorSignTransaction', () => {
         d.locktime = 900000;
         expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
             .toThrow(/locktime 900000.*only locktime 0/s);
+    });
+
+    // The payload carries no version, so the firmware picks it; a PSBT that
+    // needs one the device may not reproduce is refused before it is asked.
+    it.each([3, 0, undefined])('refuses a PSBT at transaction version %s', (txVersion) => {
+        const d = makeDecomposed();
+        d.txVersion = txVersion;
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/only version 1 or 2/);
+    });
+
+    it('refuses an input whose sequence sets a relative timelock', () => {
+        const d = makeDecomposed();
+        d.inputs[0].sequence = 10;
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/input 0 sets a relative timelock \(sequence 0xa\)/);
+    });
+
+    it('refuses an input with no sequence rather than letting the firmware pick one', () => {
+        const d = makeDecomposed();
+        delete d.inputs[0].sequence;
+        expect(() => toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths }))
+            .toThrow(/input 0 has no valid sequence/);
+    });
+
+    it('forwards a version 1 PSBT whose input signals RBF', () => {
+        const d = makeDecomposed();
+        d.txVersion = 1;
+        d.inputs[0].sequence = 0xfffffffd;
+        const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths });
+        expect(payload.inputs[0].sequence).toBe(0xfffffffd);
     });
 
     it('builds an unchanged payload for locktime 0 and for an absent locktime', () => {

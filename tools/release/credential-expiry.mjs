@@ -99,6 +99,19 @@ export function readOpenPgpExpiry(file, { run = execFileSync, fingerprint, signi
 }
 
 /**
+ * Turn an artifact's expiry text into a Date, or into no date when it does not parse.
+ * An Invalid Date is truthy, so passing one on would count as measured and skip the drift check.
+ *
+ * @returns {{date: Date|null, reason: string|null}}
+ */
+function parsedExpiry(text) {
+    const date = new Date(text);
+    return Number.isNaN(date.getTime())
+        ? { date: null, reason: `the artifact carries an unparseable expiry "${text}"` }
+        : { date, reason: null };
+}
+
+/**
  * Read `notAfter` out of whatever the row points at.
  *
  * Three artifact shapes carry an expiry and they are read differently: an X.509
@@ -120,7 +133,7 @@ export function readActualExpiry(file, { run = execFileSync, fingerprint, signin
             const plist = run('security', ['cms', '-D', '-i', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             const m = /<key>ExpirationDate<\/key>\s*<date>([^<]+)<\/date>/.exec(plist);
             if (!m) return { date: null, reason: 'no ExpirationDate in the profile' };
-            return { date: new Date(m[1]), reason: null };
+            return parsedExpiry(m[1]);
         } catch {
             return { date: null, reason: 'the profile could not be decoded (security cms failed)' };
         }
@@ -134,7 +147,9 @@ export function readActualExpiry(file, { run = execFileSync, fingerprint, signin
             const out = run('openssl', ['x509', '-in', file, '-inform', form, '-noout', '-enddate'],
                 { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             const m = /notAfter=(.+)/.exec(out);
-            if (m) return { date: new Date(m[1].trim()), reason: null };
+            // Stop here even on an unparseable date: openssl read the certificate,
+            // so trying the other encoding would only misname the fault.
+            if (m) return parsedExpiry(m[1].trim());
         } catch { /* try the other encoding */ }
     }
     return { date: null, reason: 'not a certificate this tool can read' };

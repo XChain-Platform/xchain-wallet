@@ -42,3 +42,21 @@ export function isChainVisibleToUser(descriptor, settings) {
     if (Boolean(settings?.developerMode)) return true;
     return descriptor?.networkKind !== 'regtest';
 }
+
+const CANONICAL_COIN_ORDER = ['bitcoin', 'litecoin', 'dogecoin'];
+
+/**
+ * Coin families a network filter offers: visible descriptors only, the
+ * canonical bitcoin / litecoin / dogecoin order first (the order Home's
+ * filter uses, not the bundle order), then any other coin as encountered.
+ *
+ * @param {Array<{ networkKind: string, coin: string }>} descriptors
+ * @param {{ developerMode?: boolean } | null | undefined} settings
+ * @returns {string[]}
+ */
+export function coinFamiliesForUser(descriptors, settings) {
+    const seen = new Set(filterChainsForUser(descriptors, settings).map((d) => d.coin).filter(Boolean));
+    const ordered = CANONICAL_COIN_ORDER.filter((c) => seen.has(c));
+    for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
+    return ordered;
+}

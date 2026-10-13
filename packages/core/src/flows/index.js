@@ -231,6 +231,7 @@ export {
 } from './feeEstimate.js';
 export {
     isEntryReplaceable,
+    isReplaceCallAvailable,
     sendRbfRequest,
     replaceFromHistoryEntry,
     cancelUndoSnapshot,
@@ -240,6 +241,7 @@ export {
     RbfNotSupportedError,
     RbfInvalidEntryError,
 } from './rbfReplace.js';
+export { planRbfReplacement, RbfPlanError } from './rbfPlan.js';
 export {
     getFiatRate,
     refreshFiatRates,

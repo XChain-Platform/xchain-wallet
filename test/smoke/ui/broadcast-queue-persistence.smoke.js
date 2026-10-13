@@ -12,9 +12,10 @@
 // persistence across reload. The queue lives in-memory inside
 // createBackgroundHost; v0.293.0 adds a pluggable storage adapter that
 // rehydrates the in-memory map at host construction and writes back on
-// every mutation, so a service-worker restart (extension), a tab refresh
-// (web), or an Electron app relaunch (desktop) doesn't lose the user's
-// signed-but-unbroadcast txs.
+// every mutation, so a service-worker restart (extension) or a tab refresh
+// (web) doesn't lose the user's signed-but-unbroadcast txs. The desktop
+// host runs in Electron main, where the picker finds no storage, so its
+// queue survives a lock (one shared store) but not a relaunch.
 //
 // Verifies:
 //   1. broadcastQueueStorage.js exports createBroadcastQueueStorage;
@@ -161,10 +162,10 @@ assert.ok(
 );
 assert.ok(
     broadcastBlock
-        && /=== 'permanent'\)\s*\{\s*\n\s*const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
+        && /const permanent = flows\.classifyBroadcastFailure\(err\) === 'permanent';/.test(broadcastBlock)
+        && /if \(permanent\)\s*\{\s*\n\s*const cur = q\.findIndex\(\(e\) => e\.id === id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(broadcastBlock),
     'a PERMANENT failure drops the entry from the queue and persists that',
-);
-assert.ok(
+);assert.ok(
     broadcastBlock && /\}\s*\n\s*throw err;/.test(broadcastBlock),
     'the failure still propagates to the caller, permanent or not',
 );
@@ -202,11 +203,15 @@ assert.ok(
 
 const discardBlock = sliceRouteBody(bg, 'broadcast.queue.discard');
 assert.ok(
-    discardBlock && /if \(idx >= 0\) q\.splice\(idx, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
+    discardBlock && /const cur = q\.findIndex\(\(e\) => e\.id === req\?\.id\);\s*\n\s*if \(cur >= 0\) q\.splice\(cur, 1\);\s*\n\s*await persistQueue\(\);/.test(discardBlock),
     'broadcast.queue.discard persists after the splice',
 );
-// pushQueueEntry persists too (fire-and-forget so auto-enqueue paths
-// stay non-async).
+assert.ok(
+    discardBlock.indexOf('flows.discardQueuedBroadcast(') < discardBlock.indexOf('q.splice('),
+    'broadcast.queue.discard retires or journals the record before the entry leaves the queue',
+);
+// pushQueueEntry starts a background save too, for the vault rebuild that
+// pushes in a loop; lanes needing the entry on disk await their own save.
 const pushBodyMatch = /function pushQueueEntry\([^)]*\)\s*\{([\s\S]+?)\n\s{4}\}\s*\n\s{4}return \{/.exec(engineSrc);
 assert.ok(pushBodyMatch, 'pushQueueEntry body parses');
 assert.ok(
@@ -218,8 +223,12 @@ assert.ok(
 // --- 5. Auto-enqueue callbacks await ensureQueueLoaded -----------------
 
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engineSrc),
-    'the shared onBroadcastFailure hook awaits ensureQueueLoaded before pushing',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \(await enqueueSignedBroadcast\(walletId, entry\)\)\.persisted;/.test(engineSrc),
+    'the shared onBroadcastFailure hook returns the queue save verdict',
+);
+assert.ok(
+    /async function enqueueSignedBroadcast\(walletId, entry\) \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engineSrc),
+    'the shared enqueue path loads, deduplicates, and persists signed broadcasts',
 );
 assert.ok(
     !/async \(entry\) => \{ pushQueueEntry\(/.test(bg) && !/async \(entry\) => \{ pushQueueEntry\(/.test(engineSrc),

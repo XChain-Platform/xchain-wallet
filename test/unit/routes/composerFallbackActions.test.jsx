@@ -9,7 +9,7 @@
 // a literal, so this test cannot drift either.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -63,9 +63,9 @@ function mountParallel(listActions, chainId) {
     );
 }
 
-function mountBatch(listActions) {
+function mountBatch(listActions, chainId = BTC) {
     render(
-        <MessagingProvider shell="web" messaging={messagingWith(listActions, BTC)}>
+        <MessagingProvider shell="web" messaging={messagingWith(listActions, chainId)}>
             <BatchComposerForm walletId="wallet-1" onBack={() => {}} />
         </MessagingProvider>,
     );
@@ -103,5 +103,28 @@ describe('BatchComposerForm fallback action list', () => {
         mountBatch(vi.fn(async () => { throw new Error('sdk down'); }));
         const expected = AUTHORABLE_ACTIONS.filter((a) => a !== 'BATCH' && a !== 'FILE');
         expect(await actionOptions()).toEqual(expected);
+    });
+
+    it('drops the Bitcoin-only actions on a Litecoin chain, as the Parallel composer does', async () => {
+        mountBatch(vi.fn(async () => { throw new Error('sdk down'); }), LTC);
+        const options = await actionOptions();
+        for (const btcOnly of BTC_EXCLUSIVE_ACTIONS) expect(options).not.toContain(btcOnly);
+        expect(options).toEqual([...COMMON_ACTIONS].filter((a) => a !== 'BATCH' && a !== 'FILE').sort());
+    });
+
+    it('blocks Review when a chain switch strands a queued Bitcoin-only step', async () => {
+        const messaging = messagingWith(vi.fn(async () => { throw new Error('sdk down'); }), BTC);
+        messaging.getAddressesByChain = vi.fn(async () => ({ [BTC]: [FROM], [LTC]: [{ ...FROM, id: 'address-2' }] }));
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <BatchComposerForm walletId="wallet-1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await actionOptions();
+        const pick = (name) => within(screen.getByText(name, { selector: 'span' }).closest('label')).getByRole('combobox');
+        fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
+        fireEvent.change(pick('Chain'), { target: { value: LTC } });
+        expect(await screen.findByText(/is not available on/)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
 });

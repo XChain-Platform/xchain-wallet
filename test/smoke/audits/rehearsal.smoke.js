@@ -35,7 +35,7 @@
 
 import { strict as assert } from 'node:assert';
 import { createServer } from 'node:http';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -48,13 +48,15 @@ import {
     probeLane,
     assertRecord,
     swapRequirement,
+    resolvedPackageEntries,
     bootstrapOsesAt,
+    previousPublishedTag,
     resolveProdFeed,
     RECORD_VERSION,
     deviceInstalledArch,
     swapExercisesLane,
 } from '../../../tools/release/rehearse.mjs';
-import { LANES } from '../../../tools/release/rehearsal-matrix.mjs';
+import { LANES, ALL_OS_TRIGGER_PACKAGES } from '../../../tools/release/rehearsal-matrix.mjs';
 import { pointerNameFor } from '../../../tools/release/update-info.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -91,7 +93,9 @@ const ARTIFACTS = {
     [`xchain-wallet-setup-${VERSION}-arm64.exe`]: 'win-arm64-bytes',
     [`xchain-wallet-${VERSION}-x64-mac.zip`]: 'mac-x64-bytes',
     [`xchain-wallet-${VERSION}-arm64-mac.zip`]: 'mac-arm64-bytes',
-    [`xchain-wallet-${VERSION}.AppImage`]: 'linux-x64-bytes',
+    // The forced AppImage artifactName gives the x64 build its `x86_64`
+    // token; an un-suffixed AppImage is one the signing gate refuses.
+    [`xchain-wallet-${VERSION}-x86_64.AppImage`]: 'linux-x64-bytes',
     [`xchain-wallet-${VERSION}-arm64.AppImage`]: 'linux-arm64-bytes',
     // The debs are lanes too (§5, corrected 2026-08-02): DebUpdater
     // selects them out of these same two pointers and installs them with
@@ -101,6 +105,15 @@ const ARTIFACTS = {
     [`xchain-wallet_${VERSION}_amd64.deb`]: 'linux-x64-deb-bytes',
     [`xchain-wallet_${VERSION}_arm64.deb`]: 'linux-arm64-deb-bytes',
 };
+
+// Spelled out by hand, but read through the signing gate's own arch rule, so
+// a fixture name the gate would refuse to attribute fails here, not later.
+for (const [name, label] of Object.entries(ARTIFACTS)) {
+    const arch = execFileSync('bash', ['-c', 'lib="$1"; shift; . "$lib" && xr_artifact_arch "$1"',
+        'arch-check', join(root, 'tools/release/lib.sh'), name], { encoding: 'utf8' }).trim();
+    assert.equal(arch, label.split('-')[1],
+        `fixture ${name} must carry the arch token lib.sh xr_artifact_arch reads (got '${arch}')`);
+}
 
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
 
@@ -164,7 +177,7 @@ function makeFeed(name, { mutate = () => {}, tamper = () => {} } = {}) {
         // 2026-08-02): one pointer serves the AppImage lane and the deb
         // lane, and the two are told apart by extension, not by arch.
         [`${CHANNEL}-linux.yml`]: pointerBody([
-            `xchain-wallet-${VERSION}.AppImage`,
+            `xchain-wallet-${VERSION}-x86_64.AppImage`,
             `xchain-wallet_${VERSION}_amd64.deb`,
         ]),
         [`${CHANNEL}-linux-arm64.yml`]: pointerBody([
@@ -251,12 +264,13 @@ const good = makeFeed('feed-good');
     // lanes resolving to the same file.
     const selected = results.map((r) => r.selected);
     assert.equal(new Set(selected).size, 8, 'no two lanes resolve to the same artifact');
+    // Linux x64 spells its arch per format: `x86_64` on the AppImage, Debian's
+    // `amd64` on the deb, and neither contains the string `x64`.
+    const LINUX_X64_TOKEN = { 'linux-x64-appimage': 'x86_64', 'linux-x64-deb': 'amd64' };
     for (const r of results) {
-        const expected = r.arch === 'x64' && r.os === 'linux' ? null : r.arch;
-        if (expected) {
-            assert.ok(r.selected.includes(expected),
-                `${r.id} resolved ${r.selected}, which does not carry ${expected}`);
-        }
+        const expected = LINUX_X64_TOKEN[r.id] ?? r.arch;
+        assert.ok(r.selected.includes(expected),
+            `${r.id} resolved ${r.selected}, which does not carry ${expected}`);
     }
 
     // The two multi-arch pointers must have resolved BY NAME. If either
@@ -392,7 +406,7 @@ const good = makeFeed('feed-good');
     // is the entire reason the S5 gate is in the loop.
     const feed = makeFeed('feed-consistent-lie', {
         tamper: ({ files, pointers }) => {
-            const name = `xchain-wallet-${VERSION}.AppImage`;
+            const name = `xchain-wallet-${VERSION}-x86_64.AppImage`;
             files[name] = 'attacker-payload';
             // Rewritten to match, so the feed is internally consistent.
             // The deb entry is left honest, so this case also shows the
@@ -639,6 +653,57 @@ const check = (over) => assertRecord({
         }).requirement,
         'all-os',
     );
+
+    // A dependency-only release: the lockfile moved and no first-party path did.
+    // The updater and shell are third-party, so their bump is judged on the
+    // resolved versions at both tags, never on the file list alone.
+    const realLock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8');
+    const livePins = resolvedPackageEntries(realLock, ALL_OS_TRIGGER_PACKAGES);
+    assert.ok(livePins, 'the live pnpm-lock.yaml parses: electron and electron-updater both resolve');
+    for (const name of ALL_OS_TRIGGER_PACKAGES) {
+        assert.ok(livePins[name].length > 0,
+            `${name} is watched for an all-OS bump but does not resolve in pnpm-lock.yaml; a stale `
+            + 'name watches nothing');
+    }
+    const updaterVersion = livePins['electron-updater'][0];
+    const bumpedLock = realLock.split(`electron-updater@${updaterVersion}:`).join('electron-updater@0.0.1-bumped:');
+    assert.notEqual(bumpedLock, realLock, 'the fixture bump found the electron-updater entry to rewrite');
+    const lockRun = (files, locks) => (_repo, args) => (args[0] === 'show'
+        ? locks[args[1].split(':')[0]]
+        : files.join('\n'));
+    const depOnly = ['pnpm-lock.yaml', 'packages/desktop/package.json'];
+    const bump = swapRequirement({
+        repo: '.', tag: TAG, previousTag: 'v0.333.0',
+        run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: bumpedLock }),
+    });
+    assert.equal(bump.requirement, 'all-os', 'an electron-updater bump must be rehearsed on every OS');
+    assert.match(bump.reason, /electron-updater .* -> .*0\.0\.1-bumped/, 'and the reason names the bump');
+    const viteBumped = realLock.replace(/^( {2}vite@)[^:\n]*:/m, (_m, key) => `${key}999.0.0:`);
+    assert.notEqual(viteBumped, realLock, 'the fixture bump found a vite entry to rewrite');
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: viteBumped }),
+        }).requirement,
+        'one-os',
+        'a lockfile change that leaves every updater and shell package alone stays one-OS',
+    );
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(depOnly, { 'v0.333.0': realLock, [TAG]: 'not: a lockfile\n' }),
+        }).requirement,
+        'all-os',
+        'a lockfile that cannot be read is the strict answer, never the cheap one',
+    );
+    assert.equal(
+        swapRequirement({
+            repo: '.', tag: TAG, previousTag: 'v0.333.0',
+            run: lockRun(['packages/desktop/package.json'], {}),
+        }).requirement,
+        'one-os',
+        'the desktop manifest alone is a release version bump, not an updater change',
+    );
 }
 
 // ------------------------------------------- the CLI, against a real repo
@@ -678,9 +743,52 @@ const check = (over) => assertRecord({
     assert.equal(oldest.status, 0);
     assert.match(oldest.stdout, /^bootstrap/, 'the genuinely-first release is bootstrap');
 
-    const normal = cli('requirement', '--repo', repo, '--tag', 'v0.2.0');
-    assert.equal(normal.status, 0);
+    // A production feed in this process, so the CLI runs async: it answers which tags were published.
+    const publishedTags = new Map([['v0.1.0', 200], ['v0.2.0', 200]]);
+    const feed = createServer((req, res) => {
+        const t = /^\/RELEASE_HASHES\/(v[^/]+)\.txt$/.exec(req.url)?.[1];
+        const status = publishedTags.get(t) ?? 404;
+        res.writeHead(status);
+        res.end(status === 200 ? `# tag: ${t}\n${'0'.repeat(64)}  ./xchain-wallet-${t}-mac-arm64.zip\n` : '');
+    });
+    await new Promise((ok) => feed.listen(0, '127.0.0.1', ok));
+    const feedBase = `http://127.0.0.1:${feed.address().port}`;
+    const cliAsync = (...args) => new Promise((ok) => {
+        const child = spawn(process.execPath, [join(root, 'tools/release/rehearse.mjs'), ...args]);
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => { stdout += d; });
+        child.stderr.on('data', (d) => { stderr += d; });
+        child.on('close', (status) => ok({ status, stdout, stderr }));
+    });
+
+    const normal = await cliAsync('requirement', '--repo', repo, '--tag', 'v0.2.0', '--prod-feed', feedBase);
+    assert.equal(normal.status, 0, normal.stderr);
     assert.match(normal.stdout, /^one-os/, 'a release with a predecessor needs a real swap');
+
+    const noFeed = cli('requirement', '--repo', repo, '--tag', 'v0.2.0');
+    assert.equal(noFeed.status, 1, 'with earlier tags and no feed, which one was published is unknown');
+    assert.match(noFeed.stderr, /--prod-feed/);
+
+    // An unpublished tag between this one and the last publish must not become the diff base or waive the swap.
+    mkdirSync(join(repo, 'packages/desktop/main'), { recursive: true });
+    writeFileSync(join(repo, 'packages/desktop/main/updater.js'), 'updater\n');
+    git('add', '.');
+    git('commit', '-qm', 'updater change');
+    git('-c', 'tag.gpgsign=false', 'tag', 'v0.2.1');
+    writeFileSync(join(repo, 'b'), 'y');
+    git('add', 'b');
+    git('commit', '-qm', 'unrelated change');
+    git('-c', 'tag.gpgsign=false', 'tag', 'v0.3.0');
+    const skipping = await cliAsync('requirement', '--repo', repo, '--tag', 'v0.3.0', '--prod-feed', feedBase);
+    assert.equal(skipping.status, 0, skipping.stderr);
+    assert.match(skipping.stdout, /^all-os/,
+        'the updater change since the last PUBLISHED tag demands every OS; a git-order base would read one-os');
+    assert.match(skipping.stderr, /previous release is v0\.2\.0; skipped 1 unpublished tag\(s\)[^\n]*v0\.2\.1/,
+        'the skipped unpublished tag is named');
+    const explicit = cli('requirement', '--repo', repo, '--tag', 'v0.3.0', '--previous-tag', 'v0.2.1');
+    assert.match(explicit.stdout, /^one-os/, 'control: an explicit --previous-tag is still the operator\'s override');
+    feed.close();
 
     const unknown = cli('requirement', '--repo', repo, '--tag', 'v9.9.9');
     assert.equal(unknown.status, 1, 'an untagged release must not resolve to bootstrap');
@@ -704,7 +812,8 @@ const check = (over) => assertRecord({
     assert.doesNotMatch(coverage.stdout, /never had an observed swap: .*mac-x64/);
     {
         // Every shipped lane swapped but mac-x64 passes; dropping mac-arm64 too must fail again.
-        const shipped = [...LANES.filter((l) => l.os !== 'win32' && l.id !== 'mac-x64').map((l) => l.id), 'android-direct'];
+        const shipped = [...LANES.filter((l) => l.os !== 'win32' && l.id !== 'mac-x64').map((l) => l.id),
+            'android-direct', 'android-full'];
         const coverWith = (lanes) => {
             const records = mkdtempSync(join(work, 'cover-'));
             writeFileSync(join(records, 'REHEARSAL-v0.337.2.json'), JSON.stringify({
@@ -854,6 +963,70 @@ const check = (over) => assertRecord({
     // silently bootstrap the world.
     assert.equal(resolveProdFeed(root), 'https://downloads.xchain.io/wallet',
         'resolveProdFeed must return the feed root, with the desktop directory dropped');
+
+    // The previous release is the newest earlier tag the feed PUBLISHED, so an unpublished tag between is skipped.
+    const tagsRun = (list) => (repo, args) => {
+        assert.deepEqual(args.slice(0, 2), ['tag', '--list'], 'only the tag listing is read');
+        return `${list.join('\n')}\n`;
+    };
+    const byTag = (answers) => async (url) => {
+        const t = /RELEASE_HASHES\/(v[^/]+)\.txt$/.exec(url)?.[1];
+        const a = answers[t];
+        if (a instanceof Error) throw a;
+        if (!a) throw new Error(`unexpected fetch for ${url}`);
+        return stub(a[0], a[1] ?? '')();
+    };
+    const macLinux = manifest(['xchain-wallet-0.2.0-x64-mac.zip', 'xchain-wallet-0.2.0-x86_64.AppImage']);
+    const threeTags = tagsRun(['v0.3.0', 'v0.2.1', 'v0.2.0']);
+
+    const walked = await previousPublishedTag({
+        repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags,
+        fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [200, macLinux] }),
+    });
+    assert.equal(walked.previousTag, 'v0.2.0', 'a 404 tag is skipped, never read as the previous release');
+    assert.deepEqual(walked.skipped, ['v0.2.1'], 'and the skipped tag is named');
+
+    const direct = await previousPublishedTag({
+        repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags,
+        fetchImpl: byTag({ 'v0.2.1': [200, macLinux] }),
+    });
+    assert.equal(direct.previousTag, 'v0.2.1', 'a published previous tag is used as it is');
+    assert.deepEqual(direct.skipped, []);
+
+    const first = await previousPublishedTag({
+        repo: '.', tag: 'v0.2.0', prodFeedBase: null, run: threeTags,
+        fetchImpl: async () => { throw new Error('the oldest tag reads no feed'); },
+    });
+    assert.equal(first.previousTag, null, 'the genuinely-first tag is bootstrap, with no feed read');
+
+    for (const [label, args] of [
+        ['a 500 on a walked tag', { fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [500, 'upstream'] }) }],
+        ['a network failure on a walked tag', { fetchImpl: byTag({ 'v0.2.1': new Error('fetch failed') }) }],
+        ['no production feed base', { prodFeedBase: null, fetchImpl: byTag({}) }],
+        ['every earlier tag unpublished', { fetchImpl: byTag({ 'v0.2.1': [404], 'v0.2.0': [404] }) }],
+    ]) {
+        await assert.rejects(previousPublishedTag({
+            repo: '.', tag: 'v0.3.0', prodFeedBase: base, run: threeTags, ...args,
+        }), /--previous-tag/, `${label} must stop the run and name the override, never guess a predecessor`);
+    }
+
+    // The seam: the git-order base waived every OS and passed an empty one-os record; the published base demands a swap.
+    const oneOs = (bootstrap) => assertRecord({
+        record: {
+            'record-version': RECORD_VERSION, tag: 'v0.3.0', 'prod-manifest-sha256': 'm',
+            'swap-requirement': 'one-os', 'requirement-reason': 'test', 'pinned-key-override': null,
+            lanes: LANES.map((l) => ({ id: l.id, ok: true })), swaps: [], 'automated-checks': [],
+            'swap-bootstrap-oses': bootstrap.oses, 'swap-bootstrap-reason': bootstrap.reason,
+        },
+        tag: 'v0.3.0', prodManifestSha256: 'm',
+    });
+    const gitOrder = await bootstrapOsesAt({ previousTag: 'v0.2.1', prodFeedBase: base, fetchImpl: stub(404, '') });
+    assert.ok(oneOs(gitOrder).ok, 'control: the unpublished git-order base waives every swap');
+    const published = await bootstrapOsesAt({
+        previousTag: walked.previousTag, prodFeedBase: base, fetchImpl: stub(200, macLinux),
+    });
+    assert.match(oneOs(published).problems.join(' '), /no observed swap on any OS/,
+        'with the published predecessor the release still owes an observed swap');
 }
 
 server.close();

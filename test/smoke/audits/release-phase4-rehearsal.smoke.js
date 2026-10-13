@@ -42,7 +42,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
     announcedGateFallback, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
-    gateFallbackMismatch, PIN_FORMAT, PIN_PATH, pinPathFiles, signingPathFiles, STEPS, uncoveredByPin,
+    gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probeEnv, scopeMismatch,
+    signingPathFiles, STEPS, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
 
 assert.ok(existsSync(PIN_PATH),
@@ -144,10 +145,49 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     const hostBlocked = 'launch-probe: 2 artifact(s) could NOT be probed because this host is missing a facility\n';
     assert.equal(classify(hostBlocked), 'signature-gate', 'the word "missing" in a launch-probe refusal is not lane scope');
 
+    // A dev-mock gate refusal, framed the way sign.sh prints it, means only the GPG key was named.
+    const devMockRefusal = (gateLines) => 'sign.sh: running pre-sign dev-mock gate against /tmp/stage ...\n'
+        + '  gate (tool tree): /repo/tools/build-reproduce/check-no-dev-mock.sh\n'
+        + gateLines
+        + 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.\n';
+    const devMockRefusals = [
+        devMockRefusal('Pre-release gate FAILED - a required tool is missing.\n'),
+        devMockRefusal('Pre-release gate FAILED - it scanned NOTHING (2 target(s) absent).\n'
+            + 'A gate that could not run has not passed; sign.sh states that rule about\n'
+            + 'a missing script and it holds identically for an empty scan.\n'),
+        devMockRefusal('FAIL packages/desktop/main is missing\n'
+            + 'Pre-release gate FAILED - desktop main-process source is absent; scanned NOTHING.\n'),
+        devMockRefusal('Pre-release gate FAILED - dev-SDK stub leaked into a production bundle,\n'),
+    ];
+    for (const output of devMockRefusals) {
+        assert.equal(classify(output), 'gpg-key-named',
+            'a dev-mock gate refusal means only the GPG key was named; its word "missing" is not lane scope');
+        assert.equal(firstRefusal(output), 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.',
+            'the blocker of a dev-mock gate refusal is sign.sh\'s own refusal line');
+    }
+
     const gpgAfterGates = 'signature gate ok (2 verified, 0 recorded-not-verified)\n'
         + 'launch probe ok (1 launched and still alive, 2 not probed on this host, 0 non-app file(s) ignored)\n'
         + 'gpg: signing failed: Inappropriate ioctl for device\n';
     assert.equal(classify(gpgAfterGates), 'manifest-written', 'gpg evidence still outranks both gates');
+    assert.equal(firstRefusal(gpgAfterGates), 'gpg: signing failed: Inappropriate ioctl for device',
+        'the blocker of a gpg stop is gpg\'s own refusal line');
+
+    // sign.sh runs gpg under set -e and says nothing after a gpg failure, so its last own line is progress.
+    const gpgStop = 'release/lib.sh: artifact-set gate ok (5 artifact(s))\n'
+        + 'sign.sh: hashing artifacts in /tmp/stage ...\n'
+        + 'sign.sh: signing manifest with key ABCDEF0123456789 ...\n'
+        + 'gpg: skipped "ABCDEF0123456789": Inappropriate ioctl for device\n'
+        + 'gpg: signing failed: Inappropriate ioctl for device\n';
+    assert.equal(classify(gpgStop), 'manifest-written', 'a gpg stop after the manifest reached manifest-written');
+    assert.equal(firstRefusal(gpgStop), 'gpg: signing failed: Inappropriate ioctl for device',
+        'the blocker of a gpg stop is gpg\'s last line, never sign.sh\'s "signing manifest" progress line');
+    assert.doesNotMatch(firstRefusal(gpgStop), /signing manifest with key/,
+        'a progress line was pinned as the blocker of a gpg stop');
+    assert.equal(firstRefusal('gpg: WARNING: unsafe ownership on homedir\n'
+        + 'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.\n'),
+    'sign.sh: pre-sign dev-mock gate FAILED. Refusing to sign.',
+    'a later sign.sh refusal still outranks an earlier gpg line: the last refusal wins');
 
     assert.equal(classify('launch probe ok (1 launched and still alive)\nsign.sh: hashing artifacts in x ...\n'),
         'launch-probe', 'a passed launch probe with no later evidence reached the launch-probe step');
@@ -169,7 +209,7 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
         assert.equal(classify(quiet), 'invoked', `a non-refusal gate mention claimed depth: ${quiet.split('\n')[0]}`);
     }
     assert.equal(classify('something nobody recognises\n'), 'invoked', 'unrecognised output stays conservative');
-    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates]) {
+    for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals]) {
         assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
     }
 }
@@ -177,7 +217,7 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
 // The executable gates are tracked from format 3: tag side by default, script side (hashed and gated)
 // where the tag predated a gate and sign.sh ran this checkout's copy. Formats 1 and 2 never list them.
 {
-    assert.equal(PIN_FORMAT, 3, 'the gates entered the tracked set at pin format 3');
+    assert.ok(PIN_FORMAT >= 3, 'the gates entered the tracked set at pin format 3');
     for (const set of ['release', 'staging']) {
         const now = signingPathFiles(set);
         assert.ok(EXECUTABLE_GATES.every((g) => now.repo.includes(g) && !now.script.includes(g)),
@@ -207,7 +247,9 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
 
     const legacy = uncoveredByPin({ releaseSet: 'release' });
     assert.ok(EXECUTABLE_GATES.every((g) => legacy.includes(g)), 'check must name the gates a legacy pin never covered');
-    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }), []);
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 3, gateFallback: [] }),
+        LIB_SH_DEPENDENCIES, 'a format-3 pin predates exactly the files lib.sh loads from its own directory');
+    assert.deepEqual(uncoveredByPin({ releaseSet: 'release', pinFormat: 4, gateFallback: [] }), []);
 
     const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const work = mkdtempSync(join(tmpdir(), 'phase4-gates-'));
@@ -236,6 +278,79 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     } finally {
         rmSync(work, { recursive: true, force: true });
     }
+}
+
+// Every file lib.sh loads from its own directory is script side from format 4, for both release
+// sets, because lib.sh is always the invoking checkout's copy. Formats 1 to 3 never list them.
+{
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const libText = readFileSync(join(walletRoot, 'tools', 'release', 'lib.sh'), 'utf8');
+    const loaded = [...new Set([...libText.matchAll(/\$here\/([A-Za-z0-9._-]+)/g)]
+        .map((m) => `tools/release/${m[1]}`))];
+    assert.ok(loaded.length > 0, 'found no $here/ reference in lib.sh, so this guard scans nothing');
+    for (const set of ['release', 'staging']) {
+        for (const gateFallback of [[], ['tools/release/launch-probe.mjs']]) {
+            const now = signingPathFiles(set, 4, { gateFallback });
+            const untracked = loaded.filter((p) => !now.script.includes(p) || now.repo.includes(p));
+            assert.deepEqual(untracked, [],
+                `lib.sh loads ${untracked.join(', ')} from its own directory, so a ${set} run reads the `
+                + 'invoking checkout\'s copy; untracked, `check` cannot see it drift.');
+        }
+        for (const fmt of [1, 2, 3]) {
+            const old = signingPathFiles(set, fmt);
+            assert.ok(LIB_SH_DEPENDENCIES.every((p) => !old.script.includes(p) && !old.repo.includes(p)),
+                `format ${fmt} must keep the file lists it was recorded with`);
+        }
+    }
+
+    const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const files = signingPathFiles('release', 4);
+    const hashes = Object.fromEntries(files.script.map((p) => [p,
+        createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
+    const work = mkdtempSync(join(tmpdir(), 'phase4-libdeps-'));
+    try {
+        const pinFile = join(work, 'pin.json');
+        const write = (scriptPath) => writeFileSync(pinFile, JSON.stringify({
+            pinFormat: 4, releaseSet: 'release', gateFallback: [], tag: 'v0.0.0',
+            reached: 'manifest-written', scriptRef: head, repoRef: head, scriptPath, repoPath: {},
+        }));
+        write(hashes);
+        assert.ok(drift({ pinFile }).ok, 'a format-4 pin of today\'s bytes must read clean');
+        for (const p of LIB_SH_DEPENDENCIES) {
+            write({ ...hashes, [p]: 'f'.repeat(64) });
+            const stale = drift({ pinFile });
+            assert.ok(!stale.ok && stale.moved.some((m) => m.path === p),
+                `a format-4 pin must go STALE when ${p}, which lib.sh loads on the signing path, moves`);
+        }
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// A pin records its scope from its own arguments, so sign.sh must not take a
+// different one from the operator's environment, and a run that did anyway
+// must not be pinned.
+{
+    const env = probeEnv({
+        XCHAIN_RELEASE_LANES: 'mac,linux', SIGN_SKIP_DEV_MOCK_CHECK: '1',
+        XCHAIN_RELEASE_GPG_KEY: 'K', PATH: '/bin',
+    });
+    assert.ok(!('XCHAIN_RELEASE_LANES' in env) && !('SIGN_SKIP_DEV_MOCK_CHECK' in env),
+        'probe must not hand sign.sh an inherited lane scope or dev-mock skip');
+    assert.equal(env.XCHAIN_RELEASE_GPG_KEY, 'K', 'probe must keep the signing key sign.sh requires');
+    assert.equal(env.PATH, '/bin', 'probe must keep the rest of the environment');
+    assert.equal(probeEnv({}, { SIGN_SKIP_DEV_MOCK_CHECK: '1' }).SIGN_SKIP_DEV_MOCK_CHECK, '1',
+        'an override the caller passes explicitly still reaches sign.sh');
+
+    const partial = 'sign.sh: PARTIAL release - gating against lane(s): mac linux\n';
+    assert.equal(scopeMismatch({ output: partial, lane: null }).length, 1,
+        'a PARTIAL run with no --lane must not be pinned as a full release');
+    assert.deepEqual(scopeMismatch({ output: partial, lane: 'mac,linux' }), [],
+        'a PARTIAL run the operator asked for is consistent');
+    assert.equal(scopeMismatch({ output: 'sign.sh: SIGN_SKIP_DEV_MOCK_CHECK=1 - dev-mock gate SKIPPED.\n', lane: null })
+        .length, 1, 'a run that skipped the dev-mock gate must not be pinned');
+    assert.deepEqual(scopeMismatch({ output: 'sign.sh: hashing artifacts in <input> ...\n', lane: null }), [],
+        'a full-scope run with the gate in place is consistent');
 }
 
 const d = drift();

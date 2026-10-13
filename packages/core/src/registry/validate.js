@@ -186,6 +186,11 @@ export const FAMILY_NETWORK_WIF_BYTE = {
 // Only caps are listed (less capability is harmless); unknown families stay free.
 export const FAMILY_RBF_SUPPORTED = { dogecoin: false };
 
+// Pin the fee unit where a family's display depends on it. Every tier table is per-byte and prices
+// alike in either unit, but a per-vbyte dogecoin descriptor would show 100000 sat/vB tiers and seed
+// a custom rate far below the 1 DOGE/kB relay floor. Bitcoin and litecoin stay free.
+export const FAMILY_FEE_UNIT = { dogecoin: 'sats-per-kbyte' };
+
 const isDerivationPaths = (v) => {
     if (!isPlainObject(v)) return false;
     for (const [k, val] of Object.entries(v)) {
@@ -299,6 +304,16 @@ export function validateChainDescriptor(record) {
             'feeStrategy.rbfSupported',
             r.feeStrategy?.rbfSupported === false,
             `must be false for the ${r.coin} family (RBF is not supported)`,
+        );
+    }
+    // A pinned family must declare its own fee unit (see FAMILY_FEE_UNIT).
+    const familyFeeUnit = FAMILY_FEE_UNIT[r.coin];
+    if (familyFeeUnit !== undefined) {
+        check(
+            errors,
+            'feeStrategy.unit',
+            r.feeStrategy?.unit === familyFeeUnit,
+            `must be ${familyFeeUnit} for the ${r.coin} family`,
         );
     }
     // http/ws endpoints are only acceptable where transit interception is

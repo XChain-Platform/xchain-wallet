@@ -26,16 +26,29 @@ import {
     handleWalletUnlock,
     UnlockThrottledError,
 } from '../../../packages/extension/src/background/walletUnlock.js';
+import { delayForAttempts } from '../../../packages/core/src/flows/lockoutTracking.js';
+
+describe('background unlock gate and Locked screen ladder', () => {
+    it('matches the published ladder step by step', () => {
+        const expectedMs = [0, 0, 0, 5_000, 15_000, 60_000, 300_000, 900_000, 900_000];
+        expect(FREE_ATTEMPTS).toBe(2);
+        expectedMs.forEach((delayMs, failures) => {
+            expect(computeBackoffMs(failures), `background delay after failure ${failures}`).toBe(delayMs);
+            expect(delayForAttempts(failures) * 1000, `UI delay after failure ${failures}`).toBe(delayMs);
+        });
+    });
+});
 
 describe('unlockThrottle pure logic', () => {
     it('gives FREE_ATTEMPTS mistypes with no delay, then escalates', () => {
         for (let n = 0; n <= FREE_ATTEMPTS; n++) {
             expect(computeBackoffMs(n)).toBe(0);
         }
-        expect(computeBackoffMs(FREE_ATTEMPTS + 1)).toBe(15_000);
-        expect(computeBackoffMs(FREE_ATTEMPTS + 2)).toBe(30_000);
+        expect(computeBackoffMs(FREE_ATTEMPTS + 1)).toBe(5_000);
+        expect(computeBackoffMs(FREE_ATTEMPTS + 2)).toBe(15_000);
         expect(computeBackoffMs(FREE_ATTEMPTS + 3)).toBe(60_000);
-        // Caps at 15 minutes.
+        expect(computeBackoffMs(FREE_ATTEMPTS + 4)).toBe(5 * 60_000);
+        expect(computeBackoffMs(FREE_ATTEMPTS + 5)).toBe(15 * 60_000);
         expect(computeBackoffMs(FREE_ATTEMPTS + 50)).toBe(15 * 60 * 1000);
     });
 
@@ -54,7 +67,7 @@ describe('unlockThrottle pure logic', () => {
         expect(s.lockedUntil).toBe(0); // still free
         s = recordFailure(s, 1000);
         expect(s.failCount).toBe(FREE_ATTEMPTS + 1);
-        expect(s.lockedUntil).toBe(1000 + 15_000);
+        expect(s.lockedUntil).toBe(1000 + 5_000);
     });
 });
 

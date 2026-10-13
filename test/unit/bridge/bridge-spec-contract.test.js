@@ -122,8 +122,8 @@ function scalingSdkRegistry({ confirmed = '2.5', tokens = [] } = {}) {
 }
 
 // Records what the approval screen was handed, and answers with exactly what
-// ConnectApproval submits today: the chains the user ticked, and
-// `accounts: requestedAccounts`, which is always empty (no account selector).
+// ConnectApproval submits: the chains the user ticked, and the accounts the
+// user ticked (empty here, which the background narrows to the primary one).
 function recordingApprovals({ chains = [CHAIN], accounts = [] } = {}) {
     const seen = [];
     return {

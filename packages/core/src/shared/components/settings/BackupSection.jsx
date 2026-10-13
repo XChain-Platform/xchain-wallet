@@ -303,8 +303,9 @@ export function BackupSection({ activeWallet }) {
             setPublishPreparation(null);
             // The background clears the pending batch on a successful
             // publish; drop it here too so the notice goes away without
-            // waiting for the next poll.
-            setAutoSync(null);
+            // waiting for the next poll. A queued publish has not landed,
+            // so its batch stays pending and the notice stays.
+            if (!r?.queued) setAutoSync(null);
         } catch (err) {
             if (!isUserRejection(err)) {
                 setPublishError(passwordStepFailure(err, 'Failed to publish labels.'));
@@ -1157,6 +1158,33 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
  */
 function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
+    // Say "published" only for a broadcast that returned a txid; a transient
+    // failure resolves queued, with the signed bytes in the broadcast queue.
+    if (!txid) {
+        return (
+            <div data-testid="publish-labels-queued" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--xc-space-2)',
+                padding: 'var(--xc-space-3)',
+                background: 'var(--xc-surface-raised)',
+                border: '1px solid var(--xc-border)',
+                borderRadius: 'var(--xc-radius-md)',
+            }}>
+                <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
+                    Labels signed, not broadcast yet
+                </div>
+                <div style={ROW_HINT}>
+                    {result?.queued
+                        ? 'The label transaction is waiting in the queued-transactions banner and will be sent from there.'
+                        : 'No transaction ID came back, so the labels may not be on-chain yet. Check the queued-transactions banner before publishing again.'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
+                </div>
+            </div>
+        );
+    }
     return (
         <div style={{
             display: 'flex',

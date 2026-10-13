@@ -198,14 +198,14 @@ describe('the single-leg deploy lane refuses before it composes', () => {
         await deployWith(sdkAnswering({ status: 'present', name: 'Escrow' }), NAMED);
         expect(submitAction).toHaveBeenCalledTimes(1);
         expect(vi.mocked(submitAction).mock.calls[0][0].pendingTxMeta.actionSummary)
-            .toContain('Deploy contract "Escrow"');
+            .toContain('Publish contract "Escrow"');
     });
 
     it('composes unguarded against an SDK that cannot answer', async () => {
         await deployWith(proxyStubSdk());
         expect(submitAction).toHaveBeenCalledTimes(1);
         expect(vi.mocked(submitAction).mock.calls[0][0].pendingTxMeta.actionSummary)
-            .toContain('Deploy contract "(unnamed)"');
+            .toContain('Publish contract "(unnamed)"');
     });
 });
 
@@ -258,6 +258,6 @@ describe('the chunked deploy lane refuses before it plans or composes', () => {
         const assembling = vi.mocked(submitAction).mock.calls
             .map((c) => c[0].pendingTxMeta.actionSummary)
             .find((s) => s.includes('assembling'));
-        expect(assembling).toContain('Deploy contract "Escrow"');
+        expect(assembling).toContain('Publish contract "Escrow"');
     });
 });

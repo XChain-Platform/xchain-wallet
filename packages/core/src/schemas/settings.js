@@ -102,8 +102,10 @@ export function resolveAdsChainConfig(state, descriptor) {
  * Resolve a per-chain fee entry's effective preferences the same way:
  * stored null/absent fields follow the descriptor's `feeStrategy`
  * defaults; a stored value is an explicit user override. A stored
- * rbfByDefault is honored only where the descriptor supports RBF: a chain
- * declaring `rbfSupported: false` always resolves to false.
+ * rbfByDefault is honored only where the descriptor declares
+ * `rbfSupported: true`: a chain declaring false, and an entry with no
+ * descriptor at all, always resolve to false (less capability is the
+ * harmless direction, the same reading the fee-bump flow takes).
  *
  * @param {{ strategy?: string | null, customSatsPerKb?: number | null, rbfByDefault?: boolean | null } | null | undefined} entry
  * @param {{ feeStrategy?: { defaultStrategy: string, rbfSupported: boolean } } | null | undefined} descriptor
@@ -114,8 +116,8 @@ export function resolveFeeConfig(entry, descriptor) {
     return {
         strategy: entry?.strategy ?? descriptor?.feeStrategy?.defaultStrategy ?? 'normal',
         customSatsPerKb: entry?.customSatsPerKb ?? null,
-        // Cap a stored true at the chain's capability (no RBF on a chain that cannot replace)
-        rbfByDefault: rbfSupported === false ? false : (entry?.rbfByDefault ?? rbfSupported ?? true),
+        // Cap a stored true at the chain's declared capability (no RBF on a chain that cannot replace or is unknown)
+        rbfByDefault: rbfSupported === true ? (entry?.rbfByDefault ?? true) : false,
     };
 }
 
@@ -159,6 +161,39 @@ export const AUTOLOCK_MINUTES_MIN = 1;
 export const AUTOLOCK_MINUTES_MAX = 1440;
 export const AUTOLOCK_MINUTES_DEFAULT = 15;
 
+// Undo-send grace window, in seconds, 0 (no hold) to 30. validateSettings
+// only checks for a non-negative integer, so a hand-edited 600 validates;
+// resolveUndoSendSeconds is the reader-side bound.
+export const UNDO_SEND_SECONDS_MIN = 0;
+export const UNDO_SEND_SECONDS_MAX = 30;
+export const UNDO_SEND_SECONDS_DEFAULT = 5;
+
+/**
+ * Stored `grace.undoSendSeconds` clamped to at most UNDO_SEND_SECONDS_MAX,
+ * or the default when settings, `grace` or the field is absent, non-finite,
+ * negative, fractional or not a number.
+ * @param {any} settings
+ * @returns {number}
+ */
+export function resolveUndoSendSeconds(settings) {
+    const v = settings?.grace?.undoSendSeconds;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < UNDO_SEND_SECONDS_MIN) {
+        return UNDO_SEND_SECONDS_DEFAULT;
+    }
+    return Math.min(v, UNDO_SEND_SECONDS_MAX);
+}
+
+/**
+ * Effective undo-send hold in seconds: 0 unless `grace.undoSendEnabled` is
+ * exactly `true`, otherwise resolveUndoSendSeconds(settings).
+ * @param {any} settings
+ * @returns {number}
+ */
+export function resolveUndoSendWindowSeconds(settings) {
+    if (settings?.grace?.undoSendEnabled !== true) return 0;
+    return resolveUndoSendSeconds(settings);
+}
+
 /**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
@@ -198,7 +233,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean, incomingPending?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged); incomingPending is v2-tolerant, defaults true; notify when a watched address has an INCOMING payment sitting in the mempool, before it confirms
  * @property {boolean} developerMode
  * @property {boolean} learnMode
- * @property {{ undoSendSeconds: number, testSendThresholdSats: number|string }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
+ * @property {{ undoSendSeconds: number, undoSendEnabled?: boolean, testSendThresholdSats: number|string }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
  * @property {{ enabled: boolean }} panicMode                                                                v2: duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2: backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
@@ -217,7 +252,7 @@ export const AUTOLOCK_MINUTES_DEFAULT = 15;
  * @property {{ walletMode: 'watcher' | 'signer', label: string, keySetId: string, keys: object[], sharedChainIds: string[], pairedAt: string } | null} [partnerPairing] v2-tolerant: §20.5. The verified other half of a watcher/signer pair, holding that partner's account-level PUBLIC key set (never any seed or private key). Written only by `flows.pairPartner` after `verifyPartnerPairing` proves both halves derive from one recovery phrase. null / absent = unpaired, which is the only valid state for a `full` wallet.
  * @property {typeof NETWORKS[number]} [activeNetwork]                                                     v2-tolerant: `mainnet` (default) / `testnet` / `regtest`. Filters every visible chain AND every data fetch to chains on this network; a wallet with mainnet + testnet chains active under the hood shows only the mainnet ones while `activeNetwork === 'mainnet'`. Switching is a Settings > Network operation. Cross-network features are disabled while the filter is on.
  * @property {Partial<Record<typeof NETWORKS[number], string>>} [lastUsedChain]                             v2-tolerant: the chainId the user last worked on, one slot per network so a testnet choice never becomes the mainnet default. Written when an address is made active and when an action form submits; read by the action forms as their opening chain when the caller names none (shared/chainSelection.js).
- * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `wallet.addCustomChain` host route via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
+ * @property {object[]} [customChains]                                                                       v2-tolerant: user-added ChainDescriptor records (§9.7 / Cluster Q FOLLOWUP 2). Persisted across SW restarts so `chainRegistry.addCustom` re-seeds on boot. Per-descriptor validation runs in the `chainRegistry.addCustomChain` host route (`addCustomChain` in flows/customChains.js) via `validateChainDescriptor`; the schema check here only enforces that the field is an array of plain objects so a corrupt persisted blob can't crash the settings read.
  * @property {boolean} [showFiatInHistory] v2-tolerant. When true, the History route shows a fiat equivalent alongside each row's native-coin amount (using `fiatCurrency` + the live price lookup). Default false. Fiat is only ever computed for native-coin amounts; token amounts have no valid coin rate and never show one, regardless of this flag.
  * @property {{ enabled: boolean, start: string, end: string }} [quietHours] v2-tolerant. Do-not-disturb window for notification delivery. `start`/`end` are 'HH:MM' 24h local-time strings (e.g. '22:00'/'08:00'); an end before start wraps past midnight. `enabled` defaults false. Read by the §46 NotificationService/PriceAlertWatcher delivery choke points, not by the settings toggles themselves - a suppressed notification is silently dropped, not queued.
  * @property {{ enabled: boolean, perKind: Record<string, string> }} [sounds] v2-tolerant. Event sounds (spec §6 M4.2). TOP-LEVEL, never nested under the notification flags: the sparse merge is one level deep, so nesting would freeze the whole flag block on the first picker change. `enabled` is the master switch and defaults FALSE (ruling I-35a: audio is opt-in, no surprise noise on upgrade). `perKind` maps a notification family key (the `SOUND_FAMILIES` keys, which are the notification flag names) to a palette sound id or the sentinel 'none' (that family muted while the master stays on); a family absent from the map plays its palette default, and an id the palette no longer knows resolves to that default at read time (`pickedSoundForFamily`) rather than failing validation, so a palette rename can never make a stored record unreadable.
@@ -310,6 +345,7 @@ export function createDefaultSettings() {
         learnMode: false,
         grace: {
             undoSendSeconds: 5,
+            undoSendEnabled: false,
             testSendThresholdSats: 0,
         },
         panicMode: {
@@ -481,6 +517,7 @@ export function validateSettings(record) {
         'grace',
         isPlainObject(r.grace)
             && isNonNegativeInteger(r.grace.undoSendSeconds)
+            && (r.grace.undoSendEnabled === undefined || isBoolean(r.grace.undoSendEnabled))
             && (isNonNegativeInteger(r.grace.testSendThresholdSats)
                 || (typeof r.grace.testSendThresholdSats === 'string'
                     && /^\d+$/.test(r.grace.testSendThresholdSats))),
@@ -724,11 +761,13 @@ export function validateSettings(record) {
     }
     if (r.customChains !== undefined) {
         // Only enforces "array of plain objects" here. Per-descriptor
-        // validation runs in `wallet.addCustomChain` via
+        // validation runs in the `chainRegistry.addCustomChain` host route
+        // (`addCustomChain` in flows/customChains.js) via
         // `validateChainDescriptor` before the descriptor is appended.
         // A corrupt persisted blob (the field somehow ended up with a
-        // malformed descriptor) is filtered at boot in createBackground-
-        // Host's re-seed loop, never raised to the user.
+        // malformed descriptor) is skipped row by row at load time by
+        // `hydrateCustomChainsFromSettings` (registry/hydrateCustomChains.js),
+        // never raised to the user.
         check(
             errors,
             'customChains',

@@ -194,7 +194,7 @@ describe('the deploy form no longer asks for a name', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Deploy/));
+            fireEvent.click(button(utils, /^Publish/));
             await drain(40);
         });
         // Nothing was composed: no confirm screen, no compose call, no fee.
@@ -218,7 +218,7 @@ describe('the deploy form no longer asks for a name', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Deploy/));
+            fireEvent.click(button(utils, /^Publish/));
             await drain(40);
         });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(true);

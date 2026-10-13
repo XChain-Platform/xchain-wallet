@@ -143,6 +143,22 @@ describe('composeForConfirm bare native payments', () => {
         expect(outs.some((o) => o.address === 'bcrt1qdest' && String(o.value) === '1000000')).toBe(true);
     });
 
+    // A caller that pre-supplies the payment, as sendToken does on the atomic
+    // path, must not pay twice: the tamper check reads the same customOutputs,
+    // so it would approve the double payment.
+    it.each([
+        ['a bare payment', {}],
+        ['a payment carrying a MEMO', { MEMO: 'hello' }],
+    ])('pays a pre-supplied recipient output once on %s', async (_label, params) => {
+        const h = makeHarness();
+        const args = NATIVE_ARGS(h, params);
+        args.encoderOpts = { ...args.encoderOpts, customOutputs: [{ address: 'bcrt1qdest', value: '1000000' }] };
+        const composed = await composeForConfirm(args);
+        const outs = h.createTx.mock.calls[0][0].customOutputs || [];
+        expect(outs.filter((o) => o.address === 'bcrt1qdest')).toHaveLength(1);
+        expect(composed.expectedOutputs.addressed.filter((s) => s.address === 'bcrt1qdest')).toHaveLength(1);
+    });
+
     it('keeps the action when a MEMO is present: a memo needs a carrier', async () => {
         const h = makeHarness();
         const composed = await composeForConfirm(NATIVE_ARGS(h, { MEMO: 'hello' }));

@@ -41,13 +41,13 @@ import {
     FORM_DRAFT_TTL_7D,
     FORM_DRAFT_TTL_DEFAULT,
 } from '../../../schemas/settings.js';
-import { INPUT, ROW, ROW_HINT, ToggleRow, Status, STACK } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_HINT, ToggleRow, SettingsLoadError, Status, STACK } from './_settingsPrimitives.jsx';
 
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onToggle = async (field, next) => {

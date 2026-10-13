@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 import { IntlMessageFormat } from 'intl-messageformat';
 
-import { en } from '../../../packages/core/src/i18n/en.js';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import {
     availableLocales,
     format,

@@ -21,10 +21,10 @@
 // a value that nothing read, so the app just followed the OS.
 //
 // Deferred:
-//   - Accent color (per spec §35.1 only "when brand is finalized").
+//   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
 import { useSettings } from '../../hooks/useSettings.js';
-import { ROW, ROW_LABEL, SELECT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -38,17 +38,11 @@ const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
     { value: 'never', label: 'Never reduce' },
 ]);
 
-const HINT = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    fontStyle: 'italic',
-};
-
 export function AppearanceSection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onThemeChange = async (next) => {
@@ -95,10 +89,6 @@ export function AppearanceSection() {
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                 </select>
-            </div>
-            <div style={ROW}>
-                <span style={ROW_LABEL}>Accent color</span>
-                <span style={HINT}>finalized at brand cut</span>
             </div>
         </div>
     );

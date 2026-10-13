@@ -28,6 +28,7 @@
 // alive behind a screen claiming it was erased. Clearing storage without
 // teardown is not a wipe.
 
+import { BROADCAST_QUEUE_PRUNED_PREFIX } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 import { isTrustedExtensionSender } from '../bridge/publicSurface.js';
 
 /** Message type the extension pages send to ask for a wipe. */
@@ -78,6 +79,35 @@ export const WALLET_LOCAL_KEYS = Object.freeze([
 ]);
 
 /**
+ * Wallet-owned `chrome.storage.local` key families, one key per walletId, so
+ * they cannot be enumerated above and are swept by prefix instead.
+ */
+export const WALLET_LOCAL_KEY_PREFIXES = Object.freeze([
+    BROADCAST_QUEUE_PRUNED_PREFIX,  // background/broadcastQueueStore.js (pruned-wallet ledger)
+]);
+
+/**
+ * Names of every key in a local area, values unread where the area can list
+ * names alone (getKeys, Chrome 130+), falling back to a full read when getKeys
+ * is missing or fails. An area that can list neither way has nothing to sweep.
+ *
+ * @param {{ get?: (keys: null) => Promise<object>, getKeys?: () => Promise<string[]> }} local
+ * @returns {Promise<string[]>}
+ */
+async function localKeyNames(local) {
+    if (typeof local.getKeys === 'function') {
+        try {
+            const keys = await local.getKeys();
+            if (Array.isArray(keys)) return keys;
+        } catch (_e) {
+            // Fall through to the full read below.
+        }
+    }
+    if (typeof local.get !== 'function') return [];
+    return Object.keys((await local.get(null)) || {});
+}
+
+/**
  * Erase every extension-owned store the wallet writes.
  *
  * `chrome.storage.session` is cleared WHOLESALE on purpose: it holds the
@@ -89,7 +119,7 @@ export const WALLET_LOCAL_KEYS = Object.freeze([
  * Never throws past this boundary: the caller is a message handler, and
  * core renders the returned `error` to the user.
  *
- * @param {{ local?: { remove: (keys: string[]) => Promise<void> },
+ * @param {{ local?: { remove: (keys: string[]) => Promise<void>, get?: (keys: null) => Promise<object>, getKeys?: () => Promise<string[]> },
  *           session?: { clear: () => Promise<void> } }} [stores]
  *   inject for tests; defaults to the real chrome.storage areas
  * @returns {Promise<{ ok: true, cleared: string[] } | { ok: false, error: string }>}
@@ -111,6 +141,19 @@ export async function wipeExtensionStorage(stores = {}) {
         cleared.push(...WALLET_LOCAL_KEYS);
     } catch (err) {
         errors.push(err?.message || String(err));
+    }
+
+    // Sweep the per-wallet key families on their own, so a failed listing is
+    // reported but never skips the enumerated clear above or the session below.
+    if (local && typeof local.remove === 'function') {
+        try {
+            const names = await localKeyNames(local);
+            const swept = names.filter((k) => WALLET_LOCAL_KEY_PREFIXES.some((p) => k.startsWith(p)));
+            if (swept.length) await local.remove(swept);
+            cleared.push(...swept);
+        } catch (err) {
+            errors.push(err?.message || String(err));
+        }
     }
 
     // Best-effort by contract but NOT silent: an engine without

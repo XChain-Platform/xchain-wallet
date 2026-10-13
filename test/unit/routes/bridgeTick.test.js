@@ -21,6 +21,7 @@ import {
     bridgeLegFor,
     bridgeChainsList,
     bridgeDestinationError,
+    isReachableBridgeChain,
     compareDecimal,
     belowFeeWarning,
     quotedProtocolFee,
@@ -109,10 +110,21 @@ describe('bridgeLegFor', () => {
 describe('bridgeChainsList', () => {
     it('reads a comma list, the "-" sentinel and the empty (unchanged) field apart', () => {
         expect(bridgeChainsList('DOGE,LTC')).toEqual(['DOGE', 'LTC']);
-        expect(bridgeChainsList(' doge , ltc ')).toEqual(['DOGE', 'LTC']);
+        expect(bridgeChainsList(' doge , ltc ')).toEqual(['doge', 'ltc']);
         expect(bridgeChainsList('-')).toEqual([]);
         expect(bridgeChainsList('')).toBeNull();
         expect(bridgeChainsList(undefined)).toBeNull();
+    });
+});
+
+describe('isReachableBridgeChain', () => {
+    it('accepts only an upper-case protocol coin ticker', () => {
+        expect(isReachableBridgeChain('LTC')).toBe(true);
+        expect(isReachableBridgeChain('DOGE')).toBe(true);
+        expect(isReachableBridgeChain('ltc')).toBe(false);
+        expect(isReachableBridgeChain('Ltc')).toBe(false);
+        expect(isReachableBridgeChain('XYZ')).toBe(false);
+        expect(isReachableBridgeChain('')).toBe(false);
     });
 });
 
@@ -141,6 +153,27 @@ describe('bridgeDestinationError', () => {
     it('makes NO claim when the opt-in list is unknown', () => {
         expect(bridgeDestinationError({
             tick: 'FUFU', sourceCoin: 'DOGE', destCoin: 'BTC', bridgeChains: null,
+        })).toBeNull();
+    });
+
+    // The network matches the opt-in list verbatim against an upper-case
+    // DEST_COIN, so a lower-case entry opens no chain at all.
+    it('refuses a destination the opt-in names only in lower case', () => {
+        const msg = bridgeDestinationError({
+            tick: 'FUFU', sourceCoin: 'BTC', destCoin: 'LTC', bridgeChains: bridgeChainsList('ltc'),
+        });
+        expect(msg).not.toBeNull();
+        expect(msg).not.toContain('can be moved to');
+        expect(msg).toContain('"ltc"');
+    });
+
+    it('lists only the opt-in entries the network accepts', () => {
+        const bridgeChains = bridgeChainsList('DOGE,ltc');
+        const msg = bridgeDestinationError({ tick: 'FUFU', sourceCoin: 'BTC', destCoin: 'LTC', bridgeChains });
+        expect(msg).toMatch(/It can be moved to: Dogecoin\.$/);
+        expect(bridgeDestinationError({ tick: 'FUFU', sourceCoin: 'BTC', destCoin: 'DOGE', bridgeChains })).toBeNull();
+        expect(bridgeDestinationError({
+            tick: 'FUFU', sourceCoin: 'BTC', destCoin: 'LTC', bridgeChains: bridgeChainsList('LTC'),
         })).toBeNull();
     });
 

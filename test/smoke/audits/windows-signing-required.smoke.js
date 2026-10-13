@@ -293,52 +293,30 @@ function loadError(env) {
         assert.ok(new RegExp(`${REQUIRE_VAR}:\\s*'1'`).test(step),
             `the Windows build step '${name}' must set ${REQUIRE_VAR}: '1', or a missing`
             + ' signing secret produces unsigned installers and a green lane');
-        assert.ok(new RegExp(`${SUBJECT_VAR}:\\s*\\$\\{\\{\\s*secrets\\.${SUBJECT_VAR}\\s*\\}\\}`).test(step),
-            `the Windows build step '${name}' must pass ${SUBJECT_VAR} through`);
-        // The lane signs through the eSigner certificate selected by subject
-        // (D3). Azure variables handed through as well would win the path
-        // selection in windows-signing.cjs and sign with a second key, so a
-        // build step must carry none of them.
         for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
-            assert.ok(!new RegExp(`${secret}:`).test(step),
-                `the Windows build step '${name}' must not pass ${secret}: the release`
-                + ' lane signs through the eSigner subject only');
+            assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(step),
+                `the Windows build step '${name}' must pass ${secret} through`);
         }
+        assert.ok(!new RegExp(`${SUBJECT_VAR}:`).test(step),
+            `the Windows build step '${name}' must not select the retired subject path`);
     }
 
-    // The requirement without the credentials is a lane that can only fail.
-    // The subject names the certificate; the eSigner CKA step registers the
-    // cloud key behind it, and it needs all five values from the
-    // release-signing environment before any Windows build step runs.
-    const cka = steps.find((s) => /name:\s*Install and register the eSigner CKA/.test(s));
-    assert.ok(cka, 'release.yml registers the eSigner CKA in the Windows job');
-    const ckaAt = wf.indexOf('Install and register the eSigner CKA');
+    const preflightName = 'Require every Azure Trusted Signing secret';
+    const preflight = steps.find((s) => s.includes(`name: ${preflightName}`));
+    assert.ok(preflight, 'release.yml checks every Azure signing value in the Windows job');
+    const preflightAt = wf.indexOf(preflightName);
     const firstWinBuild = wf.indexOf(winBuilds[0]);
-    assert.ok(ckaAt >= 0 && ckaAt < firstWinBuild,
-        'the eSigner CKA is registered before the first Windows build step');
-    for (const secret of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', SUBJECT_VAR]) {
-        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(cka),
-            `the eSigner CKA step must pass ${secret} through, or the signing`
-            + ' requirement the build steps declare can never be met');
+    assert.ok(preflightAt >= 0 && preflightAt < firstWinBuild,
+        'the Azure signing environment is checked before the first Windows build step');
+    for (const secret of [...AZURE_CONFIG_VARS, ...AZURE_CREDENTIAL_VARS]) {
+        assert.ok(new RegExp(`${secret}:\\s*\\$\\{\\{\\s*secrets\\.${secret}\\s*\\}\\}`).test(preflight),
+            `the Azure preflight must pass ${secret} through`);
+        assert.ok(new RegExp(`['\"]${secret}['\"]`).test(preflight),
+            `the Azure preflight must validate ${secret}`);
     }
-    // `config` without -key exits non-zero with "A required parameter is
-    // missing", and pwsh carries on past a native failure, so v0.341.0 built
-    // with no certificate loaded. Each CKA call is checked, and the step
-    // proves the subject reached the store before any build runs.
-    assert.ok(/\$tool config[^\n]*-key\s/.test(cka),
-        'the eSigner CKA config call passes -key, the master key file it requires');
-    for (const verb of ['config', 'unload', 'load']) {
-        assert.ok(new RegExp(`& \\$tool ${verb}[^\\n]*\\n\\s*if \\(\\$LASTEXITCODE -ne 0\\)`).test(cka),
-            `the eSigner CKA ${verb} call is followed by a $LASTEXITCODE check`);
+    for (const retired of ['ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET']) {
+        assert.ok(!wf.includes(retired), `release.yml no longer carries retired eSigner variable ${retired}`);
     }
-    assert.ok(/Cert:\\CurrentUser\\My[^\n]*WIN_CSC_SUBJECT_NAME/.test(cka),
-        'the eSigner CKA step asserts a certificate with the configured subject is in CurrentUser\\My');
-    // The bundled signtool could see the certificate and not use its key, so
-    // the step proves an SDK signtool signs with it and hands that one on.
-    assert.ok(/signtool\.exe[\s\S]*sign \/debug[\s\S]*SIGNTOOL_PATH=\$chosen[^\n]*GITHUB_ENV/.test(cka),
-        'the eSigner CKA step probes a Windows SDK signtool and exports it as SIGNTOOL_PATH');
-    assert.ok(!/\$tool credentials/.test(cka),
-        'the eSigner CKA step calls only commands the tool has (config, unload, load)');
 }
 
 // ---------------------------------------- the far end still rejects an .exe

@@ -109,3 +109,49 @@ describe('the atomic branch pays a bare native send', () => {
         expect(built.data).toBe('SEND|0|JDOG|1|dest');
     });
 });
+
+// A MEMO keeps the SEND action string, so the send is no longer "bare", but it
+// still moves native coin and still owes the recipient a real output. The
+// confirm path folds the payment on every request; this branch must build the
+// same bytes for the same send.
+describe('the atomic branch pays a native send that carries a memo', () => {
+    const MEMO_PARAMS = { ...NATIVE_PARAMS, MEMO: 'hi' };
+
+    it('adds the destination output and keeps the action string', async () => {
+        const h = makeHarness({ params: MEMO_PARAMS, encoderOpts: { ...ADVANCED_OPTS } });
+        await submitWithSigner(h.args);
+        const built = h.createTx.mock.calls[0][0];
+        expect(built.customOutputs).toEqual([PAYMENT]);
+        expect(built.data).toBe('SEND|0|JDOG|1|dest');
+        expect(h.createAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('pays the memo send alongside a donation output', async () => {
+        const h = makeHarness({
+            params: MEMO_PARAMS,
+            encoderOpts: { ...ADVANCED_OPTS, customOutputs: [DONATION] },
+        });
+        await submitWithSigner(h.args);
+        expect(h.createTx.mock.calls[0][0].customOutputs).toEqual([DONATION, PAYMENT]);
+    });
+
+    it('does not double-pay a memo send whose caller supplied the output', async () => {
+        const h = makeHarness({
+            params: MEMO_PARAMS,
+            encoderOpts: { ...ADVANCED_OPTS, customOutputs: [PAYMENT] },
+        });
+        await submitWithSigner(h.args);
+        expect(h.createTx.mock.calls[0][0].customOutputs).toEqual([PAYMENT]);
+    });
+
+    it('leaves a token send with a memo exactly as it was', async () => {
+        const h = makeHarness({
+            params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: DEST, MEMO: 'hi' },
+            encoderOpts: { ...ADVANCED_OPTS },
+        });
+        await submitWithSigner(h.args);
+        const built = h.createTx.mock.calls[0][0];
+        expect(built.customOutputs).toBeUndefined();
+        expect(built.data).toBe('SEND|0|JDOG|1|dest');
+    });
+});

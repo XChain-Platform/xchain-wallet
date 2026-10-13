@@ -4,7 +4,7 @@
 # XChain Platform Wallet
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.341.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.341.3-blue" alt="Version">
   <img src="https://img.shields.io/badge/tests-471%20smokes%20%2B%20Playwright%20E2E-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node">
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" alt="License">
@@ -20,7 +20,7 @@ Self-custodial multi-chain wallet for the XChain Platform. Runs as a browser web
 
 ## Features
 
-- **Four shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation), `@xchain-wallet/mobile` (Capacitor shell wrapping the same web build, Android now with iOS to follow); all share `@xchain-wallet/core` for routes, components, flows, and signers
+- **Four shells, one codebase:** `@xchain-wallet/web` (Vite SPA), `@xchain-wallet/extension` (Chrome MV3 popup + full-screen + service worker), `@xchain-wallet/desktop` (Electron with main-process signing isolation), `@xchain-wallet/mobile` (Capacitor shell wrapping the same web build, Android shipped, iOS pending App Store release); all share `@xchain-wallet/core` for routes, components, flows, and signers
 - **All 29 XChain ACTIONs:** SEND, ISSUE, MINT, DESTROY, ORDER, DISPENSER, DIVIDEND, SWEEP, SWAP, AIRDROP, MESSAGE, LIST, LINK, BROADCAST, PRICE, VOTE, BATCH, DEPLOY, EXECUTE, DEPOSIT, WITHDRAW, COINPAY, STAKE, UNSTAKE, DELEGATE, COLLECT, CALLBACK, SLEEP, FILE
 - **Self-custodial key management:** BIP39 mnemonic + optional 25th-word passphrase, BIP32 HD derivation per chain, AES-256-GCM vault encrypted with an Argon2id-derived master key (calibrated per device), Counterwallet legacy mnemonic import
 - **Pluggable signer interface:** `SoftwareSigner` (in-vault keys), `TrezorSigner` (Trezor Connect, all current models), `LedgerSigner` (WebHID, all current models), `RemoteSigner` (cross-shell pairing), `MultisigSigner` (classical n-of-m + MuSig2 sessions)
@@ -74,7 +74,7 @@ Full wallet documentation lives in the [xchain-documentation](https://github.com
 
 ## Status
 
-Pre-v1.0 (current version: `0.341.2`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
+Pre-v1.0 (current version: `0.341.3`). All four implementation phases (Phase 1: framework; Phase 2: issuance + hardware; Phase 3: DEX + messaging; Phase 4: contracts + staking + cross-chain + multisig) are closed. The autonomous portion of the §56.3 pre-launch track is also closed; three user-driven items remain before v1.0.0 GA: external security audit, external accessibility audit, and Chrome Web Store submission. Audit-readiness packets ship with the repo.
 
 ## Quick Start
 
@@ -154,7 +154,7 @@ xchain-wallet/
 │   ├── web/                     browser SPA shell (Vite)
 │   ├── extension/               Chrome MV3 extension shell (popup + full-screen + service worker)
 │   ├── desktop/                 Electron desktop shell (Windows / macOS / Linux)
-│   ├── mobile/                  Capacitor mobile shell (Android now, iOS to follow); wraps the web build
+│   ├── mobile/                  Capacitor mobile shell (Android shipped, iOS pending App Store release); wraps the web build
 │   ├── signers-ledger/          LedgerSigner vendor implementation, extracted from core
 │   ├── signers-trezor/          TrezorSigner vendor implementation, extracted from core
 │   ├── bridge-spec/             window.xchain TypeScript type definitions
@@ -245,11 +245,11 @@ Every package under `packages/` **ships at the same version number** as the root
 
 The membership rule is "everything under `packages/`" rather than a list of names, because a list is what let this drift in the first place: six packages sat a patch version behind the root while this paragraph claimed otherwise, and nothing noticed. `test/smoke/audits/version-lockstep.smoke.js` now enforces it, and a newly added package is in scope the moment it exists.
 
-**The prose copies count too.** A bump is 14 files: the ten `package.json` files, `packages/extension/manifest.json`, `packages/core/src/buildInfo.js`, this README (the version badge at the top and the `current version` line under Status) and `CHANGELOG.md`, which gets a section for the new version. The same smoke holds all of them, because a bump that lands in the manifests and stops short of the prose leaves the two statements a human reads first claiming the previous release. A signed `v0.335.0` tag was once cut against a tree where no file declared 0.335.0 at all, and only `release.yml`'s tag-versus-`package.json` gate caught it. A prerelease version (`-beta.N`, `-respin.N`) needs no changelog section: it rides the release it is a prerelease of.
+**The prose copies count too.** A bump touches the root and every `packages/*/package.json`, `packages/extension/manifest.json`, `packages/core/src/buildInfo.js`, this README (the version badge at the top and the `current version` line under Status) and `CHANGELOG.md`, which gets a section for the new version. The same smoke holds all of them, because a bump that lands in the manifests and stops short of the prose leaves the two statements a human reads first claiming the previous release. A signed `v0.335.0` tag was once cut against a tree where no file declared 0.335.0 at all, and only `release.yml`'s tag-versus-`package.json` gate caught it. A prerelease version (`-beta.N`, `-respin.N`) needs no changelog section: it rides the release it is a prerelease of.
 
 **And the changelog section has to say something.** A `## [X.Y.Z]` heading with nothing under it used to satisfy every check here, so a release could be tagged with its contents undocumented at the one moment that becomes permanent. The section now needs at least one entry, enforced by the same smoke.
 
-**Run `node tools/release/bump-version.mjs <version>` rather than editing the fourteen by hand.** It derives the same membership from the same filesystem the smoke does, promotes whatever `## [Unreleased]` holds into the new section, and refuses to run while that section is empty. Write those entries first, one short sentence each; that part is editorial and no tool can do it. The smoke stays the authority: it is a second derivation of the rule rather than a copy of the tool's list, so a place the tool misses is one the check still catches.
+**Run `node tools/release/bump-version.mjs <version>` rather than editing them by hand.** It derives the same membership from the same filesystem the smoke does, promotes whatever `## [Unreleased]` holds into the new section, and refuses to run while that section is empty. Write those entries first, one short sentence each; that part is editorial and no tool can do it. The smoke stays the authority: it is a second derivation of the rule rather than a copy of the tool's list, so a place the tool misses is one the check still catches.
 
 ## Parent Platform
 

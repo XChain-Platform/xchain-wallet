@@ -29,7 +29,7 @@
 // A leading `identifier:` or `some.namespaced.identifier:` segment. Anchored
 // on a lowercase first letter and no internal whitespace, so real copy
 // ("Note: keep a backup") is not mistaken for a function prefix.
-const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
+export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 
 // Library / runtime internals that carry no meaning for the person reading
 // them, whether or not they arrive with a function prefix.

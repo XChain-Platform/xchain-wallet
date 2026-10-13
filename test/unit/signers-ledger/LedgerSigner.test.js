@@ -220,7 +220,10 @@ describe('LedgerSigner.getAddresses', () => {
     });
 
     it('uses legacy format for dogecoin', async () => {
-        const s = makeSigner();
+        const getWalletPublicKey = vi.fn().mockResolvedValue({
+            publicKey: '02' + 'a'.repeat(64), bitcoinAddress: 'Dmock', chainCode: 'c'.repeat(64),
+        });
+        const s = makeSigner({ getWalletPublicKey });
         const rows = await s.getAddresses({
             chainId: 'dogecoin-mainnet',
             accountIndex: 0,
@@ -230,6 +233,23 @@ describe('LedgerSigner.getAddresses', () => {
         });
         expect(rows).toHaveLength(1);
         expect(rows[0].path).toMatch(/^m\/44'/);
+        expect(getWalletPublicKey.mock.calls[0][1]).toMatchObject({ format: 'legacy' });
+    });
+
+    // The default format and the default purpose are stated in two helpers;
+    // a bech32 request on a 44' path is refused by the device, so pin the pair.
+    it.each([
+        ['dogecoin-mainnet', "m/44'", 'legacy'],
+        ['litecoin-mainnet', "m/44'", 'legacy'],
+        ['bitcoin-mainnet', "m/84'", 'bech32'],
+    ])('pairs the default format with the default purpose on %s', async (chainId, purpose, format) => {
+        const getWalletPublicKey = vi.fn().mockResolvedValue({
+            publicKey: '02' + 'a'.repeat(64), bitcoinAddress: 'mock', chainCode: 'c'.repeat(64),
+        });
+        const s = makeSigner({ getWalletPublicKey });
+        const rows = await s.getAddresses({ chainId, accountIndex: 0, change: 0, startIndex: 0, count: 1 });
+        expect(rows[0].path.startsWith(`${purpose}/`)).toBe(true);
+        expect(getWalletPublicKey.mock.calls[0][1]).toMatchObject({ format });
     });
 
     it('propagates app errors as SignerStatusError', async () => {
@@ -344,6 +364,7 @@ describe('LedgerSigner.signPsbt', () => {
                 }],
                 outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
                 locktime: 0,
+                txVersion: 2,
             }),
             txidOf: vi.fn().mockReturnValue('deadbeef'),
         },
@@ -353,6 +374,27 @@ describe('LedgerSigner.signPsbt', () => {
         psbtHex: 'cafe',
         chainId: 'bitcoin-mainnet',
         signingPaths: [{ inputIndex: 0, path: "m/84'/0'/0'/0/0" }],
+    });
+
+    it('hands the device no redeemScript for a wrapped-segwit input', async () => {
+        const mockSdk = signPsbtSdk();
+        const [inp] = mockSdk.wallet.decomposePsbt().inputs;
+        mockSdk.wallet.decomposePsbt.mockReturnValue({
+            inputs: [{ ...inp, scriptType: 'p2sh-p2wpkh', redeemScriptHex: '0014' + 'bb'.repeat(20) }],
+            outputs: [{ value: 900, scriptPubKeyHex: '0014' + 'cc'.repeat(20) }],
+            locktime: 0,
+            txVersion: 2,
+        });
+        const app = makeApp();
+        const s = makeSigner(app, { sdkRegistry: { get: () => mockSdk } });
+        await s.signPsbt({
+            psbtHex: 'cafe',
+            chainId: 'bitcoin-mainnet',
+            signingPaths: [{ inputIndex: 0, path: "m/49'/0'/0'/0/0" }],
+        });
+        const call = app.createPaymentTransaction.mock.calls[0][0];
+        expect(call.inputs[0][2]).toBeUndefined();
+        expect(call.segwit).toBe(true);
     });
 
     it('calls splitTransaction with the v10 four-argument signature', async () => {
@@ -397,7 +439,8 @@ describe('LedgerSigner.signPsbt', () => {
         const err = await s.signPsbt({ psbtHex: 'cafe', chainId, signingPaths: [] }).catch((e) => e);
         expect(err).toBeInstanceOf(Error);
         expect(err.message).toMatch(/funds would appear missing/);
-        expect(err.message).toContain(chainId);
+        expect(err.message).toContain(chainId === 'bitcoin-testnet' ? 'Bitcoin testnet' : 'Bitcoin regtest');
+        expect(err.message).not.toContain(chainId);
         expect(err.message).not.toMatch(/Litecoin|Dogecoin/);
         expect(get).not.toHaveBeenCalled();
         expect(mockSdk.wallet.decomposePsbt).not.toHaveBeenCalled();

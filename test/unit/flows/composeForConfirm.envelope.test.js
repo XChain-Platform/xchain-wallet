@@ -253,7 +253,8 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
         expect(h.signPsbt).not.toHaveBeenCalled();
         expect(h.broadcastTx).not.toHaveBeenCalled();
         expect(listPendingCommits()).toHaveLength(0);
-        await waitFor(() => expect(utils.container.textContent).toMatch(/did not\s+arrive with the commit/));
+        await waitFor(() => expect(utils.container.textContent).toMatch(/did not\s+arrive with the first/));
+        expect(utils.container.textContent).not.toMatch(/TAPROOT pair/);
     });
 
     it('keeps a hardware source on the legacy ceiling and never asks for AUTO', async () => {

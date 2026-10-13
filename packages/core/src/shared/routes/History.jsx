@@ -14,12 +14,12 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     isEntryReplaceable,
+    isReplaceCallAvailable,
     replaceFromHistoryEntry,
     cancelUndoSnapshot,
     undoCancel,
-    RbfNotSupportedError,
-    RbfInvalidEntryError,
 } from '../../flows/rbfReplace.js';
+import { rbfFailureMessage } from '../utils/rbfFailureMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -39,6 +39,7 @@ import {
     pendingTxToEntry,
 } from '../utils/pendingHistory.js';
 import { t } from '../../i18n/index.js';
+import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -1661,18 +1662,14 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                 const undone = await undoCancel({ messaging, snapshot });
                                 setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
                             } catch (undoErr) {
-                                setRbfError(undoErr?.message || 'Could not undo the cancellation.');
+                                setRbfError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
                             }
                         },
                     });
                 }
             }
         } catch (err) {
-            if (err instanceof RbfNotSupportedError || err instanceof RbfInvalidEntryError) {
-                setRbfError(err.message);
-            } else {
-                setRbfError(err?.message || 'Replacement failed.');
-            }
+            setRbfError(rbfFailureMessage(err, "Couldn't speed up or cancel this transaction. Try again later."));
         } finally {
             setRbfBusy(null);
         }
@@ -1697,7 +1694,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     // an allowlisted action), so the offer has to be withdrawn here.
     // Replacing a replacement bumps the fee on a transaction the network
     // has already dropped, spends a fee, and moves nothing.
-    if (replaceable.ok && !entry.pending?.replaced) {
+    if (isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
         moreOptions.push({
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
@@ -2050,6 +2047,21 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
 }
 
 /**
+ * Split a failed record's stored error into a sentence for the user and the
+ * raw text for a collapsed disclosure. Only a recognised cause becomes prose:
+ * flow prefixes, SDK strings and unclassified node text stay in the details.
+ *
+ * @param {unknown} stored
+ * @returns {{ reason: string | null, details: string }}
+ */
+function failedReasonOf(stored) {
+    const raw = stored == null ? '' : String(stored).trim();
+    if (!raw) return { reason: null, details: '' };
+    const h = humanizeError(raw, 'send this transaction');
+    return { reason: h.cause === 'unknown' ? null : h.message, details: raw };
+}
+
+/**
  * M2.3 pending branch of the detail card. Everything a user can be told
  * honestly about a transaction that has been sent and not yet indexed:
  * which of the five states it is in, when the network first reported it,
@@ -2069,6 +2081,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
     const settled = state === 'confirmed';
     const failed = state === 'failed';
     const meta = entry?.pending || null;
+    const failure = failed ? failedReasonOf(meta?.error) : null;
     const desc = describePendingAction(entry);
     const amountOf = (value) => (balancesHidden ? '•••••' : value);
 
@@ -2099,10 +2112,14 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 ) : null
             ) : failed ? (
                 <>
-                    {meta?.error ? (
-                        <p className={styles.pendingNotValidated}>
-                            {t('pending.detail.failedReason', { error: meta.error })}
-                        </p>
+                    {failure?.reason ? (
+                        <p className={styles.pendingNotValidated}>{failure.reason}</p>
+                    ) : null}
+                    {failure?.details ? (
+                        <details className={styles.pendingTiming}>
+                            <summary>{t('pending.detail.technicalDetails')}</summary>
+                            <code>{failure.details}</code>
+                        </details>
                     ) : null}
                     {typeof onDismissFailed === 'function' && meta?.pendingTxId ? (
                         <Button

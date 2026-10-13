@@ -89,7 +89,9 @@ assert.match(flowSrc, /SIGN_THROTTLE_DEFAULT_BURST/, 'defaults still exported');
 
 // ─── 3. createBackgroundHost wires throttle ────────────────────────────
 
-assert.match(hostSrc, /createSignThrottle,?\s*\n?\s*\}\s*=\s*flows;/,
+const flowsImport = /const \{([\s\S]*?)\}\s*=\s*flows;/.exec(hostSrc);
+assert.ok(flowsImport, 'host destructures its flow imports');
+assert.match(flowsImport[1], /\bcreateSignThrottle\b/,
     'createSignThrottle imported from flows');
 assert.match(hostSrc, /let cachedThrottleLimits =/,
     'host owns a cachedThrottleLimits closure variable');

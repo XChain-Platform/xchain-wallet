@@ -13,7 +13,8 @@
 // Drives the single-encode confirm pipeline. All SDK work is HOST-side
 // (the React tree only reaches the host over `messaging`): the injected
 // `compose` runs composeForConfirm + the tamper check in the background
-// and resolves with an already-verified ComposedAction; `preflight` runs
+// and resolves with an already-verified HostComposeWireEnvelope (see
+// ../../flows/composeActionForConfirm.js); `preflight` runs
 // sdk.preflight in the background. The hook itself is a pure UI state
 // machine: compose PRE-OPEN, open the modal, stream pre-flight, and on
 // Approve re-check staleness (and,, the native-coin protocol fee this
@@ -29,11 +30,18 @@
 // `user-rejected`) so forms can skip error toasts on Reject.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
+import {
+    broadcastFailureKindFromError,
+    BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+} from '../../flows/broadcastPermanence.js';
 import { reserveFromSimulation } from '../../flows/reserveFromSimulation.js';
 import { livenessMessage } from '../../flows/inputLiveness.js';
 import { compareNativeFeeQuote, isNativeFeeRefusal, nativeFeeChangedError } from '../../flows/nativeFeeRequote.js';
 import { isHardPreflightFinding, preflightFindingKey } from '../utils/preflightFindingKey.js';
+import {
+    clearQueuedResultHandoff,
+    setQueuedResultHandoff,
+} from '../utils/submitFailureMessage.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -87,7 +95,8 @@ export function useConfirmAction() {
     const approvalBeganRef = useRef(false);
     const releaseUnlessApproving = useCallback((built) => {
         if (approvalBeganRef.current) return;
-        releaseEncoderInputs(built, releasedEncoderInputsRef.current).catch((err) => {
+        const sendRelease = optsRef.current?.releaseEncoderInputs;
+        releaseEncoderInputs(built, releasedEncoderInputsRef.current, sendRelease).catch((err) => {
             console.error('Encoder input release failed:', err);
         });
     }, []);
@@ -168,7 +177,7 @@ export function useConfirmAction() {
      * exist on this side of it.
      *
      * @param {Object} args
-     * @param {() => Promise<import('../../flows/composeActionForConfirm.js').HostComposeEnvelope>} args.compose   host compose + tamper (messaging.composeForConfirm)
+     * @param {() => Promise<import('../../flows/composeActionForConfirm.js').HostComposeWireEnvelope>} args.compose   host compose + tamper (messaging.composeForConfirm)
      * @param {(credentials: object, composed: object) => Promise<any>} args.onApprove
      * @param {string} args.chainId
      * @param {(reqOpts: { actionString: string, source?: string, localDeltas?: Array<{tick:string,amount:string}>, bypassCache?: boolean, mode?: string }) => Promise<object>} [args.preflight]   host preflight (messaging.preflight); omit to skip pre-flight
@@ -182,6 +191,9 @@ export function useConfirmAction() {
      *   Called only when the composed action actually attaches a native-coin
      *   fee output; a composed amount outside the fresh band interrupts
      *   instead of signing.
+     * @param {(token: string) => Promise<any>} [args.releaseEncoderInputs]
+     * Redeems the host's `releaseEncoderInputsToken` (messaging.releaseEncoderInputs)
+     *   on Reject, an aborted compose or unmount, so the encoder frees the inputs it held.
      * @param {boolean} [args.alwaysCheckInputs]    force the liveness probe regardless of PSBT age (the resume path)
      * @param {{ put: (payload: object) => Promise<any>, clear: (id: string) => Promise<any> }} [args.session] §5.4 confirm-session store
      * @param {{ software: string, hardware?: string, base: object, after?: object, returnTo?: object, label?: string }} [args.resume]
@@ -195,14 +207,17 @@ export function useConfirmAction() {
      * @param {object} [args.resumeRequest]         the compose request, stored alongside for display/rehydration
      * @returns {Promise<any>}   resolves with onApprove's own return value; EXCEPT on a
      *   TRANSIENT post-sign broadcast failure (§5.3.4), where it resolves with
-     *   `{ queued: true, broadcast: 'queued', error }` - the tx is signed and handed to the
-     *   broadcast queue, so callers must render "Signed. Not broadcast yet." (the
+     *   `{ queued: true, broadcast: 'queued', unsaved, error }` - the tx is signed and handed
+     *   to the broadcast queue, so callers must render "Signed. Not broadcast yet." (the
      *   queue is drained by the user from QueuedBroadcastBanner, never automatically), not
-     *   an error. A PERMANENT broadcast failure rejects (re-compose required).
+     *   an error. `unsaved` is true when neither durable store accepted the signed bytes, so
+     *   the queued result must also warn that closing the current window loses them. A
+     *   PERMANENT broadcast failure rejects (re-compose required).
      */
     const confirm = useCallback((args) => {
         if (activeInstanceId !== null) return Promise.reject(new ConfirmActionBusyError());
         activeInstanceId = instanceId;
+        clearQueuedResultHandoff();
 
         const controller = new AbortController();
         abortRef.current = controller;
@@ -463,7 +478,13 @@ export function useConfirmAction() {
                 // broadcast yet", and RESOLVE so callers don't render an error.
                 setPhase('signed-not-broadcast');
                 setError(null);
-                const queuedResult = { queued: true, broadcast: 'queued', error: { name: err?.name, message: err?.message } };
+                const queuedResult = {
+                    queued: true,
+                    broadcast: 'queued',
+                    unsaved: err?.name === BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
+                    error: { name: err?.name, message: err?.message },
+                };
+                setQueuedResultHandoff(queuedResult);
                 settleResolve(queuedResult);
                 return queuedResult;
             }
@@ -491,7 +512,11 @@ export function useConfirmAction() {
         setError(null);
         try {
             if (!approvalBeganRef.current) {
-                await releaseEncoderInputs(composedRef.current, releasedEncoderInputsRef.current);
+                await releaseEncoderInputs(
+                    composedRef.current,
+                    releasedEncoderInputsRef.current,
+                    optsRef.current?.releaseEncoderInputs,
+                );
             }
         } catch (err) {
             const detail = err?.message ? ` ${err.message}` : '';
@@ -518,14 +543,40 @@ export function useConfirmAction() {
     };
 }
 
-async function releaseEncoderInputs(composed, released) {
+/**
+ * Free the inputs the encoder reserved for an abandoned compose, at most once.
+ *
+ * @param {object|null} composed
+ * @param {Set<unknown>} released  what this instance already released (a function or a token)
+ * @param {((token: string) => Promise<any>)|undefined} sendRelease  redeems a host token
+ */
+async function releaseEncoderInputs(composed, released, sendRelease) {
     const release = composed?.releaseEncoderInputs;
-    if (typeof release !== 'function' || released.has(release)) return;
-    released.add(release);
+    // In-process compose: the envelope still holds the release function itself.
+    if (typeof release === 'function') {
+        if (released.has(release)) return;
+        released.add(release);
+        try {
+            await release();
+        } catch (err) {
+            released.delete(release);
+            throw err;
+        }
+        return;
+    }
+    // Across the messaging boundary the host swapped that function for a single-use token.
+    const token = composed?.releaseEncoderInputsToken;
+    if (typeof token !== 'string' || !token || released.has(token)) return;
+    released.add(token);
+    // Say so once when the caller wired no sender: the inputs then stay held until the encoder times out.
+    if (typeof sendRelease !== 'function') {
+        console.error('useConfirmAction: confirm() got no releaseEncoderInputs sender, so the encoder keeps this compose\'s inputs reserved');
+        return;
+    }
     try {
-        await release();
+        await sendRelease(token);
     } catch (err) {
-        released.delete(release);
+        released.delete(token);
         throw err;
     }
 }

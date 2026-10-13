@@ -95,23 +95,31 @@ describe('contractManifestFor', () => {
         expect(res.status).toBe('unavailable');
     });
 
-    it('fails toward caution on a malformed permissions column', async () => {
-        // The indexer rejects malformed manifests at deploy time, so this is
-        // a corrupt-read path: overstating the contract's reach is the safe
-        // direction, understating it is not.
+    it('reports unavailable on a malformed permissions column', async () => {
         const res = await contractManifestFor({
             sdkRegistry: registryReturning({ permissions: '{not json', max_take_bps: 'abc' }),
             ...ARGS,
         });
-        expect(res.status).toBe('unrestricted');
-        expect(res.maxTakeBps).toBeNull();
+        expect(res).toEqual({ permissions: null, maxTakeBps: null, status: 'unavailable' });
     });
 
-    it('drops a non-string entry rather than rendering it as a permission', async () => {
-        const res = await contractManifestFor({
-            sdkRegistry: registryReturning({ permissions: ['SEND', 7], max_take_bps: null }),
-            ...ARGS,
-        });
-        expect(res.status).toBe('unrestricted');
+    it('reports unavailable when permissions is not an array of strings', async () => {
+        for (const permissions of [['SEND', 7], '{"a":1}', 5, {}, true]) {
+            const res = await contractManifestFor({
+                sdkRegistry: registryReturning({ permissions, max_take_bps: null }),
+                ...ARGS,
+            });
+            expect(res.status).toBe('unavailable');
+        }
+    });
+
+    it('reports unavailable when the explorer flags the manifest', async () => {
+        for (const flag of ['permissions_error', 'manifest_error']) {
+            const res = await contractManifestFor({
+                sdkRegistry: registryReturning({ permissions: null, [flag]: 'bad manifest' }),
+                ...ARGS,
+            });
+            expect(res.status).toBe('unavailable');
+        }
     });
 });

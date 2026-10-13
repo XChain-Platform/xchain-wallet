@@ -95,3 +95,20 @@ describe('market and contract screens route every load failure through it', () =
         expect(src).toContain('readFailureMessage(');
     });
 });
+
+describe('token, dispenser and stake screens word explorer load failures through it', () => {
+    // Each pattern is the raw explorer-read fallback that used to reach the screen.
+    const SITES = [
+        ['packages/core/src/shared/routes/TokenDetail.jsx', /set(?:Holders|Gated)Error\(err\?\.message/],
+        ['packages/core/src/shared/routes/ManageToken.jsx', /set(?:Holders|Listings|Orders|Swaps|Activity)Error\(err\?\.message/],
+        ['packages/core/src/shared/routes/DispenserDetail.jsx', /setLoadError\(err\?\.message/],
+        ['packages/core/src/shared/routes/StakeDetail.jsx', /setLoadError\(err\?\.message/],
+        ['packages/core/src/shared/routes/DividendForm.jsx', /error: err\?\.message \|\| 'Failed to load holders\.'/],
+    ];
+
+    it.each(SITES)('%s shows no raw explorer error', (rel, rawFallback) => {
+        const src = readFileSync(join(process.cwd(), rel), 'utf8');
+        expect(src).not.toMatch(rawFallback);
+        expect(src).toContain('readFailureMessage(');
+    });
+});

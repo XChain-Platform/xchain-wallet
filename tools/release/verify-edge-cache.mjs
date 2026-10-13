@@ -98,6 +98,7 @@
 // Exit 0 only if every probe met the contract AND every probe was real.
 
 import { pointerNameFor } from './update-info.mjs';
+import { DESKTOP_POINTER_LANES } from './pointer-gate.mjs';
 import { UPDATE_FEED_URL } from '../../packages/web/src/update/directUpdateCheck.js';
 
 const BAD_NAME = /^latest/;
@@ -188,14 +189,9 @@ const artifact = arg('artifact');
 // each carry both arches in one file, Linux splits per arch. Derived from
 // update-info.mjs's own rule rather than a list written here, so this
 // cannot drift from what the build emits - which is the entire class of
-// bug that made `latest*.yml` survive in twelve live positions.
-const LANES = [
-    { os: 'win32' },
-    { os: 'darwin' },
-    { os: 'linux', arch: 'x64' },
-    { os: 'linux', arch: 'arm64' },
-];
-const pointers = LANES.map((lane) => pointerNameFor({ channel, ...lane }));
+// bug that made `latest*.yml` survive in twelve live positions. The lane
+// list is the one publish.sh's pointer gate demands, for the same reason.
+const pointers = DESKTOP_POINTER_LANES.map(({ os, arch }) => pointerNameFor({ channel, os, arch }));
 
 // Every pointer this project publishes, as a path under `base`. Desktop's
 // four live under `desktop/`; the direct-APK lane's lives under `android/`

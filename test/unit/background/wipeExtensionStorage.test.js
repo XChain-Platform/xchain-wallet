@@ -60,6 +60,7 @@ function seededStores() {
         'xchain.signThrottle': '{"count":2}',
         'xchain.broadcastQueue': '[]',
         'xchain.logConsole': '[]',
+        'xchain.broadcastQueue.pruned.w-gone': 1,
         'xchain.layoutMode': 'sidepanel',
     });
     const session = fakeArea({
@@ -98,6 +99,39 @@ describe('background/wipeExtensionStorage', () => {
         expect(left.filter((k) => WALLET_LOCAL_KEYS.includes(k))).toEqual([]);
         // layoutMode is a window preference, not wallet state.
         expect(left).toEqual(['xchain.layoutMode']);
+    });
+
+    // The pruned-wallet ledger writes one key per walletId, so no enumerated
+    // list can name it; a page or worker that never built a queue store has no
+    // seal to erase it either.
+    it('sweeps the pruned-wallet ledger by prefix, listing names only where getKeys exists', async () => {
+        const { local, session } = seededStores();
+        local.map.set('xchain.broadcastQueue.pruned.w-two', 1);
+        local.getKeys = async () => [...local.map.keys()];
+        const readAll = vi.spyOn(local, 'get');
+        const res = await wipeExtensionStorage({ local, session });
+        expect(res.ok).toBe(true);
+        expect(readAll).not.toHaveBeenCalledWith(null);
+        expect([...local.map.keys()]).toEqual(['xchain.layoutMode']);
+        expect(res.cleared).toContain('xchain.broadcastQueue.pruned.w-two');
+    });
+
+    it('falls back to a full read when getKeys fails, and still sweeps the ledger', async () => {
+        const { local, session } = seededStores();
+        local.getKeys = async () => { throw new Error('getKeys refused'); };
+        const res = await wipeExtensionStorage({ local, session });
+        expect(res.ok).toBe(true);
+        expect([...local.map.keys()]).toEqual(['xchain.layoutMode']);
+    });
+
+    it('reports a failed ledger listing but still clears the enumerated keys and the session', async () => {
+        const { local, session } = seededStores();
+        local.get = async () => { throw new Error('listing refused'); };
+        const res = await wipeExtensionStorage({ local, session });
+        expect(res.ok).toBe(false);
+        expect(res.error).toMatch(/listing refused/);
+        expect(local.map.has('xchain-wallet:vault')).toBe(false);
+        expect(session.map.size).toBe(0);
     });
 
     it('reports the failure instead of throwing when the store refuses', async () => {

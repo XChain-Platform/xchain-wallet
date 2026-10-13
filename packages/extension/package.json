@@ -1,6 +1,6 @@
 {
     "name": "@xchain-wallet/extension",
-    "version": "0.341.2",
+    "version": "0.341.3",
     "license": "AGPL-3.0-or-later",
     "private": true,
     "description": "Chrome MV3 extension shell for XChain Wallet - popup, full-screen, background service worker, content script, injected provider",
@@ -20,7 +20,7 @@
         "qrcode": "^1.5.4",
         "react": "^18.3.0",
         "react-dom": "^18.3.0",
-        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.21.3"
+        "xchain-sdk": "npm:@dankest-llc/xchain-sdk@0.22.4"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.0",

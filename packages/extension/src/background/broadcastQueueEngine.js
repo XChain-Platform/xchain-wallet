@@ -12,7 +12,26 @@
 // store: rehydrate, merge, persist, settlement journal, vault rebuild and
 // reconcile, seal and prune. The host registers the routes and calls these.
 
-import { sealBroadcastQueueStore } from './broadcastQueueStore.js';
+import {
+    OWED_SETTLEMENT_LIMIT,
+    owedRecordKey,
+    sealBroadcastQueueStore,
+} from './broadcastQueueStore.js';
+
+/**
+ * Carry the commit-landed marker of a queued reveal or phase-2 spend onto a queue
+ * entry, so a permanent retry verdict keeps its record 'broadcast' rather than 'failed'.
+ *
+ * @param {{ commitLanded?: unknown, commitTxid?: unknown } | null | undefined} source
+ * @returns {{ commitLanded?: true, commitTxid?: string }}
+ */
+function commitLandedFields(source) {
+    if (source?.commitLanded !== true) return {};
+    return {
+        commitLanded: true,
+        ...(typeof source.commitTxid === 'string' && source.commitTxid ? { commitTxid: source.commitTxid } : {}),
+    };
+}
 
 /**
  * @param {{
@@ -30,11 +49,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // the array identity has to survive the merge.
     //
     // No per-entry tombstone is needed to stop the merge resurrecting a removed
-    // entry: a merge only runs while `queueStore.loaded` is false, and in that window
-    // the map holds nothing but entries `pushQueueEntry` added, which
-    // persistQueue has refused to write. An entry that is both in memory and in
-    // the snapshot implies a load that already succeeded, and that latches
-    // `queueStore.loaded` so no further merge happens.
+    // entry. A merge runs while `queueStore.loaded` is false, which happens in
+    // two windows. Before the first load latches, the map holds nothing but
+    // entries `pushQueueEntry` added, whose saves persistQueue declined.
+    // After a web lease reload whose read failed, the map also holds what this
+    // store saved before it went dormant, and another writer may have removed
+    // some of it since. `queueStore.persisted` tells the two apart: it records
+    // what the key held at the last load or save that resolved, so a live entry
+    // it names that the snapshot lacks was removed and is dropped, and one it
+    // does not name never reached storage and stays. Before the first load the
+    // record is empty, so that window keeps every live entry.
     //
     // The one removal that can run in that window is `pruneWalletFromQueue`,
     // so it records the walletId in `queueStore.prunedWallets`; the merge skips
@@ -49,7 +73,17 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // a retirement whose persistQueue write was refused leaves the entry in the
     // blob, and the next boot merges it back in. `reconcileRestoredEntries`
     // below is what judges those entries against the durable half.
-    function mergeQueueSnapshot(snapshot) {
+    function mergeQueueSnapshot(snapshot, known) {
+        // Drop in place what the key held before this read and no longer does.
+        for (const [walletId, live] of queuedBroadcasts.entries()) {
+            const named = known?.get(walletId);
+            if (!named) continue;
+            const stored = Array.isArray(snapshot[walletId]) ? snapshot[walletId] : [];
+            const storedIds = new Set(stored.map((e) => e?.id));
+            for (let i = live.length - 1; i >= 0; i -= 1) {
+                if (named.has(live[i]?.id) && !storedIds.has(live[i].id)) live.splice(i, 1);
+            }
+        }
         for (const walletId of Object.keys(snapshot)) {
             if (queueStore.prunedWallets?.has(walletId)) continue;
             const arr = snapshot[walletId];
@@ -91,8 +125,16 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             queueStore.loaded = true;
             return;
         }
+        // Without the writer lease the key is another tab's: reading it here
+        // would latch `loaded` and let the write-back below run unleased.
+        if (queueStore.dormant) return;
         if (!queueStore.loadPromise) {
             queueStore.loadPromise = (async () => {
+                // What the key held before this read, to tell a removal from
+                // an entry that never reached storage.
+                const known = queueStore.persisted;
+                const knownQueues = known?.queues;
+                const knownOwed = known?.owed;
                 // Whatever this process already holds was queued or journaled
                 // while the persist helpers were refusing to write, so the blob
                 // does not carry it. Both write-backs below are conditional on
@@ -139,8 +181,12 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                     }
                     if (queueStore.sealed) return false;
                 }
-                mergeQueueSnapshot(snapshot);
-                mergeOwedSettlements(persistedOwed);
+                // Re-sample the journal after the reads: a record made while
+                // one was in flight had its own persist refused, so the
+                // write-back below is its only route to storage.
+                const owedAtMerge = heldOwed || queueStore.owed.length > 0;
+                mergeQueueSnapshot(snapshot, knownQueues);
+                mergeOwedSettlements(persistedOwed, knownOwed);
                 queueStore.loaded = true;
                 // Once `loaded` latches no merge runs again, so the live map is
                 // the whole truth and the pending prunes have nothing left to skip.
@@ -159,7 +205,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 // threw returned above before `loaded` latched, so reaching
                 // this line means the journal was read and merged; writing it
                 // back cannot erase the owed writes recorded before this boot.
-                if (heldOwed || replayedPrune) await persistOwedSettlements();
+                if (owedAtMerge || replayedPrune) await persistOwedSettlements();
                 return true;
             })();
         }
@@ -171,7 +217,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // Resolve true only when the snapshot reached storage; every skip or refusal is false.
     /** @returns {Promise<boolean>} */
     async function persistQueue() {
-        if (queueStore.sealed || !queueStore.storage) return false;
+        if (queueStore.sealed || queueStore.dormant || !queueStore.storage) return false;
         if (!queueStore.loaded) {
             await ensureQueueLoaded();
             // Storage is still unreadable, so the map is known-incomplete.
@@ -179,7 +225,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             // disk alone; writing it back is the erasure this guards against.
             // A seal that landed during the wait also latches `loaded`, so it
             // is checked on its own: this save would recreate the wiped key.
-            if (queueStore.sealed || !queueStore.loaded) return false;
+            if (queueStore.sealed || queueStore.dormant || !queueStore.loaded) return false;
         }
         /** @type {Record<string, any[]>} */
         const snapshot = {};
@@ -200,7 +246,6 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // after its bytes landed keeps netting the spend out of the balance.
     // The journal is `queueStore.owed`, shared like the map, so a record a
     // torn-down host writes is the one the next host's open vault drains.
-    const OWED_SETTLEMENT_LIMIT = 50;
     // Cap the journal so a vault that never reopens cannot grow the stored blob
     // without bound. Positional: the array is kept oldest-first, so the front goes.
     function capOwedSettlements() {
@@ -208,8 +253,15 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             queueStore.owed = queueStore.owed.slice(-OWED_SETTLEMENT_LIMIT);
         }
     }
-    function mergeOwedSettlements(persisted) {
-        if (!Array.isArray(persisted) || persisted.length === 0) return;
+    function mergeOwedSettlements(persisted, known) {
+        if (!Array.isArray(persisted)) return;
+        // A record the key held before this read and no longer does was
+        // drained by another writer; the same rule as the queue merge above.
+        if (known?.size > 0) {
+            const stored = new Set(persisted.filter(Boolean).map(owedRecordKey));
+            queueStore.owed = queueStore.owed.filter((s) => !known.has(owedRecordKey(s)) || stored.has(owedRecordKey(s)));
+        }
+        if (persisted.length === 0) return;
         const held = new Set(queueStore.owed.map((s) => s.pendingTxId));
         const restored = [];
         for (const owed of persisted) {
@@ -229,7 +281,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
     // the local store by enumerated key, so a key of its own would outlive the
     // wallet whose transactions the journal names.
     async function persistOwedSettlements() {
-        if (queueStore.sealed || !queueStore.loaded) return;
+        if (queueStore.sealed || queueStore.dormant || !queueStore.loaded) return;
         if (typeof queueStore.storage?.saveSettlements !== 'function') return;
         try {
             await queueStore.storage.saveSettlements(queueStore.owed.map((s) => ({ ...s })));
@@ -362,9 +414,10 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         // a prune over a map that never loaded would drop this wallet on disk
         // and leave every other wallet's entries to the fail-closed gate.
         await ensureQueueLoaded();
-        // The read is still failing, so neither persist below can write and
-        // the blob keeps this wallet; the recovering load drops it instead.
-        if (!queueStore.loaded && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
+        // The read is still failing, or the store is dormant, so neither
+        // persist below can write and the blob keeps this wallet; the
+        // recovering load or the lease reload drops it instead.
+        if ((!queueStore.loaded || queueStore.dormant) && !queueStore.sealed) queueStore.prunedWallets?.add(walletId);
         const hadEntries = queuedBroadcasts.delete(walletId);
         recoveredWallets.delete(walletId);
         reconciledWallets.delete(walletId);
@@ -467,6 +520,11 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      *     can reach are exactly the ones no live call owns.
      *   - no owed settlement names it. A journaled write belongs to an entry
      *     whose broadcast or discard already happened.
+     * The last two are sampled before the vault reads as well as after, and an
+     * id held at either moment is skipped. A route drops its entry only after
+     * the record is terminal or journaled, and the journal drops a record only
+     * once its write lands, so a record read stale mid-scan is still named by
+     * the first sample.
      *
      * @param {any} vault
      * @param {any} chainRegistry
@@ -474,6 +532,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      */
     async function restoreQueueFromVault(vault, chainRegistry, walletId) {
         if (recoveredWallets.has(walletId)) return;
+        const heldBeforeReads = heldPendingTxIds(walletId);
         let owned;
         let queued;
         let claimed = [];
@@ -500,9 +559,8 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             ...(Array.isArray(claimed) ? claimed.map((record) => ({ record, resumedClaim: true })) : []),
         ];
         if (candidates.length === 0) return;
-        const live = getQueue(walletId);
-        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
-        for (const owed of queueStore.owed) held.add(owed.pendingTxId);
+        const held = heldPendingTxIds(walletId);
+        for (const id of heldBeforeReads) held.add(id);
         const restorable = candidates
             .filter(({ record: r }) => r
                 && typeof r.txHex === 'string' && r.txHex
@@ -525,6 +583,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 txid: record.txid,
                 pendingTxId: record.id,
                 ...(resumedClaim ? { resumedClaim: true } : {}),
+                ...commitLandedFields(record),
                 // No ADS verdict: it rode the entry, never the record, so the
                 // donation this transaction may carry is not re-derivable here.
                 // Booking nothing under-counts the accumulator; booking a guess
@@ -532,6 +591,13 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 adsCommit: null,
             });
         }
+    }
+    // PendingTx ids a live queue entry or an owed settlement names right now.
+    function heldPendingTxIds(walletId) {
+        const live = queuedBroadcasts.get(walletId) ?? [];
+        const held = new Set(live.map((e) => e.pendingTxId).filter(Boolean));
+        for (const owed of queueStore.owed) held.add(owed.pendingTxId);
+        return held;
     }
     // Wallets whose rehydrated entries this process has already judged against
     // the durable half. Left un-latched when the vault could not answer, so the
@@ -609,14 +675,42 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * beside the PendingTx submitAction stamped 'queued', rather than only
      * after the next worker restart rebuilds them without their ADS verdict.
      * Awaits the rehydrate first so a push racing a worker restart cannot
-     * orphan the persisted entries.
+     * orphan the persisted entries, and awaits the save after the push so the
+     * entry's ADS verdict, which no PendingTx record carries, is on disk
+     * before submitAction re-throws.
      *
      * @param {string | undefined} walletId
-     * @returns {((entry: any) => Promise<void>) | undefined}
+     * @returns {((entry: any) => Promise<boolean>) | undefined}
      */
     function enqueueOnBroadcastFailure(walletId) {
         if (typeof walletId !== 'string' || !walletId) return undefined;
-        return async (entry) => { await ensureQueueLoaded(); pushQueueEntry(walletId, entry); };
+        return async (entry) => (await enqueueSignedBroadcast(walletId, entry)).persisted;
+    }
+    /**
+     * Add one signed transaction to the live queue and wait for its durable
+     * snapshot. Direct broadcasters use the returned entry to report the
+     * handoff without duplicating the queue's rehydrate and twin rules.
+     *
+     * @param {string} walletId
+     * @param {any} entry
+     * @returns {Promise<{ entry: import('./broadcastQueueStorage.js').QueueEntry, persisted: boolean }>}
+     */
+    async function enqueueSignedBroadcast(walletId, entry) {
+        await ensureQueueLoaded();
+        // A first list in the gap after the 'queued' stamp may have rebuilt
+        // these bytes already; give that entry the verdict instead of a twin.
+        const twin = liveTwinOf(walletId, entry);
+        if (twin) adoptSnapshotVerdict(twin, entry);
+        const stored = twin ?? pushQueueEntry(walletId, entry);
+        return { entry: stored, persisted: await persistQueue() };
+    }
+    // Find the live entry for the same PendingTx and the same signed bytes.
+    function liveTwinOf(walletId, entry) {
+        const pendingTxId = entry?.pendingTxId;
+        if (typeof pendingTxId !== 'string' || !pendingTxId) return null;
+        return getQueue(walletId).find(
+            (e) => e.pendingTxId === pendingTxId && e.signedTxHex === entry.signedTxHex,
+        ) ?? null;
     }
     /**
      * Push a signed-but-unbroadcast tx onto the per-walletId queue.
@@ -636,7 +730,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * had already claimed, so the banner can say the attempt was interrupted
      * and the broadcast route can read an "already known" reply as delivery.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string | null, adsCommit?: { chainId: string, donationIncluded: boolean } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -655,6 +749,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 ? { pendingTxId: entry.pendingTxId }
                 : {}),
             ...(entry.resumedClaim === true ? { resumedClaim: true } : {}),
+            ...commitLandedFields(entry),
             ...(adsCommit
                 && typeof adsCommit === 'object'
                 && typeof adsCommit.chainId === 'string'
@@ -663,10 +758,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 : {}),
         };
         getQueue(walletId).push(stored);
-        // Fire-and-forget: onBroadcastFailure callers (every signing
-        // action route) intentionally don't await pushQueueEntry,
-        // so we can't make it a Promise. The persist runs in the
-        // background; load + restart guarantees consistency on next boot.
+        // Start a background save for the vault rebuild, which pushes in a loop.
+        // Callers that need the entry on disk (the onBroadcastFailure hook and
+        // the renderer enqueue route) await their own persistQueue() after this.
         void persistQueue();
         return stored;
     }
@@ -748,6 +842,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         restoreQueueFromVault,
         reconcileRestoredEntries,
         enqueueOnBroadcastFailure,
+        enqueueSignedBroadcast,
         pushQueueEntry,
         settleQueuedPendingTx,
         applyPendingTxPatch,

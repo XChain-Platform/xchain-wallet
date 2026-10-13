@@ -557,7 +557,9 @@ export function PublishFileForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and "File
         // published" would claim a permanent publish that never happened.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="file publish" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="file publish" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>

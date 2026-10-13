@@ -29,9 +29,23 @@ const { createBackgroundTransport } = signers;
 
 // Most ids one `register` message may carry. A renderer announces the
 // hardware signers it holds live, which is a handful; the desktop
-// listener caps the same message at the same number. Matching it keeps
-// one invariant on the shared registry instead of two.
+// listener caps the same message at the same number.
 export const MAX_SIGNER_IDS_PER_MESSAGE = 64;
+
+// Most ids one port may hold across all its messages, matching desktop's
+// MAX_SIGNER_IDS_PER_SENDER (the per-message cap alone lets N messages keep
+// 64*N transports). Owned ids re-register free; unregister and disconnect free room.
+export const MAX_SIGNER_IDS_PER_SENDER = 64;
+
+// Count only the valid ids this port does not already own. An id a newer page
+// took over still counts until this port unregisters it or disconnects.
+function fitsPortQuota(ownedIds, signerIds) {
+    const adds = new Set();
+    for (const id of signerIds) {
+        if (typeof id === 'string' && id.length > 0 && !ownedIds.has(id)) adds.add(id);
+    }
+    return ownedIds.size + adds.size <= MAX_SIGNER_IDS_PER_SENDER;
+}
 
 /**
  * Attach the signer-bridge onConnect listener. Returns a detach
@@ -72,6 +86,8 @@ export function attachSignerBridgeListener(chromeRuntime) {
                 // oversized message is a bug or a misbehaving page and half a
                 // registry is worse than none.
                 if (msg.signerIds.length > MAX_SIGNER_IDS_PER_MESSAGE) return;
+                // Drop the whole batch when it would push this port past its total cap.
+                if (!fitsPortQuota(ownedIds, msg.signerIds)) return;
                 // No cross-owner guard here, unlike the desktop twin, and that
                 // is deliberate: isTrustedExtensionSender collapses popup,
                 // full-screen tab and side panel to ONE trust level, and the

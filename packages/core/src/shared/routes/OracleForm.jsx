@@ -474,7 +474,11 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         // Signed but not broadcast yet: nothing is priced, so no success copy.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} what="price publish" />);
+        if (result?.queued) {
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="price publish" unsaved={result.unsaved} />,
+            );
+        }
         if (result?.psbtHex && !txid) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }

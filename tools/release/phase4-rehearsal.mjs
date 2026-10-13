@@ -32,7 +32,8 @@
 // each got wrong in turn. A Phase 4 signing run reads from TWO trees at once:
 //
 //   the SCRIPT side  - sign.sh, verify.sh and lib.sh come from the checkout
-//                      the operator invokes.
+//                      the operator invokes, and so do the files lib.sh
+//                      loads from its own directory.
 //   the REPO side    - shipped-lanes.txt comes from the tree passed to
 //                      --repo, which is the TAG's copy.
 //
@@ -87,9 +88,16 @@ export const EXECUTABLE_GATES = [
     'tools/release/launch-probe.mjs',
 ];
 
+// List the files lib.sh loads from its own directory (`$here/...`), always the invoking checkout's copy.
+export const LIB_SH_DEPENDENCIES = [
+    'tools/release/update-info.mjs',
+    'tools/release/store-profile-status.txt',
+];
+
 // Read a pin with no pinFormat with the fixed legacy split, which is what recorded it.
-// Format 3 adds the executable gates; formats 1 and 2 keep the lists they were recorded with.
-export const PIN_FORMAT = 3;
+// Format 3 adds the executable gates and format 4 lib.sh's own-directory files;
+// older formats keep the lists they were recorded with.
+export const PIN_FORMAT = 4;
 
 /**
  * The script-side and repo-side files for a release set, mirroring lib.sh's
@@ -99,6 +107,9 @@ export const PIN_FORMAT = 3;
  * From format 3 the executable gates join the repo side, because the tag's copy
  * wins. A gate named in `gateFallback` moves to the script side instead: sign.sh
  * ran this checkout's copy, so those are the bytes to hash and gate.
+ *
+ * From format 4 the files lib.sh loads from its own directory join the script
+ * side for both release sets, since lib.sh is always the invoking checkout's.
  *
  * @param {string} releaseSet  'release' or 'staging'
  * @param {number} [pinFormat] the pin format to read; below 2 is the fixed legacy split
@@ -117,8 +128,9 @@ export function signingPathFiles(releaseSet, pinFormat = PIN_FORMAT, { gateFallb
         ? { script: [...SIGNING_SCRIPTS, ...SIGNING_CONTROLS], repo: [LANE_ROSTER] }
         : { script: SIGNING_SCRIPTS, repo: [LANE_ROSTER, ...SIGNING_CONTROLS] };
     if (pinFormat < 3) return split;
+    const ownDir = pinFormat < 4 ? [] : LIB_SH_DEPENDENCIES;
     return {
-        script: [...split.script, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
+        script: [...split.script, ...ownDir, ...EXECUTABLE_GATES.filter((p) => gateFallback.includes(p))],
         repo: [...split.repo, ...EXECUTABLE_GATES.filter((p) => !gateFallback.includes(p))],
     };
 }
@@ -235,6 +247,9 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
 export function classify(output) {
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
+    // Match sign.sh's own dev-mock refusal before any vocabulary test: sign.sh exits right after it,
+    // and the gate output it echoes says "missing", which the generic match below reads as lane scope.
+    if (/pre-sign dev-mock gate FAILED/.test(output)) return 'gpg-key-named';
     if (/XCHAIN_RELEASE_GPG_KEY is not set/.test(output)) return 'invoked';
     if (/unknown argument/.test(output)) return 'invoked';
     // The gpg markers are tested FIRST, because reaching them means every
@@ -256,6 +271,43 @@ export function classify(output) {
     if (/^verify-signatures: |verify-signatures\.mjs is in neither tree/m.test(output)) return 'artifact-set';
     if (/UNSIGNED|UNDECLARED|missing/i.test(output)) return 'lane-scope';
     return 'invoked';
+}
+
+// The variables sign.sh reads in place of an absent flag. A rehearsal's scope
+// comes from its arguments alone, so `probe` never inherits these.
+export const SCOPE_ENV = [
+    'XCHAIN_RELEASE_LANES',
+    'XCHAIN_RELEASE_TAG',
+    'XCHAIN_RELEASE_DIR',
+    'XCHAIN_RELEASE_REPO',
+    'SIGN_SKIP_DEV_MOCK_CHECK',
+];
+
+/** The environment `probe` hands sign.sh: `base` without SCOPE_ENV, then the caller's explicit overrides. */
+export function probeEnv(base, overrides = {}) {
+    const env = { ...base };
+    for (const k of SCOPE_ENV) delete env[k];
+    return { ...env, ...overrides };
+}
+
+/**
+ * Where sign.sh's own output says the run's scope differs from what `pin` records.
+ * (sign.sh reads XCHAIN_RELEASE_LANES only when no --lane was given, so a
+ * PARTIAL line is a mismatch only when no lane was requested.)
+ *
+ * @param {{ output: string, lane: string | null }} args
+ * @returns {string[]} reasons, empty when consistent
+ */
+export function scopeMismatch({ output, lane }) {
+    const reasons = [];
+    const partial = /PARTIAL release - gating against lane\(s\): ([^\n]*)/.exec(String(output))?.[1];
+    if (partial && !lane) {
+        reasons.push(`sign.sh gated a PARTIAL release (${partial.trim()}) although no --lane was given`);
+    }
+    if (/dev-mock gate SKIPPED/.test(String(output))) {
+        reasons.push('sign.sh skipped the dev-mock gate, so the depth recorded past it was never gated');
+    }
+    return reasons;
 }
 
 /**
@@ -291,7 +343,7 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
         // signature step is expected to be unreachable here and that is the
         // honest outcome, not a failure of this tool.
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...env },
+        env: probeEnv(process.env, env),
     });
     const output = `${r.stdout || ''}${r.stderr || ''}`;
     const reached = r.status === 0 ? 'signature' : classify(output);
@@ -312,10 +364,12 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
 // first one pinned a progress message as the blocker. A refusal is the last
 // thing a run says before it stops. The two executable gates refuse under their
 // own prefixes, so those count too (hyphenated `launch-probe:`, never the spaced progress line).
+// gpg's own `gpg:` line counts as well: sign.sh runs gpg under set -e and prints
+// nothing after a gpg failure, so its last `sign.sh:` line there is the "signing manifest" progress line.
 export function firstRefusal(output) {
     const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe):/.test(lines[i])) return lines[i];
+        if (/^(sign\.sh|release\/lib\.sh|verify-signatures|launch-probe|gpg):/.test(lines[i])) return lines[i];
     }
     return lines[lines.length - 1] || null;
 }
@@ -384,6 +438,14 @@ function cmdPin(argv) {
             + `tree than this tool expected: ${mismatched.join(', ')}. The tag tree's copy should win `
             + 'wherever it exists, and this checkout\'s copy should run only where the tag predates the gate. '
             + 'Bring gateFallbackFor() back in line with sign.sh gate_script first.');
+        return 1;
+    }
+    // Refuse when sign.sh says it ran a different scope than the one this pin would record.
+    const scope = scopeMismatch({ output: result.output, lane });
+    if (scope.length) {
+        console.error('[phase4-rehearsal] refusing to pin: sign.sh ran a different scope than requested:');
+        for (const reason of scope) console.error(`  ${reason}`);
+        console.error('\n  Pass the scope explicitly (--lane) and keep it out of the environment, then re-drive.');
         return 1;
     }
     // The commit that last touched the SIGNING PATH, not bare HEAD.

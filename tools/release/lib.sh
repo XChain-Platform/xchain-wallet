@@ -37,15 +37,16 @@
 #     <sha256>  ./xchain-wallet-web-v0.333.1.tar.gz
 #     ...
 #
-# Version 2 added the profile lines. A build profile is which
-# SET OF FEATURES was compiled in, and v1 has exactly two: `default`
-# (web, desktop, extension) and `store` (the mobile store builds, which
-# compile OUT the surfaces the app-store review posture hides, per
-# §2.3). Two artifacts of one tag can therefore contain different code,
-# and a record whose whole job is to prove what shipped could not say
-# which was which. The mapping is one profile per artifact, taken from
-# the same committed expected-artifacts.txt that gates the set, so it is
-# a property of the declared release rather than of the machine.
+# Version 2 added the profile lines. A build profile records which build
+# configuration produced an artifact, and v1 has exactly two: `default`
+# (web, desktop, extension) and `store` (the mobile store builds, with
+# store-specific CSP, sourcemaps, packaging, and a signed profile stamp).
+# The 2026-10-09 review decision ships every product surface in both profiles;
+# a profile name does not imply a reduced surface set. Two artifacts of one tag
+# can still contain different build controls, and a record whose whole job is
+# to prove what shipped must say which was which. The mapping is one profile
+# per artifact, taken from the same committed expected-artifacts.txt that gates
+# the set, so it is a property of the declared release rather than of the machine.
 #
 # There is no version-1 compatibility branch: nothing has been published
 # yet (RELEASE_HASHES/ holds no manifests), so a v1 reader would be dead
@@ -234,8 +235,12 @@ XR_STAGING_OSES=(linux mac windows)
 # `store-only` is every lane that ships through a store: Play, the App
 # Stores, Snap, Chrome. The store IS their update channel, so a release
 # covering only such lanes carries no electron-updater pointer and has no
-# desktop update path to rehearse - which is why publish.sh waives both
-# checks for them.
+# desktop update path to rehearse. publish.sh waives the pointer check for
+# them, and waives the §7.5 rehearsal only when the release also carries no
+# artifact a DIRECT lane distributes: the android lane is store-only here
+# and still ships the sideloaded APK through android/latest.json, so an
+# android partial must pass `rehearse.mjs run --lane android-direct`
+# (rehearsal-matrix.mjs --direct-lanes-for answers which direct lanes apply).
 #
 # `updater` is the three desktop lanes, whose users update through OUR
 # feed: a channel pointer we publish, walked by electron-updater, proven
@@ -410,13 +415,12 @@ xr_profile_for() {
 # Refuse a release that labels an artifact `store` before the store build
 # profile exists as a build mechanism.
 #
-# Recording a profile is not producing one. The compile-time flags that
-# make a `store` build differ from a `default` one are not written yet
-# (§2.3), so writing `store` into a
-# signed, append-only record today would be a FALSE claim: a verifier would
-# read it as "the review-hidden surfaces are absent" from a build that
-# still contains them. That is worse than saying nothing, so it fails shut
-# and the status file says how to open it.
+# Recording a profile is not producing one. Until the compile-time profile
+# mechanism exists, writing `store` into a signed, append-only record would be
+# a false claim about the CSP, sourcemap posture, packaging inputs, and profile
+# stamp carried by the artifact. That is worse than saying nothing, so this
+# fails shut and the status file says how to open it. Surface membership is
+# governed independently by packages/web/src/surfaces/registry.js.
 # Args: dir expected_file
 xr_assert_store_profile_buildable() {
     local dir="$1" expected="$2" here status name has_store=0
@@ -648,6 +652,80 @@ xr_header_field() {
 # Args: tag
 xr_release_tag_of() {
     printf '%s\n' "$1" | sed -E 's/-resign[0-9]+$//'
+}
+
+# One field of an android-ceremony.sh provenance record, whitespace removed.
+# The ceremony pads values unevenly (`rehearsal:  yes`, `dirty_paths: 0`), so
+# the key is matched as a line prefix and the padding is dropped.
+# Args: record-file key
+xr_ceremony_record_field() {
+    awk -v k="$2" 'index($0, k ":") == 1 {
+        sub(/^[^:]*:[[:space:]]*/, ""); gsub(/[[:space:]]/, ""); print; exit
+    }' "$1"
+}
+
+# Refuse an input directory whose ceremony records say its bytes are not a
+# release. android-ceremony.sh --rehearsal builds the working tree (dirty,
+# not at the tag) yet signs with the real K9/K10 keys and stages under the
+# release filenames, so records/ is the only thing that tells the two apart.
+# Every other gate reads top-level files only and never sees it.
+#
+# A directory WITHOUT records/ passes: a full release set legitimately holds
+# Android files copied out of the ceremony directory without their record.
+# A re-sign tag is accepted when the record names its release tag's commit.
+# Args: input-dir tag tag-commit repo
+xr_check_ceremony_records() {
+    local input="$1" tag="$2" tag_commit="$3" repo="$4"
+    local marker="$input/records/DO-NOT-PUBLISH.txt"
+    local prov="$input/records/PROVENANCE.txt"
+    local why="" rehearsal dirty rec_commit rec_head release_tag release_commit
+
+    if [[ -f "$marker" ]]; then
+        echo "sign.sh: ceremony record refuses this signing: $marker exists:" >&2
+        sed 's/^/    /' "$marker" >&2
+        echo "  These are rehearsal artifacts. Re-run android-ceremony.sh without" >&2
+        echo "  --rehearsal from a clean checkout of the tag, into a fresh --output." >&2
+        return 1
+    fi
+    [[ -f "$prov" ]] || return 0
+
+    rehearsal="$(xr_ceremony_record_field "$prov" rehearsal)"
+    dirty="$(xr_ceremony_record_field "$prov" dirty_paths)"
+    rec_commit="$(xr_ceremony_record_field "$prov" tag_commit)"
+    rec_head="$(xr_ceremony_record_field "$prov" head)"
+
+    if [[ "$rehearsal" != "no" ]]; then
+        why="rehearsal is '${rehearsal:-missing}', expected 'no'"
+    elif [[ "$dirty" != "0" ]]; then
+        why="dirty_paths is '${dirty:-missing}', expected '0'"
+    elif [[ -z "$rec_commit" || "$rec_commit" == "none" ]]; then
+        why="tag_commit is '${rec_commit:-missing}': the build named no tagged commit"
+    elif [[ "$rec_head" != "$rec_commit" ]]; then
+        why="head '${rec_head:-missing}' is not tag_commit '$rec_commit'"
+    elif [[ "$rec_commit" != "$tag_commit" ]]; then
+        release_tag="$(xr_release_tag_of "$tag")"
+        release_commit=""
+        if [[ "$release_tag" != "$tag" ]]; then
+            release_commit="$(git -C "$repo" rev-parse --verify --quiet \
+                "refs/tags/$release_tag^{commit}" 2>/dev/null || true)"
+        fi
+        if [[ -z "$release_commit" || "$rec_commit" != "$release_commit" ]]; then
+            why="tag_commit '$rec_commit' is not $tag ($tag_commit)"
+            if [[ "$release_tag" != "$tag" ]]; then
+                why+=" nor its release tag $release_tag (${release_commit:-not found in $repo})"
+            fi
+        fi
+    fi
+
+    if [[ -n "$why" ]]; then
+        echo "sign.sh: ceremony record refuses this signing: $prov" >&2
+        echo "  $why" >&2
+        echo "  The manifest would claim these bytes came from $tag when the" >&2
+        echo "  ceremony that built them says otherwise. Re-run android-ceremony.sh" >&2
+        echo "  without --rehearsal from a clean checkout of the tag." >&2
+        return 1
+    fi
+    return 0
 }
 
 # True if the manifest carries the signed header at all.
@@ -1187,12 +1265,6 @@ xr_check_payload_arches() {
         [[ -n "$arch" ]] || continue
         n="$(xr_check_payload_arch "$dir" "$name" "$arch")"
         problems=$((problems + n))
-        # The same set answers a second question, and the §7.5 rehearsal got
-        # it wrong: does the payload carry the addon a Linux
-        # install compiles? Tallied apart from the arch count so each gate
-        # reports the defect it actually found.
-        n="$(xr_check_payload_native "$dir" "$name")"
-        native=$((native + n))
     done < <(xr_list_artifacts "$dir")
 
     if [[ "$problems" -gt 0 ]]; then
@@ -1674,7 +1746,12 @@ xr_check_shipped_lanes() {
             return 1
         fi
 
-        for pat in $rest; do
+        # Split into words WITHOUT pathname expansion: an unquoted word loop
+        # over the raw string would expand each glob against the operator's
+        # working directory and compare the filenames it found instead.
+        local -a rest_pats=()
+        read -r -a rest_pats <<< "$rest"
+        for pat in "${rest_pats[@]}"; do
             # Drift direction 1: this file must not describe artifacts the
             # release list has never heard of.
             matched=0

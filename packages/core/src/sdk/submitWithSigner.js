@@ -30,15 +30,18 @@
 import { assertSigningAllowed } from '../flows/panicMode.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
+import { capRbfToDescriptor } from '../flows/rbfCap.js';
 import { applyNativeFeePreflight } from './nativeFeePreflight.js';
 import { annotateEncoderFeeRequirement } from './encoderErrors.js';
 import { applyOracleFeePreflight } from './oracleFeePreflight.js';
 import {
-    isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput,
+    isBareNativePayment, withNativePaymentOutput, hasNativePaymentOutput, nativePaymentOutput,
 } from '../flows/nativePayment.js';
 import { recordPendingCommit, clearPendingCommit } from '../shared/utils/envelopeRecoveryMemory.js';
 import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
+import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
+import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
@@ -103,12 +106,10 @@ export class BroadcastFailedError extends Error {
 export class HardwareChunkLaneError extends Error {
     /** @param {{ action: string, encoding: string, signerKind?: string }} fields */
     constructor({ action, encoding, signerKind }) {
-        super(`This ${action} is too large for one transaction: the network carries it as a `
-            + `${encoding} pair, a commit plus a revealing transaction signed after the first `
-            + `is broadcast. ${signerKind ? `A ${signerKind} signer` : 'This signer'} cannot sign `
-            + 'that revealing transaction, and broadcasting only the first would spend coin into '
-            + 'a script that nothing can open and record no action at all. Use a software wallet '
-            + 'key for this action.');
+        super(`${chunkLaneOpener(action)}, and the second is signed after the first is `
+            + `broadcast. ${signerSubject(signerKind)} cannot sign that second transaction, and `
+            + 'broadcasting only the first would spend coin into a script that nothing can open '
+            + 'and record no action at all. Use a software wallet key for this action.');
         this.name = 'HardwareChunkLaneError';
         this.userFacing = true;
         this.action = action;
@@ -133,16 +134,14 @@ export class EnvelopeConfirmLaneError extends Error {
      *   commitMismatch: the signed commit is not the one the reveal spends
      */
     constructor({ action, encoding, commitMismatch = false }) {
-        super(`This ${action} is too large for one transaction: the network carries it as a `
-            + `${encoding} pair, a commit plus a revealing transaction that must be signed before `
-            + 'the first is broadcast. '
+        super(`${chunkLaneOpener(action)}, and both must be signed before the first is broadcast. `
             + (commitMismatch
-                ? 'The commit that was signed is not the transaction its revealing transaction '
-                  + 'spends, and broadcasting it would spend coin into a script that nothing can '
-                  + 'open and record no action at all, so nothing was broadcast. '
-                : 'The revealing transaction or its recovery record did not '
-                  + 'arrive with the commit, and broadcasting only the first would spend coin into a '
-                  + 'script that nothing can open and record no action at all, so nothing was signed. ')
+                ? 'The first transaction that was signed is not the one the second spends, and '
+                  + 'broadcasting it would spend coin into a script that nothing can open and record '
+                  + 'no action at all, so nothing was broadcast. '
+                : 'The second transaction or its recovery record did not arrive with the first, '
+                  + 'and broadcasting only the first would spend coin into a script that nothing can '
+                  + 'open and record no action at all, so nothing was signed. ')
             + 'Try again.');
         this.name = 'EnvelopeConfirmLaneError';
         this.userFacing = true;
@@ -193,7 +192,7 @@ export function isCompleteEnvelope(built) {
 export function assertCompleteEnvelope(built, action) {
     if (isEnvelopePair(built) && !isCompleteEnvelope(built)) {
         throw new EnvelopeConfirmLaneError({
-            action: action || 'action',
+            action,
             encoding: typeof built.encoding === 'string' ? built.encoding : 'TAPROOT',
         });
     }
@@ -247,6 +246,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {(txid: string, opts?: { timeout?: number, pollInterval?: number, requireValid?: boolean }) => Promise<unknown>} [waitForTxid]
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
+ * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
  */
 
 /**
@@ -281,6 +281,7 @@ export async function submitWithSigner({
     waitForTxid,
     waitOpts,
     onProgress = () => {},
+    beforeBroadcast,
 }) {
     if (!sdkRegistry) throw new Error('submitWithSigner: sdkRegistry is required');
     if (!actionData?.action) throw new Error('submitWithSigner: actionData.action is required');
@@ -381,6 +382,21 @@ export async function submitWithSigner({
         bareNativePayment = isBareNativePayment(actionData, chainRegistry?.get(chainId));
         createResult = bareNativePayment ? null : sdk.actions.createAction(actionData);
 
+        const envelopeRequest = createResult
+            ? envelopeEncoderOpts({
+                descriptor: chainRegistry?.get(chainId),
+                signer,
+                encoderOpts,
+                compiledBytes: compiledPayloadByteLen(
+                    createResult.actionString,
+                    encoderOpts.rawData,
+                ),
+            })
+            : null;
+        const requestedEncoderOpts = envelopeRequest
+            ? { ...encoderOpts, ...envelopeRequest }
+            : encoderOpts;
+
         // Step 1b: native-coin fee pre-flight. When the caller opted to pay the protocol fee in the
         // native coin, this sizes the FEE_DESTINATION output and REFUSES (throws NativeFeeForfeitError)
         // a transaction that can't be safely priced. A failed native-fee action forfeits the fee.
@@ -388,7 +404,7 @@ export async function submitWithSigner({
         preflight = await applyNativeFeePreflight({
             sdk,
             actionData,
-            encoderOpts,
+            encoderOpts: requestedEncoderOpts,
             // Who is SPENDING, which the dry run behind this quote resolves the
             // holder and the balance from. `sourceAddress` is the address the SDK
             // funds from and is that spender on every flow that sets it; `change`
@@ -403,7 +419,7 @@ export async function submitWithSigner({
             // rotated address - unfunded, holding none of the token - and the
             // indexer's `valid:false` surfaced as a NativeFeeForfeitError on a
             // transaction that was perfectly fundable.
-            source: encoderOpts.sourceAddress || encoderOpts.change,
+            source: requestedEncoderOpts.sourceAddress || requestedEncoderOpts.change,
             onProgress,
         });
         // Step 1c: PRICE v1 oracle usage fee. A Mode B dispenser must pay its oracle
@@ -416,7 +432,8 @@ export async function submitWithSigner({
             encoderOpts: preflight.encoderOpts,
             onProgress,
         });
-        effectiveEncoderOpts = oraclePreflight.encoderOpts;
+        // Cap RBF to the chain's descriptor; the encoder signals it on any chain it is asked to.
+        effectiveEncoderOpts = capRbfToDescriptor(chainRegistry?.get(chainId), oraclePreflight.encoderOpts);
 
         // Step 1d: the native-fee output must be EMITTED on the
         // transaction that carries the ACTION. The indexer validates the
@@ -442,21 +459,29 @@ export async function submitWithSigner({
         // `advancedAction` route forwards pubkey/sourceAddress/change/fee opts
         // and nothing else, so a native SEND through the parallel composer built
         // a transaction with no OP_RETURN and no payment. Idempotent, so the
-        // callers that pre-supply it keep their bytes.
-        if (bareNativePayment) {
-            effectiveEncoderOpts = withNativePaymentOutput({
-                actionData,
-                descriptor: chainRegistry?.get(chainId),
-                encoderOpts: effectiveEncoderOpts,
-            });
-            // Fail closed rather than sign a send that pays nobody. The fold
-            // above makes this unreachable today; it is here so the next route
-            // that skips it fails loudly instead of broadcasting.
-            if (!hasNativePaymentOutput(actionData, chainRegistry?.get(chainId), effectiveEncoderOpts)) {
-                throw new Error(
-                    'submitWithSigner: a native-coin send must carry its destination payment output',
-                );
-            }
+        // callers that pre-supply it keep their bytes. Not gated on a bare
+        // payment, exactly like composeForConfirm: a native SEND carrying a
+        // MEMO keeps its action string and still pays the recipient.
+        const paymentDescriptor = chainRegistry?.get(chainId);
+        effectiveEncoderOpts = withNativePaymentOutput({
+            actionData,
+            descriptor: paymentDescriptor,
+            encoderOpts: effectiveEncoderOpts,
+        });
+        // Fail closed rather than sign a native send that pays nobody. The
+        // fold above makes this unreachable today; it is here so the next
+        // route that skips it fails loudly instead of broadcasting.
+        const paymentParams = actionData?.params || {};
+        const owedPayment = nativePaymentOutput({
+            tick: paymentParams.TICK,
+            amount: paymentParams.AMOUNT,
+            destination: paymentParams.DESTINATION,
+            descriptor: paymentDescriptor,
+        });
+        if (owedPayment && !hasNativePaymentOutput(actionData, paymentDescriptor, effectiveEncoderOpts)) {
+            throw new Error(
+                'submitWithSigner: a native-coin send must carry its destination payment output',
+            );
         }
 
         // Step 2: encode to PSBT via the encoder service.
@@ -572,21 +597,26 @@ export async function submitWithSigner({
             // here, before the commit exists.
             envelopeReveal: true,
         });
-        // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
-        // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
-        // cannot persist, and a throw here means we never broadcast: an unrecorded
-        // commit is an unrecoverable one.
-        if (encoded.envelope) {
-            recordPendingCommit({
-                commitTxid:      encoded.envelope.commitTxid,
-                commitVout:      encoded.envelope.commitVout,
-                commitValue:     encoded.envelope.commitValue,
-                commitAddress:   encoded.envelope.commitAddress,
-                internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
-                tapleafHash:     encoded.envelope.tapleafHash,
-                coin:            chainId,
-            });
-        }
+    }
+
+    if (typeof beforeBroadcast === 'function') {
+        await beforeBroadcast({ signed, revealSigned: envelopeRevealSigned });
+    }
+
+    // §3.5: the key-path cancel needs {outpoint, internal key path, tapleaf
+    // hash} and cannot be rebuilt without them. recordPendingCommit THROWS if it
+    // cannot persist, and a throw here means we never broadcast: an unrecorded
+    // commit is an unrecoverable one.
+    if (envelopePair && encoded.envelope) {
+        recordPendingCommit({
+            commitTxid:      encoded.envelope.commitTxid,
+            commitVout:      encoded.envelope.commitVout,
+            commitValue:     encoded.envelope.commitValue,
+            commitAddress:   encoded.envelope.commitAddress,
+            internalKeyPath: signingPaths?.[0]?.path || encoded.envelope.internalPubkey,
+            tapleafHash:     encoded.envelope.tapleafHash,
+            coin:            chainId,
+        });
     }
 
     // Step 4: broadcast phase-1 tx. Wrap rejections so submitAction

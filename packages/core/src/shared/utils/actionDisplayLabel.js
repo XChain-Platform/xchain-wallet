@@ -42,7 +42,9 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     CROSSCHAIN: 'Cross-chain',
     LIST: 'Recipient list',
     PRICE: 'Price',
-    SLEEP: 'Scheduled delay',
+    // Name SLEEP by all three things it does (lock an address, pause a token,
+    // resume a paused token): a History row cannot tell them apart by name.
+    SLEEP: 'Lock, pause or resume',
     COLLECT: 'Collect rewards',
     DELEGATE: 'Delegate',
     DEPLOY: 'Publish contract',
@@ -64,6 +66,7 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     ANCHOR: 'Network checkpoint',
     ATTEST: 'Validator attestation',
     NODEPROOF: 'Node proof',
+    LIST_SHARE: 'Shared list settlement',
     // ROLLCALL closes a liveness epoch: one on-chain record of which
     // validators were present and which were absent. A holder only ever sees
     // it because a validator address they watch published or was named in it.
@@ -71,6 +74,7 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     SLASH: 'Validator penalty',
     XCALL: 'Cross-chain call',
     XEXEC: 'Cross-chain execution',
+    XPOLICY: 'Bridge policy settlement',
     CROSS_SETTLE: 'Cross-chain settlement',
     // XBRIDGE is one verb over four user versions (lock / burn) plus the two
     // mirror-injected settle legs, and a History row cannot tell them apart
@@ -91,6 +95,7 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // cancels their own order reads the result in their own History.
     BET: 'Bet',
     BET_EXPIRE: 'Bet expired',
+    BET_EDIT: 'Bet updated',
     COINPAY_EXPIRE: 'Coin payment expired',
     DISPENSER_CANCEL: 'Dispenser cancelled',
     DISPENSER_CLOSE: 'Dispenser closed',

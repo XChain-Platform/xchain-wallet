@@ -199,8 +199,8 @@ const api = ZONE_RULES.find((r) => r.name === 'API Rate Limit');
 assert.ok(general && api, 'both zone rules must be recorded');
 assert.deepEqual(
     [general.threshold, general.periodSec, api.threshold, api.periodSec],
-    [90, 60, 564, 10],
-    'the General rule is 90 per minute and the API rule 564 per 10 seconds, the plan\'s shortest window',
+    [90, 60, 168, 10],
+    'the General rule is 90 per minute and the API rule 168 per 10 seconds, the plan\'s shortest window',
 );
 assert.equal(api.action, 'Block 429, 10 seconds', 'the API rule\'s mitigation is the 10 s minimum, not a minute');
 assert.equal(general.matches('/icon/favicon.png', 'wallet.xchain.io'), false, 'the General rule excludes /icon/');
@@ -258,7 +258,7 @@ assert.equal(apiRow.skipped, 0, 'no request of this session is skipped by rule 9
 assert.equal(generalRow.skipped, 0);
 assert.equal(apiRow.worstCasePerPeriod, oneAddress.total * ATTEMPTS_PER_CALL, 'retries are counted at the edge too');
 assert.equal(apiRow.requiredPerPeriod, oneAddress.total * ATTEMPTS_PER_CALL * 3);
-assert.equal(apiRow.fitsToday, true, 'one cold-open with retries fits under 564');
+assert.equal(apiRow.fitsToday, true, 'one cold-open with retries fits under 168');
 assert.equal(apiRow.clearsRequirement, true, 'and so does the same cold-open times the headroom multiplier');
 assert.equal(generalRow.clearsRequirement, true);
 
@@ -341,7 +341,7 @@ console.log(
     + ' re-fire on a poll whose token set is unchanged; an alt-tab costs one poll after the data has'
     + ' aged and none before, driven through the shipped throttle; both zone rules are transcribed as'
     + ' read off the rule editors, the General one at 90 per minute excluding the three API hosts and the'
-    + ' API one at 564 per 10s matching them by hostname, with rule 9\'s rate-limit skip down to eleven'
+    + ' API one at 168 per 10s matching them by hostname, with rule 9\'s rate-limit skip down to eleven'
     + ' hosts and rule 10\'s SBFM-only skip on the three, so the API rule counts every request of the'
     + ' session and the General rule counts none; the API rule\'s requirement and the per-route worst'
     + ' minute are derived with the wallet\'s own retry multiplier and poll constants)',

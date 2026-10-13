@@ -594,6 +594,34 @@ assert.ok(/path:\s*\.docs-sibling/.test(testJob),
 assert.ok(/^\s{6}XCHAIN_DOCS_ROOT:\s*\$\{\{\s*github\.workspace\s*\}\}\/\.docs-sibling/m.test(testJob),
     'XCHAIN_DOCS_ROOT must point at the same .docs-sibling path the checkout writes; '
     + 'if the two ever disagree the checkout succeeds and every docs smoke still refuses.');
+const manifestCheckout = stepBlocks(testJob)
+    .find((step) => step.includes('- name: Check out the canonical action manifest'));
+assert.ok(manifestCheckout, 'ci.yml must check out the canonical action manifest');
+assert.match(manifestCheckout,
+    /^\s{10}ref:\s*\$\{\{\s*github\.base_ref\s*\|\|\s*\(github\.ref\s*==\s*'refs\/heads\/master'\s*&&\s*'master'\s*\|\|\s*'develop'\)\s*\}\}\s*$/m,
+    'the canonical action manifest checkout must use the PR base, master on master, and develop otherwise');
+assert.match(manifestCheckout, /^\s{10}path:\s*\.docs-sibling\/action-manifest-ref\s*$/m,
+    'the canonical action manifest checkout must stay under the ignored docs sibling');
+assert.ok(/^\s{6}XCHAIN_ACTION_MANIFEST_ROOT:\s*\$\{\{\s*github\.workspace\s*\}\}\/\.docs-sibling\/action-manifest-ref/m.test(testJob),
+    'XCHAIN_ACTION_MANIFEST_ROOT must point at the branch-matched documentation checkout');
+assert.ok(!/^xchain-documentation=/m.test(read('.ci-siblings-pins')),
+    'the venue must follow the pushed documentation branch rather than force master or develop');
+const manifestConformance = read('test/unit/ActionManifestConformance.test.js');
+assert.ok(!/explicitRoot/.test(manifestConformance + read('test/helpers/siblingCheckout.js')),
+    'an explicit docs root must retain the sibling provenance checks');
+assert.match(manifestConformance,
+    /const docs = siblingCheckout\(HERE, DOCS\);\s*const committedRoot = !docs\.usable && docsRoot/,
+    'the manifest guard must retain the sibling provenance verdict before reading canonical bytes');
+assert.match(manifestConformance,
+    /expect\(canonical,[\s\S]*?\)\.toEqual\(committed\);[\s\S]*?expect\(readFileSync\(VENDORED, 'utf8'\),[\s\S]*?\)\.toEqual\(committed\);/,
+    'a supplied live-main checkout must match its committed HEAD before its manifest can be canonical');
+assert.ok(!/DOCS_(?:MASTER|DEVELOP)_MANIFEST_SHA256|createHash\s*\(/.test(manifestConformance),
+    'the manifest identity guard must not admit unequal files through fixed digest exceptions');
+assert.ok(!/fetch\s*\(/.test(manifestConformance),
+    'the manifest identity guard must compare the supplied canonical checkout without a network substitute');
+assert.match(manifestConformance,
+    /if \(!skipOrFail\(ctx, docs, 'the canonical action-manifest\.json byte-identity guard'\)\) return;\s*expect\(readFileSync\(VENDORED, 'utf8'\),[\s\S]*?\)\.toEqual\(readFileSync\(DOCS, 'utf8'\)\)/,
+    'the manifest identity guard must directly compare vendored and supplied canonical bytes');
 
 // --- 10. Every workflow that builds the web SPA raises Node's heap ------
 //

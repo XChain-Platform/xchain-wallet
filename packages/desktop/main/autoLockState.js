@@ -155,7 +155,7 @@ export function autoLockStatePathFor(userDataDir) {
 }
 
 /**
- * Fold a renderer `autolock.report` signal into the stored record.
+ * Fold a renderer `session.autolock` (AUTO_LOCK_REPORT_TYPE) signal into the stored record.
  *
  * Arming re-stamps `lastActivity` so the user always gets a full window
  * from the moment they armed, never an instant lock. Disarming keeps a

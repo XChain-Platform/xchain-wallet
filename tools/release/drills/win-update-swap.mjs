@@ -47,10 +47,11 @@
 //   - It drives `NsisUpdater` with a stub app adapter rather than from
 //     inside Electron, so Electron's own plumbing around the updater is not
 //     exercised.
-//   - It does not run our `updateVerify.js` S5 gate: that gate refuses
-//     everything until K1 is pinned (ceremony A), so a drill including it
-//     could only ever prove the refusal. Its ordering is covered by
-//     test/unit/desktop/updaterInstallGate.test.js.
+//   - It does not run our `updateVerify.js` S5 gate: that gate admits only
+//     bytes listed in a K1-signed manifest, and K1 never sits on a CI runner,
+//     so the unsigned pair this drill builds is in no such manifest and a
+//     drill including the gate could only ever prove the refusal. Its
+//     ordering is covered by test/unit/desktop/updaterInstallGate.test.js.
 //   - `app-update.yml` is written locally WITHOUT `publisherName`, so
 //     electron-updater's Authenticode publisher-match is skipped. The
 //     installers a CI swap-check builds are unsigned; the publisher half is

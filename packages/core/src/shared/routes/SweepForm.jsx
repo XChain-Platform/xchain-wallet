@@ -430,6 +430,7 @@ export function SweepForm({
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // §4.7: reserve the debited balance on the host-shared ledger,
                 // so two windows cannot both approve against the same balance.
                 reservationLedger: {
@@ -595,7 +596,7 @@ export function SweepForm({
         // Signed but not broadcast. None of the post-sweep effects
         // below (auto-pay disarmed, dispensers closing) have happened.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="sweep" />);
+            return wrap(<QueuedResultPanel onDone={onBack} what="sweep" unsaved={result.unsaved} />);
         }
         const forceClose = result?.forceClose;
         return wrap(

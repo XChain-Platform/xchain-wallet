@@ -105,10 +105,9 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
         return { ...base, coin, verdict: 'unavailable', reason: 'quote carries no amount' };
     }
 
-    // Bounds come from the quote's own band when it carries one (the indexer
-    // formats both to 8 dp, so they convert to satoshis exactly) and are
-    // derived from the tolerances only as a fallback, rounded the conservative
-    // way in each direction.
+    // Bounds come from the quote's own band when it converts to satoshis
+    // exactly, and otherwise (absent, or past 8 dp) from the tolerances,
+    // rounded the conservative way in each direction so the band never widens.
     const quotedMinSats = boundSats(
         fresh.minAcceptable, quotedExpectedSats, fresh.toleranceMin, DEFAULT_TOLERANCE_MIN, Math.ceil,
     );
@@ -185,7 +184,8 @@ export function nativeFeeChangedError(cmp, opts) {
  * A native-coin decimal string ('0.04000000') as an integer satoshi count.
  * String arithmetic, not `Number(x) * 1e8`: a float round-trip on a fee
  * amount is exactly the error that would push a comparison across the band
- * boundary it exists to police.
+ * boundary it exists to police. Exact or null: a non-zero digit past the
+ * 8th decimal place returns null rather than being truncated.
  *
  * @param {string|number|null|undefined} value
  * @returns {number|null}
@@ -195,6 +195,8 @@ export function satsFromNativeDecimal(value) {
     const s = String(value).trim();
     if (!/^\d+(\.\d+)?$/.test(s)) return null;
     const [whole, frac = ''] = s.split('.');
+    // Refuse sub-satoshi precision; truncating it would lower a band floor.
+    if (/[1-9]/.test(frac.slice(8))) return null;
     const sats = Number(whole) * 1e8 + Number((frac + '00000000').slice(0, 8));
     return Number.isSafeInteger(sats) ? sats : null;
 }

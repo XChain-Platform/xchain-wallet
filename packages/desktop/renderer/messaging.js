@@ -154,6 +154,16 @@ export function listAccounts(walletId) {
     return /** @type {any} */ (sendMessage('account.list', { walletId }));
 }
 
+/**
+ * Tell the host which wallet the user just selected, so connected dApps get
+ * accountsChanged for it.
+ *
+ * @param {string} walletId
+ */
+export function setActiveWallet(walletId) {
+    return /** @type {any} */ (sendMessage('wallet.setActive', { walletId }));
+}
+
 /** @param {object} opts */
 export function createAccount(opts) {
     return /** @type {any} */ (sendMessage('account.create', opts));
@@ -228,6 +238,14 @@ export function sendToken(opts) {
 }
 
 /**
+ * @param {import('@xchain-wallet/core/flows/rbfReplace.js').RbfRequest} opts
+ * @returns {Promise<import('@xchain-wallet/core/flows/rbfReplace.js').RbfResult>}
+ */
+export function replaceTx(opts) {
+    return /** @type {any} */ (sendMessage('tx.replace', opts));
+}
+
+/**
  * §20 / G040: Watcher-mode encode-only helper.
  * @param {object} opts
  */
@@ -246,7 +264,7 @@ export function buildSendPsbtRequest(opts) {
  * described three different ways across three shells.
  *
  * @param {object} opts   SEND base shape or { actionData, encoderOpts, from }
- * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeWireEnvelope>}
  */
 export function composeForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.composeForConfirm', opts));
@@ -284,6 +302,10 @@ export function reserve(opts) {
 /** @param {{ id: string }} opts */
 export function releaseReservation(opts) {
     return /** @type {any} */ (sendMessage('action.releaseReservation', opts));
+}
+/** Redeem the host's releaseEncoderInputsToken so the encoder frees an abandoned compose's inputs. @param {{ token: string }} opts */
+export function releaseEncoderInputs(opts) {
+    return /** @type {any} */ (sendMessage('action.releaseEncoderInputs', opts));
 }
 
 /**
@@ -1007,13 +1029,21 @@ export function cancelMarketActionHw(opts) {
     return /** @type {any} */ (sendMessage('action.cancelMarket.hw', opts));
 }
 
+export function editBetFeedListsAction(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists', opts));
+}
+
+export function editBetFeedListsActionHw(opts) {
+    return /** @type {any} */ (sendMessage('action.editBetFeedLists.hw', opts));
+}
+
 /**
  * Compose a BET action through the allow-listed sdk.betting.*Params builder
  * host-side, so the confirm page previews the wire params the encoder will see.
  * Resolves with the same envelope as composeForConfirm plus those params.
  *
  * @param {object} opts
- * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { betParams: object }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeWireEnvelope & { betParams: object }>}
  */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
@@ -1255,6 +1285,15 @@ export function getTokenInfo(req) {
     return /** @type {any} */ (sendMessage('token.info', req));
 }
 
+/**
+ * Supply-over-time series for one issued token, for TokenDetail's chart.
+ *
+ * @param {{ chainId: string, tick: string, opts?: object }} req
+ */
+export function getSupplyHistory(req) {
+    return /** @type {any} */ (sendMessage('token.supplyHistory', req));
+}
+
 /** @param {{ chainId: string, query: string, limit?: number }} req */
 export function searchTokens(req) {
     return /** @type {any} */ (sendMessage('tokens.search', req));
@@ -1359,7 +1398,7 @@ export function gatedPublishActionHw(opts) {
  * envelope as composeForConfirm plus the prepared action approval signs.
  *
  * @param {object} opts
- * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeWireEnvelope & { gatedPublish: { actionData: object, keyHash: string, ciphertextLength: number } }>}
  */
 export function composeGatedPublishForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.gatedPublish.composeForConfirm', opts));
@@ -1536,7 +1575,7 @@ export function setActiveNetwork(opts) {
  * the same envelope as composeForConfirm plus the params the encoder saw.
  *
  * @param {object} opts
- * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { voteParams: object }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeWireEnvelope & { voteParams: object }>}
  */
 export function composeVoteForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.vote.composeForConfirm', opts));
@@ -1548,7 +1587,7 @@ export function composeVoteForConfirm(opts) {
  * same envelope as composeForConfirm plus the params the encoder saw.
  *
  * @param {object} opts
- * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeEnvelope & { messageParams: object }>}
+ * @returns {Promise<import('@xchain-wallet/core/flows/composeActionForConfirm.js').HostComposeWireEnvelope & { messageParams: object }>}
  */
 export function composeMessageForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.message.composeForConfirm', opts));
@@ -1656,7 +1695,7 @@ export function listCustomChains() {
     return /** @type {Promise<{ descriptors: object[] }>} */ (sendMessage('chainRegistry.listCustomChains'));
 }
 export function addCustomChain(req) {
-    return /** @type {Promise<{ descriptor: object }>} */ (sendMessage('chainRegistry.addCustomChain', req));
+    return /** @type {Promise<import('@xchain-wallet/core/flows/customChains.js').AddCustomChainResult>} */ (sendMessage('chainRegistry.addCustomChain', req));
 }
 export function removeCustomChain(req) {
     return /** @type {Promise<{ removed: boolean }>} */ (sendMessage('chainRegistry.removeCustomChain', req));
@@ -1899,4 +1938,13 @@ export function listBlocklistAuditLog() {
 
 export function clearBlocklistAuditLog() {
     return /** @type {Promise<{ cleared: number }>} */ (sendMessage('sites.auditLog.clear'));
+}
+
+/**
+ * Cancel a held send before its hold window elapses.
+ * @param {string} holdId
+ * @returns {Promise<{ cancelled: boolean }>}
+ */
+export function sendHoldCancel(holdId) {
+    return /** @type {any} */ (sendMessage('send.holdCancel', { holdId }));
 }

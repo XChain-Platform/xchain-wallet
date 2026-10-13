@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { PRE_HOST_MESSAGE_TYPES } from '../../../packages/extension/src/background/sessionMeta.js';
+import { RELEASE_ENCODER_INPUTS_TYPE } from '../../../packages/extension/src/background/MessageHost.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -200,6 +201,29 @@ describe('background message host (all three shells)', () => {
         expect(inactive).toEqual({ ok: true, result: false });
     });
 
+    it('applies the per-chain gate to actions nested in a composed batch', async () => {
+        // The host must hand its chain registry to the batch builder, or the
+        // nested gate is skipped and a fee-burning batch reaches signing.
+        const builder = {
+            add() { return builder; },
+            build: async () => ({ actionString: 'BATCH|0|SEND|0|a|1|;COLLECT|0|x' }),
+        };
+        const host = makeHost({
+            chainRegistry: { get: (id) => ({ coin: id.split('-')[0] }), list: () => [] },
+            sdkRegistry: { get: () => ({ batch: () => builder }) },
+        });
+        const request = { chainId: 'litecoin-mainnet', subActions: [{ action: 'SEND', params: {} }] };
+        const refused = await host.handle({ type: 'batch.buildCommand', request });
+        expect(refused.ok).toBe(false);
+        expect(JSON.stringify(refused)).toMatch(/accepted on Bitcoin only/);
+
+        const allowed = await host.handle({
+            type: 'batch.buildCommand', request: { ...request, chainId: 'bitcoin-mainnet' },
+        });
+        expect(allowed.ok).toBe(true);
+        expect(allowed.result.subStrings).toHaveLength(2);
+    });
+
     it('refuses to register the same route twice', () => {
         // Two shells (or a merge) quietly clobbering a privileged route with a
         // second handler is a trust-boundary bug, so the host fails loudly.
@@ -268,6 +292,8 @@ describe('client message types against the host route table', () => {
             expect(literal.length, `${file} parsed as ${literal.length} sends`).toBeGreaterThan(floor);
             expect(computed, `${file} sends a computed type this check cannot follow`).toEqual([]);
             for (const type of new Set(literal)) {
+                // MessageHost.handle answers the encoder-input release itself, ahead of the route table.
+                if (type === RELEASE_ENCODER_INPUTS_TYPE) continue;
                 if (registered.has(type) || (preHost && PRE_HOST_MESSAGE_TYPES.has(type))) continue;
                 unrouted.push(`${file} -> '${type}'`);
             }

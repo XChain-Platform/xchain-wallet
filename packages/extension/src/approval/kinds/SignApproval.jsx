@@ -28,6 +28,9 @@ import { PsbtIntentPanel } from '@xchain-wallet/core/shared/components/PsbtInten
 import { PreflightPanel } from '@xchain-wallet/core/shared/components/PreflightPanel.jsx';
 import { ActionIntentSummary } from '@xchain-wallet/core/shared/components/ActionIntentSummary.jsx';
 import { psbtRefusalReason } from '@xchain-wallet/core/shared/components/PsbtConfirmScreen.jsx';
+import { describeUnreadableReason } from '@xchain-wallet/core/shared/components/psbtDecodeReasons.js';
+import { describePolicyReason } from '@xchain-wallet/core/shared/components/coSignPolicyReasons.js';
+import { isDeveloperMessage, userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
@@ -58,7 +61,7 @@ async function resolveTickName(chainId, ref) {
     const key = chainId + '|' + ref;
     if (tickNameCache.has(key)) return tickNameCache.get(key);
     try {
-        const info = await getTokenInfo(chainId, ref);
+        const info = await getTokenInfo({ chainId, tick: ref });
         const name = (info && info.canonicalTick) || null;
         if (name && name !== ref) {
             tickNameCache.set(key, name);
@@ -964,6 +967,64 @@ function HardenedSignedText({ value, warningNoun }) {
  * hex string. Outputs paying the user's own addresses are labelled as
  * change; everything else is money leaving the wallet.
  */
+const COSIGN_UNREADABLE = 'This co-sign request could not be read.';
+
+/**
+ * The alert's first sentence when the co-sign preview failed. Copy written for
+ * a user passes through after the lead sentence; developer text never does.
+ *
+ * @param {string|null} error
+ * @returns {string}
+ */
+function coSignErrorSentence(error) {
+    if (!error) return COSIGN_UNREADABLE;
+    const text = userFacingMessage(error, COSIGN_UNREADABLE);
+    return text === COSIGN_UNREADABLE ? text : `${COSIGN_UNREADABLE} ${text}`;
+}
+
+/**
+ * The alert sentence for an action the wallet could not decode. Names the
+ * cause in plain words when the decoder's code has one; never the raw code.
+ *
+ * @param {string|null} decodeReason
+ * @returns {string}
+ */
+function coSignUndecodedSentence(decodeReason) {
+    const why = describeUnreadableReason(decodeReason);
+    return why
+        ? `The action in this co-sign request could not be read because ${why}.`
+        : 'The action in this co-sign request could not be read.';
+}
+
+/**
+ * The alert sentence for a request the account policy refuses. Names the rule
+ * in plain words when the policy code has one; never the raw code.
+ *
+ * @param {string|null} policyReason
+ * @returns {string}
+ */
+function coSignPolicySentence(policyReason) {
+    const why = describePolicyReason(policyReason);
+    return why
+        ? `This request is outside the account policy because ${why}.`
+        : 'This request is outside the account policy.';
+}
+
+/**
+ * Collapsed disclosure holding a raw code or message for support, kept outside
+ * the alert so a signer reads only plain words.
+ *
+ * @param {{ testId: string, text: string }} props
+ */
+function CoSignTechnicalDetails({ testId, text }) {
+    return (
+        <details className={styles.details} data-testid={testId}>
+            <summary className={styles.detailsToggle}>Technical details</summary>
+            <code style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</code>
+        </details>
+    );
+}
+
 /**
  * Co-sign intent summary (§22 / P4). Shows which agent account is being asked
  * to co-sign, the action decoded from the PSBT (with amount + destinations),
@@ -981,14 +1042,17 @@ function CoSignIntentSummary({ loading, error, preview }) {
     }
     if (error || !preview) {
         return (
-            <ul className={styles.warnings} role="alert">
-                <li>
-                    {error
-                        ? `This co-sign request could not be decoded (${error}). `
-                        : 'This co-sign request could not be decoded. '}
-                    Only approve it if you trust the source.
-                </li>
-            </ul>
+            <>
+                <ul className={styles.warnings} role="alert">
+                    <li>
+                        {coSignErrorSentence(error)}
+                        {' '}Only approve it if you trust the source.
+                    </li>
+                </ul>
+                {error && isDeveloperMessage(error) ? (
+                    <CoSignTechnicalDetails testId="cosign-error-details" text={error} />
+                ) : null}
+            </>
         );
     }
 
@@ -1019,15 +1083,28 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     ) : null}
                 </>
             ) : (
-                <ul className={styles.warnings} role="alert">
-                    <li>The action could not be decoded from this transaction ({preview.decodeReason}).</li>
-                </ul>
+                <>
+                    <ul className={styles.warnings} role="alert">
+                        <li>{coSignUndecodedSentence(preview.decodeReason)}</li>
+                    </ul>
+                    {preview.decodeReason ? (
+                        <CoSignTechnicalDetails testId="cosign-decode-details" text={String(preview.decodeReason)} />
+                    ) : null}
+                </>
             )}
 
             {preview.decodeOk && !preview.policyOk ? (
-                <ul className={styles.warnings} role="alert">
-                    <li>This request is outside the account policy ({preview.policyReason}). The co-signer will refuse it even if you approve.</li>
-                </ul>
+                <>
+                    <ul className={styles.warnings} role="alert">
+                        <li>
+                            {coSignPolicySentence(preview.policyReason)}
+                            {' '}The co-signer will refuse it even if you approve.
+                        </li>
+                    </ul>
+                    {preview.policyReason ? (
+                        <CoSignTechnicalDetails testId="cosign-policy-details" text={String(preview.policyReason)} />
+                    ) : null}
+                </>
             ) : null}
             {preview.decodeOk && preview.policyOk && preview.needsConfirmation ? (
                 <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>

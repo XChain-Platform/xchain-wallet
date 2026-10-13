@@ -56,7 +56,7 @@
 #   XCHAIN_BINFMT_DIR                 default /proc/sys/fs/binfmt_misc
 #   XCHAIN_REPRODUCE_ALLOW_EMULATION  1 = proceed anyway, loudly
 #
-# Exit 0 proceed, exit 3 refuse.
+# Exit 0 proceed, exit 2 usage (an unrecognised option), exit 3 refuse.
 
 set -euo pipefail
 
@@ -89,6 +89,7 @@ Usage:
 
 Exit codes:
   0  proceed: native, or an emulator that finishes (Rosetta)
+  2  usage:   an unrecognised option; the only positional is a platform
   3  refuse:  qemu-user or an unknown emulator, which crashes the build
               with a message that names neither qemu nor the architecture
 

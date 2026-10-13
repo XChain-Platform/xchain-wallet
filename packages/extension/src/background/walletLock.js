@@ -222,3 +222,27 @@ export function createHostBuildFlight(build) {
         return result == null && joined ? start() : result;
     };
 }
+
+/**
+ * Build the MV3 keepalive tick: rebuild the host, run the idle-lock check, then refresh.
+ * The lock check never waits on the refresh (its socket connects carry no timeout),
+ * and a rejected host build or refresh never skips it.
+ * @param {{ ensureHost: () => Promise<unknown>, maybeAutoLock: () => Promise<string>,
+ *   refresh: () => unknown, logger?: { error: Function } }} deps
+ * @returns {() => Promise<string>} resolves to the idle-lock outcome
+ */
+export function createKeepaliveTick(deps) {
+    const logger = deps.logger ?? console;
+    return async function keepaliveTick() {
+        // Run the check after the host rebuild: a cold worker reads locked until then.
+        try { await deps.ensureHost(); } catch (err) { logger.error('[xchain] keepalive ensureHost failed:', err); }
+        let outcome = 'failed';
+        try { outcome = await deps.maybeAutoLock(); } catch (err) { logger.error('[xchain] keepalive auto-lock failed:', err); }
+        // Fire the refresh unawaited; a session that just locked has nothing to refresh.
+        if (outcome !== 'locked') {
+            Promise.resolve().then(deps.refresh)
+                .catch((err) => logger.error('[xchain] keepalive refresh failed:', err));
+        }
+        return outcome;
+    };
+}

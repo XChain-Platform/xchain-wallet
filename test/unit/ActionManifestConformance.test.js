@@ -15,6 +15,7 @@
 // slice, so adding an action everywhere-but-the-wallet (or vice versa) fails loud.
 
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,7 @@ import {
     PROTOCOL_ONLY_ACTIONS,
     BITCOIN_ACTIONS,
 } from '../../packages/core/src/registry/actions.js';
+import { BATCH_ACTION_ALIASES } from '../../packages/core/src/flows/batchCommand.js';
 import MANIFEST from '../fixtures/action-manifest.json';
 
 // Resolve from this file, not cwd, so the guard holds wherever vitest is launched.
@@ -70,13 +72,50 @@ describe('ACTION manifest conformance: wallet walletForm set @regression', () =>
         }
     });
 
-    // IDENTITY: vendored copy must match canonical. Refuses an absent docs
-    // checkout and a lane symlink into a live main checkout alike.
+    // Hold the BATCH weight pre-check's alias table to the manifest, since an
+    // alias it misses is charged the default weight instead of its target's.
+    it('BATCH_ACTION_ALIASES exactly equals the manifest aliases map', () => {
+        expect({ ...BATCH_ACTION_ALIASES },
+            'packages/core/src/flows/batchCommand.js BATCH_ACTION_ALIASES drifted from action-manifest.json aliases; ' +
+            'update the wallet table to match the manifest.'
+        ).toEqual(MANIFEST.aliases);
+        for (const target of Object.values(MANIFEST.aliases)) {
+            expect(MANIFEST.actions, target).toHaveProperty(target);
+        }
+    });
+
+    it('settlement anchors stay explorer-only', () => {
+        for (const action of ['XPOLICY', 'LIST_SHARE']) {
+            expect(MANIFEST.actions[action]).toEqual({
+                category: 'settlement-anchor',
+                explorerRender: true,
+            });
+        }
+    });
+
+    // IDENTITY: vendored copy must match canonical.
     it('vendored test/fixtures/action-manifest.json is byte-identical to canonical', (ctx) => {
-        const DOCS = process.env.XCHAIN_DOCS_ROOT
-            ? join(process.env.XCHAIN_DOCS_ROOT, 'protocol', 'action-manifest.json')
+        const docsRoot = process.env.XCHAIN_ACTION_MANIFEST_ROOT || process.env.XCHAIN_DOCS_ROOT;
+        const DOCS = docsRoot
+            ? join(docsRoot, 'protocol', 'action-manifest.json')
             : join(HERE, '..', '..', '..', 'xchain-documentation', 'protocol', 'action-manifest.json');
         const docs = siblingCheckout(HERE, DOCS);
+        const committedRoot = !docs.usable && docsRoot
+            && /resolves through a symlink into the live main checkout/.test(docs.reason);
+        if (committedRoot) {
+            const canonical = readFileSync(DOCS, 'utf8');
+            const committed = execFileSync('git', [
+                '-C', docsRoot, 'show', 'HEAD:protocol/action-manifest.json',
+            ], { encoding: 'utf8' });
+            expect(canonical,
+                'the supplied canonical manifest differs from its checkout HEAD; use a clean committed checkout.'
+            ).toEqual(committed);
+            expect(readFileSync(VENDORED, 'utf8'),
+                'vendored action-manifest.json drifted from the supplied checkout HEAD; edit ' +
+                'xchain-documentation/protocol/action-manifest.json and re-vendor all copies.'
+            ).toEqual(committed);
+            return;
+        }
         if (!skipOrFail(ctx, docs, 'the canonical action-manifest.json byte-identity guard')) return;
         expect(readFileSync(VENDORED, 'utf8'),
             'vendored action-manifest.json drifted from canonical; edit ' +

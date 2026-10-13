@@ -13,20 +13,17 @@
 // Live rows:
 //   - Auto-lock timeout (minutes)
 //   - Test-send warning threshold (sats; 0 disables)
+//   - Undo-send: opt-in hold so a signed send can be cancelled before broadcast
 //   - Panic mode toggle: schema slot ships v2; full §26.5 duress-PIN
 //     wiring lands later, the toggle gates that behavior when present.
 //   - Backup reminders cadence (off / monthly / quarterly)
 //
-// The undo-send grace row was removed v0.132.0. The feature was
-// scrapped (a cancellable countdown delays every broadcast and rewards
-// rage-clicking with a no-op). The `settings.grace.undoSendSeconds`
-// schema field stays around as a dead slot until a future v3 migration
-// sweeps it; see settings close-report FOLLOWUP 12.
 
 import { useSettings } from '../../hooks/useSettings.js';
-import { INPUT, ROW, ROW_LABEL, SELECT, STACK, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
+import { UndoSendRow } from './UndoSendRow.jsx';
 import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
 
 const AUTOLOCK_OPTIONS = /** @type {const} */ ([
@@ -49,7 +46,7 @@ export function SafetySection() {
     const { settings, loading, error, update } = useSettings();
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={`Settings unavailable: ${error.message}`} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onAutolockChange = async (next) => {
@@ -107,6 +104,7 @@ export function SafetySection() {
                     style={{ ...INPUT, width: 140, textAlign: 'right' }}
                 />
             </div>
+            <UndoSendRow />
             <BiometricRow />
             <PanicModeRow />
             <DuressPassphraseRow />

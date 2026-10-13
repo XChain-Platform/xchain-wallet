@@ -1134,8 +1134,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // resolved fee config; the encoder turns `rbf` into BIP125 input
     // sequence numbers (sequence < 0xfffffffe).
     const [rbfEnabled, setRbfEnabled] = useState(true);
-    // Clamp the flag to the descriptor's capability (DOGE declares rbfSupported:false)
-    const rbfSupported = descriptor?.feeStrategy?.rbfSupported !== false;
+    // Clamp the flag to the descriptor's declared capability (DOGE declares false; no descriptor means no RBF)
+    const rbfSupported = descriptor?.feeStrategy?.rbfSupported === true;
     const rbfForSend = rbfSupported && rbfEnabled;
     useEffect(() => {
         if (!chainId) return;
@@ -1588,6 +1588,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 // broadcast, in the permanent terminal §5.3.4 forbids
                 // re-signing out of.
                 checkInputs: (psbtHex) => messaging.checkInputLiveness({ chainId, psbtHex }),
+                releaseEncoderInputs: (token) => messaging.releaseEncoderInputs({ token }),
                 // And the native-fee half, for the sends that carry a
                 // protocol fee (a gated tick composes as BATCH, and a
                 // multi-recipient send is priced per leg).

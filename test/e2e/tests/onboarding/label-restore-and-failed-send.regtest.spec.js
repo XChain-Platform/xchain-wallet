@@ -218,12 +218,18 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
                 .toBeVisible({ timeout: 60_000 });
             await expect(failedRow).toContainText(/failed, never sent/);
 
-            // Open it: the reason the wallet recorded, and the way out.
+            // Open it: the reason in plain words, the node's own text behind
+            // Technical details, and the way out.
             await failedRow.locator('xpath=ancestor::button[1]').click();
-            await expect(page.getByText(/^Reason: /), 'the failed detail shows no reason')
+            const failedPanel = page.getByRole('region', { name: 'Failed transaction' });
+            await expect(failedPanel.getByText(/The network rejected this transaction\./),
+                'the failed detail shows no reason')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(page.getByText(/bad-txns-inputs-missingorspent/),
-                'the reason shown is not the node\'s rejection')
+            await expect(failedPanel.getByText(/^Reason: /), 'the raw reason is still in the prose')
+                .toHaveCount(0);
+            await failedPanel.getByText('Technical details', { exact: true }).click();
+            await expect(failedPanel.getByText(/bad-txns-inputs-missingorspent/),
+                'the technical details are not the node\'s rejection')
                 .toBeVisible();
             await page.getByRole('button', { name: 'Remove from history', exact: true }).click();
 

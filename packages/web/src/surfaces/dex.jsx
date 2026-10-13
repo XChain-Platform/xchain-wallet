@@ -22,11 +22,13 @@
 //
 // Consequences of that choice, both deliberate:
 //   - This is the ONLY module allowed to import a DEX route component. A
-//     second importer would keep the code in the store bundle no matter what
-//     the alias does, so a smoke asserts this file is the only one.
+//     second importer would keep the code in a bundle whose profile hides
+//     `dex` no matter what the alias does, so a smoke asserts this file is
+//     the only one.
 //   - Every export here must exist in the twin with the same shape. The twin
-//     is what a store build actually runs, so a name added on one side only is
-//     an undefined at runtime, on the shell with the least test coverage.
+//     is what a build that hides `dex` runs (no profile does today; see
+//     `registry.js`), so a name added on one side only is an undefined at
+//     runtime, on the shell with the least test coverage.
 
 import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
 import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
@@ -54,8 +56,8 @@ export const DEX_SURFACE_ENABLED = true;
  * Called once from the web shell's route chain, in place of the nine
  * `if (unlockedView === …)` blocks that used to sit there. Order inside the
  * chain does not matter: view names are unique, and an unmatched view falls
- * through to Home, which is also what a store build does with a `markets` view
- * restored from a previous session (`RESUMABLE_VIEWS` still lists it).
+ * through to Home, which is also what a build that hides `dex` would do with a
+ * `markets` view restored from a previous session (`RESUMABLE_VIEWS` lists it).
  *
  * @param {string} unlockedView
  * @param {{

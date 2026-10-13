@@ -76,7 +76,7 @@ function shellModules(shell) {
 // A dev link points at the SDK checkout; pnpm's own link points into the
 // store. Telling them apart is what keeps `link` idempotent and stops
 // `unlink` from restoring a link onto itself.
-function isDevLink(live) {
+export function isDevLink(live) {
     if (classify(live) !== 'symlink') return false;
     const target = path.resolve(path.dirname(live), readlinkSync(live));
     return !target.includes(`${path.sep}.pnpm${path.sep}`);
@@ -163,17 +163,19 @@ function unlink() {
     if (missing) process.exitCode = 1;
 }
 
-switch (command) {
-    case 'link':
-        link();
-        break;
-    case 'unlink':
-        unlink();
-        break;
-    case 'status':
-        status();
-        break;
-    default:
-        console.error('usage: node tools/dev/sdk-link.mjs <link|unlink|status> [--sdk <path>]');
-        process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    switch (command) {
+        case 'link':
+            link();
+            break;
+        case 'unlink':
+            unlink();
+            break;
+        case 'status':
+            status();
+            break;
+        default:
+            console.error('usage: node tools/dev/sdk-link.mjs <link|unlink|status> [--sdk <path>]');
+            process.exit(1);
+    }
 }

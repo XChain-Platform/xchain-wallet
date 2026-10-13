@@ -79,7 +79,7 @@ export const FINDINGS = {
     'POINTER-UNREADABLE': 'a JSON pointer the shipped client discards (oversized, or a version it will not parse)',
     'POINTER-DANGLING': 'a pointer naming a file that is not on the feed',
     'POINTER-HASH': "a pointer's sha512 does not match the bytes it names",
-    'POINTER-UNCOVERED': 'a pointer names a file no signed manifest covers',
+    'POINTER-UNCOVERED': "a pointer names a file its own version's signed manifest does not cover",
     'POINTER-NO-MANIFEST': "no manifest is published for a live pointer's version",
     'MANIFEST-UNSIGNED': 'a manifest with no detached signature beside it',
     'MANIFEST-BAD-SIG': 'a manifest whose signature did not verify',
@@ -410,6 +410,7 @@ export function sweep(root, options = {}) {
     // ---- baseline: the union of every published manifest ---------------
     const manifestDir = join(root, MANIFEST_DIR);
     const union = new Map();        // basename -> Set<sha256>
+    const byRelease = new Map();    // releaseTagOf(tag) -> Set<basename>
     const tagsSeen = new Set();
     let manifestCount = 0;
     let signaturesChecked = 0;
@@ -460,9 +461,12 @@ export function sweep(root, options = {}) {
             // release, and nothing else reads this set.
             tagsSeen.add(tag);
             tagsSeen.add(releaseTagOf(tag));
+            const release = releaseTagOf(tag);
+            if (!byRelease.has(release)) byRelease.set(release, new Set());
             for (const [file, hash] of entries) {
                 if (!union.has(file)) union.set(file, new Set());
                 union.get(file).add(hash);
+                byRelease.get(release).add(file);
             }
         }
     }
@@ -603,7 +607,16 @@ export function sweep(root, options = {}) {
             if (entry.sha512 && sha512File(target) !== entry.sha512) {
                 add('POINTER-HASH', rel, `sha512 does not match ${dir}/${entry.url}`);
             }
-            if (!union.has(entry.url)) {
+            // Judged against the pointer's OWN release, as the client does
+            // (updateVerify.js verifyChannelPointer): it fetches only that
+            // release's manifest. With no such manifest POINTER-NO-MANIFEST has
+            // fired, and the union test still reports a planted file.
+            const own = byRelease.get(`v${info.version}`);
+            if (own && !own.has(entry.url)) {
+                add('POINTER-UNCOVERED', rel,
+                    `names ${dir}/${entry.url}, which the v${info.version} manifest does not cover`
+                    + (union.has(entry.url) ? ' (another release\'s manifest does)' : ''));
+            } else if (!own && !union.has(entry.url)) {
                 add('POINTER-UNCOVERED', rel,
                     `names ${dir}/${entry.url}, which no signed manifest covers`);
             }

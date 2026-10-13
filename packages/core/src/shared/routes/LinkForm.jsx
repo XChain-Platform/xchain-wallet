@@ -497,7 +497,9 @@ export function LinkForm({ walletId, onBack }) {
         // resolves a transient broadcast failure that way, and the copy
         // below would report a link that is not on any chain yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="link" />);
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="link" unsaved={result.unsaved} />,
+            );
         }
         return wrap(
             <>
@@ -509,7 +511,7 @@ export function LinkForm({ walletId, onBack }) {
                     </>
                 ) : null}
                 <p className={styles.hint}>
-                    Once mined, both sides will thread together in History.
+                    Once mined, History shows both actions as linked.
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>

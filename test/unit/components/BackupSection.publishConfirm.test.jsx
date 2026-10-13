@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -185,5 +185,31 @@ describe('BackupSection label publication confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
 
         expect(await screen.findByLabelText('Wallet password')).toHaveValue('');
+    });
+
+    // A transient broadcast failure resolves queued: the signed bytes wait in the
+    // broadcast queue, so the panel must not say the labels were published, and the
+    // pending batch notice must survive because nothing has landed yet.
+    it('reports a queued publish as signed, not published, and keeps the auto-sync notice', async () => {
+        const messaging = mount({
+            labelSyncStatusRequest: vi.fn(async () => ({ due: true, batch: { changeCount: 2 } })),
+            publishLabelsRequest: vi.fn(async () => {
+                throw Object.assign(new Error('ECONNREFUSED'), { name: 'BroadcastFailedTransientError' });
+            }),
+        });
+
+        await screen.findByText('Labels changed since the last publish');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+        const queued = await screen.findByTestId('publish-labels-queued');
+        expect(messaging.publishLabelsRequest).toHaveBeenCalled();
+        expect(queued.textContent).toMatch(/queued-transactions banner/);
+        expect(screen.queryByText('✓ Labels published')).toBeNull();
+
+        fireEvent.click(within(queued).getByRole('button', { name: 'Done' }));
+        expect(await screen.findByText('Labels changed since the last publish')).toBeTruthy();
     });
 });

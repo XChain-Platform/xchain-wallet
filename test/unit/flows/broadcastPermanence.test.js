@@ -60,6 +60,18 @@ describe('classifyBroadcastFailure', () => {
         expect(classifyBroadcastFailure(err)).toBe('transient');
     });
 
+    it('keeps a conflict with an unconfirmed tx TRANSIENT and a confirmed conflict PERMANENT', () => {
+        expect(classifyBroadcastFailure(new Error('txn-mempool-conflict: conflicts with unconfirmed tx'))).toBe('transient');
+        expect(classifyBroadcastFailure({
+            message: 'broadcast failed (phase1): Encoder RPC error',
+            cause: { response: { data: { error: 'txn-mempool-conflict (conflicts with an unconfirmed transaction)' } } },
+        })).toBe('transient');
+        expect(classifyBroadcastFailure(new Error('conflicting transaction already confirmed'))).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error('conflict-confirmed'))).toBe('permanent');
+        expect(classifyBroadcastFailure(new Error('conflict with unconfirmed tx; conflicting tx is now confirmed'))).toBe('permanent');
+        expect(classifyBroadcastFailure('conflict '.repeat(20000) + 'unconfirmed '.repeat(20000))).toBe('transient');
+    });
+
     it('prefers an explicit structured rejectReason', () => {
         const err = { rejectReason: 'bad-txns-inputs-missingorspent', message: 'generic' };
         expect(classifyBroadcastFailure(err)).toBe('permanent');

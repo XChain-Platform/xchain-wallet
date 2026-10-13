@@ -16,9 +16,9 @@
 //
 // Per-target transports (§18.2):
 //
-//   packages/extension/src/signers/ledgerFactory.js   (WebHID)
-//   packages/web/src/signers/ledgerFactory.js         (WebHID)
-//   packages/desktop/src/signers/ledgerFactory.js     (node-HID; Piece 5)
+//   packages/extension/src/signers/ledgerFactory.js              (WebHID)
+//   packages/web/src/signers/ledgerFactory.js                    (WebHID)
+//   packages/desktop/renderer/signerFactories/ledgerFactory.js   (WebHID)
 //
 // Ledger specifics that shape the surface:
 //
@@ -123,9 +123,12 @@ function hwMusig2UnsupportedError(qualifiedMethod, detail) {
 function chainIdToLedgerFormat(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet':
+            return 'bech32';
+        // DOGE + LTC default to legacy on Ledger; keep this in step with the
+        // 44' default in bip44PurposeFor, or the device refuses the pair.
         case 'litecoin-mainnet':
         case 'dogecoin-mainnet':
-            return 'bech32';
+            return 'legacy';
         case 'bitcoin-testnet':
         case 'bitcoin-regtest':
             throw unsupportedBitcoinNetworkError(chainId);
@@ -562,8 +565,6 @@ function ledgerFormatFor(addressType, chainId) {
     if (addressType === 'p2wpkh') return 'bech32';
     if (addressType === 'p2sh-p2wpkh') return 'p2sh';
     if (addressType === 'p2pkh') return 'legacy';
-    // DOGE + LTC default to legacy on Ledger.
-    if (chainId === 'dogecoin-mainnet' || chainId === 'litecoin-mainnet') return 'legacy';
     return chainIdToLedgerFormat(chainId);
 }
 

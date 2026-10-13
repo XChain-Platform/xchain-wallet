@@ -49,11 +49,11 @@ assert.match(
 // --- payload --------------------------------------------------------
 
 // The payload carries the flag clamped to the descriptor's rbfSupported,
-// so a chain without RBF (Dogecoin) never sends rbf:true.
+// so a chain without RBF (Dogecoin), or with no descriptor, never sends rbf:true.
 assert.match(
     sendSrc,
-    /const rbfSupported = descriptor\?\.feeStrategy\?\.rbfSupported !== false;/,
-    'reads the chain RBF capability from the descriptor',
+    /const rbfSupported = descriptor\?\.feeStrategy\?\.rbfSupported === true;/,
+    'reads the chain RBF capability from the descriptor, failing closed when it is missing',
 );
 assert.match(
     sendSrc,

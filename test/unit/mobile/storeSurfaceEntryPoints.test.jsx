@@ -10,13 +10,13 @@
 
 // The other half: nothing OFFERS the DEX when the build has none.
 //
-// `storeSurfaces.test.js` proves the route components are out of the bundle.
-// That is not the same as proving a user (or an app reviewer) sees no way in,
+// `storeSurfaces.test.js` proves the route components can stay out of a bundle.
+// That is not the same as proving a user sees no way in,
 // and the two can come apart in a specific way worth testing for: the labels
-// still exist in the store bundle, because they sit in arrays inside shared
+// still exist in the bundle, because they sit in arrays inside shared
 // modules that every build carries. What must be true is that NOTHING RENDERS
-// them, so these tests render the real components in the state a store build
-// puts them in.
+// them, so these tests render the real components in the state a future
+// surface-stripped profile would put them in.
 //
 // Rendered rather than asserted on source, because the failure this guards is a
 // visible control, and because the fix it pins is specifically about how an
@@ -51,9 +51,9 @@ describe('the main menu', () => {
     });
 
     it('renders neither row when it does not', () => {
-        // The store build passes no handler, because the destination is not in
-        // the bundle. MenuRoute has always filtered on handler presence; this
-        // pins that, since it is now load-bearing rather than tidy.
+        // A surface-stripped build passes no handler, because the destination
+        // is not in the bundle. MenuRoute has always filtered on handler
+        // presence; this pins that, since it is load-bearing rather than tidy.
         draw(<MenuRoute onBack={() => {}} onTokens={() => {}} />);
         expect(screen.queryByText('Decentralized Exchange')).toBeNull();
         expect(screen.queryByText('Marketplace')).toBeNull();
@@ -98,15 +98,16 @@ describe('the command palette', () => {
     });
 
     it('keeps the DEX when a shell says nothing, rather than losing it silently', () => {
-        // Every shell but a surface-stripped store build passes no flag at all.
+        // A shell that carries the surface may pass no flag at all.
         expect(ids({ hasDexSurface: undefined })).toContain('nav-markets');
     });
 });
 
 // The same failure one level down. Home's quick-action row hides
-// Exchange on a store build, but kept its "More" button, whose only entry is
-// the DEX-gated Swap. The button survived into a build with nothing behind it,
-// so tapping it opened a menu whose single row read "No additional actions".
+// Exchange on a surface-stripped build, but kept its "More" button, whose only
+// entry is the DEX-gated Swap. The button survived into a build with nothing
+// behind it, so tapping it opened a menu whose single row read
+// "No additional actions".
 describe("Home's quick-action overflow menu", () => {
     const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
     const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -145,10 +146,10 @@ describe("Home's quick-action overflow menu", () => {
     });
 
     it('renders no More button at all when nothing is behind it', async () => {
-        // The store build wires no Swap handler, because SwapForm is not in
-        // the bundle. Absent beats disabled and both beat an empty menu: a
-        // control that opens onto "No additional actions" is a dead affordance
-        // sitting in the quick-action row on the wallet's primary screen.
+        // A surface-stripped build wires no Swap handler, because SwapForm is
+        // not in the bundle. Absent beats disabled and both beat an empty menu:
+        // a control that opens onto "No additional actions" is a dead
+        // affordance sitting in the wallet's primary quick-action row.
         drawHome({ onSend: () => {}, onReceive: () => {} });
 
         const row = within(await quickActions());

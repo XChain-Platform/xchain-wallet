@@ -57,7 +57,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyRun, JOB_STATE, VERDICT } from '../../../tools/release/run-verdict.mjs';
+import { classifyRun, exitCodeFor, JOB_STATE, VERDICT } from '../../../tools/release/run-verdict.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -371,6 +371,40 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
     'excluding the reading job by name must leave the rest classifiable. Without this the `verdict` '
     + 'job can only ever report PENDING, because it is always mid-run when it looks.');
 
+// A job that hit its time limit is a hung step, which is a finding. GitHub reports it `cancelled`,
+// with the running step `cancelled` and this check-run annotation; `timed_out` is read the same way.
+const TIMEOUT_NOTE = 'The job has exceeded the maximum execution time of 6h0m0s';
+const hungSteps = [
+    { name: 'Set up job', status: 'completed', conclusion: 'success' },
+    { name: 'Install dependencies', status: 'completed', conclusion: 'success' },
+    { name: 'Run E2E suite', status: 'completed', conclusion: 'cancelled' },
+    { name: 'Upload Playwright report', status: 'completed', conclusion: 'skipped' },
+    { name: 'Complete job', status: 'completed', conclusion: 'success' },
+];
+const hungJob = (over) => ({ name: 'e2e', status: 'completed', steps: hungSteps, ...over });
+for (const [label, job] of [
+    ['a cancelled job carrying the timeout annotation', hungJob({ conclusion: 'cancelled', annotation: TIMEOUT_NOTE })],
+    ['a cancelled job whose timeout annotation is not the first',
+        hungJob({ conclusion: 'cancelled', annotations: ['The operation was canceled.', TIMEOUT_NOTE] })],
+    ['a `timed_out` job', hungJob({ conclusion: 'timed_out' })],
+]) {
+    const hung = classifyRun({ id: 0, jobs: [job] });
+    assert.equal(stateOf(hung, 'e2e'), JOB_STATE.TIMED_OUT, `${label} must be reported as timed out`);
+    assert.equal(hung.verdict, VERDICT.RED, `${label} is a hung step, a finding, never infrastructure to re-run`);
+    assert.deepEqual(hung.assertions, ['e2e / Run E2E suite (timed out)'], `${label} must name the step that hung`);
+    assert.equal(exitCodeFor(hung.verdict), 1, `${label} must fail the verdict job`);
+}
+const concurrencyCancel = classifyRun({ id: 0, jobs: [hungJob({
+    conclusion: 'cancelled',
+    annotations: ['Canceling since a higher priority waiting request for ci-refs/pull/61/merge-ref exists',
+        'The operation was canceled.'],
+})] });
+assert.equal(stateOf(concurrencyCancel, 'e2e'), JOB_STATE.CANCELLED,
+    'a mid-run cancel by a newer push carries no finding and must stay CANCELLED');
+assert.equal(concurrencyCancel.verdict, VERDICT.NO_VERDICT);
+assert.equal(stateOf(classifyRun({ id: 0, jobs: [{ name: 'e2e', status: 'completed', conclusion: 'timed_out', steps: [] }] }), 'e2e'),
+    JOB_STATE.NOT_STARTED, 'a job with no steps ran nothing, whatever its conclusion');
+
 // Drive the CLI against a local stub API: a refused annotation must leave the
 // verdict and exit code exactly as the offline form gives them, and a refused
 // jobs call must still exit 2, because without jobs there is nothing to classify.
@@ -390,6 +424,14 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
         if (req.url.startsWith('/repos/o/r/actions/runs/1/jobs')) return send(jobsStatus, { jobs: stubJobs });
         if (req.url === '/repos/o/r/actions/runs/1') return send(200, meta);
         if (req.url.startsWith('/repos/o/r/check-runs/77/annotations')) return send(403, { message: 'Resource not accessible' });
+        const hung = /^\/repos\/o\/r\/actions\/runs\/(2|3)(\/jobs)?/.exec(req.url);
+        if (hung) {
+            const checkRun = hung[1] === '2' ? 88 : 89;
+            const jobsOf = [hungJob({ conclusion: 'cancelled', check_run_url: `https://api.example/repos/o/r/check-runs/${checkRun}` })];
+            return send(200, hung[2] ? { jobs: jobsOf } : { ...meta, id: Number(hung[1]), conclusion: 'cancelled' });
+        }
+        if (req.url.startsWith('/repos/o/r/check-runs/88/annotations')) return send(200, [{ message: TIMEOUT_NOTE }]);
+        if (req.url.startsWith('/repos/o/r/check-runs/89/annotations')) return send(403, { message: 'Resource not accessible' });
         return send(404, {});
     });
     await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
@@ -418,6 +460,13 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
             'a refused annotation changed the verdict; the classification stands on the empty steps array.');
         assert.match(online.stderr, /checks: read/,
             'a refused annotation must name the missing `checks: read` scope on stderr.');
+        const timedOut = await cli(['--run', '2', '--repo', 'o/r', '--json']);
+        assert.equal(timedOut.status, 1,
+            `a cancelled job whose annotation says it hit its time limit must exit 1; stderr: ${timedOut.stderr}`);
+        assert.deepEqual(JSON.parse(timedOut.stdout).assertions, ['e2e / Run E2E suite (timed out)']);
+        const unread = await cli(['--run', '3', '--repo', 'o/r', '--json']);
+        assert.equal(unread.status, 0, 'a refused annotation on a cancelled job leaves it CANCELLED, exit 0');
+        assert.equal(JSON.parse(unread.stdout).jobs[0].state, JOB_STATE.CANCELLED);
         jobsStatus = 500;
         const broken = await cli(['--run', '1', '--repo', 'o/r', '--json']);
         assert.equal(broken.status, 2, 'a refused jobs call must still exit 2: there is nothing to classify.');
@@ -426,6 +475,39 @@ assert.equal(classifyRun({ id: 0, jobs: selfReading }, { exclude: ['verdict'] })
         rmSync(work, { recursive: true, force: true });
     }
 }
+
+// Run the CLI through a symlinked directory: a silent exit 0 there reads as
+// "no finding" from a classifier that never ran.
+{
+    const { spawnSync } = await import('node:child_process');
+    const { mkdtempSync, symlinkSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const work = mkdtempSync(join(tmpdir(), 'run-verdict-link-'));
+    try {
+        const linked = join(work, 'release');
+        symlinkSync(join(repoRoot, 'tools', 'release'), linked, 'dir');
+        const run = spawnSync(process.execPath, [join(linked, 'run-verdict.mjs'), '--help'], { encoding: 'utf8' });
+        assert.match(run.stdout, /Usage:/,
+            `run-verdict.mjs invoked through a symlink printed no usage (exit ${run.status}); `
+            + 'its entry-point check must compare realpaths, or the CLI is silently skipped.');
+    } finally {
+        rmSync(work, { recursive: true, force: true });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Part 3: bin/ci-full.sh, the local twin of ci.yml, carries every job.
+// ---------------------------------------------------------------------------
+
+// Each ci.yml job needs a `# --- job: <name>` section in the twin, in workflow
+// order: a job with no section is a job the pre-push gate never runs.
+const ciFull = readFileSync(join(repoRoot, 'bin', 'ci-full.sh'), 'utf8');
+const twinJobs = [...ciFull.matchAll(/^# --- job: ([A-Za-z0-9_-]+) -/gm)].map((m) => m[1]);
+assert.deepEqual(twinJobs, [...jobs.keys()],
+    `bin/ci-full.sh's job sections (${twinJobs.join(', ')}) do not match ci.yml's jobs `
+    + `(${[...jobs.keys()].join(', ')}). The script prints "same set GitHub CI runs", so a job `
+    + 'it lacks gates green locally and red on GitHub. Add a `# --- job: <name>` section that '
+    + 'runs the job\'s steps, or prints SKIPPED-BY-DESIGN for each step that cannot run locally.');
 
 console.log('OK: ci master-verdict smoke (concurrency exempts refs/heads/master from '
     + 'cancel-in-progress, evaluated both ways; push-to-master trigger intact; `verdict` job waits '

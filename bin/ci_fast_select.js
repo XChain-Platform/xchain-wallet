@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 const CONSENSUS = [
     'src/consensus/',
@@ -215,6 +215,16 @@ function main() {
     return runPlan(plan);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+// Compare against argv[1]'s realpath as a URL, so a symlinked or spaced checkout still runs the CLI.
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+}
+
+if (invokedDirectly()) {
     process.exitCode = main();
 }

@@ -104,9 +104,9 @@ export function BottomTabBar({
         return () => document.removeEventListener('keydown', onKey);
     }, [sheetOpen]);
 
-    // `requiresDex` is a BUILD fact, not a wallet one: the store profile
-    // compiles the DEX routes out, so the row would point at a view
-    // that does not exist in this bundle.
+    // `requiresDex` is a BUILD fact, not a wallet one: a profile that hides
+    // the DEX surface compiles its routes out (none does today), so the row
+    // would point at a view that does not exist in that bundle.
     // `requiresVm` is the registry gate Home and the palette use, not a BTC one.
     const sheetRows = SHEET_PRIMARY.filter(
         (row) => (!row.requiresVm || hasVmAddress)

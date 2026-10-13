@@ -51,8 +51,13 @@ import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // at build time. Candidate for a lower-level package extraction once a
 // third shell appears.
 import { createBackgroundHost } from '../../extension/src/background/createBackgroundHost.js';
+import { createBroadcastQueueEngine } from '../../extension/src/background/broadcastQueueEngine.js';
 import { createBroadcastQueueStorage } from '../../extension/src/background/broadcastQueueStorage.js';
-import { createBroadcastQueueStore, sealBroadcastQueueStore } from '../../extension/src/background/broadcastQueueStore.js';
+import {
+    createBroadcastQueueStore,
+    refreshBroadcastQueueStore,
+    sealBroadcastQueueStore,
+} from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
@@ -614,10 +619,51 @@ let signerPool = null;
 // broadcast that resolves after the removal writes nothing back.
 let broadcastQueueStore = null;
 
+class WebBroadcastClaims extends Set {
+    constructor(iterable, onEmpty) {
+        super(iterable);
+        this.onEmpty = onEmpty;
+    }
+
+    delete(claim) {
+        const removed = super.delete(claim);
+        if (removed && this.size === 0) this.onEmpty();
+        return removed;
+    }
+
+    clear() {
+        const hadClaims = this.size > 0;
+        super.clear();
+        if (hadClaims) this.onEmpty();
+    }
+}
+
+// Signing routes hand their flow a hook that queues the signed bytes when the
+// broadcast fails, so the lease has to outlive that network call the way the
+// queue routes' own claims make it outlive theirs.
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$)/;
+let routeClaimSeq = 0;
+
+async function runRouteHoldingLease(store, type, run) {
+    const claims = typeof type === 'string' && QUEUE_WRITING_ROUTE.test(type) ? store?.inFlight : null;
+    // A NUL prefix cannot equal the walletId:entryId claims the queue routes check.
+    const claim = claims ? `\u0000route:${++routeClaimSeq}` : null;
+    if (claim) claims.add(claim);
+    try {
+        return await run();
+    } finally {
+        if (claim) claims.delete(claim);
+    }
+}
+
 /** Build the page's queue store on first use, when the page's storage is known. */
 function sharedBroadcastQueueStore() {
     if (!broadcastQueueStore) {
         broadcastQueueStore = createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
+        broadcastQueueStore.inFlight = new WebBroadcastClaims(
+            broadcastQueueStore.inFlight,
+            () => webVaultLeaseCoordinator.finishDeferredRelease(),
+        );
     }
     return broadcastQueueStore;
 }
@@ -666,10 +712,138 @@ let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
 
 const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
-/** @type {{ release: () => Promise<void> } | null} */
-let webVaultLease = null;
-/** @type {Promise<{ release: () => Promise<void> } | null> | null} */
-let webVaultLeaseAcquisition = null;
+
+function createWebVaultLeaseCoordinator({ getLockManager, getQueueStore, isNativeVault, isBrowserRuntime }) {
+    /** @type {{ release: () => Promise<void> } | null} */
+    let lease = null;
+    /** @type {Promise<{ release: () => Promise<void> } | null> | null} */
+    let acquisition = null;
+    /** @type {{ release: () => Promise<void> } | null} */
+    let deferredRelease = null;
+    /** @type {Promise<void> | null} */
+    let releaseCompletion = null;
+
+    function beginRelease(heldLease) {
+        if (releaseCompletion) return releaseCompletion;
+        // Fence the store before another tab can take the key; the next
+        // lease's reload lifts it.
+        const store = getQueueStore();
+        if (store) store.dormant = true;
+        const completion = heldLease.release();
+        releaseCompletion = completion;
+        void completion.then(
+            () => { if (releaseCompletion === completion) releaseCompletion = null; },
+            () => { if (releaseCompletion === completion) releaseCompletion = null; },
+        );
+        return completion;
+    }
+
+    function finishDeferredRelease() {
+        const heldLease = deferredRelease;
+        if (!heldLease || heldLease !== lease) return releaseCompletion ?? Promise.resolve();
+        deferredRelease = null;
+        const completion = beginRelease(heldLease);
+        void completion.catch(() => {});
+        return completion;
+    }
+
+    async function acquire() {
+        const lockManager = getLockManager();
+        if (!lockManager || typeof lockManager.request !== 'function') {
+            if (!isBrowserRuntime() || isNativeVault()) return null;
+            throw new VaultCoordinationUnavailableError();
+        }
+        if (isNativeVault()) return null;
+        if (releaseCompletion) {
+            try { await releaseCompletion; } catch (_err) { /* acquisition retries below */ }
+        }
+        if (lease) {
+            if (deferredRelease === lease) deferredRelease = null;
+            return null;
+        }
+        if (acquisition) {
+            const acquired = await acquisition;
+            if (!acquired) throw new VaultInUseError();
+            return null;
+        }
+
+        let resolveHold;
+        const hold = new Promise((resolve) => { resolveHold = resolve; });
+        let requestCompletion = null;
+        acquisition = new Promise((resolve, reject) => {
+            try {
+                const request = lockManager.request(
+                    WEB_VAULT_LOCK_NAME,
+                    { mode: 'exclusive', ifAvailable: true },
+                    async (lock) => {
+                        if (!lock) {
+                            resolve(null);
+                            return;
+                        }
+                        let released = false;
+                        const acquiredLease = {
+                            release() {
+                                if (!released) {
+                                    released = true;
+                                    resolveHold();
+                                }
+                                return requestCompletion ?? Promise.resolve();
+                            },
+                        };
+                        lease = acquiredLease;
+                        resolve(acquiredLease);
+                        try {
+                            await hold;
+                        } finally {
+                            if (lease === acquiredLease) lease = null;
+                        }
+                    },
+                );
+                requestCompletion = Promise.resolve(request);
+                requestCompletion.catch(reject);
+            } catch (err) {
+                reject(err);
+            }
+        });
+
+        try {
+            const acquiredLease = await acquisition;
+            if (!acquiredLease) throw new VaultInUseError();
+            await refreshBroadcastQueueStore(getQueueStore());
+            return acquiredLease;
+        } finally {
+            acquisition = null;
+        }
+    }
+
+    async function release(heldLease = lease) {
+        if (!heldLease || lease !== heldLease) return;
+        if (getQueueStore()?.inFlight?.size > 0) {
+            deferredRelease = heldLease;
+            return;
+        }
+        if (deferredRelease === heldLease) deferredRelease = null;
+        await beginRelease(heldLease);
+    }
+
+    return {
+        acquire,
+        release,
+        finishDeferredRelease,
+        whenReleased: () => releaseCompletion ?? Promise.resolve(),
+        state: () => ({
+            hasLease: lease !== null,
+            releaseDeferred: deferredRelease !== null,
+        }),
+    };
+}
+
+const webVaultLeaseCoordinator = createWebVaultLeaseCoordinator({
+    getLockManager: () => globalThis.navigator?.locks,
+    getQueueStore: () => broadcastQueueStore,
+    isNativeVault: () => usingNativeVault(),
+    isBrowserRuntime: () => typeof globalThis.window !== 'undefined' && Boolean(globalThis.indexedDB),
+});
 
 // Seen-state key for the governance-poll watcher (localStorage): notify-once
 // bookkeeping only (chain → open-poll ids already announced), no secrets.
@@ -993,72 +1167,149 @@ export class VaultCoordinationUnavailableError extends Error {
  * @returns {Promise<{ release: () => Promise<void> } | null>}
  */
 async function acquireWebVaultLease() {
-    const lockManager = globalThis.navigator?.locks;
-    if (!lockManager || typeof lockManager.request !== 'function') {
-        if (typeof globalThis.window === 'undefined' || !globalThis.indexedDB) return null;
-        if (usingNativeVault()) return null;
-        throw new VaultCoordinationUnavailableError();
-    }
-    if (usingNativeVault()) return null;
-    if (webVaultLease) return null;
-    if (webVaultLeaseAcquisition) {
-        const lease = await webVaultLeaseAcquisition;
-        if (!lease) throw new VaultInUseError();
-        return null;
-    }
-
-    let resolveHold;
-    const hold = new Promise((resolve) => { resolveHold = resolve; });
-    webVaultLeaseAcquisition = new Promise((resolve, reject) => {
-        try {
-            const request = lockManager.request(
-                WEB_VAULT_LOCK_NAME,
-                { mode: 'exclusive', ifAvailable: true },
-                async (lock) => {
-                    if (!lock) {
-                        resolve(null);
-                        return;
-                    }
-                    let released = false;
-                    let resolveReleased;
-                    const releaseComplete = new Promise((done) => { resolveReleased = done; });
-                    const lease = {
-                        release() {
-                            if (!released) {
-                                released = true;
-                                resolveHold();
-                            }
-                            return releaseComplete;
-                        },
-                    };
-                    webVaultLease = lease;
-                    resolve(lease);
-                    try {
-                        await hold;
-                    } finally {
-                        if (webVaultLease === lease) webVaultLease = null;
-                        resolveReleased();
-                    }
-                },
-            );
-            Promise.resolve(request).catch(reject);
-        } catch (err) {
-            reject(err);
-        }
-    });
-
-    try {
-        const lease = await webVaultLeaseAcquisition;
-        if (!lease) throw new VaultInUseError();
-        return lease;
-    } finally {
-        webVaultLeaseAcquisition = null;
-    }
+    return webVaultLeaseCoordinator.acquire();
 }
 
 /** @param {{ release: () => Promise<void> } | null} [lease] */
-async function releaseWebVaultLease(lease = webVaultLease) {
-    if (lease && webVaultLease === lease) await lease.release();
+async function releaseWebVaultLease(lease) {
+    await webVaultLeaseCoordinator.release(lease);
+}
+
+export const __webVaultLeaseHarnessForTests = {
+    acquire: acquireWebVaultLease,
+    release: releaseWebVaultLease,
+    queueStore: sharedBroadcastQueueStore,
+    state: webVaultLeaseCoordinator.state,
+};
+
+export function __createWebVaultMultiTabHarnessForTests() {
+    const copy = (value) => JSON.parse(JSON.stringify(value));
+    let stored = { queues: {}, settlements: [] };
+    let lockHeld = false;
+    const lockManager = {
+        async request(name, _options, callback) {
+            if (lockHeld) return callback(null);
+            lockHeld = true;
+            try {
+                return await callback({ name });
+            } finally {
+                lockHeld = false;
+            }
+        },
+    };
+
+    function createTab() {
+        let cachedSettlements = [];
+        const storage = {
+            async load() {
+                const snapshot = copy(stored);
+                cachedSettlements = snapshot.settlements;
+                return snapshot.queues;
+            },
+            async loadSettlements() {
+                return copy(cachedSettlements);
+            },
+            async save(queues) {
+                stored = { queues: copy(queues), settlements: copy(cachedSettlements) };
+            },
+            async saveSettlements(settlements) {
+                cachedSettlements = copy(settlements);
+                stored = { queues: copy(stored.queues), settlements: copy(cachedSettlements) };
+            },
+            async clear() {
+                cachedSettlements = [];
+                stored = { queues: {}, settlements: [] };
+            },
+        };
+        const store = createBroadcastQueueStore({ storage, prunedLedger: null });
+        let coordinator;
+        store.inFlight = new WebBroadcastClaims(
+            store.inFlight,
+            () => coordinator.finishDeferredRelease(),
+        );
+        const queue = createBroadcastQueueEngine({
+            store,
+            importedAddressIdsFor: async () => new Set(),
+            discardQueuedBroadcast: async () => {},
+        });
+        coordinator = createWebVaultLeaseCoordinator({
+            getLockManager: () => lockManager,
+            getQueueStore: () => store,
+            isNativeVault: () => false,
+            isBrowserRuntime: () => true,
+        });
+        let activeLease = null;
+        return {
+            async acquire() {
+                activeLease = await coordinator.acquire();
+                await queue.ensureQueueLoaded();
+            },
+            async release() {
+                await coordinator.release(activeLease);
+                activeLease = null;
+            },
+            async enqueue(walletId, entry) {
+                await queue.ensureQueueLoaded();
+                const queued = queue.pushQueueEntry(walletId, entry);
+                await queue.persistQueue();
+                return copy(queued);
+            },
+            async discard(walletId, entryId) {
+                await queue.ensureQueueLoaded();
+                const entries = queue.getQueue(walletId);
+                const index = entries.findIndex((entry) => entry.id === entryId);
+                if (index >= 0) entries.splice(index, 1);
+                await queue.persistQueue();
+            },
+            async list(walletId) {
+                await queue.ensureQueueLoaded();
+                return copy(queue.getQueue(walletId));
+            },
+            beginBroadcast(claim) {
+                store.inFlight.add(claim);
+            },
+            async finishBroadcast(claim) {
+                store.inFlight.delete(claim);
+                await coordinator.whenReleased();
+            },
+            failureHook: (walletId) => queue.enqueueOnBroadcastFailure(walletId),
+            recordOwed(walletId, pendingTxId) {
+                queue.recordOwedSettlement(walletId, pendingTxId, 'patch', { status: 'broadcast' });
+            },
+            dispatch: (type, run) => runRouteHoldingLease(store, type, run),
+            whenReleased: () => coordinator.whenReleased(),
+            state: coordinator.state,
+        };
+    }
+
+    return {
+        createTab,
+        seed(queues, settlements = []) {
+            stored = { queues: copy(queues), settlements: copy(settlements) };
+        },
+        stored: () => copy(stored),
+    };
+}
+
+/**
+ * Undo what a failed create / import / restore put into module state, and
+ * close the vault it built: Vault keeps its own copy of the master key, and
+ * only `close()` zeros it.
+ *
+ * @param {{ openedVault: any, ownPool: any, ownHost: any }} owned
+ */
+function tearDownFailedOnboarding({ openedVault, ownPool, ownHost }) {
+    if (ownHost && host === ownHost) {
+        stopNotifications();
+        host = null;
+    }
+    if (ownPool && signerPool === ownPool) {
+        try { ownPool.lockAll(); } catch (_lockErr) { /* best-effort */ }
+        signerPool = null;
+    }
+    if (!openedVault) return;
+    if (vault === openedVault) vault = null;
+    try { openedVault.close(); } catch (_closeErr) { /* best-effort */ }
 }
 
 /**
@@ -1086,12 +1337,17 @@ export async function createWalletLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
         const result = await flowsNs.createWallet({
@@ -1109,6 +1365,7 @@ export async function createWalletLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         await signerPool.populate({
             vault,
             password,
@@ -1124,10 +1381,14 @@ export async function createWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1176,12 +1437,17 @@ export async function importMnemonicLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();
         const result = await flowsNs.importMnemonic({
             password,
@@ -1199,6 +1465,7 @@ export async function importMnemonicLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         await signerPool.populate({
             vault,
             password,
@@ -1214,6 +1481,7 @@ export async function importMnemonicLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
@@ -1243,6 +1511,9 @@ export async function importMnemonicLocal(req) {
             walletId: result.wallet.id,
             labelSync,
         };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1322,6 +1593,10 @@ export async function importBackupLocal(req) {
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
@@ -1329,6 +1604,7 @@ export async function importBackupLocal(req) {
         masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
+        openedVault = v;
         await v.open();
         const common = {
             vault: v,
@@ -1351,6 +1627,7 @@ export async function importBackupLocal(req) {
         vault = v;
         await sdkBound();
         signerPool = new signersLib.SignerPool();
+        ownPool = signerPool;
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
         // wallet silently and the user would meet it at their first spend.
@@ -1368,6 +1645,7 @@ export async function importBackupLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
         });
+        ownHost = host;
         startNotifications();
         sessionStarted = true;
         await meta.save({ kdfParams });
@@ -1378,6 +1656,9 @@ export async function importBackupLocal(req) {
             skipped: result.skipped,
             rekeyed: result.rekeyed,
         };
+    } catch (err) {
+        if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+        throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
@@ -1563,7 +1844,8 @@ export async function sendMessage(type, request) {
     if (!host) {
         throw Object.assign(new Error('wallet is locked'), { name: 'VaultClosedError' });
     }
-    const response = await host.handle({ type, request });
+    const active = host;
+    const response = await runRouteHoldingLease(broadcastQueueStore, type, () => active.handle({ type, request }));
     if (response.ok) return response.result;
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding
     // with name+message alone dropped them.
@@ -1590,6 +1872,11 @@ export function __resetForTests() {
     host = null;
     broadcastQueueStore = null;
     void releaseWebVaultLease();
+}
+
+/** Test hook: install a host without opening a persisted vault. */
+export function __setHostForTests(nextHost) {
+    host = nextHost;
 }
 
 // Only a GCM tag mismatch is a wrong password. Matching error TEXT instead

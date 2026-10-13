@@ -82,6 +82,20 @@ describe('TokenAdminForm bridge settings: the opt-in', () => {
         expect(screen.getByLabelText('Litecoin')).not.toBeChecked();
     });
 
+    // The network matches the stored list verbatim against an upper-case coin,
+    // so a lower-case entry opens nothing and must not read as an open chain.
+    it('does not pre-fill a lower-case entry, says it opens nothing, and treats the untouched form as unchanged', async () => {
+        mountAdmin({
+            chainId: DOGE, tick: 'FUFU', locks: {}, bridgeChains: 'ltc',
+        });
+        const note = await screen.findByText(/a spelling the network does not accept/i, {}, WAIT);
+        expect(note.textContent).toContain('"ltc"');
+        expect(screen.getByLabelText('Litecoin')).not.toBeChecked();
+        expect(applyButton()).toBeDisabled();
+        fireEvent.click(screen.getByLabelText('Litecoin'));
+        await waitFor(() => expect(applyButton()).not.toBeDisabled(), WAIT);
+    });
+
     it('says plainly that closing a chain never strands existing holders', async () => {
         mountAdmin({ chainId: DOGE, tick: 'FUFU', locks: {} });
         const note = await screen.findByText(/closes the door to NEW transfers/i, {}, WAIT);

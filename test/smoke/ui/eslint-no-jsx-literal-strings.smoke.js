@@ -13,7 +13,7 @@
 // eslint dependency, just static analysis of the rule's own logic.
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,7 +54,7 @@ assert.ok(!isTrivialString('Sign in to continue'), 'sentence is non-trivial');
 assert.ok(isTrivialString('Hello', ['Hello']), 'allow-listed sentence is trivial');
 
 // USER_FACING_ATTRS set covers the documented attribute list.
-// The last twenty-six are component props: copy shipped through them
+// The last thirty are component props: copy shipped through them
 // escaped the translator index while the set held DOM attribute names
 // only.
 // Every documented name is listed here, and the size assertion below
@@ -69,7 +69,8 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'headline', 'statusLabel', 'allLabel', 'summaryNoun',
     'menuHeader', 'emptyTitle', 'emptyBody', 'confirmLabel', 'cancelLabel',
     'copyLabel', 'balanceText', 'submitLabel',
-    'what', 'prefix', 'noun', 'summary', 'error',
+    'what', 'prefix', 'noun', 'summary', 'error', 'recovery',
+    'feeText', 'emptyActionLabel', 'warningNoun',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -408,6 +409,53 @@ assert.match(v[0].message, /Inline JSX text/, 'and reports it as JSX text, not a
 v = findViolations(jsxAttr('value', literal('bc1qexampleaddress')));
 assert.strictEqual(v.length, 0, 'value stays out of the set (CopyButton clipboard payload)');
 
+// 19d. Three copy props written one hop before their sink. HomeTabs passes
+// 'Clear filter' as emptyActionLabel, SignApproval passes warningNoun literals,
+// and the forms pass feeText a `Network fee: …` template wrapped in .trim().
+const callOn = (receiver, method) => ({
+    type: 'CallExpression', arguments: [],
+    callee: { type: 'MemberExpression', computed: false, object: receiver, property: identifier(method) },
+});
+const trimmedFee = callOn(template('Network fee: ', ' ', ''), 'trim');
+v = findViolations(jsxAttr('warningNoun', literal('message')));
+assert.strictEqual(v.length, 1, 'flags a warningNoun literal');
+assert.match(v[0].message, /warningNoun/);
+v = findViolations(jsxAttr('emptyActionLabel', jsxExpr(conditional(literal('Clear filter'), identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags emptyActionLabel branch copy');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(trimmedFee, identifier('undefined')))));
+assert.strictEqual(v.length, 1, 'flags a trimmed template in a feeText ternary branch');
+assert.match(v[0].message, /Network fee/);
+v = findViolations(jsxAttr('aria-label', jsxExpr(logical(identifier('custom'), callOn(literal('Pin to top'), 'trimEnd')))));
+assert.strictEqual(v.length, 1, 'flags a trimmed literal in a fallback branch');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('', ' ', ''), 'trim'), identifier('undefined')))));
+assert.strictEqual(v.length, 0, 'a trimmed pure-interpolation template stays silent');
+v = findViolations(jsxAttr('feeText', jsxExpr(conditional(callOn(template('Network fee: ', ''), 'toUpperCase'), identifier('undefined')))));
+assert.strictEqual(v.length, 0, 'only the three trim methods unwrap; another call stays a blind spot');
+v = findViolations(jsxAttr('feeText', jsxExpr(identifier('feeText'))));
+assert.strictEqual(v.length, 0, 'a runtime feeText value stays silent');
+
+// 19e. The style guide's note and kicker stay out of the set only while no
+// shipped file passes them as an attribute; this walk keeps that true.
+const STYLE_GUIDE_DIR = join('packages', 'web', 'src', 'style-guide');
+const NOTE_OR_KICKER_ATTR = /(^|\s)(note|kicker)=["'{]/m;
+function sourceFiles(dir) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) return full.endsWith(STYLE_GUIDE_DIR) ? [] : sourceFiles(full);
+        return /\.[jt]sx?$/.test(entry.name) ? [full] : [];
+    });
+}
+const packageSrcDirs = readdirSync(join(root, 'packages'))
+    .map((pkg) => join(root, 'packages', pkg, 'src'))
+    .filter((dir) => existsSync(dir));
+const stray = packageSrcDirs.flatMap(sourceFiles)
+    .filter((file) => NOTE_OR_KICKER_ATTR.test(readFileSync(file, 'utf8')));
+assert.ok(packageSrcDirs.length > 0, 'the note/kicker walk reaches package sources');
+assert.deepStrictEqual(stray, [], 'no note= or kicker= attribute outside the style guide');
+assert.ok(sourceFiles(join(root, 'packages', 'web', 'src')).length > 0, 'the walk still reads the web package');
+assert.ok(NOTE_OR_KICKER_ATTR.test('<Row value={x} note={y} />'), 'the note/kicker pattern matches an attribute');
+assert.ok(!NOTE_OR_KICKER_ATTR.test('<div role="note" />'), 'the note/kicker pattern ignores role="note"');
+
 // 22. Copy hoisted into a module-scope constant table reaches a sink
 // through an identifier, which the four inline gates read as invisible.
 // The sink decides: an unread table, a technical attribute and a
@@ -428,6 +476,8 @@ const hints = () => constTable('HINTS', objectExpr(
     prop('balance', literal('Weight = token balance')),
     prop('id', literal('-')),
     prop('nested', objectExpr(prop('tone', literal('warning')))),
+    // A nested object stays silent even under a copy key: tables judge strings only.
+    prop('panel', objectExpr(prop('label', literal('Open panel')))),
 ));
 const sinkRef = (name, value) => jsxElement([jsxAttr(name, jsxExpr(value))]);
 
@@ -449,6 +499,49 @@ v = findViolations(program(hints(),
 assert.strictEqual(v.length, 2, 'each table value is judged once, however many sinks read it');
 v = findViolations(jsxElement([jsxAttr('hint', jsxExpr(member(identifier('HINTS'), 'mode', true)))]));
 assert.strictEqual(v.length, 0, 'without a Program root there are no tables and nothing changes');
+
+// 22b. Copy written as an inline object in a copy-carrying prop, the shape
+// StatusMessage's `recovery={{ label: 'Restore', onAction }}` ships in. The
+// object's own keys are judged by the same set, so `label` and `ariaLabel`
+// count and `onAction` or `details` never do.
+const recoveryAttr = (value) => jsxAttr('recovery', jsxExpr(value));
+const onAction = prop('onAction', identifier('restoreDraft'));
+v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)));
+assert.strictEqual(v.length, 1, 'flags a literal label in an inline recovery object');
+assert.match(v[0].message, /recovery/);
+assert.match(v[0].message, /Restore/);
+assert.strictEqual(v[0].node.type, 'ObjectExpression', 'reports the object node itself');
+v = findViolations(recoveryAttr(conditional(objectExpr(prop('label', literal('Try again')), onAction), identifier('undefined'))));
+assert.strictEqual(v.length, 1, 'flags an object held in a ternary branch, once');
+assert.match(v[0].message, /Try again/);
+v = findViolations(recoveryAttr(conditional(
+    objectExpr(prop('label', literal('Open Backup')), onAction),
+    objectExpr(prop('label', literal('Dismiss')), onAction),
+)));
+assert.strictEqual(v.length, 1, 'two object branches are one violation, not two');
+v = findViolations(recoveryAttr(objectExpr(prop('label', conditional(literal('Merging…'), literal('Merge'))), onAction)));
+assert.strictEqual(v.length, 1, 'flags ternary copy inside the label value');
+v = findViolations(recoveryAttr(objectExpr(prop('label', template('Sell ', ' per fill at ', '')), onAction)));
+assert.strictEqual(v.length, 1, 'flags template copy inside the label value');
+v = findViolations(recoveryAttr(objectExpr(prop('ariaLabel', literal('Retry the import')), prop('label', identifier('lbl')))));
+assert.strictEqual(v.length, 1, 'judges every copy key, ariaLabel included');
+v = findViolations(recoveryAttr(objectExpr({ type: 'ObjectProperty', key: identifier('label'), value: literal('Clear') })));
+assert.strictEqual(v.length, 1, 'accepts the Babel ObjectProperty shape');
+v = findViolations(recoveryAttr(objectExpr({ type: 'Property', key: literal('label'), value: literal('Clear'), computed: false })));
+assert.strictEqual(v.length, 1, 'accepts a string-literal key');
+// The must-stay-silent shapes.
+v = findViolations(recoveryAttr(objectExpr(prop('label', identifier('restoreLabel')), onAction)));
+assert.strictEqual(v.length, 0, 'a runtime label stays silent');
+v = findViolations(recoveryAttr(objectExpr(onAction, prop('id', literal('retry-btn')), prop('details', literal('stack trace text')))));
+assert.strictEqual(v.length, 0, 'keys outside the set stay silent');
+v = findViolations(recoveryAttr(objectExpr({ type: 'Property', key: identifier('kind'), value: literal('Restore'), computed: true })));
+assert.strictEqual(v.length, 0, 'a computed key stays silent');
+v = findViolations(recoveryAttr(objectExpr({ type: 'SpreadElement', argument: identifier('base') }, onAction)));
+assert.strictEqual(v.length, 0, 'a spread element stays silent');
+v = findViolations(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('red'))))));
+assert.strictEqual(v.length, 0, 'an object on a technical attribute stays silent');
+v = findViolations(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)), { allow: ['Restore'] });
+assert.strictEqual(v.length, 0, 'allowlist suppresses inline object copy');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -583,6 +676,26 @@ visitors.ObjectPattern(objectPattern(defaulted('prefix', literal('Last synced'))
 visitors.ObjectPattern(objectPattern(defaulted('noun', literal('Ticker'))));
 assert.strictEqual(reports.length, 20, 'create() flags the prefix and noun prop defaults');
 
+// Test 22b on the shipping side: the two attribute paths must stay in step.
+visitors.JSXAttribute(recoveryAttr(objectExpr(prop('label', literal('Restore')), onAction)));
+assert.strictEqual(reports.length, 21, 'create() flags a literal label in an inline recovery object');
+visitors.JSXAttribute(recoveryAttr(conditional(objectExpr(prop('label', literal('Try again')), onAction), identifier('undefined'))));
+assert.strictEqual(reports.length, 22, 'create() flags an object held in a ternary branch, once');
+visitors.JSXAttribute(recoveryAttr(conditional(
+    objectExpr(prop('label', literal('Open Backup')), onAction),
+    objectExpr(prop('label', literal('Dismiss')), onAction),
+)));
+assert.strictEqual(reports.length, 23, 'create() reports two object branches once');
+visitors.JSXAttribute(recoveryAttr(objectExpr(prop('label', identifier('restoreLabel')), onAction)));
+visitors.JSXAttribute(jsxAttr('style', jsxExpr(objectExpr(prop('label', literal('red'))))));
+assert.strictEqual(reports.length, 23, 'create() ignores a runtime label and a technical attribute object');
+
+// Test 19d on the shipping side.
+visitors.JSXAttribute(jsxAttr('warningNoun', literal('sign-in')));
+visitors.JSXAttribute(jsxAttr('emptyActionLabel', jsxExpr(conditional(literal('Clear filter'), identifier('undefined')))));
+visitors.JSXAttribute(jsxAttr('feeText', jsxExpr(conditional(trimmedFee, identifier('undefined')))));
+assert.strictEqual(reports.length, 26, 'create() flags the three one-hop copy props, a trimmed fee template included');
+
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {
     options: [],
@@ -613,7 +726,11 @@ const { shouldSkipFile } = rule;
 const abs = (p) => `/repo/xchain-wallet/${p}`;
 assert.ok(shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['/src/legacy/']), 'a regex source skips its directory');
 assert.ok(!shouldSkipFile(abs('packages/core/src/app/Foo.jsx'), ['/src/legacy/']), 'and nothing outside it');
-assert.ok(shouldSkipFile(abs('packages/core/src/Old.jsx'), [/Old\.jsx$/]), 'a RegExp instance passes through');
+assert.throws(() => shouldSkipFile(abs('packages/core/src/Old.jsx'), [/Old\.jsx$/]),
+    (err) => err instanceof TypeError && /ignoreFiles/.test(err.message),
+    'a RegExp entry is refused, matching meta.schema, rather than silently skipping nothing');
+assert.strictEqual(rule.meta.schema[0].properties.ignoreFiles.items.type, 'string',
+    'meta.schema takes ignoreFiles entries as strings, the one contract the helper enforces');
 assert.ok(!shouldSkipFile(abs('packages/core/src/legacy/Foo.jsx'), ['^src/legacy/']),
     'a repo-root anchor never matches the absolute filename, which is why the header example is unanchored');
 for (const glob of ['src/legacy/**', 'src/*.jsx', '*.test.jsx', 'src/(legacy']) {
@@ -633,6 +750,7 @@ assert.match(ruleSrc, /eslint-disable-next-line @xchain\/no-jsx-literal-strings/
     'rule documents the per-line disable comment');
 assert.doesNotMatch(ruleSrc, /ignoreFiles` glob/, 'the header does not document ignoreFiles as globs');
 assert.match(ruleSrc, /ignoreFiles: \['\/src\/legacy\/'\]/, 'the header shows a regex-source ignoreFiles example');
+assert.doesNotMatch(ruleSrc, /or a RegExp/, 'the header does not advertise RegExp ignoreFiles entries, which meta.schema rejects');
 for (const dir of ['dist', 'node_modules']) {
     assert.match(ruleSrc, new RegExp(`\`/${dir}/\``), `the header lists the ${dir} default`);
 }

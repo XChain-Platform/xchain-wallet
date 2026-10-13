@@ -29,7 +29,10 @@
 # Modes:
 #   default      - verify hashes, header anchor AND signature
 #   --no-sig     - skip the GPG signature check (NOT a verification:
-#                  it trusts whoever served you the manifest)
+#                  it trusts whoever served you the manifest). It skips
+#                  the SIGNATURE and nothing else: a manifest with no
+#                  release header is still refused whenever a tag was
+#                  asked for, because it cannot answer for one.
 #   --recompute  - write a fresh unsigned RELEASE_HASHES.txt without
 #                  verifying an existing one (local convenience)
 #
@@ -78,6 +81,14 @@
 # otherwise pass --tag. In signature mode the anchor is mandatory,
 # because "the signature is good" plus "I don't know which release this
 # is" is exactly the gap a replayed manifest walks through.
+#
+# Under --no-sig the anchor is mandatory too WHENEVER ONE WAS ASKED FOR,
+# by --tag (including its XCHAIN_RELEASE_TAG environment fallback below)
+# or by a versioned filename. A headerless manifest names no release, so
+# it can only agree with itself, and agreeing with itself is what a manifest
+# from another release does perfectly. The genuinely unanchored case - no
+# --tag, no XCHAIN_RELEASE_TAG, no versioned filename, a pre-header or
+# --recompute manifest - still passes with the warning it always had.
 
 set -euo pipefail
 
@@ -253,6 +264,16 @@ fi
 )
 
 # --- Header / anchor check ----------------------------------------------
+#
+# The filename anchor is parsed BEFORE the header branch, because the
+# headerless branch needs it too: whether an anchor was ASKED FOR is a
+# fact about the call, not about the document that answered it.
+BASE="$(basename "$MANIFEST")"
+FILE_TAG=""
+if [[ "$BASE" =~ ^(v[0-9][^/]*)\.txt$ ]]; then
+    FILE_TAG="${BASH_REMATCH[1]}"
+fi
+
 if xr_has_header "$SNAP_MANIFEST"; then
     M_TAG="$(xr_header_field "$SNAP_MANIFEST" 'tag')"
     M_COMMIT="$(xr_header_field "$SNAP_MANIFEST" 'tag-commit')"
@@ -281,11 +302,6 @@ if xr_has_header "$SNAP_MANIFEST"; then
     # filename". A stale but genuinely signed pair - last release's tarball
     # beside last release's manifest and .asc - passed hash, signature and
     # anchor, and was unpacked into releases/<new tag> and flipped live.
-    BASE="$(basename "$MANIFEST")"
-    FILE_TAG=""
-    if [[ "$BASE" =~ ^(v[0-9][^/]*)\.txt$ ]]; then
-        FILE_TAG="${BASH_REMATCH[1]}"
-    fi
     EXPECT_TAG=""
     if [[ -n "$FILE_TAG" && -n "$TAG" ]]; then
         # Same release named two ways: anchor to the MORE SPECIFIC one, so
@@ -373,8 +389,25 @@ if xr_has_header "$SNAP_MANIFEST"; then
         echo "  This release was signed without the gate that keeps the" >&2
         echo "  fabricated-address dev SDK out of a shipped bundle." >&2
     fi
-elif [[ "$NO_SIG" -eq 1 ]]; then
+elif [[ "$NO_SIG" -eq 1 && -z "$TAG" && -z "$FILE_TAG" ]]; then
     echo "verify.sh: WARNING - manifest has no header (unsigned, or from before this header existed)." >&2
+    echo "  Nothing anchors it to a release, and nothing asked it to." >&2
+elif [[ "$NO_SIG" -eq 1 ]]; then
+    # AN ANCHOR THAT WAS ASKED FOR IS NOT ANSWERED BY A DOCUMENT THAT
+    # CANNOT CARRY ONE. Until this branch existed, --no-sig plus a
+    # headerless manifest printed a warning and exited 0 with $TAG never
+    # read, so a checksum-only manifest covering another release's tarball
+    # satisfied a request for THIS one. deploy-web.sh makes --tag mandatory
+    # and forwards it here, and its own header promises that under --no-sig
+    # "the hash and the anchor are still checked". A hash check that agrees
+    # with itself is not an answer to "is this the manifest for $TAG",
+    # whether $TAG came from --tag or its XCHAIN_RELEASE_TAG fallback.
+    echo "verify.sh: $MANIFEST has no release header, so it cannot be anchored to" >&2
+    echo "  '${TAG:-$FILE_TAG}'. --no-sig skips the SIGNATURE; it does not make a" >&2
+    echo "  manifest that names no release able to answer for one." >&2
+    echo "  Fetch the published RELEASE_HASHES/${TAG:-$FILE_TAG}.txt, or drop --tag" >&2
+    echo "  if a bare hash check against this manifest is all you wanted." >&2
+    exit 1
 else
     # In signature mode a missing header is not a legacy quirk: the
     # signature covers the manifest bytes, so a real signed release
@@ -408,12 +441,24 @@ fi
 # one value in this repo that only an observed signing run can write.
 PIN_FILE="$HERE/../../docs/release-key-pin.json"
 PIN_SOURCE="--key"
-if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
-    EXPECT_KEY="$(sed -n 's/.*"fingerprint"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
+PIN_FPR=""
+PIN_SUBKEY=""
+PIN_PUBLIC_KEY=""
+if [[ -f "$PIN_FILE" ]]; then
+    PIN_FPR="$(sed -n 's/.*"fingerprint"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
         "$PIN_FILE" | head -1)"
+    PIN_SUBKEY="$(sed -n 's/.*"signingSubkey"[[:space:]]*:[[:space:]]*"\([0-9A-Fa-f]\{40\}\)".*/\1/p' \
+        "$PIN_FILE" | head -1)"
+    PIN_PUBLIC_KEY="$(sed -n 's/.*"publicKey"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        "$PIN_FILE" | head -1)"
+fi
+if [[ -z "$EXPECT_KEY" && -f "$PIN_FILE" ]]; then
+    EXPECT_KEY="$PIN_FPR"
     PIN_SOURCE="docs/release-key-pin.json"
 fi
 EXPECT_KEY="$(printf '%s' "$EXPECT_KEY" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+PIN_FPR="$(printf '%s' "$PIN_FPR" | tr '[:lower:]' '[:upper:]')"
+PIN_SUBKEY="$(printf '%s' "$PIN_SUBKEY" | tr '[:lower:]' '[:upper:]')"
 if [[ -z "$EXPECT_KEY" ]]; then
     echo "verify.sh: no expected signing key, so the signature cannot be attributed." >&2
     echo "  A good signature from an unknown key is not a verification: this" >&2
@@ -435,6 +480,95 @@ fi
 echo "verify.sh: verifying GPG signature on $MANIFEST ..." >&2
 echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
 
+GPG_TIMEOUT_SECONDS="${XCHAIN_VERIFY_GPG_TIMEOUT_SECONDS:-15}"
+if [[ ! "$GPG_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "verify.sh: XCHAIN_VERIFY_GPG_TIMEOUT_SECONDS must be a positive integer." >&2
+    exit 2
+fi
+if ! command -v perl >/dev/null 2>&1; then
+    echo "verify.sh: perl is required to enforce the GPG verification time limit." >&2
+    exit 2
+fi
+
+run_gpg_bounded() {
+    perl -MPOSIX=:sys_wait_h -e '
+        my $seconds = shift;
+        my $pid = fork();
+        exit 127 unless defined $pid;
+        if ($pid == 0) {
+            POSIX::setpgid(0, 0);
+            exec @ARGV;
+            exit 127;
+        }
+        my $timed_out = 0;
+        $SIG{ALRM} = sub { $timed_out = 1; kill 9, -$pid; kill 9, $pid; };
+        alarm $seconds;
+        waitpid($pid, 0);
+        my $status = $?;
+        alarm 0;
+        exit 124 if $timed_out;
+        exit WEXITSTATUS($status) if WIFEXITED($status);
+        exit 128 + WTERMSIG($status) if WIFSIGNALED($status);
+        exit 1;
+    ' "$GPG_TIMEOUT_SECONDS" "$@"
+}
+
+VERIFY_GNUPGHOME="$SNAP_DIR/gnupg"
+mkdir -m 700 "$VERIFY_GNUPGHOME"
+KEY_MATERIAL="$SNAP_DIR/release-signing-key.gpg"
+IMPORT_KEY=1
+
+if [[ "$EXPECT_KEY" == "$PIN_FPR" || "$EXPECT_KEY" == "$PIN_SUBKEY" ]]; then
+    if [[ -z "$PIN_PUBLIC_KEY" ]]; then
+        echo "verify.sh: docs/release-key-pin.json does not name its public key." >&2
+        exit 1
+    fi
+    PIN_PUBLIC_KEY="$(dirname "$PIN_FILE")/$PIN_PUBLIC_KEY"
+    if [[ ! -f "$PIN_PUBLIC_KEY" ]]; then
+        echo "verify.sh: pinned public key '$PIN_PUBLIC_KEY' was not found." >&2
+        exit 1
+    fi
+    cp "$PIN_PUBLIC_KEY" "$KEY_MATERIAL"
+else
+    if GPG_VERSION="$(run_gpg_bounded gpg --version 2>/dev/null)" \
+        && [[ "$GPG_VERSION" == "gpg (GnuPG)"* ]]; then
+        if run_gpg_bounded gpg --batch --no-options --no-autostart --export > "$KEY_MATERIAL"; then
+            :
+        else
+            result=$?
+            if [[ "$result" -eq 124 ]]; then
+                echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s reading the requested key." >&2
+            else
+                echo "verify.sh: could not read the requested key from the caller's keyring." >&2
+            fi
+            exit 1
+        fi
+    else
+        result=$?
+        if [[ "$result" -eq 124 ]]; then
+            echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s starting gpg." >&2
+            exit 1
+        fi
+        IMPORT_KEY=0
+    fi
+fi
+
+if [[ "$IMPORT_KEY" -eq 1 ]]; then
+    if run_gpg_bounded env GNUPGHOME="$VERIFY_GNUPGHOME" \
+        gpg --batch --no-options --no-autostart --quiet \
+        --import-options import-minimal --import "$KEY_MATERIAL"; then
+        :
+    else
+        result=$?
+        if [[ "$result" -eq 124 ]]; then
+            echo "verify.sh: timed out after ${GPG_TIMEOUT_SECONDS}s importing the release key." >&2
+        else
+            echo "verify.sh: could not import the release key into the isolated keyring." >&2
+        fi
+        exit 1
+    fi
+fi
+
 # --status-fd rather than the human output, because "Good signature from
 # <uid>" is a name and names are not the check. VALIDSIG carries the
 # signing key's fingerprint as its first field and the PRIMARY key's as
@@ -443,10 +577,19 @@ echo "verify.sh: signature must come from $EXPECT_KEY (via $PIN_SOURCE)" >&2
 # fingerprint a user reads on the published channel never appears as the
 # signer. Either half may be named by --key; a mismatch on both is a
 # wrong key. The human output still goes to stderr for the operator.
-GPG_STATUS="$(gpg --status-fd 3 --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)" || {
-    echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
+if GPG_STATUS="$(run_gpg_bounded env GNUPGHOME="$VERIFY_GNUPGHOME" \
+    gpg --batch --no-options --no-autostart --trust-model always --status-fd 3 \
+    --verify "$SNAP_SIG" "$SNAP_MANIFEST" 3>&1 1>&2)"; then
+    :
+else
+    result=$?
+    if [[ "$result" -eq 124 ]]; then
+        echo "verify.sh: GPG verification timed out after ${GPG_TIMEOUT_SECONDS}s." >&2
+    else
+        echo "verify.sh: gpg could not verify the signature on $MANIFEST" >&2
+    fi
     exit 1
-}
+fi
 
 SIGNER_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($3); exit}')"
 PRIMARY_FPR="$(printf '%s\n' "$GPG_STATUS" | awk '/^\[GNUPG:\] VALIDSIG /{print toupper($NF); exit}')"

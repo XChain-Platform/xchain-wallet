@@ -65,6 +65,8 @@ import { serializeError } from '@xchain-wallet/extension/src/background/MessageH
 // The pure idle decision, shared with the extension backstop so the two
 // shells cannot drift on what "idle" means.
 import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
+import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wallet/extension/src/background/broadcastQueueStore.js';
+import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
@@ -110,6 +112,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
  */
 
@@ -160,7 +163,17 @@ export function createRuntime(deps) {
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
+        // One broadcast-queue store for every host this process builds, as the
+        // extension and web shells hold: a lock keeps it (a broadcast still on
+        // the network owes its persist and journal entry to the NEXT host),
+        // and only a wipe seals and renews it.
+        broadcastQueueStore: newBroadcastQueueStore(),
     };
+}
+
+/** Build a queue store over the same default storage a host would pick itself. */
+function newBroadcastQueueStore() {
+    return createBroadcastQueueStore({ storage: createBroadcastQueueStorage() });
 }
 
 /**
@@ -322,6 +335,7 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            broadcastQueueStore: runtime.broadcastQueueStore,
             getDiagnosticContext: runtime.getDiagnosticContext,
             // Re-applies routing on any settings.update touching `privacy`,
             // so the toggle takes effect on the next request.
@@ -516,8 +530,10 @@ export function tearDownHost(runtime) {
  * from the renderer actually lands.
  *
  * The renderer's `wipeWalletStorage` can only reach localStorage and
- * IndexedDB, neither of which the desktop shell uses. Its four stores
- * are files under `app.getPath('userData')`, reachable only from main:
+ * IndexedDB, neither of which the desktop shell uses. Its stores are
+ * files under `app.getPath('userData')`, reachable only from main, and
+ * `targets` below is the list that decides what goes; a new per-wallet
+ * store added to `createRuntime` goes there too:
  *
  *   - storage        `vault.bin`            encrypted vault document
  *   - meta           `meta.json`            kdfParams: the "a wallet
@@ -528,6 +544,10 @@ export function tearDownHost(runtime) {
  *   - unlockThrottle attempt counters       a lockout inherited by the
  *                                           *next* wallet, punishing the
  *                                           user for the old one's typos
+ *   - autoLock       `autolock.json`        the idle stamp of a session
+ *                                           that no longer exists, which
+ *                                           would hand the next wallet
+ *                                           somebody else's idle clock
  *
  * The throttle is cleared deliberately. It exists to slow password
  * guessing against a vault; once that vault is gone there is nothing
@@ -538,7 +558,7 @@ export function tearDownHost(runtime) {
  * write a store back after it was unlinked.
  *
  * Per-store failures are collected rather than thrown so one unwritable
- * file cannot leave the other three behind; the caller reports `ok`.
+ * file cannot leave the others behind; the caller reports `ok`.
  *
  * @param {DesktopRuntime} runtime
  * @returns {Promise<WipeResult>}
@@ -546,6 +566,14 @@ export function tearDownHost(runtime) {
 export async function wipeRuntimeStores(runtime) {
     if (!runtime) throw new Error('wipeRuntimeStores: runtime is required');
     tearDownHost(runtime);
+    // Seal the shared queue store so a broadcast the torn-down host still has
+    // on the network writes nothing back; the next unlock gets a fresh one.
+    try {
+        await sealBroadcastQueueStore(runtime.broadcastQueueStore);
+    } catch (err) {
+        console.error('[xchain] broadcast-queue seal failed:', err);
+    }
+    runtime.broadcastQueueStore = newBroadcastQueueStore();
 
     /** @type {string[]} */
     const cleared = [];

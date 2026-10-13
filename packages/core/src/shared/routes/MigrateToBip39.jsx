@@ -183,7 +183,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'done' ? 'BIP39 wallet created' : 'Migrate to BIP39'}
+            title={stage === 'done' ? 'BIP39 wallet created' : 'Upgrade recovery phrase'}
         />
     );
     const wrap = (children) => (

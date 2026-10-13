@@ -543,10 +543,10 @@ async function composePromoTile(outPath) {
             <rect width="100%" height="100%" fill="url(#tile)"/>
             <text x="${TILE_W / 2}" y="${logoTop + logoTargetH + 40}" text-anchor="middle"
                   font-family="-apple-system,Helvetica,Arial,sans-serif"
-                  font-size="24" font-weight="700" fill="#FFFFFF">XChain Wallet</text>
+                  font-size="20" font-weight="700" fill="#FFFFFF">The wallet for the XChain Platform</text>
             <text x="${TILE_W / 2}" y="${logoTop + logoTargetH + 64}" text-anchor="middle"
                   font-family="-apple-system,Helvetica,Arial,sans-serif"
-                  font-size="14" fill="#EAF3FA">Self-custodial Bitcoin, Dogecoin &amp; Litecoin wallet</text>
+                  font-size="14" fill="#EAF3FA">Currently supports BTC, DOGE &amp; LTC</text>
         </svg>
     `);
 

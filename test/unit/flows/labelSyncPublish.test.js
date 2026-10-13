@@ -300,6 +300,56 @@ describe('submitLabelsPublication confirmation envelope', () => {
     });
 });
 
+// The confirm modal tells the user a transiently failed publish is queued, so the
+// lane must hand submitAction both durable halves: the PendingTx record that boot
+// recovery rebuilds from, and the host queue hook.
+describe('label publication keeps signed bytes durable on a transient broadcast failure', () => {
+    const preparation = {
+        chainId: CHAIN_ID,
+        from: FROM_ADDRESS,
+        actionData: { action: 'FILE', params: { VERSION: '0', NAME: 'labels' } },
+        encoderOpts: { rawData: 'aabbccdd' },
+        discoveryName: 'labels',
+        sizeBytes: 4,
+    };
+    const base = {
+        vault: {}, walletId: 'wallet-1', password: PASSWORD, chainRegistry: {}, sdkRegistry: {}, preparation,
+    };
+
+    it('submitLabelsPublication forwards the queue hook and a PendingTx record', async () => {
+        vi.mocked(submitAction).mockResolvedValue({ txid: 'txid-1', pendingTxId: 'p-1' });
+        const onBroadcastFailure = vi.fn();
+
+        const r = await submitLabelsPublication({ ...base, onBroadcastFailure });
+
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        expect(call.onBroadcastFailure).toBe(onBroadcastFailure);
+        expect(call.pendingTxMeta).toEqual({
+            fromAddress: FROM_ADDRESS.address,
+            toAddress: null,
+            actionSummary: 'Publish wallet labels (4 bytes)',
+        });
+        expect(r.pendingTxId).toBe('p-1');
+    });
+
+    it('submitLabelsPublication skips the PendingTx record only when told to', async () => {
+        await submitLabelsPublication({ ...base, trackPendingTx: false });
+        expect(vi.mocked(submitAction).mock.calls[0][0].pendingTxMeta).toBeUndefined();
+    });
+
+    it('publishLabelsNow forwards the queue hook on the one-shot path', async () => {
+        const vault = await openVault();
+        const { wallet } = await makeWallet(vault, { passphraseEnabled: false });
+        const onBroadcastFailure = vi.fn();
+
+        await publish(vault, wallet.id, { onBroadcastFailure });
+
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        expect(call.onBroadcastFailure).toBe(onBroadcastFailure);
+        expect(call.pendingTxMeta?.fromAddress).toBe(FROM_ADDRESS.address);
+    });
+});
+
 // "Publish labels" was funding from the HIGHEST-index HD receive
 // address on the chain, never the wallet's active address, so a wallet that
 // had moved on from address #0 (the one Send/Home actually operate on) got

@@ -102,9 +102,7 @@ assert.ok(
 // Every submitAction call site forwards the hook, so a failed broadcast on
 // any action lands on the queue the confirm modal tells the user it is on.
 // A file listed here is exempt on purpose and says why.
-const FORWARD_EXEMPT = new Map([
-    ['labelSync.js', 'label publish stamps no PendingTx and has no queued-result surface'],
-]);
+const FORWARD_EXEMPT = new Map([]);
 const flowsDir = join(core, 'src', 'flows');
 const submitterNames = new Set();
 let forwardingFiles = 0;
@@ -135,10 +133,13 @@ assert.ok(
     /host\.register\('broadcast\.queue\.enqueue'/.test(bg),
     'createBackgroundHost registers broadcast.queue.enqueue',
 );
-// One hook builder feeds every signing route, and it pushes onto the queue.
 assert.ok(
-    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \{ await ensureQueueLoaded\(\); pushQueueEntry\(walletId, entry\); \};/.test(engine),
-    'enqueueOnBroadcastFailure builds a hook that pushes onto the queue',
+    /function enqueueOnBroadcastFailure\(walletId\) \{[\s\S]+?return async \(entry\) => \(await enqueueSignedBroadcast\(walletId, entry\)\)\.persisted;/.test(engine),
+    'enqueueOnBroadcastFailure returns the shared queue persistence verdict',
+);
+assert.ok(
+    /async function enqueueSignedBroadcast\(walletId, entry\) \{\s*await ensureQueueLoaded\(\);[\s\S]*?const twin = liveTwinOf\(walletId, entry\);\s*if \(twin\) adoptSnapshotVerdict\(twin, entry\);\s*const stored = twin \?\? pushQueueEntry\(walletId, entry\);\s*return \{ entry: stored, persisted: await persistQueue\(\) \};/.test(engine),
+    'the shared enqueue path loads, deduplicates, and persists signed broadcasts',
 );
 assert.ok(
     /host\.register\('action\.send'[^\n]*\n(?:(?!host\.register)[\s\S])*?onBroadcastFailure: enqueueOnBroadcastFailure\(req\?\.walletId\)/.test(bg),
@@ -151,7 +152,7 @@ assert.ok(
 );
 // Every software-signer route that runs a submitting flow wires it too.
 let softwareRoutes = 0;
-for (const m of bg.matchAll(/return (\w+)\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\)[^\n]*/g)) {
+for (const m of bg.matchAll(/(?:return|const result = await) (\w+)\(\{ \.\.\.req, signer: await sessionSigner\(req, vault, signerPool\)[^\n]*/g)) {
     if (!submitterNames.has(m[1])) continue;
     assert.ok(
         m[0].includes('onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId)'),

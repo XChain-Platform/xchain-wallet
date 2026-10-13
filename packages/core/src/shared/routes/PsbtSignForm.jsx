@@ -84,6 +84,26 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
+
+// Show fixed copy for every parse failure: the parse handler throws only
+// precondition text and decoder exceptions, never wording written for a user.
+const PARSE_FAILED_MESSAGE = "This doesn't look like a transaction this wallet can read. "
+    + 'Check that you pasted the whole thing and picked the right chain.';
+
+// Say what the user cannot do here, not which shell API is missing.
+const SIGN_UNAVAILABLE_MESSAGE = "This version of the wallet can't sign transactions on this screen.";
+
+// Word a failed broadcast without the handler's prefix or the node's reject code.
+// A missing txid can follow a node that accepted the bytes, so never say nothing went out.
+function broadcastFailureMessage(err) {
+    const raw = err && typeof err === 'object' ? String(/** @type {any} */ (err).message || '') : String(err || '');
+    if (/did not return a txid/i.test(raw)) {
+        return "The wallet couldn't confirm this transaction reached the network. "
+            + 'Check your transaction history before broadcasting it again.';
+    }
+    return readFailureMessage(err, 'broadcast this transaction');
+}
 
 function arrayBufferToHex(buf) {
     const view = new Uint8Array(buf);
@@ -255,8 +275,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     // §20 / G040 FOLLOWUP 1: capture the broadcastable txHex + txid from
     // the sign result so the result page can offer in-wallet broadcast.
     const [signedTxHex, setSignedTxHex] = useState(/** @type {string} */ (''));
+    const [signedTxid, setSignedTxid] = useState(/** @type {string} */ (''));
     const [broadcastState, setBroadcastState] = useState(
-        /** @type {'idle' | 'broadcasting' | 'broadcast' | 'error'} */ ('idle'),
+        /** @type {'idle' | 'broadcasting' | 'broadcast' | 'queued' | 'error'} */ ('idle'),
     );
     const [broadcastTxid, setBroadcastTxid] = useState(/** @type {string} */ (''));
     const [broadcastError, setBroadcastError] = useState(/** @type {string | null} */ (null));
@@ -449,7 +470,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -479,7 +500,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return undefined;
         }
         if (typeof messaging.parsePsbtRequest !== 'function') {
-            setParseError('messaging.parsePsbtRequest is not available in this shell.');
+            setParseError("This version of the wallet can't read pasted transactions.");
             return undefined;
         }
         let cancelled = false;
@@ -501,7 +522,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 setDecomposed(null);
                 setParsedAction(null);
                 setParsedActionReason(null);
-                setParseError(err?.message || 'Failed to parse transaction.');
+                setParseError(PARSE_FAILED_MESSAGE);
             })
             .finally(() => { if (!cancelled) setParsing(false); });
         return () => { cancelled = true; };
@@ -620,6 +641,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             });
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
             setBroadcastState('idle');
             setBroadcastTxid('');
             setBroadcastError(null);
@@ -629,7 +651,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
-                    : err?.message || 'Signing failed.',
+                    : readFailureMessage(err, 'sign this transaction'),
             );
         }
     }
@@ -650,7 +672,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         }
         if (useConfirmPage) {
             if (typeof messaging.signPsbtUserInitiated !== 'function') {
-                setError('messaging.signPsbtUserInitiated is not available in this shell.');
+                setError(SIGN_UNAVAILABLE_MESSAGE);
                 return;
             }
             // The password is collected ON the confirm page, so the credential
@@ -664,13 +686,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 return;
             }
             if (typeof messaging.signPsbtUserInitiatedHw !== 'function') {
-                setError('messaging.signPsbtUserInitiatedHw is not available in this shell.');
+                setError(SIGN_UNAVAILABLE_MESSAGE);
                 return;
             }
         } else {
             if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
             if (typeof messaging.signPsbtUserInitiated !== 'function') {
-                setError('messaging.signPsbtUserInitiated is not available in this shell.');
+                setError(SIGN_UNAVAILABLE_MESSAGE);
                 return;
             }
         }
@@ -690,6 +712,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 });
             setSignedPsbtHex(result?.signedPsbtHex || '');
             setSignedTxHex(typeof result?.txHex === 'string' ? result.txHex : '');
+            setSignedTxid(typeof result?.txid === 'string' ? result.txid : '');
             setBroadcastState('idle');
             setBroadcastTxid('');
             setBroadcastError(null);
@@ -698,7 +721,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
-                    : err?.message || 'Signing failed.',
+                    : readFailureMessage(err, 'sign this transaction'),
             );
         } finally {
             setBusy(false);
@@ -787,9 +810,14 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         }}>{broadcastTxid}</code>
                         <CopyButton value={broadcastTxid} label="Copy txid" />
                     </div>
+                ) : broadcastState === 'queued' ? (
+                    <div role="status" aria-live="polite" style={{ color: 'var(--xc-text-muted)' }}>
+                        The network could not take the transaction yet. Its signed bytes are saved in the
+                        queued-transactions banner, where you can retry without signing again.
+                    </div>
                 ) : broadcastState === 'error' ? (
                     <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
-                        Broadcast failed: {broadcastError}
+                        {broadcastError}
                     </div>
                 ) : signedPsbtHex ? (
                     <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
@@ -807,7 +835,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </p>
                 )}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    {broadcastState !== 'broadcast' ? (
+                    {broadcastState !== 'broadcast' && broadcastState !== 'queued' ? (
                         <Button
                             variant="primary"
                             block
@@ -816,7 +844,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             onClick={async () => {
                                 if (!signedTxHex || !chainId) return;
                                 if (typeof messaging.broadcastSignedTxRequest !== 'function') {
-                                    setBroadcastError('messaging.broadcastSignedTxRequest is not available in this shell.');
+                                    setBroadcastError("This version of the wallet can't broadcast from here. "
+                                        + 'Copy the signed transaction and broadcast it with another tool.');
                                     setBroadcastState('error');
                                     return;
                                 }
@@ -824,13 +853,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 setBroadcastError(null);
                                 try {
                                     const res = await messaging.broadcastSignedTxRequest({
+                                        walletId,
                                         chainId,
                                         txHex: signedTxHex,
+                                        txid: signedTxid || undefined,
+                                        fromAddress: selectedAddress?.address || undefined,
                                     });
-                                    setBroadcastTxid(res?.txid || '');
-                                    setBroadcastState('broadcast');
+                                    if (res?.queued === true) {
+                                        setBroadcastState('queued');
+                                    } else {
+                                        setBroadcastTxid(res?.txid || signedTxid);
+                                        setBroadcastState('broadcast');
+                                    }
                                 } catch (err) {
-                                    setBroadcastError(err?.message || 'Broadcast failed.');
+                                    setBroadcastError(broadcastFailureMessage(err));
                                     setBroadcastState('error');
                                 }
                             }}
@@ -844,6 +880,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         onClick={() => {
                             setSignedPsbtHex(null);
                             setSignedTxHex('');
+                            setSignedTxid('');
                             setBroadcastState('idle');
                             setBroadcastTxid('');
                             setBroadcastError(null);

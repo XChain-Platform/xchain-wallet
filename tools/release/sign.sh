@@ -269,10 +269,9 @@ if [[ -z "${XCHAIN_RELEASE_GPG_KEY:-}" ]]; then
 sign.sh: XCHAIN_RELEASE_GPG_KEY is not set.
 
 This says nothing about whether a key exists - only that this run was
-not told which one to use. K1 was generated on 2026-08-05 and its
-fingerprint is published in SECURITY.md; see G180 in
-claude/reports/xchain-wallet/SPEC_GAPS.md for what remains of that gate
-(publication reaching readers, which is a deploy rather than a key).
+not told which one to use. K1 was generated on 2026-08-05; its
+fingerprint and current publication status are documented in SECURITY.md
+(G180, the release-key publication gate).
 
 Path forward:
   1. Point GNUPGHOME at the keystore holding the release key
@@ -329,6 +328,16 @@ if [[ -n "$DIRT" ]]; then
     echo "  Build and sign from a throwaway clone, never the shared worktree." >&2
     exit 1
 fi
+
+# --- Ceremony-record gate -----------------------------------------
+#
+# The gate above proves the SIGNING clone is clean and at the tag; it says
+# nothing about the tree that BUILT the bytes. android-ceremony.sh records
+# that in records/ beside them, and a --rehearsal run (dirty tree, real keys,
+# release filenames) is told apart from a release only there. Every gate
+# below reads top-level files, so this one reads the record before anything
+# is hashed. No flag skips it.
+xr_check_ceremony_records "$INPUT_DIR" "$TAG" "$TAG_COMMIT" "$REPO_ROOT" || exit 1
 
 # --- Signing-control source ---------------------------------------------
 #
@@ -805,7 +814,26 @@ xr_assert_store_profile_buildable "$INPUT_DIR" "$GATE_EXPECTED"
 # used as an argument throws its exit status away, so `node "$(...)"`
 # would run node with an empty path on the refusal branch.
 SIGNATURE_GATE="$(gate_script tools/release/verify-signatures.mjs)" || exit 1
-node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+run_signature_gate() {
+    node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
+}
+SIGNATURE_OUT=""
+if ! SIGNATURE_OUT="$(run_signature_gate 2>&1)"; then
+    printf '%s\n' "$SIGNATURE_OUT" >&2
+    exit 1
+fi
+printf '%s\n' "$SIGNATURE_OUT" >&2
+
+# Exit 0 is not enough: require the verifier's completion receipt. This
+# makes a truncated or accidentally short-circuited checker a refusal rather
+# than permission to wrap unchecked installers in the release manifest.
+if ! printf '%s\n' "$SIGNATURE_OUT" \
+    | grep -qE '^signature gate ok \([0-9]+ verified, [0-9]+ recorded-not-verified(, [0-9]+ undeclared left to the artifact-set gate)?\)$'; then
+    echo "sign.sh: signature gate exited 0 without its completion receipt." >&2
+    echo "  Refusing to sign: the installer-signature checks did not prove" >&2
+    echo "  that they reached their final verdict." >&2
+    exit 1
+fi
 
 # --- Launch probe (row 144) --------------------------------------
 # EVERY GATE ABOVE THIS LINE READS THE ARTIFACTS. NONE OF THEM RUNS ONE.
@@ -829,14 +857,24 @@ node "$SIGNATURE_GATE" "$INPUT_DIR" "$GATE_EXPECTED" "$RELEASE_SET"
 #
 # NO --require-probed HERE, deliberately. This runs on the release Mac
 # against a set that also holds Linux artifacts no Mac can execute, so a
-# minimum-launch count would refuse every release. What prevents a silent
-# pass instead is the probe's own banner: a run that launched nothing says
-# so in block capitals rather than printing an "ok" line. The CI lanes,
-# where the host and the lane match by construction, DO pass a minimum.
+# minimum-launch count would refuse every release. The CI lanes, where the
+# host and the lane match by construction, DO pass a minimum.
 #
-# It opens a real window on the operator's desktop for a few seconds, and
-# over SSH (no Aqua session) it reports NOT PROBED by name rather than
-# failing the ceremony.
+# Two things stand in for that minimum here. Only an artifact this host
+# cannot run at all (another OS's build, or a Linux build of the other arch
+# where no translator exists) is reported NOT PROBED by name, and a run
+# that launched nothing says so in a block-capitals banner and exits 0:
+# that is the honest "this Mac cannot run a Linux artifact"
+# case. A host MISSING A FACILITY it needed is refused with exit 1 instead,
+# before the manifest is written, which stops the ceremony right here on
+# purpose, so a macOS release is never signed with zero launch evidence.
+# On the release Mac that means running over SSH (no logged-in Aqua
+# session) or an x64 mac zip on Apple silicon with no Rosetta 2: both
+# refuse, neither is reported NOT PROBED.
+#
+# It opens a real window on the operator's desktop for a few seconds, so run
+# the ceremony from a logged-in desktop session: with a mac artifact in the
+# set, over SSH the probe refuses rather than carrying on.
 LAUNCH_PROBE="$(gate_script tools/release/launch-probe.mjs)" || exit 1
 node "$LAUNCH_PROBE" "$INPUT_DIR" "$RELEASE_SET"
 

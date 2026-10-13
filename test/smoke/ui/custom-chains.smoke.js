@@ -274,6 +274,14 @@ for (const shellPath of shells) {
     assert.match(src, /chainRegistry\.listCustomChains/, `${shellPath}: routes to chainRegistry.listCustomChains`);
     assert.match(src, /chainRegistry\.addCustomChain/, `${shellPath}: routes to chainRegistry.addCustomChain`);
     assert.match(src, /chainRegistry\.removeCustomChain/, `${shellPath}: routes to chainRegistry.removeCustomChain`);
+    assert.match(src, /customChains\.js'\)\.AddCustomChainResult>\} \*\/ \(sendMessage\('chainRegistry\.addCustomChain'/,
+        `${shellPath}: addCustomChain shim casts to the shared AddCustomChainResult typedef`);
+    assert.doesNotMatch(src, /Promise<\{ descriptor: object \}>/,
+        `${shellPath}: addCustomChain shim does not narrow the route result to { descriptor }`);
+}
+assert.match(flowSrc, /@typedef \{object\} AddCustomChainResult/, 'customChains flow exports the AddCustomChainResult typedef');
+for (const field of ['descriptor', '\\[restored\\]', '\\[replaced\\]']) {
+    assert.match(flowSrc, new RegExp(`@property \\{[^}]+\\} ${field}\\s`), `AddCustomChainResult declares ${field}`);
 }
 
 // ─── 6. DeveloperModeSection wiring ─────────────────────────────────────

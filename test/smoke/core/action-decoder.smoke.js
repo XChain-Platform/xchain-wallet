@@ -216,6 +216,15 @@ const chainRegistry = registryLib.defaultRegistry();
         d.details.find((r) => r.label === 'Locking').value.includes('minting'),
         'lock label reads "minting" not "LOCK_MINT"',
     );
+    const paused = decoderLib.decodeAction({
+        action: 'ISSUE',
+        params: { VERSION: '0', TICK: 'NEWCOIN', LOCK_SLEEP: '1' },
+        chainId: 'bitcoin-mainnet',
+        chainRegistry,
+    });
+    const pauseRow = paused.details.find((r) => r.label === 'Locking');
+    assert.ok(pauseRow && pauseRow.value.includes('pausing'), 'lock label reads "pausing" not "LOCK_SLEEP"');
+    assert.ok(!/sleep/i.test(pauseRow.value), 'lock label does not name the SLEEP command');
     assert.ok(
         d.warnings.some((w) => /locking is permanent/i.test(w)),
         'ISSUE with lock flags surfaces the permanent-lock warning',

@@ -277,6 +277,7 @@ export {
     FAMILY_MAINNET_COIN_TYPE_SLOT,
     FAMILY_NETWORK_WIF_BYTE,
     FAMILY_RBF_SUPPORTED,
+    FAMILY_FEE_UNIT,
 } from './validate.js';
 export {
     COMMON_ACTIONS,
@@ -293,7 +294,7 @@ export {
     ADS_DONATION_ADDRESS_PLACEHOLDER,
     isDonationAddressConfigured,
 } from './validate.js';
-export { filterChainsForUser, isChainVisibleToUser } from './visibility.js';
+export { filterChainsForUser, isChainVisibleToUser, coinFamiliesForUser } from './visibility.js';
 export { hydrateCustomChainsFromSettings } from './hydrateCustomChains.js';
 export {
     verifyChainRegistry,

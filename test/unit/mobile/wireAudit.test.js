@@ -179,6 +179,9 @@ describe('wire audit: the mobile egress set is pinned', () => {
         // first-party endpoint that carries no wallet address, which is why it
         // can be described as anonymous where the balance queries cannot.
         expect(row.carries).toMatch(/no addresses/i);
+        // The check fetches a fixed static file and compares versions on the
+        // device, so the declaration must not claim the version leaves it.
+        expect(row.carries).toMatch(/running version is not sent/i);
     });
 
     it('rejects an unknown shell rather than answering for one', () => {

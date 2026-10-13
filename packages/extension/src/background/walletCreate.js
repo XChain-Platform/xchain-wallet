@@ -63,21 +63,25 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
             backend: deps.storageBackend,
             masterKey,
         });
-        await vault.open();
-        const result = await flows.createWallet({
-            password,
-            vault,
-            chainRegistry: deps.chainRegistry,
-            sdkRegistry: deps.sdkRegistry,
-            activeChainIds,
-            name,
-            strengthBits,
-            bip39Passphrase,
-            kdfParams,
-        });
-        await vault.save();
-        vault.close();
-        mnemonic = result.mnemonic;
+        try {
+            await vault.open();
+            const result = await flows.createWallet({
+                password,
+                vault,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                activeChainIds,
+                name,
+                strengthBits,
+                bip39Passphrase,
+                kdfParams,
+            });
+            await vault.save();
+            mnemonic = result.mnemonic;
+        } finally {
+            // Vault kept its own copy of the key; close zeros that copy.
+            vault.close();
+        }
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
@@ -118,38 +122,42 @@ export async function handleWalletImport(request, deps) {
             backend: deps.storageBackend,
             masterKey,
         });
-        await vault.open();
-        const result = await flows.importMnemonic({
-            password,
-            mnemonic,
-            vault,
-            chainRegistry: deps.chainRegistry,
-            sdkRegistry: deps.sdkRegistry,
-            activeChainIds,
-            name,
-            bip39Passphrase,
-            origin,
-            kdfParams,
-        });
-        await vault.save();
-        // §19.5.2 restore half: the labels + contacts this seed published
-        // earlier come back into the fresh vault while the password is
-        // still in scope. The wallet is already saved above, so a failure
-        // here costs the restore and never the import.
-        labelSync = await restoreLabelSyncBestEffort({
-            vault,
-            walletId: result.wallet.id,
-            password,
-            bip39Passphrase,
-            chainIds: typeof flows.labelSyncSearchChainIds === 'function'
-                ? flows.labelSyncSearchChainIds(deps.chainRegistry, activeChainIds)
-                : activeChainIds,
-            sdkRegistry: deps.sdkRegistry,
-        });
-        if (labelSync?.restored) await vault.save();
-        vault.close();
-        format = result.format;
-        walletId = result.wallet.id;
+        try {
+            await vault.open();
+            const result = await flows.importMnemonic({
+                password,
+                mnemonic,
+                vault,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                activeChainIds,
+                name,
+                bip39Passphrase,
+                origin,
+                kdfParams,
+            });
+            await vault.save();
+            // §19.5.2 restore half: the labels + contacts this seed published
+            // earlier come back into the fresh vault while the password is
+            // still in scope. The wallet is already saved above, so a failure
+            // here costs the restore and never the import.
+            labelSync = await restoreLabelSyncBestEffort({
+                vault,
+                walletId: result.wallet.id,
+                password,
+                bip39Passphrase,
+                chainIds: typeof flows.labelSyncSearchChainIds === 'function'
+                    ? flows.labelSyncSearchChainIds(deps.chainRegistry, activeChainIds)
+                    : activeChainIds,
+                sdkRegistry: deps.sdkRegistry,
+            });
+            if (labelSync?.restored) await vault.save();
+            format = result.format;
+            walletId = result.wallet.id;
+        } finally {
+            // Vault kept its own copy of the key; close zeros that copy.
+            vault.close();
+        }
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
@@ -247,27 +255,31 @@ export async function handleWalletImportBackup(request, deps) {
             backend: deps.storageBackend,
             masterKey,
         });
-        await vault.open();
-        const common = {
-            vault,
-            password: backupPassword,
-            walletPassword,
-            devicePassword: password,
-            mode: 'fresh',
-        };
-        // A failed restore must leave NOTHING behind: the vault is only saved
-        // and the session only opened once the merge has actually succeeded,
-        // so a wrong wallet password throws with the install still fresh and
-        // the user able to try again rather than half-onboarded.
-        result = hasPointer
-            ? await flows.restoreFromBackupPointer({
-                ...common,
-                pointer: req.pointer,
-                resolveBackupContent: deps.resolveBackupContent ?? resolveBackupPointerContent,
-            })
-            : await flows.importBackupFile({ ...common, fileContent: req.fileContent });
-        await vault.save();
-        vault.close();
+        try {
+            await vault.open();
+            const common = {
+                vault,
+                password: backupPassword,
+                walletPassword,
+                devicePassword: password,
+                mode: 'fresh',
+            };
+            // A failed restore must leave NOTHING behind: the vault is only saved
+            // and the session only opened once the merge has actually succeeded,
+            // so a wrong wallet password throws with the install still fresh and
+            // the user able to try again rather than half-onboarded.
+            result = hasPointer
+                ? await flows.restoreFromBackupPointer({
+                    ...common,
+                    pointer: req.pointer,
+                    resolveBackupContent: deps.resolveBackupContent ?? resolveBackupPointerContent,
+                })
+                : await flows.importBackupFile({ ...common, fileContent: req.fileContent });
+            await vault.save();
+        } finally {
+            // Vault kept its own copy of the key; close zeros that copy.
+            vault.close();
+        }
 
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);

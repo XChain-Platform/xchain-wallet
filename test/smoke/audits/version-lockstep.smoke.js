@@ -139,13 +139,13 @@ assert.ok(/ships? at the same version number/.test(readme),
 
 // --- 5. The prose copies of the version --------------------------------
 //
-//The lockstep set is 14 files, and until now this check covered
-// 12 of them: the ten package.json files, the manifest and buildInfo. The
-// two it did not cover are the two a human reads first, README.md's version
-// badge and its Status line, and both spell the number out in prose where
-// nothing derives it.
+// Sections 1-3 cover the root and every packages/*/package.json, the
+// extension manifest and buildInfo.js. This one covers the copies a human
+// reads first, README.md's version badge and its Status line, which spell
+// the number out in prose where nothing derives it, plus the CHANGELOG
+// section for the version.
 //
-// That gap is the shape of the defect was filed for. A signed
+// That gap is the shape of the defect this was filed for. A signed
 // `v0.335.0` tag was cut against a tree in which every file still declared
 // 0.334.0, so the tag named a version no file in the repo claimed, and
 // release.yml's tag-versus-package.json gate is the only thing that caught

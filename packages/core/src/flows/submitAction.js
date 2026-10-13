@@ -32,10 +32,12 @@ import {
     classifyBroadcastFailure,
     BROADCAST_FAILED_PERMANENT_NAME,
     BROADCAST_FAILED_TRANSIENT_NAME,
+    BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME,
 } from './broadcastPermanence.js';
 import { invalidateTokenInfoForAction } from '../shared/utils/tokenInfoCache.js';
 import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
+import { withAdsPlanAtEncode } from './buildActionPsbt.js';
 
 /**
  * §4.7: the single-tick debit a SEND moves, for the concurrent-window
@@ -84,7 +86,8 @@ export function sendDeltaFromAction(actionData) {
  * @property {(txid: string, opts?: object) => Promise<unknown>} [waitForTxid]
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
- * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null }) => void | Promise<void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. Caller (typically the bridge background host) hands the entry off to §49.5's queued-broadcast surface so the signed tx isn't lost on a network blip.
+ * @property {(transactions: { signed: object, revealSigned: object | null }) => void | Promise<void>} [beforeBroadcast] awaited after signing and before any broadcast
+ * @property {(entry: { signedTxHex: string, txid: string, chainId: string, signedAt: number, summary: string, error: string, pendingTxId: string | null, adsCommit: { chainId: string, donationIncluded: boolean } | null, commitLanded?: true, commitTxid?: string | null }) => boolean | void | Promise<boolean | void>} [onBroadcastFailure]   Cluster G FOLLOWUP 1: fires when the broadcast leg fails after a successful sign. The bridge background host resolves false when the entry did not reach §49.5's durable queued-broadcast surface; legacy void callbacks are treated as accepted handoffs.
  */
 
 /**
@@ -120,6 +123,7 @@ export async function submitAction({
     waitForTxid,
     waitOpts,
     onProgress,
+    beforeBroadcast,
     onBroadcastFailure,
 }) {
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
@@ -129,9 +133,9 @@ export async function submitAction({
     if (!descriptor) throw new Error(`submitAction: unknown chain "${chainId}"`);
 
     // §36.3 ADS: resolve the donation plan ONCE up front against the
-    // current settings snapshot. If `canSubmit`, inject a customOutput
-    // into encoderOpts so the encoder builds the donation into the
-    // same transaction. After a successful broadcast we call
+    // current settings snapshot. If `canSubmit`, schedule a customOutput
+    // for the encoder so it builds the donation into the same transaction.
+    // After a successful broadcast we call
     // `commitAdsStep` with the resolved `donationIncluded` so the
     // accumulator resets / lifetimeDonatedSats advances correctly.
     //
@@ -141,8 +145,26 @@ export async function submitAction({
     // reflect the actual tx that was broadcast, regardless of whether
     // the donation fired.
     const adsSettingsSnapshot = await vault.settings.get();
-    const { encoderOpts: effectiveEncoderOpts, adsPlan, adsEnabledForChain } =
+    const { encoderOpts: encoderOptsWithAds, adsPlan, adsEnabledForChain } =
         applyAdsPlanToEncoderOpts(adsSettingsSnapshot, chainId, chainRegistry, encoderOpts);
+
+    // Confirmation composition runs fee preflights before ADS, so its output
+    // order is caller outputs, protocol fees, then donation. Atomic submission
+    // reaches the same preflights inside submitWithSigner; defer its donation
+    // fold to the encoder boundary so both routes build byte-identical output
+    // order. Seed a shared array because a chunk-lane reveal reads the same
+    // options after createTx returns.
+    const effectiveEncoderOpts = !prebuiltPsbt && adsPlan.canSubmit
+        ? {
+            ...encoderOpts,
+            customOutputs: Array.isArray(encoderOpts?.customOutputs)
+                ? encoderOpts.customOutputs.slice()
+                : [],
+        }
+        : encoderOptsWithAds;
+    const effectiveSdkRegistry = !prebuiltPsbt && adsPlan.canSubmit
+        ? withAdsPlanAtEncode(sdkRegistry, adsSettingsSnapshot, chainId, chainRegistry)
+        : sdkRegistry;
 
     // Which verdict the accounting books. On the prebuilt path the donation was
     // decided and folded at COMPOSE time, and one background host serves every
@@ -188,6 +210,8 @@ export async function submitAction({
 
     // Set once phase 1 is on the network: submitWithSigner emits these phases only after it lands.
     let phase1Landed = false;
+    // The landed commit's txid, kept apart from the record's txid, which a queued reveal overwrites.
+    let commitTxid = null;
 
     // Chain the caller's onProgress with our lifecycle-tracking callback
     // so both fire for every phase.
@@ -196,6 +220,8 @@ export async function submitAction({
         if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
             phase1Landed = true;
         }
+        const landedTxid = data?.commitTxid ?? data?.phase1Txid;
+        if (typeof landedTxid === 'string' && landedTxid) commitTxid = landedTxid;
         if (onProgress) {
             try {
                 onProgress(phase, data);
@@ -281,7 +307,7 @@ export async function submitAction({
     try {
         try {
             result = await submitWithSigner({
-                sdkRegistry,
+                sdkRegistry: effectiveSdkRegistry,
                 chainRegistry,
                 chainId,
                 actionData,
@@ -299,6 +325,7 @@ export async function submitAction({
                 waitForTxid,
                 waitOpts,
                 onProgress: composedOnProgress,
+                beforeBroadcast,
             });
         } catch (err) {
             // Record the outcome on the PendingTx without letting the vault
@@ -313,15 +340,17 @@ export async function submitAction({
             // `message` and type are untouched because the messaging envelope
             // carries only those.
             const stampPending = async (patch) => {
-                if (!pending) return;
+                if (!pending) return false;
                 try {
                     await writePending(patch);
+                    return true;
                 } catch (writeErr) {
                     if (err && typeof err === 'object') {
                         err.pendingTxWriteError = writeErr && writeErr.message
                             ? String(writeErr.message)
                             : String(writeErr);
                     }
+                    return false;
                 }
             };
             // Cluster G FOLLOWUP 1: broadcast leg failed after a clean
@@ -364,15 +393,21 @@ export async function submitAction({
                     // Do NOT invoke onBroadcastFailure: there is nothing to
                     // queue. The caller sees the thrown error and re-composes.
                 } else {
-                    await stampPending({
+                    // Mark a queued reveal or phase-2 whose commit landed, so a later
+                    // permanent retry verdict keeps it 'broadcast' as the branch above does.
+                    const commitMark = phase1Landed ? { commitLanded: true, commitTxid } : {};
+                    const pendingSaved = await stampPending({
                         status: 'queued',
                         txid: err.txid,
                         txHex: err.signedTxHex,
                         error: err && err.message ? String(err.message) : String(err),
+                        ...commitMark,
                     });
+                    let queueSaved = false;
                     if (typeof onBroadcastFailure === 'function') {
                         try {
-                            await onBroadcastFailure({
+                            queueSaved = await onBroadcastFailure({
+                                ...commitMark,
                                 signedTxHex: err.signedTxHex,
                                 txid: err.txid,
                                 chainId: err.chainId,
@@ -392,11 +427,14 @@ export async function submitAction({
                                 adsCommit: adsEnabledForChain
                                     ? { chainId, donationIncluded }
                                     : null,
-                            });
+                            }) !== false;
                         } catch (_inner) {
                             // Swallow callback errors; the broadcast
                             // failure is the load-bearing signal.
                         }
+                    }
+                    if (!pendingSaved && !queueSaved) {
+                        err.name = BROADCAST_FAILED_TRANSIENT_UNSAVED_NAME;
                     }
                 }
             } else if (pending) {
