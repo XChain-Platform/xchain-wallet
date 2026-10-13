@@ -43,6 +43,14 @@ const tokenCleanupModules = [
     'BalanceChanges.module.css',
     'CollectiblesView.module.css',
 ];
+const auditedGeometryModules = [
+    'ConfirmActionModal.module.css',
+    'ContactsPickerScreen.module.css',
+    'DataTable.module.css',
+    'DemoBanner.module.css',
+    'DerivationPathCrossCheck.module.css',
+    'DraftDiscardButton.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -199,6 +207,25 @@ it('limits ViewPrivateKey raw pixels to documented hairlines and sub-scale inset
     for (const { precedingLine } of rawPixelDeclarations) {
         expect(precedingLine).toMatch(/^\/\* .+ \*\/$/);
     }
+});
+
+it('keeps audited component geometry free of tokenizable pixel dimensions', () => {
+    const geometryDeclaration = /(?:^|[;{])\s*((?:(?:margin|padding)(?:-[\w-]+)?|(?:row-|column-)?gap|border-radius|(?:(?:min|max)-)?(?:width|height|block-size|inline-size)|font-size|outline-offset))\s*:\s*([^;}]+)/gm;
+    const violations = [];
+
+    for (const file of auditedGeometryModules) {
+        const css = withoutComments(readFileSync(join(componentsRoot, file), 'utf8'));
+        for (const [, property, value] of css.matchAll(geometryDeclaration)) {
+            const trimmedValue = value.trim();
+            const isClippingBox = ['width', 'height'].includes(property)
+                && trimmedValue === '1px';
+            if (!isClippingBox && /(?<![\w.-])[1-9]\d*px(?![\w-])/.test(value)) {
+                violations.push(`${file}: ${property}: ${trimmedValue}`);
+            }
+        }
+    }
+
+    expect(violations).toEqual([]);
 });
 
 it('lists raw pixel paddings on card-like module CSS rules', () => {
