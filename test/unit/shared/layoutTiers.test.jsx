@@ -27,8 +27,11 @@ import {
     showsSidebar,
     showsBottomBar,
 } from '../../../packages/core/src/shared/styles/breakpoints.js';
-import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
+import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 
 describe('layout tiers', () => {
@@ -147,6 +150,34 @@ describe('layout tiers', () => {
                 expect(screen.getByTestId('route')).toBeInTheDocument();
                 cleanup();
             }
+        });
+
+        it.each([
+            ['web', 1200, true, 'Primary navigation'],
+            ['extension popup', 360, false, 'Bottom navigation'],
+            ['desktop renderer', 1200, true, 'Primary navigation'],
+        ])('gives the %s shell one main, one banner, and one labelled navigation', (
+            _shell,
+            width,
+            includeSidebar,
+            navigationName,
+        ) => {
+            window.innerWidth = width;
+            render(
+                <FullLayoutWithNav
+                    nav={includeSidebar ? <LeftNav currentView="home" onSelect={() => {}} /> : undefined}
+                    bottomBar={<BottomTabBar currentView="home" onSelect={() => {}} />}
+                    header={<AppHeader />}
+                >
+                    <Screen header={<h1>Home</h1>}>Wallet content</Screen>
+                </FullLayoutWithNav>,
+            );
+
+            expect(screen.getAllByRole('main')).toHaveLength(1);
+            expect(screen.getAllByRole('banner')).toHaveLength(1);
+            const navigations = screen.getAllByRole('navigation');
+            expect(navigations).toHaveLength(1);
+            expect(navigations[0]).toHaveAccessibleName(navigationName);
         });
 
         it('focuses a new route heading without stealing focus on initial or inline renders', async () => {
