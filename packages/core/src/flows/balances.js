@@ -238,7 +238,7 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
         throw balResp instanceof Error ? balResp : new Error(String(balResp));
     }
     // D-152: degrading independently is right; degrading SILENTLY is not. A
-    // failed token read used to return `tokens: []`, which is byte-identical to
+    // failed token read must not return `tokens: []`, which is byte-identical to
     // "this address holds no tokens" - so a hiccup on one endpoint presented as
     // a confident empty wallet: no rows on Home, and an asset picker that says
     // "Nothing matches" for a token the address is holding. `unavailable` names
