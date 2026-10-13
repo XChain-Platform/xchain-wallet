@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -343,12 +343,26 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
-                    {isClear
-                        ? `Clear any standing delegation of your ${tick} voting weight.`
-                        : `Delegate your ${tick} voting weight to ${delegateTo.slice(0, 16)}…`}
-                </p>
+            <FormPage
+                label={`Review ${verb.toLowerCase()}`}
+                onSubmit={handleSubmit}
+                intro={isClear
+                    ? `Clear any standing delegation of your ${tick} voting weight.`
+                    : `Delegate your ${tick} voting weight to ${delegateTo.slice(0, 16)}…`}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : verb}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
@@ -388,20 +402,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : verb}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -469,7 +470,23 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={verb}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim()) || actionConfirm.composing}
+                >
+                    {singleEncode ? verb : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             <div className={styles.actions} style={{ gap: '0.5rem' }}>
                 <Button type="button" variant={isClear ? 'ghost' : 'primary'} onClick={() => { setMode('delegate'); setFormError(null); }}>Delegate</Button>
@@ -522,12 +539,6 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                 />
             ) : null}
 
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button type="submit" variant="primary" block loading={actionConfirm.composing} disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim()) || actionConfirm.composing}>
-                    {singleEncode ? verb : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

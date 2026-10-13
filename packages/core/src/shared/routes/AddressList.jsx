@@ -9,11 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, Icon, InfoTip, Input, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainPicker, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
@@ -679,11 +678,28 @@ export function AddressList({
                     />
                 )}
             >
-                <form className={wifStyles.wifForm} onSubmit={handleAdvancedGenerate} noValidate>
-                    <p className={wifStyles.wifNotice}>
-                        Advanced option for recovering or recreating a known receive address.
-                        The index must not already be held by this account.
-                    </p>
+                <FormPage
+                    label="Generate address at index"
+                    onSubmit={handleAdvancedGenerate}
+                    intro="Advanced option for recovering or recreating a known receive address. The index must not already be held by this account."
+                    status={advancedError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {advancedError}
+                        </StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="md"
+                            loading={advancedBusy}
+                            disabled={advancedBusy || !effectiveAdvancedChainId}
+                            data-testid="advanced-address-generate"
+                        >
+                            Generate
+                        </Button>
+                    )}
+                >
                     <ChainPicker
                         label="Coin"
                         value={effectiveAdvancedChainId}
@@ -735,24 +751,7 @@ export function AddressList({
                         disabled={advancedBusy}
                         autoFocus
                     />
-                    {advancedError ? (
-                        <StatusMessage variant="error" className={styles.error}>
-                            {advancedError}
-                        </StatusMessage>
-                    ) : null}
-                    <div className={wifStyles.wifActions}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="md"
-                            loading={advancedBusy}
-                            disabled={advancedBusy || !effectiveAdvancedChainId}
-                            data-testid="advanced-address-generate"
-                        >
-                            Generate
-                        </Button>
-                    </div>
-                </form>
+                </FormPage>
             </Screen>
         );
     }
@@ -772,7 +771,24 @@ export function AddressList({
                     />
                 )}
             >
-                <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
+                <FormPage
+                    label="Import address"
+                    onSubmit={handleImportWif}
+                    status={wifError ? (
+                        <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="md"
+                            loading={wifBusy}
+                            disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
+                        >
+                            Import
+                        </Button>
+                    )}
+                >
                         <ChainPicker
                             label="Chain"
                             value={wifChainId}
@@ -870,21 +886,7 @@ export function AddressList({
                             />
                             <span>I understand this key is not backed up by my recovery phrase.</span>
                         </label>
-                        {wifError ? (
-                            <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
-                        ) : null}
-                        <div className={wifStyles.wifActions}>
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                size="md"
-                                loading={wifBusy}
-                                disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
-                            >
-                                Import
-                            </Button>
-                        </div>
-                </form>
+                </FormPage>
             </Screen>
         );
     }
@@ -1146,7 +1148,8 @@ export function AddressList({
         };
         return (
             <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
-                <div className={local.detailTop}>
+                <ListPage>
+                    <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
                         <span className={local.detailLabel}>Address</span>
                         {isActiveRow(selected) ? (
@@ -1190,9 +1193,9 @@ export function AddressList({
                             {selected.label || 'No label'}
                         </div>
                     )}
-                </div>
+                    </div>
 
-                <div className={local.quickActions} role="group" aria-label="Address actions">
+                    <div className={local.quickActions} role="group" aria-label="Address actions">
                     {selected.record?.id ? (
                         <button
                             type="button"
@@ -1232,15 +1235,15 @@ export function AddressList({
                             <span>Delete</span>
                         </button>
                     ) : null}
-                </div>
+                    </div>
 
-                <div className={local.tabsRow} role="tablist" aria-label="Address sections">
+                    <div className={local.tabsRow} role="tablist" aria-label="Address sections">
                     <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
                         About
                     </button>
-                </div>
+                    </div>
 
-                <div className={local.tabPanel}>
+                    <div className={local.tabPanel}>
                     <div className={local.detailCard}>
                         {/* The testid is derived from the label so every detail field is
                             addressable without hand-maintaining a list. Before it, a spec
@@ -1302,14 +1305,15 @@ export function AddressList({
                             </div>
                         ) : null}
                     </div>
-                </div>
-                {confirmDialog.request ? (
-                    <ConfirmModal
-                        {...confirmDialog.request}
-                        onConfirm={confirmDialog.onConfirm}
-                        onCancel={confirmDialog.onCancel}
-                    />
-                ) : null}
+                    </div>
+                    {confirmDialog.request ? (
+                        <ConfirmModal
+                            {...confirmDialog.request}
+                            onConfirm={confirmDialog.onConfirm}
+                            onCancel={confirmDialog.onCancel}
+                        />
+                    ) : null}
+                </ListPage>
             </Screen>
         );
     }
@@ -1320,21 +1324,24 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <EmptyStateNudge
-                title="No addresses yet"
-                body="Generate a receive address to populate this list."
-                actionLabel={onReceive ? 'Receive' : undefined}
-                onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
-            />,
+            <ListPage>
+                <EmptyState
+                    title="No addresses yet"
+                    body="Generate a receive address to populate this list."
+                    actionLabel={onReceive ? 'Receive' : undefined}
+                    onAction={onReceive}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
+            </ListPage>,
         );
     }
 
     return wrap(
-        <>
-            <div className={local.toolbar}>
+        <ListPage toolbar={(
+            <>
                 <input
-                    type="text"
+                    type="search"
+                    role="textbox"
                     className={local.search}
                     placeholder="Search"
                     value={query}
@@ -1345,7 +1352,8 @@ export function AddressList({
                     aria-label="Search addresses"
                 />
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
+            </>
+        )}>
             <div className={local.segmented} role="tablist" aria-label="Filter by address type">
                 {[
                     { id: 'all', label: 'All' },
@@ -1391,9 +1399,7 @@ export function AddressList({
                 </ul>
             ) : null}
             {rows.length === 0 ? (
-                <div className={local.emptyCard}>
-                    No addresses match the current filter.
-                </div>
+                <EmptyState title="No addresses match the current filter." />
             ) : (
             <ul className={local.addrList} aria-label="Wallet addresses">
                 {rows.map((row) => {
@@ -1445,6 +1451,6 @@ export function AddressList({
                 })}
             </ul>
             )}
-        </>,
+        </ListPage>,
     );
 }
