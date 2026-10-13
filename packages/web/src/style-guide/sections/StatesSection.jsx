@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Skeleton, StatusMessage, Button, Icon } from '@xchain-wallet/core/ui';
-import { EmptyStateNudge } from '@xchain-wallet/core/shared/components/EmptyStateNudge.jsx';
+import { Skeleton, StatusMessage, Button, Icon, EmptyState } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function StatesSection() {
@@ -24,13 +23,13 @@ export function StatesSection() {
                 what={<>Five primitives, each owning one slot in the state machine:
                     <ul style={{ margin: '8px 0 0 16px', padding: 0, lineHeight: 1.6 }}>
                         <li><strong><code>&lt;Skeleton&gt;</code></strong>: first paint while data is in flight; shapes mimic what's about to load.</li>
-                        <li><strong><code>&lt;EmptyStateNudge&gt;</code></strong>: loaded successfully, dataset is empty; optional CTA to populate.</li>
+                        <li><strong><code>&lt;EmptyState&gt;</code></strong>: loaded successfully, dataset is empty; optional CTA to populate (see the Empty state section; it supersedes <code>EmptyStateNudge</code>).</li>
                         <li><strong><code>&lt;StatusMessage variant="error"&gt;</code></strong>: inline, in the form, when a fetch or validation failed and the user needs to act in the same view.</li>
                         <li><strong><code>&lt;StatusMessage variant="status" | "success"&gt;</code></strong>: inline informational copy / confirmation after a successful action stays on the same view.</li>
                         <li><strong>Toast</strong> (via <code>ToastHost</code>): ephemeral result of an action when the user has already moved on (e.g. copied to clipboard, address generated).</li>
                     </ul>
                 </>}
-                doRule={<>✓ Pick by intent, not aesthetic preference. Pre-fetch = Skeleton. Loaded-empty = EmptyStateNudge. Failed = inline StatusMessage. Action result = Toast (if non-blocking) or success StatusMessage (if blocking)</>}
+                doRule={<>✓ Pick by intent, not aesthetic preference. Pre-fetch = Skeleton. Loaded-empty = EmptyState. Failed = inline StatusMessage. Action result = Toast (if non-blocking) or success StatusMessage (if blocking)</>}
                 dontRule={<>✗ Show a spinner when you could show a skeleton (the skeleton conveys what's loading) · show empty-state text in a Skeleton-shaped slot (defeats the loading hint) · use a toast for an inline form error (the user can't act on a message that vanishes)</>}
             />
 
@@ -38,14 +37,14 @@ export function StatesSection() {
 {`// Pre-fetch: render a skeleton that matches the upcoming shape
 {loading ? <Skeleton.List rows={5} /> : null}
 
-// Loaded, nothing here: empty-state nudge with optional CTA
+// Loaded, nothing here: the one empty state, with optional CTA
 {!loading && rows.length === 0 ? (
-    <EmptyStateNudge
+    <EmptyState
         title="No balances yet"
         body="Generate an address to receive funds."
         actionLabel="Receive"
         onAction={openReceive}
-        icon={<Icon.ReceiveIcon />}
+        actionIcon={<Icon.ReceiveIcon />}
     />
 ) : null}
 
@@ -69,13 +68,13 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
                 </div>
             </LiveExample>
 
-            <LiveExample label="EmptyStateNudge: loaded successfully, nothing yet">
-                <EmptyStateNudge
+            <LiveExample label="EmptyState: loaded successfully, nothing yet">
+                <EmptyState
                     title="No balances yet"
                     body="Generate a receive address to start funding your wallet."
                     actionLabel="Receive"
                     onAction={() => {}}
-                    icon={<Icon.ReceiveIcon />}
+                    actionIcon={<Icon.ReceiveIcon />}
                 />
             </LiveExample>
 

@@ -21,6 +21,8 @@ import {
     Button,
     ChainBadge,
     AddressText,
+    EmptyState,
+    ListPage,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -39,7 +41,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -54,31 +55,35 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     const header = <PageHeader onBack={onBack} title="Agent accounts" />;
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (error) return wrap(<StatusMessage variant="error">{error}</StatusMessage>);
     if (!accounts) return wrap(<p className={styles.hint}>Loading…</p>);
 
     return wrap(
-        <>
-            <p className={styles.hint} style={{ textAlign: 'left' }}>
-                Agent accounts let an automated agent share a 2-of-2 address with
-                this wallet. This wallet signs each request automatically when it
-                fits the policy you set, and asks you to approve it. Bitcoin-only
-                at launch.
-            </p>
-
-            <div className={styles.actions} style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <Button variant="primary" onClick={onProvision}>New agent account</Button>
-            </div>
-
+        <ListPage
+            intro={(
+                <>
+                    Agent accounts let an automated agent share a 2-of-2 address with
+                    this wallet. This wallet signs each request automatically when it
+                    fits the policy you set, and asks you to approve it. Bitcoin-only
+                    at launch.
+                </>
+            )}
+            toolbar={accounts.length > 0
+                ? <Button variant="primary" onClick={onProvision}>New agent account</Button>
+                : null}
+        >
             {accounts.length === 0 ? (
-                <p className={styles.hint}>No agent accounts yet.</p>
+                <EmptyState
+                    title="No agent accounts yet"
+                    body="Create one to let an agent share a 2-of-2 address with this wallet."
+                    actionLabel="New agent account"
+                    onAction={onProvision}
+                />
             ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                <ul aria-label="Agent accounts" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                     {accounts.map((a) => {
                         const descriptor = chainRegistry.get(a.chainId);
                         return (
@@ -119,6 +124,6 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                     })}
                 </ul>
             )}
-        </>,
+        </ListPage>,
     );
 }

@@ -2,6 +2,72 @@
 
 Living doc. The rule it exists to enforce: **if you find yourself copying CSS or JSX between two routes, lift it.** When in doubt, prefer one of the shared primitives below over re-rolling from scratch.
 
+The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches every example between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view.
+
+## Page templates
+
+**Every routed screen is built from exactly one page template.** A screen is a `<Screen>` with a `<PageHeader>`, and its body is one `<FormPage>` or one `<ListPage>`. All of them come from `@xchain-wallet/core/ui`.
+
+```jsx
+import { Screen, PageHeader, FormPage, FormSection, ListPage, EmptyState, SectionHeader } from '@xchain-wallet/core/ui';
+```
+
+| template | use it when the screen... | examples |
+|---|---|---|
+| `<FormPage>` | is a form the user fills in and submits | Send, rename, every action form, sign / verify |
+| `<FormPage sectioned>` + `<FormSection>` | is a long form whose fields fall into named groups | Issue token, Create dispenser, Create poll |
+| `<ListPage>` | shows things: a list, table, card grid, or read-only detail rows | Payments due, contacts, my tokens, polls, a dispenser's detail |
+
+Two parts go inside them: `<EmptyState>` is the one empty state (a list that loaded with nothing in it), and `<SectionHeader>` titles a group of content (it is also FormSection's heading). A detail screen with an Edit button is a ListPage; the edit screen it opens is a FormPage.
+
+### The form rule: narrow is bare, wide is one card
+
+One rule on every platform (phone, extension popup, desktop app, browser), decided by **viewport width with a CSS media query at 600px**:
+
+- **Narrow, under 600px** (a phone, the 360 to 400px extension popup, a narrow desktop window): the form's fields sit bare on the page with only the page gutter. No card border, background or padding.
+- **Wide, 600px and up**: the form sits in one card, a centred column 560px wide.
+- **Long forms** are split into `<FormSection>`s inside `<FormPage sectioned>`: bare sections divided by their heading when narrow, a stack of section cards when wide.
+- **The action row** (`actions`) sits at the end of the form, after the last field or the last section card, and wraps. Each button grows to share the row, so a lone button is full width; put the primary action last so it lands on the right. Errors go in `status`, just above the actions.
+
+The breakpoint is a viewport media query, not a container query (the Android WebView 102 the app ships to has no container queries) and not the shell: the old `isFull ? <div className={styles.card}>` pattern, chosen from `screenVariantFor(shell)`, put a card on a phone browser and is superseded. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
+
+### The list rule: full width, always
+
+`<ListPage>` content fills the full width of the content area up to the scrollbar and never runs under it (Screen reserves the scrollbar gutter), at every width. There is no narrow/wide switch and no 560px column for lists. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+
+### Props
+
+| component | props |
+|---|---|
+| `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default true), `className`, `ref` (the form) |
+| `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className` |
+| `ListPage` | `toolbar`, `intro`, `className`, any root attribute (`aria-label`) |
+| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `titleAs` (`h2` default), `role` (`status` default) |
+| `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing` |
+
+```jsx
+// A form screen
+<Screen variant={variant} header={<PageHeader onBack={onBack} title="Verify signature" />}>
+    <FormPage
+        label="Verify signature"
+        onSubmit={handleSubmit}
+        status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        actions={<Button type="submit" variant="primary" loading={busy}>Verify signature</Button>}
+    >
+        <Input label="Address" ... />
+    </FormPage>
+</Screen>
+
+// A list screen with an empty state and a titled group
+<Screen variant={variant} header={<PageHeader onBack={onBack} title="Payments due" />}>
+    <ListPage toolbar={<input type="search" aria-label="Search payments" ... />}>
+        {rows.length === 0 ? <EmptyState title="No payments due" body="..." /> : <ul>...</ul>}
+        <SectionHeader title="Expired, awaiting settlement" />
+        <ul>...</ul>
+    </ListPage>
+</Screen>
+```
+
 ## Page chrome (secondary toolbar)
 
 Every routed screen has a secondary toolbar below the global AppHeader. It carries: a back chevron, a centered title (optionally with a route-action icon), and an optional trailing action slot.
@@ -37,7 +103,9 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (filled accent), `ghost` (transparent). Pass `loading` for spinner state.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes: `md` (36px, default) and `sm` (28px). `block` makes it full width, `loading` shows a spinner and disables it, and `type` defaults to `button` so it never submits by accident. A variant name outside this list renders unstyled. The style guide's Buttons section shows every combination.
+
+For dialogs use the shared `NoticeModal` (one OK) and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/`, never `alert()` or `confirm()`.
 
 For icon-only buttons inside layouts (e.g. an action overlaid in an input box), a plain `<button>` is fine, but make it transparent (no background, no border) so it reads as an icon affordance, not a tappable rectangle. The hover state should change icon color only, not paint a fill.
 
@@ -282,7 +350,11 @@ If you genuinely need a one-off layout that doesn't fit any existing pattern, **
 
 ## Migration status
 
-- [x] `<PageHeader />` exists and is exported from `@xchain-wallet/core/ui`.
-- [ ] All existing routes use `<PageHeader />`. Migration tracked in TODO.md.
+- ✅ `<PageHeader />` exists and is exported from `@xchain-wallet/core/ui`.  
+- ⬜ All existing routes use `<PageHeader />`.  
+- ✅ Page templates (`FormPage`, `FormSection`, `ListPage`, `EmptyState`, `SectionHeader`) exist, are exported from `@xchain-wallet/core/ui`, and have style guide sections.  
+- ✅ Proof conversions: Verify signature (`FormPage`), Payments due (`ListPage` + `EmptyState` + `SectionHeader`), Agent accounts (`ListPage` + `EmptyState`).  
+- ⬜ Every other routed screen is built from one template. Converting a screen means: drop the `isFull ? styles.card` / `listCard` / `wrapFull` wrapper, put the body in the template, move errors into `status` and buttons into `actions`, and replace any per-route empty block or `EmptyStateNudge` with `EmptyState`.  
+- ⬜ `EmptyStateNudge` is retired once its last caller (BalanceList, CollectiblesView, AddressList, History, MarketsList, TokenPicker) uses `EmptyState`.  
 
-When you touch a route that still rolls its own header, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.
+When you touch a route that still rolls its own header, card or empty state, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.

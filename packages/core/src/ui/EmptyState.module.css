@@ -1,0 +1,49 @@
+/* Empty state: a centred block across the full content width, outlined
+   with a dashed border so it reads as "a list would go here". */
+
+.wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    padding: var(--xc-space-6) var(--xc-space-4);
+    text-align: center;
+    background: var(--xc-surface-raised);
+    border: 1px dashed var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    color: var(--xc-text);
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-text-muted);
+}
+
+.icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+.title {
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--xc-text);
+}
+
+.body {
+    margin: 0;
+    max-width: 40ch;
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+}
+
+.action {
+    margin-top: var(--xc-space-2);
+}

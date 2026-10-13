@@ -12,6 +12,7 @@
 // wallet's reusable component vocabulary. Add a new <Section> for each
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
+import { VIEWS, ViewContext, ViewFrame, WidthTriptych, useViewState } from './frames.jsx';
 import { ColorPaletteSection } from './sections/ColorPaletteSection.jsx';
 import { TypographySection } from './sections/TypographySection.jsx';
 import { SpacingSection } from './sections/SpacingSection.jsx';
@@ -40,6 +41,14 @@ import { FeeSelectorSection } from './sections/FeeSelectorSection.jsx';
 import { VoiceSection } from './sections/VoiceSection.jsx';
 import { StatesSection } from './sections/StatesSection.jsx';
 import { PrivacyModeSection } from './sections/PrivacyModeSection.jsx';
+import { PageTemplatesSection } from './sections/PageTemplatesSection.jsx';
+import { FormPageSection } from './sections/FormPageSection.jsx';
+import { FormSectionSection } from './sections/FormSectionSection.jsx';
+import { ListPageSection } from './sections/ListPageSection.jsx';
+import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
+import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
+import { ButtonsSection } from './sections/ButtonsSection.jsx';
+import { DialogsSection } from './sections/DialogsSection.jsx';
 // Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
@@ -50,6 +59,14 @@ const SECTIONS = [
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection },
+    { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection },
+    { id: 'form-page',             label: 'Form page',              Component: FormPageSection },
+    { id: 'form-section',          label: 'Form section',           Component: FormSectionSection },
+    { id: 'list-page',             label: 'List page',              Component: ListPageSection },
+    { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection },
+    { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection },
+    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection },
+    { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection },
@@ -77,7 +94,9 @@ const SECTIONS = [
 ];
 
 export function StyleGuidePage() {
+    const [view, setView] = useViewState();
     return (
+        <ViewContext.Provider value={view}>
         <main className="sg-page">
             <h1 className="sg-h1">📐 XChain Wallet Component Style Guide</h1>
             <p className="sg-lead">
@@ -94,6 +113,35 @@ export function StyleGuidePage() {
                 Examples render the actual component from
                 {' '}<code>@xchain-wallet/core/ui</code>: what you see here is what you get
                 in the app.
+                {' '}Every example renders in a frame of the width picked in the bar
+                below (Mobile 360px, Extension popup 400px, Desktop 1024px); the page
+                templates also show all three side by side.
+            </div>
+            <div className="sg-sticky">
+                <div className="sg-view-switch" role="group" aria-label="Preview width">
+                    {Object.values(VIEWS).map((v) => (
+                        <button
+                            key={v.id}
+                            type="button"
+                            aria-pressed={view === v.id}
+                            onClick={() => setView(v.id)}
+                        >
+                            {v.label} <span className="sg-view-width">{v.width}px</span>
+                        </button>
+                    ))}
+                </div>
+                <label className="sg-jump">
+                    <span>Section</span>
+                    <select
+                        value=""
+                        onChange={(e) => {
+                            if (e.target.value) window.location.hash = e.target.value;
+                        }}
+                    >
+                        <option value="">Jump to…</option>
+                        {SECTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                </label>
             </div>
             <nav className="sg-toc" aria-label="Table of contents">
                 {SECTIONS.map((s, i) => (
@@ -107,6 +155,7 @@ export function StyleGuidePage() {
                 <Component key={id} />
             ))}
         </main>
+        </ViewContext.Provider>
     );
 }
 // Reusable doc-chrome wrappers: each Section composes a heading,
@@ -155,11 +204,39 @@ export function Markup({ children }) {
     );
 }
 
-export function LiveExample({ label, children }) {
+/**
+ * A live example, rendered inside a frame at the width of the view picked in
+ * the page's Mobile / Extension / Desktop switch.
+ *
+ * @param {object} props
+ * @param {string} [props.label]
+ * @param {number} [props.minHeight]   floor for overlay-only content (dialogs)
+ * @param {boolean} [props.padded]     default true; false for an example that is a whole Screen
+ * @param {import('react').ReactNode} props.children
+ */
+export function LiveExample({ label, minHeight, padded = true, children }) {
     return (
         <div className="sg-example">
             {label ? <p className="sg-example-label">{label}</p> : null}
-            {children}
+            <ViewFrame title={label} minHeight={minHeight} padded={padded}>{children}</ViewFrame>
+        </div>
+    );
+}
+
+/**
+ * A page-template example at all three widths side by side; the caller
+ * renders one Screen per frame.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {() => import('react').ReactNode} props.render
+ * @param {number} [props.minHeight]
+ */
+export function TemplateExample({ label, render, minHeight }) {
+    return (
+        <div className="sg-example sg-example-wide">
+            <p className="sg-example-label">{label} · 360 / 400 / 1024px side by side</p>
+            <WidthTriptych title={label} render={render} minHeight={minHeight} />
         </div>
     );
 }

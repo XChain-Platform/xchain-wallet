@@ -1,0 +1,44 @@
+/* List template. Full width at every viewport: no max-width and no
+   breakpoint, so a list, table or card grid always reaches the edge of
+   Screen's content box, which stops at the reserved scrollbar gutter. */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+}
+
+/* Children stretch to the full width; min-width 0 lets long content
+   (addresses, ids) shrink and wrap instead of widening the page. */
+.page > * {
+    min-width: 0;
+}
+
+.intro {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    line-height: 1.45;
+    color: var(--xc-text-muted);
+}
+
+/* First control (usually search) takes the spare room; the rest keep
+   their natural width and wrap below it when the row runs out. A leading
+   button keeps its own width, so a lone "New" action is not stretched. */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.toolbar > * {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.toolbar > :first-child:not(button) {
+    flex: 1 1 12rem;
+}

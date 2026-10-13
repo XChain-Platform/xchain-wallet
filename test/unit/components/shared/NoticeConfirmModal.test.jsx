@@ -134,9 +134,9 @@ describe('ConfirmModal', () => {
         expect(screen.getByText('Confirm').dataset.variant).toBe('primary');
     });
 
-    it('turns the confirm variant to error when danger', () => {
+    it('turns the confirm variant to danger when danger', () => {
         setup({ danger: true });
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
-        expect(screen.getByText('Confirm').dataset.variant).toBe('error');
+        expect(screen.getByText('Confirm').dataset.variant).toBe('danger');
     });
 });
