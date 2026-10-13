@@ -133,9 +133,50 @@ describe('TokenPicker asset visibility and filtering', () => {
             target: { value: 'PEPE' },
         });
         await waitFor(() => expect(searchTokens).toHaveBeenCalledOnce());
-        expect(searchTokens).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', query: 'PEPE' });
+        expect(searchTokens).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', query: 'PEPE', limit: 50 });
         expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
             .toBeInTheDocument();
+    });
+
+    it('resets filters from an empty result', async () => {
+        mount();
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        await screen.findByText(LONG_NAME);
+        fireEvent.change(search, { target: { value: 'missing asset' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(search).toHaveValue('');
+        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
+    });
+
+    it('retries balance and platform-search failures', async () => {
+        const getWalletBalances = vi.fn()
+            .mockRejectedValueOnce(new Error('balance service unavailable'))
+            .mockResolvedValue(balances);
+        const searchTokens = vi.fn()
+            .mockRejectedValueOnce(new Error('search service unavailable'))
+            .mockResolvedValueOnce([{ tick: 'LTC.PEPE' }]);
+        mount({
+            purpose: 'receive',
+            messaging: makeMessaging({ getWalletBalances, searchTokens }),
+        });
+
+        expect(await screen.findByText('balance service unavailable')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
+
+        fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search coins or tokens' }), {
+            target: { value: 'PEPE' },
+        });
+        expect(await screen.findByText('Could not search all platform tokens. Try again.'))
+            .toBeInTheDocument();
+        expect(screen.queryByText('No matching balances')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
+            .toBeInTheDocument();
+        expect(searchTokens).toHaveBeenCalledTimes(2);
     });
 });
 
