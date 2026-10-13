@@ -90,6 +90,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    const phraseGeneratedRef = useRef(false);
+    const creationInFlightRef = useRef(false);
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
@@ -120,6 +122,17 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         setPasswordError(null);
     }
 
+    function clearWalletSecrets() {
+        clearEntrySecrets();
+        setMnemonic(null);
+        setSaved(false);
+        setQuizPositions([]);
+        setQuizAnswers({});
+        setQuizError(null);
+        setQuizErrorPosition(null);
+        phraseGeneratedRef.current = false;
+    }
+
     function handleBack() {
         if (stage === 'verify') {
             setQuizAnswers({});
@@ -128,11 +141,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         if (stage === 'mnemonic') {
-            clearEntrySecrets();
-            setMnemonic(null);
-            setSaved(false);
-            setQuizPositions([]);
-            setQuizAnswers({});
+            clearWalletSecrets();
             setPersistError(null);
             setStage('password');
             return;
@@ -143,6 +152,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
+        if (stage !== 'password' || phraseGeneratedRef.current) return;
         setValidationAttempt((attempt) => attempt + 1);
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
@@ -165,12 +175,19 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         setPasswordError(null);
-        setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
+        phraseGeneratedRef.current = true;
+        try {
+            setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
+        } catch (err) {
+            phraseGeneratedRef.current = false;
+            setPasswordError(userFacingMessage(err, 'Failed to generate a recovery phrase. Try again.'));
+            return;
+        }
         setStage('mnemonic');
     }
 
     function handleStartVerify() {
-        if (!mnemonic || !saved) return;
+        if (stage !== 'mnemonic' || !mnemonic || !saved) return;
         const totalWords = mnemonic.trim().split(/\s+/).length;
         const positions = pickQuizPositions(totalWords);
         setQuizPositions(positions);
@@ -184,7 +201,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     function handleSubmitVerify(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
-        if (!mnemonic) return;
+        if (stage !== 'verify' || !mnemonic || !saved) return;
+        if (quizPositions.length === 0) {
+            setQuizErrorPosition(null);
+            setQuizError('Recovery phrase verification could not start. Go back and try again.');
+            return;
+        }
         const words = mnemonic.trim().split(/\s+/);
         for (const p of quizPositions) {
             const expected = (words[p - 1] || '').trim().toLowerCase();
@@ -202,17 +224,18 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         }
         setQuizErrorPosition(null);
         setQuizError(null);
-        handlePersist();
+        void handlePersist();
     }
 
     async function handlePersist() {
-        if (!mnemonic || !saved || stage === 'persisting') return;
+        if (stage !== 'verify' || !mnemonic || !saved || creationInFlightRef.current) return;
+        creationInFlightRef.current = true;
         setStage('persisting');
         setPersistError(null);
-        // Paint "Creating your wallet" before the key stretching holds the
-        // UI thread, or the old verify form sits there frozen.
-        await nextPaint();
         try {
+            // Paint "Creating your wallet" before key stretching holds the
+            // UI thread so the progress state reaches the screen.
+            await nextPaint();
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
                 : '';
@@ -234,10 +257,13 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
             }
             // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
+            clearWalletSecrets();
             setStage('ads-notice');
         } catch (err) {
             setPersistError(userFacingMessage(err, 'Failed to create wallet. Try again.'));
             setStage('verify');
+        } finally {
+            creationInFlightRef.current = false;
         }
     }
 
