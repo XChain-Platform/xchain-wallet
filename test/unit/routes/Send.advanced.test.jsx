@@ -110,7 +110,7 @@ describe('Send advanced choices', () => {
         const memo = screen.getByLabelText('Memo (optional)');
         fireEvent.change(memo, { target: { value: 'm'.repeat(MAX_MEMO_LENGTH + 1) } });
 
-        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} characters.`, { exact: false }))
+        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} characters`, { exact: false }))
             .toBeInTheDocument();
         expect(screen.getByText(/network accepts at most 250/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));

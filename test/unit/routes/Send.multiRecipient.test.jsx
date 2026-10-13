@@ -121,6 +121,12 @@ async function fillRow(n, { to, amount, tick } = {}) {
 
 afterEach(() => cleanup());
 
+// The form's error summary repeats each field message as a link, so a field
+// assertion reads the error node attached to its own input.
+function fieldError(text) {
+    return screen.queryAllByText(text).find((node) => /-error$/.test(node.id || '')) ?? null;
+}
+
 describe('Send: multi-recipient (PC-52)', () => {
     it('offers a second recipient for a token send', async () => {
         mount();
@@ -170,7 +176,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         await fillFirst();
         fireEvent.click(await addRecipient());
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(screen.getByText(/Recipient 2: address is required/)).toBeInTheDocument();
+        expect(fieldError(/Recipient 2: address is required/)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -180,23 +186,23 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(await addRecipient());
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        expect(screen.getByText('Recipient 2: address is required.')).toBeInTheDocument();
-        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        expect(fieldError('Recipient 2: address is required.')).toBeInTheDocument();
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
 
         await fillRow(1, { to: BOB });
-        expect(screen.queryByText('Recipient 2: address is required.')).toBeNull();
-        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        expect(screen.queryAllByText('Recipient 2: address is required.')).toHaveLength(0);
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
 
         // Editing hides the current error while the user corrects the field.
         // Submitting the same invalid value presents that error again.
         await fillRow(1, { amount: '.' });
-        expect(screen.queryByText('Recipient 2: amount must be a positive number.')).toBeNull();
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(await screen.findByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        await waitFor(() => expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument());
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         await fillRow(1, { amount: '3' });
-        expect(screen.queryByText(/Recipient 2:/)).toBeNull();
+        expect(screen.queryAllByText(/Recipient 2:/)).toHaveLength(0);
     });
 
     it('validates the added recipient address like the first one', async () => {
@@ -205,7 +211,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(await addRecipient());
         await fillRow(1, { to: 'bc1qnotarealaddressatall', amount: '3' });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(screen.getByText(/Recipient 2:/)).toBeInTheDocument();
+        expect(fieldError(/Recipient 2:/)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -225,7 +231,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         await fillRow(1, { to: BOB, amount: '.' });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
