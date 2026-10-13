@@ -92,7 +92,7 @@ describe('History usability', () => {
         ));
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Copy index' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
         expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));

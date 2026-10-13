@@ -20,7 +20,7 @@
 // unlock screen as the remedy rather than a field on this screen.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, act as domAct } from '@testing-library/react';
+import { render, fireEvent, within, act as domAct } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
@@ -153,11 +153,15 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
             })),
         });
 
+        // The exit now asks first; confirming inside the dialog starts the removal.
         fireEvent.click(utils.getByRole('button', { name: 'Exit demo & wipe' }));
+        const dialog = utils.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
 
-        expect(utils.getByRole('button', { name: 'Back' }).disabled).toBe(true);
-        expect(utils.getByRole('button', { name: /Rename wallet/ }).disabled).toBe(true);
-        expect(utils.getByRole('button', { name: 'Exit demo & wipe' }).disabled).toBe(true);
+        const hidden = { hidden: true };
+        expect(utils.getByRole('button', { name: 'Back', ...hidden }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: /Rename wallet/, ...hidden }).disabled).toBe(true);
+        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).disabled).toBe(true);
 
         finishRemoval();
         await domAct(async () => { await drainMicrotasks(); });
