@@ -164,7 +164,7 @@ describe('History usability', () => {
             ));
 
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Copy tx hash' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
             await waitFor(() => expect(writeText).toHaveBeenCalledWith(txHash));
 
             expect(screen.getByRole('link', { name: 'XChain' }))
