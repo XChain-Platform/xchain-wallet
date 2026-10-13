@@ -129,7 +129,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
-            const demo = flowsLib.synthesizeDemoMarketActivity(tick);
+            const demo = flowsLib.synthesizeDemoMarketActivity(tick, { chainIds: chains });
             if (!cancelled) {
                 setOffers(uniqueRows(demo.offers, marketRowIdentity));
                 setSales(uniqueRows(demo.sales, marketRowIdentity));

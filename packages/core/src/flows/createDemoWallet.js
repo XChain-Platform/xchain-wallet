@@ -85,26 +85,34 @@ export async function createDemoWallet({
         masterKey,
     });
     masterKey.fill(0);  // Vault copies the key internally; zero our ref.
-    await vault.open();
 
-    const created = await createWallet({
-        password,
-        name,
-        vault,
-        chainRegistry,
-        sdkRegistry,
-        activeChainIds,
-        kdfParams: makeFreshKdfParams(DEMO_KDF_OVERRIDES),
-    });
-    const demoWallet = { ...created.wallet, origin: 'demo' };
-    await vault.wallets.put(demoWallet);
+    try {
+        await vault.open();
 
-    return {
-        vault,
-        password,
-        mnemonic: created.mnemonic,
-        wallet: demoWallet,
-        account: created.account,
-        addresses: created.addresses,
-    };
+        const created = await createWallet({
+            password,
+            name,
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            activeChainIds,
+            kdfParams: makeFreshKdfParams(DEMO_KDF_OVERRIDES),
+        });
+        const demoWallet = { ...created.wallet, origin: 'demo' };
+        await vault.wallets.put(demoWallet);
+
+        return {
+            vault,
+            password,
+            mnemonic: created.mnemonic,
+            wallet: demoWallet,
+            account: created.account,
+            addresses: created.addresses,
+        };
+    } catch (err) {
+        // A rejected creation has no caller that can close the vault. Clear
+        // its partially built document and cached key before propagating it.
+        vault.close();
+        throw err;
+    }
 }
