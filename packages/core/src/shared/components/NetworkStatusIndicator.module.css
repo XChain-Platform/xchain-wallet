@@ -77,7 +77,6 @@
     font-size: var(--xc-text-sm);
 }
 
-.wrap:hover .popover,
 .wrap[data-open='true'] .popover {
     display: block;
 }

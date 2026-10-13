@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useReachability } from '../hooks/useReachability.js';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import styles from './NetworkStatusIndicator.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -50,8 +51,11 @@ function serviceSummary(chain) {
 export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
     const { overall, perChain } = useReachability();
     const [open, setOpen] = useState(false);
+    const [hovered, setHovered] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const visible = open || hovered;
+    const popoverPlacement = useAnchoredPopover(visible, triggerRef);
     const state = overall === 'degraded' || overall === 'offline' || overall === 'normal'
         ? overall
         : 'unknown';
@@ -71,12 +75,16 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
             : label;
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!visible) return undefined;
         const onPointerDown = (event) => {
-            if (!wrapRef.current?.contains(event.target)) setOpen(false);
+            if (!wrapRef.current?.contains(event.target)) {
+                setHovered(false);
+                setOpen(false);
+            }
         };
         const onKeyDown = (event) => {
             if (event.key !== 'Escape') return;
+            setHovered(false);
             setOpen(false);
             triggerRef.current?.focus();
         };
@@ -86,28 +94,39 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
             window.removeEventListener('mousedown', onPointerDown);
             window.removeEventListener('keydown', onKeyDown);
         };
-    }, [open]);
+    }, [visible]);
 
     return (
         <div
             ref={wrapRef}
             className={styles.wrap}
             data-state={state}
-            data-open={open ? 'true' : 'false'}
+            data-open={visible ? 'true' : 'false'}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
         >
             <button
                 ref={triggerRef}
                 type="button"
                 className={styles.trigger}
-                onClick={() => setOpen((value) => !value)}
+                onClick={() => {
+                    setHovered(false);
+                    setOpen((value) => !value);
+                }}
                 aria-label={explanation}
                 aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
+                aria-expanded={visible ? 'true' : 'false'}
                 title={explanation}
             >
                 <span className={styles.dot} aria-hidden="true" />
             </button>
-            <div className={styles.popover} role="dialog" aria-label="Network status">
+            <div
+                ref={popoverPlacement.ref}
+                style={popoverPlacement.style}
+                className={styles.popover}
+                role="dialog"
+                aria-label="Network status"
+            >
                 <div className={styles.title}>{label}</div>
                 {state === 'normal' ? (
                     <div className={styles.detail}>All selected chains are reachable.</div>
@@ -127,7 +146,11 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 <button
                     type="button"
                     className={styles.settings}
-                    onClick={() => { setOpen(false); onOpenNetworkSettings(); }}
+                    onClick={() => {
+                        setHovered(false);
+                        setOpen(false);
+                        onOpenNetworkSettings();
+                    }}
                 >
                     Network settings
                 </button>
