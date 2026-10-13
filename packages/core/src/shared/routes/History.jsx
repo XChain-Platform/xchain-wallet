@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ChainBadge,
@@ -533,6 +533,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+
+    const closeSelectedRow = useCallback(() => {
+        if (!selectedKey) return;
+        const key = selectedKey;
+        selectedTxRef.current = null;
+        setSelectedKey(null);
+        requestAnimationFrame(() => {
+            const item = timelineRef.current?.querySelector(
+                `[data-history-key="${cssEscape(key)}"]`,
+            );
+            item?.querySelector('button[data-history-row]')?.focus();
+        });
+    }, [selectedKey]);
+    useBackHandler(selectedKey ? closeSelectedRow : undefined);
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
@@ -1444,6 +1459,25 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }
     };
 
+    const onTimelineKeyDown = (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        const row = event.target.closest?.('button[data-history-row]');
+        if (!row) return;
+        const rows = Array.from(
+            event.currentTarget.querySelectorAll('button[data-history-row]'),
+        );
+        const index = rows.indexOf(row);
+        if (index < 0) return;
+        let next = null;
+        if (event.key === 'ArrowDown') next = Math.min(rows.length - 1, index + 1);
+        if (event.key === 'ArrowUp') next = Math.max(0, index - 1);
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = rows.length - 1;
+        if (next == null || next === index) return;
+        event.preventDefault();
+        rows[next]?.focus();
+    };
+
     const header = (
         <PageHeader
             onBack={onBack}
@@ -1804,7 +1838,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 </div>
             ) : null}
 
-            <ul className={styles.timeline}>
+            <ul
+                ref={timelineRef}
+                className={styles.timeline}
+                aria-label={t('history.title')}
+                onKeyDown={onTimelineKeyDown}
+            >
                 {renderedItems.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
@@ -3477,6 +3516,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
             <button
                 type="button"
                 onClick={onClick}
+                data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
                 aria-expanded={selected}
             >
@@ -3591,6 +3631,7 @@ function GroupCard({ item, expanded, onToggle }) {
         <button
             type="button"
             onClick={onToggle}
+            data-history-row
             className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
             aria-expanded={expanded}
         >
@@ -3833,9 +3874,56 @@ function specialFilterIcon(id) {
     return null;
 }
 
+function listboxOptions(menu) {
+    return Array.from(menu?.querySelectorAll('[role="option"]') || [])
+        .filter((option) => !option.disabled && option.getAttribute('aria-disabled') !== 'true');
+}
+
+function focusListboxOption(menuRef, edge = 'selected') {
+    requestAnimationFrame(() => {
+        const options = listboxOptions(menuRef.current);
+        if (options.length === 0) return;
+        if (edge === 'last') {
+            options.at(-1)?.focus();
+            return;
+        }
+        const selected = options.find((option) => option.getAttribute('aria-selected') === 'true');
+        (selected || options[0])?.focus();
+    });
+}
+
+function handleListboxKeyDown(event, menuRef, close) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+        return;
+    }
+    const options = listboxOptions(menuRef.current);
+    const option = event.target.closest?.('[role="option"]');
+    const index = options.indexOf(option);
+    if (index < 0) return;
+    let next = null;
+    if (event.key === 'ArrowDown') next = (index + 1) % options.length;
+    if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = options.length - 1;
+    if (next == null) return;
+    event.preventDefault();
+    options[next]?.focus();
+}
+
 function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, iconForId, menuHeader }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
+    const triggerRef = useRef(null);
+    const menuRef = useRef(null);
+
+    const close = () => {
+        setOpen(false);
+        triggerRef.current?.focus();
+    };
 
     useEffect(() => {
         if (!open) return undefined;
@@ -3843,7 +3931,11 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
             if (wrapRef.current?.contains(e.target)) return;
             setOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setOpen(false);
+            triggerRef.current?.focus();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -3865,17 +3957,30 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
             <button
+                ref={triggerRef}
                 type="button"
                 className={styles.chainPickerBtn}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
+                onKeyDown={(event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    if (!open) setOpen(true);
+                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
+                }}
             >
                 <span className={styles.chainPickerLeft}>{summary}</span>
                 <SingleChevron direction="down" />
             </button>
             {open ? (
-                <ul className={styles.chainPickerMenu} role="listbox" aria-multiselectable="true">
+                <ul
+                    ref={menuRef}
+                    className={styles.chainPickerMenu}
+                    role="listbox"
+                    aria-multiselectable="true"
+                    onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
+                >
                     {menuHeader ? (
                         <li className={styles.checkboxMenuHeader} aria-hidden="true">
                             {menuHeader}
@@ -3886,19 +3991,17 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
                         const icon = typeof iconForId === 'function' ? iconForId(opt.id) : null;
                         return (
                             <li key={opt.id}>
-                                <label
+                                <button
+                                    type="button"
                                     className={`${styles.chainPickerOption} ${active ? styles.chainPickerOptionActive : ''}`}
                                     role="option"
                                     aria-selected={active}
+                                    onClick={() => onToggle(opt.id)}
                                 >
-                                    <input
-                                        type="checkbox"
-                                        checked={active}
-                                        onChange={() => onToggle(opt.id)}
-                                    />
+                                    <span aria-hidden="true">{active ? '✓' : '○'}</span>
                                     {icon ? <span className={styles.checkboxOptionIcon} aria-hidden="true">{icon}</span> : null}
                                     <span>{opt.label}</span>
-                                </label>
+                                </button>
                             </li>
                         );
                     })}
@@ -4015,6 +4118,13 @@ function chainScopeLabel(enabledChains, activeChainIds) {
 function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
+    const triggerRef = useRef(null);
+    const menuRef = useRef(null);
+
+    const close = () => {
+        setOpen(false);
+        triggerRef.current?.focus();
+    };
 
     useEffect(() => {
         if (!open) return undefined;
@@ -4022,7 +4132,11 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
             if (wrapRef.current?.contains(e.target)) return;
             setOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setOpen(false);
+            triggerRef.current?.focus();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -4040,17 +4154,24 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
             ? new Set(activeChainIds)
             : new Set([id]);
         onChange(next);
-        setOpen(false);
+        close();
     };
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
             <button
+                ref={triggerRef}
                 type="button"
                 className={styles.chainPickerBtn}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
+                onKeyDown={(event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    if (!open) setOpen(true);
+                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
+                }}
             >
                 <span className={styles.chainPickerLeft}>
                     {selectedDesc ? (
@@ -4068,7 +4189,12 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                 <SingleChevron direction="down" />
             </button>
             {open ? (
-                <ul className={styles.chainPickerMenu} role="listbox">
+                <ul
+                    ref={menuRef}
+                    className={styles.chainPickerMenu}
+                    role="listbox"
+                    onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
+                >
                     <li>
                         <button
                             type="button"
