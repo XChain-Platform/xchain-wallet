@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, ListPage, Button, ChainBadge } from '@xchain-wallet/core/ui';
+import { Screen, ListPage, Button, ChainBadge, ChoiceControl } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
@@ -217,18 +217,17 @@ export function ConnectApproval({ id, payload, onReject }) {
                             const checked = approvedChains.includes(d.id);
                             return (
                                 <li key={d.id} className={styles.chainRow}>
-                                    <label className={styles.chainLabel}>
-                                        <input
-                                            type="checkbox"
+                                    <ChoiceControl
+                                            className={styles.chainLabel}
                                             checked={checked}
                                             onChange={() => toggleChain(d.id)}
                                             aria-label={t('extension.connect.chains.allow', {
                                                 chain: d.displayName,
                                                 network: d.networkKind,
                                             })}
-                                        />
+                                    >
                                         <ChainBadge descriptor={d} size="sm" />
-                                    </label>
+                                    </ChoiceControl>
                                 </li>
                             );
                         })}
@@ -247,15 +246,14 @@ export function ConnectApproval({ id, payload, onReject }) {
                                     const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
                                     return (
                                         <li key={a.id} className={styles.chainRow}>
-                                            <label className={styles.chainLabel}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={approvedAccounts.includes(a.id)}
-                                                    onChange={() => toggleAccount(a.id)}
-                                                    aria-label={t('extension.connect.accounts.share', { name })}
-                                                />
+                                            <ChoiceControl
+                                                className={styles.chainLabel}
+                                                checked={approvedAccounts.includes(a.id)}
+                                                onChange={() => toggleAccount(a.id)}
+                                                aria-label={t('extension.connect.accounts.share', { name })}
+                                            >
                                                 <span>{name}</span>
-                                            </label>
+                                            </ChoiceControl>
                                         </li>
                                     );
                                 })}

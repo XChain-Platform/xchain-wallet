@@ -59,7 +59,7 @@ function renderPopup(node) {
 
 function expectCompleteButtonLabel(name) {
     const button = screen.getByRole('button', { name, exact: true });
-    const label = button.querySelector('span:last-child');
+    const label = button.querySelector(':scope > span:last-child');
     expect(button).toBeVisible();
     expect(label).not.toBeNull();
     expect(label).toHaveTextContent(name);
