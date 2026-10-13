@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ChainBadge,
@@ -1411,7 +1411,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // anything but a failed record, so this cannot make a live send vanish.
     // The row closes and the list re-reads; a refused or failed delete
     // leaves the row in place, which is the honest outcome.
-    const dismissFailedPending = async (pendingTxId) => {
+    const dismissFailedPending = useCallback(async (pendingTxId) => {
         if (typeof messaging?.dismissFailedPendingTx !== 'function') return;
         try {
             await messaging.dismissFailedPendingTx({ pendingTxId });
@@ -1421,9 +1421,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         selectedTxRef.current = null;
         setSelectedKey(null);
         setRefreshTick((n) => n + 1);
-    };
+    }, [messaging]);
 
-    const onRowClick = (entry) => {
+    const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
         // page. Falls back to the legacy inline expand for builds /
@@ -1471,7 +1471,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
             }
         }
-    };
+    }, [messaging, onSelectEntry, peerCache, selectedKey]);
 
     const header = (
         <PageHeader
@@ -1817,7 +1817,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                             ? false
                                                             : connectorByKey.has(entry.key)
                                                     }
-                                                    onClick={() => onRowClick(entry)}
+                                                    onClick={onRowClick}
                                                     peerCache={peerCache}
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
@@ -1863,7 +1863,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             entry={entry}
                             selected={selectedKey === entry.key}
                             showConnector={connectorByKey.has(entry.key)}
-                            onClick={() => onRowClick(entry)}
+                            onClick={onRowClick}
                             peerCache={peerCache}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
@@ -3488,7 +3488,7 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
     const receiveLabel = entry.receiveLabel
@@ -3499,7 +3499,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
         <li data-history-key={entry.key}>
             <button
                 type="button"
-                onClick={onClick}
+                onClick={() => onClick(entry)}
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
                 aria-expanded={selected}
             >
@@ -3588,7 +3588,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
             ) : null}
         </li>
     );
-}
+});
 
 /**
  * Collapsed group card (§28.2). Renders a single summary row that

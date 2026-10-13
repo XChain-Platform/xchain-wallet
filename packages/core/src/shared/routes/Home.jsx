@@ -993,7 +993,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on
     // this network" empty messages.
-    const coinFamilies = (() => {
+    const coinFamilies = useMemo(() => {
         const seen = new Set();
         if (balances) {
             for (const cid of Object.keys(balances)) {
@@ -1004,7 +1004,88 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((c) => seen.has(c));
         for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
         return ordered;
-    })();
+    }, [balances]);
+
+    const pinnedKeys = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const hiddenKeys = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
+    const handleAddAddress = useCallback(() => setAddAddressOpen(true), []);
+    const quickActions = useMemo(() => (
+        <div className={styles.quickActions} role="group" aria-label="Quick actions">
+            <SendQuickAction
+                onSend={onSend}
+                browserOnline={browserOnline}
+                onOffline={() => runNetworkAction('Sending', onSend)}
+            />
+            <button
+                type="button"
+                className={styles.quickAction}
+                onClick={onReceive}
+                disabled={!onReceive}
+            >
+                <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                <span>Receive</span>
+            </button>
+            {onExchange ? (
+                <button
+                    type="button"
+                    className={styles.quickAction}
+                    onClick={() => runNetworkAction('Exchange', onExchange)}
+                    aria-disabled={!browserOnline ? 'true' : undefined}
+                    title={!browserOnline ? 'Exchange needs a network connection' : undefined}
+                >
+                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                    <span>Exchange</span>
+                </button>
+            ) : null}
+            {homeMoreActions.length === 1 ? (
+                <button
+                    type="button"
+                    className={styles.quickAction}
+                    onClick={homeMoreActions[0].onSelect}
+                >
+                    <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
+                    <span>{homeMoreActions[0].label}</span>
+                </button>
+            ) : null}
+            {homeMoreActions.length > 1 ? (
+                <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                    <button
+                        type="button"
+                        className={styles.quickAction}
+                        aria-haspopup="menu"
+                        aria-expanded={homeMoreOpen}
+                        onClick={() => setHomeMoreOpen((o) => !o)}
+                    >
+                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                        <span>More</span>
+                    </button>
+                    {homeMoreOpen ? (
+                        <div className={styles.quickActionMoreMenu} role="menu">
+                            {homeMoreActions.map((action) => (
+                                <button
+                                    key={action.id}
+                                    type="button"
+                                    role="menuitem"
+                                    className={styles.quickActionMoreItem}
+                                    onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
+                                >
+                                    {action.icon ? (
+                                        <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                            {action.icon}
+                                        </span>
+                                    ) : null}
+                                    <span>{action.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    ), [
+        browserOnline, homeMoreActions, homeMoreOpen, onExchange, onReceive, onSend,
+        runNetworkAction,
+    ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
     const activeAccount = accountList.find((a) => a.id === activeAccountId) || null;
@@ -1223,13 +1304,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onReceive={onReceive}
                         onBuy={onExchange}
                         hasAddresses={Object.keys(balances).length > 0}
-                        onAddAddress={() => setAddAddressOpen(true)}
+                        onAddAddress={handleAddAddress}
                         onHistory={onHistory}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
-                        pinnedKeys={new Set(pinnedTokens)}
+                        pinnedKeys={pinnedKeys}
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
-                        hiddenKeys={new Set(hiddenTokens)}
+                        hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
@@ -1241,92 +1322,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onOpenSettings={onOpenSettings}
                         // Same rule as the gear: a lock button for shells with no header.
                         onLockWallet={onLockWallet}
-                        actions={(
-                            <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                                <SendQuickAction
-                                    onSend={onSend}
-                                    browserOnline={browserOnline}
-                                    onOffline={() => runNetworkAction('Sending', onSend)}
-                                />
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onReceive}
-                                    disabled={!onReceive}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                                    <span>Receive</span>
-                                </button>
-                                {/* Not rendered at all when the shell wires no
-                                    handler: a build can have compiled the DEX
-                                    surface out, and a greyed-out
-                                    Exchange button still advertises an
-                                    exchange. Locked-wallet states pass a
-                                    handler and disable elsewhere. */}
-                                {onExchange ? (
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        onClick={() => runNetworkAction('Exchange', onExchange)}
-                                        aria-disabled={!browserOnline ? 'true' : undefined}
-                                        title={!browserOnline ? 'Exchange needs a network connection' : undefined}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                        <span>Exchange</span>
-                                    </button>
-                                ) : null}
-                                {/* Absent, not greyed and not empty, when the
-                                    list is empty: a "More" that opens onto
-                                    nothing is a dead control on the primary
-                                    surface. */}
-                                {/* A menu holding one entry costs a tap for
-                                    nothing, so a lone action is the button. */}
-                                {homeMoreActions.length === 1 ? (
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        onClick={homeMoreActions[0].onSelect}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
-                                        <span>{homeMoreActions[0].label}</span>
-                                    </button>
-                                ) : null}
-                                {homeMoreActions.length > 1 ? (
-                                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                                        <button
-                                            type="button"
-                                            className={styles.quickAction}
-                                            aria-haspopup="menu"
-                                            aria-expanded={homeMoreOpen}
-                                            onClick={() => setHomeMoreOpen((o) => !o)}
-                                        >
-                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                            <span>More</span>
-                                        </button>
-                                        {homeMoreOpen ? (
-                                            <div className={styles.quickActionMoreMenu} role="menu">
-                                                {homeMoreActions.map((action) => (
-                                                    <button
-                                                        key={action.id}
-                                                        type="button"
-                                                        role="menuitem"
-                                                        className={styles.quickActionMoreItem}
-                                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                                    >
-                                                        {action.icon ? (
-                                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                                {action.icon}
-                                                            </span>
-                                                        ) : null}
-                                                        <span>{action.label}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                ) : null}
-                            </div>
-                        )}
+                        actions={quickActions}
                     />
                 ) : null}
 
