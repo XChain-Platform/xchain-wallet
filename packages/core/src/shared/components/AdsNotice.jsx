@@ -30,8 +30,17 @@ import { t } from '../../i18n/index.js';
  * @param {string} props.titleClass
  * @param {string} props.subtitleClass
  * @param {string} props.actionsClass
+ * @param {boolean} [props.busy]
  */
-export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleClass, actionsClass }) {
+export function AdsNotice({
+    onContinue,
+    isFull,
+    headClass,
+    titleClass,
+    subtitleClass,
+    actionsClass,
+    busy = false,
+}) {
     const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
 
     useEffect(() => {
@@ -67,6 +76,8 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
                     block={!isFull}
                     size={isFull ? undefined : 'sm'}
                     icon={<Icon.CheckIcon />}
+                    loading={busy}
+                    disabled={busy}
                 >
                     {t('adsNotice.continue')}
                 </Button>

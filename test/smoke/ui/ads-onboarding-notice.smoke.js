@@ -89,8 +89,8 @@ assert.match(
 // --- Import: every success path ends on the notice -------------------
 
 // The notice Continue marks itself consumed before it calls onImported. A
-// completed background label restore may call it again only after that mark,
-// so late labels refresh Home without skipping the notice.
+// completed background label restore safely invokes it only after that mark,
+// so late labels refresh Home without skipping the notice or leaking a rejection.
 const importedCalls = imp.match(/\bonImported\b/g) || [];
 assert.equal(
     importedCalls.length,
@@ -99,8 +99,8 @@ assert.equal(
 );
 assert.match(
     imp,
-    /if \(labelSync\?\.restored && adsContinuedRef\.current\) onImported\(\)/,
-    'a late label restore refreshes Home only after Continue',
+    /if \(labelSync\?\.restored && adsContinuedRef\.current\) \{[\s\S]{0,160}Promise\.resolve\(\)\.then\(\(\) => onImported\(\)\)\.catch/,
+    'a late label restore refreshes Home only after Continue and handles callback rejection',
 );
 const importStart = imp.indexOf('if (adsNotice)');
 assert.ok(importStart > 0, 'located the import ads-notice render branch');
@@ -111,29 +111,18 @@ assert.match(
 );
 assert.match(
     imp,
-    /const continueAfterNotice = \(\) => \{\s*adsContinuedRef\.current = true;\s*onImported\(\);/,
+    /const continueAfterNotice = \(\) => \{[\s\S]{0,360}adsContinuedRef\.current = true;[\s\S]{0,100}onImported\(\);/,
     'import Continue marks the notice consumed before refreshing App',
 );
 
 // Mnemonic import (which also carries the FreeWallet variant), fresh
 // backup restore, and the add-mode backup restore and pointer restore:
-// each success path flips the flag after its messaging call returns.
+// every success path scrubs its inputs before the shared helper raises the notice.
 const flips = imp.match(/setAdsNotice\(true\)/g) || [];
-assert.equal(flips.length, 3, 'three import success paths raise the notice');
-assert.match(
-    imp,
-    /messaging\.importBackupFresh\([\s\S]*?\);\s*setAdsNotice\(true\)/,
-    'a fresh-install restore ends on the notice',
-);
-assert.match(
-    imp,
-    /mode,\s*\}\);\s*\}\s*setAdsNotice\(true\)/,
-    'the add-mode restore and pointer restore end on the notice',
-);
-assert.match(
-    imp,
-    /messaging\.importMnemonic\([^)]*\);\s*\}[\s\S]*?setAdsNotice\(true\)/,
-    'a mnemonic import (FreeWallet variant included) ends on the notice',
-);
+assert.equal(flips.length, 1, 'the shared successful-import helper raises the notice once');
+const finishes = imp.match(/finishWalletImport\(\);/g) || [];
+assert.equal(finishes.length, 4, 'mnemonic, WIF, fresh-backup and add-backup success paths scrub secrets');
+assert.match(imp, /function finishWalletImport\(\) \{[\s\S]{0,180}clearSensitiveState\(\);[\s\S]{0,180}setAdsNotice\(true\)/,
+    'the successful-import helper scrubs secrets before raising the notice');
 
 console.log('ads-onboarding-notice smoke OK');
