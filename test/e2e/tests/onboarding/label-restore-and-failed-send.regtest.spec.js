@@ -107,7 +107,7 @@ async function importFromPhrase(page, words, name) {
     await page.goto(BASE_URL);
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
-    await page.getByLabel('Recovery phrase').fill(words.join(' '));
+    await page.getByLabel('Recovery phrase', { exact: true }).fill(words.join(' '));
     await page.getByLabel('Wallet name').fill(name);
     await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);

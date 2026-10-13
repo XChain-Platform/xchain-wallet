@@ -19,7 +19,9 @@ test('a search typed in the Send picker does not filter the Home Tokens tab', as
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
     await page.getByLabel('Search coins or tokens').fill('LTC');
-    await page.getByLabel(/^Open .* details/i).first().click();
+    // Picker rows select the asset ("Select <name> on <chain>"); only Home's
+    // balance rows open token details.
+    await page.getByRole('button', { name: /^Select .*Litecoin/ }).first().click();
 
     await gotoSection(page, 'Home');
     const main = page.getByRole('main');
