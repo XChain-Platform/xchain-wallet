@@ -84,6 +84,7 @@ export function DisplaySection() {
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
     const [displayMessage, setDisplayMessage] = useState(/** @type {string | null} */ (null));
+    const [saveError, setSaveError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
     const [watchChainId, setWatchChainId] = useState(() => chains[0]?.id || '');
     const [watchTicker, setWatchTicker] = useState('');
     const [watchMessage, setWatchMessage] = useState(/** @type {string | null} */ (null));
@@ -132,19 +133,23 @@ export function DisplaySection() {
     };
 
     const writePinned = useCallback(async (next) => {
+        setSaveError(null);
         try {
             if (walletId) await update(pinnedTokensPatchForWallet(walletId, next));
             else await update({ pinnedTokens: next });
         } catch (err) {
+            setSaveError({ key: 'pinnedTokens', message: 'Could not save the pinned tokens. Try again.' });
             // eslint-disable-next-line no-console
             console.error('display.pinnedTokens update failed:', err);
         }
     }, [update, walletId]);
 
     const writeHidden = useCallback(async (next) => {
+        setSaveError(null);
         try {
             await update({ hiddenTokens: next });
         } catch (err) {
+            setSaveError({ key: 'hiddenTokens', message: 'Could not save the hidden tokens. Try again.' });
             // eslint-disable-next-line no-console
             console.error('display.hiddenTokens update failed:', err);
         }
@@ -252,23 +257,28 @@ export function DisplaySection() {
     const showHideAffordance = settings?.showHideAffordance === true;
 
     const setPinAffordance = (next) => {
+        setSaveError(null);
         update({ showPinAffordance: !!next }).catch((err) => {
+            setSaveError({ key: 'showPinAffordance', message: 'Could not save this display preference. Try again.' });
             // eslint-disable-next-line no-console
             console.error('display.showPinAffordance update failed:', err);
         });
     };
     const setHideAffordance = (next) => {
+        setSaveError(null);
         update({ showHideAffordance: !!next }).catch((err) => {
+            setSaveError({ key: 'showHideAffordance', message: 'Could not save this display preference. Try again.' });
             // eslint-disable-next-line no-console
             console.error('display.showHideAffordance update failed:', err);
         });
     };
-    const updateDisplay = (patch) => {
+    const updateDisplay = (key, patch) => {
         setDisplayMessage(null);
+        setSaveError(null);
         update(patch).catch((err) => {
             // eslint-disable-next-line no-console
             console.error('display preference update failed:', err);
-            setDisplayMessage('Could not save the display preference. Try again.');
+            setSaveError({ key, message: 'Could not save this display preference. Try again.' });
         });
     };
     const resetDisplay = async () => {
@@ -280,6 +290,7 @@ export function DisplaySection() {
         });
         if (!confirmed) return;
         setDisplayMessage(null);
+        setSaveError(null);
         update({
             pinnedTokens: [],
             pinnedTokensByWallet: {},
@@ -298,7 +309,7 @@ export function DisplaySection() {
             .catch((err) => {
                 // eslint-disable-next-line no-console
                 console.error('display reset failed:', err);
-                setDisplayMessage('Could not reset display settings. Try again.');
+                setSaveError({ key: 'reset', message: 'Could not reset display settings. Try again.' });
             });
     };
 
@@ -309,8 +320,9 @@ export function DisplaySection() {
                 label="Hide small balances"
                 hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
                 checked={settings.privacy?.hideSmallBalances === true}
-                onChange={(next) => updateDisplay({ privacy: { hideSmallBalances: next } })}
+                onChange={(next) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: next } })}
             />
+            <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
@@ -319,7 +331,7 @@ export function DisplaySection() {
                 <select
                     aria-label="Small-balance threshold"
                     value={settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT}
-                    onChange={(e) => updateDisplay({ smallBalanceThreshold: e.target.value })}
+                    onChange={(e) => updateDisplay('smallBalanceThreshold', { smallBalanceThreshold: e.target.value })}
                     style={SELECT}
                 >
                     <option value="dust">Network dust (recommended)</option>
@@ -327,6 +339,7 @@ export function DisplaySection() {
                     <option value="0.01">Less than 0.01</option>
                     <option value="1">Less than 1</option>
                 </select>
+                <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -336,13 +349,14 @@ export function DisplaySection() {
                 <select
                     aria-label="Balance number format"
                     value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
-                    onChange={(e) => updateDisplay({ numberFormat: e.target.value })}
+                    onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
                     style={SELECT}
                 >
                     <option value="full">1,234.50000000</option>
                     <option value="trim">1,234.5</option>
                     <option value="plain">1234.50000000</option>
                 </select>
+                <DisplaySaveError error={saveError} controlKey="numberFormat" />
             </div>
 
             <h3 style={SECTION_HEADER}>Row affordances</h3>
@@ -355,12 +369,14 @@ export function DisplaySection() {
                 checked={showPinAffordance}
                 onChange={setPinAffordance}
             />
+            <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
             <ToggleRow
                 label="Show hide button on rows"
                 hint="Display a hide affordance on each balance row to collapse the token into the Hidden section."
                 checked={showHideAffordance}
                 onChange={setHideAffordance}
             />
+            <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
 
             <h3 style={SECTION_HEADER}>Watched tokens ({watched.length})</h3>
             <p style={SECTION_HINT}>
@@ -435,6 +451,7 @@ export function DisplaySection() {
                 <p style={SECTION_HINT}>
                     Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.
                 </p>
+                <DisplaySaveError error={saveError} controlKey="pinnedTokens" />
                 {pinned.length === 0 ? (
                     <div style={ROW}>
                         <span style={EMPTY_HINT}>No pinned tokens. Tap the star on a balance row to pin it.</span>
@@ -489,6 +506,7 @@ export function DisplaySection() {
                 <p style={SECTION_HINT}>
                     Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.
                 </p>
+                <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
                 {hidden.length === 0 ? (
                     <div style={ROW}>
                         <span style={EMPTY_HINT}>No hidden tokens. Tap the hide affordance on a balance row to hide it.</span>
@@ -547,6 +565,7 @@ export function DisplaySection() {
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
                     {displayMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{displayMessage}</span> : null}
+                    <DisplaySaveError error={saveError} controlKey="reset" />
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>
                     Reset to defaults
@@ -561,4 +580,10 @@ export function DisplaySection() {
             ) : null}
         </div>
     );
+}
+
+function DisplaySaveError({ error, controlKey }) {
+    return error?.key === controlKey ? (
+        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{error.message}</span>
+    ) : null;
 }
