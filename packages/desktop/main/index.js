@@ -139,6 +139,10 @@ let canCreateWindows = false;
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
+// A warm deep link belongs to the primary window selected when it arrives.
+// Pinning the webContents keeps another primary or a detached window from
+// consuming the process-wide one-shot slot first.
+let deepLinkRecipient = null;
 // Windows opened on a pinned view (open-window), which never take a deep link.
 const detachedWindows = /** @type {WeakSet<BrowserWindow>} */ (new WeakSet());
 
@@ -354,7 +358,19 @@ export function applyWindowCloseConvention(win, event, options = {}) {
 function broadcastToWindows(channel, payload, excludedContents = null) {
     for (const w of liveWindows()) {
         if (w.webContents === excludedContents) continue;
-        w.webContents.send(channel, payload);
+        sendToWindow(w, channel, payload);
+    }
+}
+
+function sendToWindow(win, channel, payload) {
+    if (!win || win.isDestroyed() || win.webContents?.isDestroyed?.()) return false;
+    try {
+        win.webContents.send(channel, payload);
+        return true;
+    } catch {
+        // A window can close after liveWindows() snapshots it. Notification
+        // delivery must not turn a completed wallet operation into an error.
+        return false;
     }
 }
 
@@ -363,6 +379,7 @@ function forwardDeepLink(event) {
     // that does not exist yet, or has not mounted its listener, claims it on
     // mount through 'xchain:deep-link-take', so a cold-start link is not lost.
     deepLinkSlot.offer(event);
+    deepLinkRecipient = null;
     const live = liveWindows();
     if (live.length === 0) return;
     const target = pickDeepLinkTarget(live, BrowserWindow.getFocusedWindow(), (w) => detachedWindows.has(w));
@@ -371,13 +388,14 @@ function forwardDeepLink(event) {
         if (canCreateWindows) void openWindowAfterIdleCheck();
         return;
     }
+    deepLinkRecipient = target.webContents;
     if (!target.isVisible()) {
         void restoreWindowAfterIdleCheck().then(() => {
-            if (!target.isDestroyed()) target.webContents.send('xchain:uri', event);
+            sendToWindow(target, 'xchain:uri', event);
         });
         return;
     }
-    target.webContents.send('xchain:uri', event);
+    sendToWindow(target, 'xchain:uri', event);
     revealWindow(target);
 }
 
@@ -1076,12 +1094,19 @@ app.whenReady().then(async () => {
             : { ok: false, reason: r.reason };
     });
 
-    // Hand the parked deep link to the renderer that asks, once. Same trust
-    // boundary as the other handlers: a remote frame gets nothing.
+    // Hand the parked deep link to its selected primary renderer once. Same
+    // trust boundary as the other handlers: a remote or detached frame gets
+    // nothing, and a sibling cannot consume a link nudged to another window.
     ipcMain.handle('xchain:deep-link-take', async (event, ...args) => {
         if (!isTrustedSender(event)) return null;
         if (!hasNoIpcArguments(args)) return null;
-        return deepLinkSlot.take();
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!senderWindow || !windows.has(senderWindow) || detachedWindows.has(senderWindow)) return null;
+        if (deepLinkRecipient?.isDestroyed?.()) deepLinkRecipient = null;
+        if (deepLinkRecipient && deepLinkRecipient !== event.sender) return null;
+        const pending = deepLinkSlot.take();
+        deepLinkRecipient = null;
+        return pending;
     });
 
     // Wire the signer-bridge ipc listener so renderer-hosted HW
