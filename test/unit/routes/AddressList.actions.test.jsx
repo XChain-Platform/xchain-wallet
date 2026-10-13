@@ -246,4 +246,18 @@ describe('Address detail actions', () => {
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(1));
         expect(screen.queryByRole('button', { name: 'Show more addresses' })).toBeNull();
     });
+
+    it('labels every address row with its chain and non-mainnet kind', async () => {
+        mount(messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ id: 'btc', address: ADDRESS, source: 'hd', role: 'receive' }],
+                'dogecoin-regtest': [{ id: 'doge', address: DOGE_ADDRESS, source: 'hd', role: 'receive' }],
+            }),
+        }));
+
+        const bitcoinRow = await screen.findByRole('button', { name: `View address ${ADDRESS}` });
+        const dogecoinRow = screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` });
+        expect(bitcoinRow).toHaveTextContent(/Bitcoin\s+regtest/i);
+        expect(dogecoinRow).toHaveTextContent(/Dogecoin\s+regtest/i);
+    });
 });

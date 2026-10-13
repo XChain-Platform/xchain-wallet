@@ -112,6 +112,22 @@ describe('<Input>', () => {
         expect(input).toHaveAttribute('enterkeyhint', 'go');
     });
 
+    it.each([
+        ['email', 'email'],
+        ['number', 'decimal'],
+        ['search', 'search'],
+        ['tel', 'tel'],
+        ['url', 'url'],
+    ])('uses the %s mobile keyboard for a semantic input type', (type, inputMode) => {
+        render(<Input label="Value" type={type} />);
+        expect(screen.getByLabelText('Value')).toHaveAttribute('inputmode', inputMode);
+    });
+
+    it('honors an input mode override', () => {
+        render(<Input label="Whole number" type="number" inputMode="numeric" />);
+        expect(screen.getByLabelText('Whole number')).toHaveAttribute('inputmode', 'numeric');
+    });
+
     it('pass-through value + onChange work end-to-end', () => {
         const onChange = vi.fn();
         render(<Input label="Amount" value="1" onChange={onChange} />);
@@ -145,6 +161,21 @@ describe('<Input>', () => {
         expect(screen.queryByRole('alert')).toBeNull();
         const hint = screen.getByText('Help');
         expect(control.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
+    });
+
+    it('shows the same error again when its key changes', () => {
+        const view = render(
+            <Input label="Name" error="Required" errorKey={1} defaultValue="" />,
+        );
+        const input = screen.getByLabelText('Name');
+        fireEvent.change(input, { target: { value: 'x' } });
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        view.rerender(
+            <Input label="Name" error="Required" errorKey={2} defaultValue="" />,
+        );
+        expect(screen.getByRole('alert')).toHaveTextContent('Required');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('renders and updates an input character counter described by the field', () => {
@@ -206,12 +237,13 @@ describe('<Input>', () => {
         expect(screen.queryByText(/local time zone/)).toBeNull();
     });
 
-    it('keeps text controls at 16px in iOS WebKit to prevent focus zoom', () => {
+    it('keeps text controls at 16px on narrow screens to prevent iOS focus zoom', () => {
         const css = readFileSync(
             'packages/core/src/ui/tokens.css',
             'utf8',
         );
-        expect(css).toMatch(/@supports \(-webkit-touch-callout: none\)/);
-        expect(css).toMatch(/input:not\(\[type='checkbox'\]\)[\s\S]*select,[\s\S]*textarea\s*\{\s*font-size: 16px !important;/);
+        // The floor is scoped to phone widths (mobileFormControlFontSize
+        // pins the exact rule); 1rem is the 16px iOS needs to skip the zoom.
+        expect(css).toMatch(/@media \(max-width: 599px\)\s*\{\s*input:not\(\[type='checkbox'\]\)[\s\S]*?select,[\s\S]*?textarea\s*\{\s*font-size: 1rem !important;/);
     });
 });

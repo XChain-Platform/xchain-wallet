@@ -1345,7 +1345,9 @@ assert.equal(ASSETS.length, 4,
 const walkScripts = (relDir) => readdirSync(join(root, relDir), { withFileTypes: true })
     .flatMap((entry) => (entry.isDirectory()
         ? walkScripts(`${relDir}/${entry.name}`)
-        : (/\.(mjs|sh)$/.test(entry.name) ? [`${relDir}/${entry.name}`] : [])));
+        // Unit tests beside the tools are not tools an operator runs.
+        : (/\.(mjs|sh)$/.test(entry.name) && !/\.test\.mjs$/.test(entry.name)
+            ? [`${relDir}/${entry.name}`] : [])));
 const releaseScriptFiles = walkScripts('tools/release').sort();
 assert.ok(releaseScriptFiles.length >= 30,
     `only ${releaseScriptFiles.length} scripts found under tools/release/, fewer than the 30 there `

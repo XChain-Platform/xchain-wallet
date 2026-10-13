@@ -66,10 +66,11 @@ describe('ReachabilityBanner delayed-data copy', () => {
     });
 
     it('names the last confirmed block and its age for a stale explorer', () => {
-        mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock: 4876327, tipAgeSeconds: 215254, replicaHalted: false } } })] });
+        const tipBlock = 4876327;
+        mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock, tipAgeSeconds: 215254, replicaHalted: false } } })] });
         const text = screen.getByRole('status').textContent;
         expect(text).toMatch(/balances and history are behind/);
-        expect(text).toMatch(/last confirmed block 4,876,327 was 2 days ago/);
+        expect(text).toContain(`last confirmed block ${tipBlock.toLocaleString()} was 2 days ago`);
         expect(text).toMatch(/catching up/);
     });
 

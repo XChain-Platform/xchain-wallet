@@ -90,6 +90,11 @@ export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }
 
+/** @param {{ walletId: string, currentPassword: string, newPassword: string }} opts */
+export function changePassword(opts) {
+    return /** @type {any} */ (sendMessage('wallet.changePassword', opts));
+}
+
 /** @param {object} opts */
 export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
