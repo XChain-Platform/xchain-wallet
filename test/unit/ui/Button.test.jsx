@@ -78,30 +78,31 @@ describe('<Button>', () => {
         expect(screen.getByTestId('sm')).toHaveClass(styles.sm);
         expect(screen.getByTestId('md')).toHaveClass(styles.md);
         expect(screen.getByTestId('lg')).toHaveClass(styles.lg);
-        const sizes = [['sm', '32'], ['md', '40'], ['lg', '48']];
+        const sizes = [['sm', '28'], ['md', '36'], ['lg', '44']];
         const followsSharedScale = (candidate) => sizes.every(([size, height]) => new RegExp(
             `\\.${size}\\s*\\{[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
             's',
         ).test(candidate));
-        const iconSizes = { sm: 'sm', md: 'md', lg: 'md' };
         for (const [size] of sizes) {
             expect(css).toMatch(new RegExp(
                 `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`
-                + `[^}]*--xc-icon-size:\\s*var\\(--xc-icon-${iconSizes[size]}\\)`,
+                + `[^}]*--xc-button-font-size:\\s*var\\(--xc-control-font-${size},\\s*\\d+(?:\\.\\d+)?(?:px|rem)\\)`
+                + `[^}]*--xc-button-padding-x:\\s*var\\(--xc-button-pad-x-${size},\\s*\\d+px\\)`
+                + `[^}]*--xc-icon-size:\\s*var\\(--xc-control-icon-${size},\\s*\\d+px\\)`,
                 's',
             ));
         }
         expect(followsSharedScale(css)).toBe(true);
         const shortened = css.replace(
-            'min-height: var(--xc-control-h-sm, 32px)',
+            'min-height: var(--xc-control-h-sm, 28px)',
             'min-height: 20px',
         );
         expect(shortened).not.toBe(css);
         expect(followsSharedScale(shortened)).toBe(false);
-        expect(css).toMatch(/\.btn\s*\{[^}]*padding:\s*0 var\(--xc-control-pad-x\)/s);
-        expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
-        expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s);
-        expect(css).not.toMatch(/min-height:\s*(?:28|36)px/);
+        expect(css).toMatch(/\.btn\s*\{[^}]*padding-block:\s*0[^}]*padding-inline:\s*var\(--xc-button-padding-x,\s*16px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius,\s*8px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-button-font-size,\s*14px\)/s);
+        expect(css).toMatch(/\.btn\s*\{[^}]*line-height:\s*var\(--xc-control-line,\s*1\.25\)/s);
     });
 
     it('passes shared icon tokens through controls, adornments, rows, and tabs', () => {
@@ -152,6 +153,6 @@ describe('<Button>', () => {
 
         expect(button).toHaveClass(styles.sm, styles.iconOnly);
         expect(css).toMatch(/\.iconOnly\s*\{[^}]*width:\s*var\(--xc-button-height\)[^}]*min-width:\s*var\(--xc-button-height\)/s);
-        expect(css).toMatch(/@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s);
+        expect(css).toMatch(/@media \(pointer:\s*coarse\), \(hover:\s*none\)[\s\S]*?\.sm::before\s*\{[^}]*width:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)[^}]*height:\s*max\(100%,\s*var\(--xc-control-hit-min,\s*24px\)\)/s);
     });
 });
