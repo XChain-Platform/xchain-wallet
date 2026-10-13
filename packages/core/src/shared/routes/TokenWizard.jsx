@@ -42,6 +42,9 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useSettings } from '../hooks/useSettings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -92,6 +95,7 @@ export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -264,6 +268,16 @@ export function TokenWizard({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        [chainId],
+    );
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -560,9 +574,15 @@ export function TokenWizard({ walletId, onBack }) {
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
             />
         );
@@ -785,6 +805,13 @@ export function TokenWizard({ walletId, onBack }) {
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
+                    />
                     <DetailRow
                         label="Protocol fee paid in"
                         value={payFeeInNativeCoin ? coinTicker : 'XCHAIN'}

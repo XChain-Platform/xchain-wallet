@@ -46,6 +46,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -252,6 +253,11 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -277,6 +283,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const feeEstimate = feePick.mode === 'custom'
         ? feeCustomEstimate
         : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
@@ -679,7 +686,8 @@ export function IssueTokenForm({ walletId, onBack }) {
                         label="Network fee"
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -731,10 +739,13 @@ export function IssueTokenForm({ walletId, onBack }) {
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
-                    : undefined}
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -947,16 +958,15 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            <FeeSelector
+                label="Network fee"
+                coinTicker={coinTicker}
+                formatFiat={formatNativeFee}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
 
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
