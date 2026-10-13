@@ -15,6 +15,7 @@
 // Underscore prefix marks this as internal to `components/settings/`;
 // other directories shouldn't import from here.
 
+import { cloneElement, useId } from 'react';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 
 export const ROW = {
@@ -62,6 +63,50 @@ export const INPUT = {
     fontFamily: 'inherit',
 };
 
+const ROW_COPY = {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    minWidth: 0,
+};
+const EMBEDDED_ROW = {
+    ...ROW,
+    padding: 'var(--xc-space-1) 0',
+    background: 'transparent',
+    border: 0,
+    borderRadius: 0,
+};
+
+/**
+ * A settings row that associates one visible label and description with its control.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {string} [props.hint]
+ * @param {import('react').ReactElement} props.children
+ * @param {boolean} [props.embedded]
+ */
+export function SettingsFieldRow({ label, hint, children, embedded = false }) {
+    const generatedId = useId();
+    const controlId = children.props.id || `settings-field-${generatedId}`;
+    const hintId = hint ? `${controlId}-hint` : undefined;
+    const describedBy = [children.props['aria-describedby'], hintId].filter(Boolean).join(' ') || undefined;
+    const control = cloneElement(children, {
+        id: controlId,
+        'aria-describedby': describedBy,
+    });
+
+    return (
+        <div style={embedded ? EMBEDDED_ROW : ROW}>
+            <div style={ROW_COPY}>
+                <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
+                {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
+            </div>
+            {control}
+        </div>
+    );
+}
+
 /**
  * Two-column row with a label + hint on the left and an `<input
  * type="checkbox">` styled as a toggle on the right.
@@ -72,32 +117,35 @@ export const INPUT = {
  * @param {boolean} props.checked
  * @param {(next: boolean) => void} props.onChange
  * @param {boolean} [props.disabled]
+ * @param {string} [props.accessibleLabel]
+ * @param {boolean} [props.embedded]
  */
-export function ToggleRow({ label, hint, checked, onChange, disabled }) {
+export function ToggleRow({
+    label,
+    hint,
+    checked,
+    onChange,
+    disabled,
+    accessibleLabel,
+    embedded = false,
+}) {
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                {hint ? <span style={ROW_HINT}>{hint}</span> : null}
-            </div>
+        <SettingsFieldRow label={label} hint={hint} embedded={embedded}>
             <input
                 type="checkbox"
                 role="switch"
-                aria-label={label}
+                aria-label={accessibleLabel}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
                 style={{
                     width: 36,
-                    // slice 2: was 20px tall, under the 24px pointer
-                    // target floor (--xc-tap-min). Every settings switch in
-                    // the wallet renders through this one row, so the whole
-                    // Settings screen moves with this number.
+                    // The shared target token keeps every settings switch at the pointer-size floor.
                     height: 'var(--xc-tap-min)',
                     cursor: disabled ? 'not-allowed' : 'pointer',
                 }}
             />
-        </div>
+        </SettingsFieldRow>
     );
 }
 
