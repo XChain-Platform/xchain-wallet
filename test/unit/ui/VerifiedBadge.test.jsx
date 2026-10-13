@@ -35,6 +35,12 @@ describe('<VerifiedBadge>', () => {
         expect(screen.getByTestId('verified-badge').textContent).toContain('Verifying');
     });
 
+    it('drops the info tip button when the badge sits inside a row button', () => {
+        render(<VerifiedBadge status="unavailable" reason="NOT_YET_CHECKPOINTED" details={false} />);
+        expect(screen.queryByRole('button')).toBeNull();
+        expect(screen.getByRole('img').getAttribute('aria-label')).toContain('too new to verify');
+    });
+
     it('renders nothing for an unknown / not-applicable status (e.g. the native coin)', () => {
         const { container } = render(<VerifiedBadge status="n/a" />);
         expect(container.firstChild).toBeNull();

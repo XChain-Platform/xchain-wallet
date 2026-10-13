@@ -392,7 +392,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             />
                         ) : null}
                         {!isNative && verify ? (
-                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={!clickable} />
                         ) : null}
                     </div>
                     <div className={styles.subtitle} title={subtitle}>{subtitle}</div>

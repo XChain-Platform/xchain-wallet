@@ -3724,7 +3724,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                     ) : null}
                     <StatusPill status={classifyEntryStatus(entry)} />
                     {verify ? (
-                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={false} />
                     ) : null}
                 </span>
                 <span className={styles.rowSourceAddress} title={entry.source || undefined}>
