@@ -513,6 +513,7 @@ let reopenInFlight = /** @type {Promise<void> | null} */ (null);
 let runUpdaterCheck = /** @type {null | (() => Promise<void>)} */ (null);
 let updaterCheckInFlight = /** @type {Promise<void> | null} */ (null);
 let updateCheckVisible = false;
+let activeWalletOperations = 0;
 
 function requestUpdateCheck({ visible = false } = {}) {
     if (!runUpdaterCheck) return Promise.resolve();
@@ -763,12 +764,18 @@ app.whenReady().then(async () => {
     // `getState` returns the broadcast shape and keeps one rendering path.
     let lastUpdaterEvent = null;
     try {
-        const { checkForUpdates, downloadAndInstall, isActive } = await attachUpdater({
+        const {
+            checkForUpdates,
+            downloadUpdate: downloadAndInstall,
+            restartAndInstall,
+            isActive,
+        } = await attachUpdater({
             onEvent: (event) => {
                 if (updateCheckVisible) event.userInitiated = true;
                 lastUpdaterEvent = event;
                 broadcastToWindows('xchain:updater', event);
             },
+            canRestart: () => activeWalletOperations === 0,
         });
         runUpdaterCheck = isActive ? checkForUpdates : null;
 
@@ -789,11 +796,17 @@ app.whenReady().then(async () => {
         // were all built and tested. Same sender check as the message
         // channel below: an install is a quit-and-replace, so it must not
         // be reachable from a frame that is positively remote.
-        ipcMain.handle('xchain:updater-install', async (event) => {
+        ipcMain.handle('xchain:updater-install', async (event, action = 'download') => {
             if (!isTrustedSender(event)) {
                 return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
             }
-            return downloadAndInstall();
+            if (action === 'check') {
+                await requestUpdateCheck({ visible: true });
+                return { ok: true };
+            }
+            if (action === 'restart') return restartAndInstall();
+            if (action === 'download') return downloadAndInstall();
+            return { ok: false, reason: 'desktop: unknown update action' };
         });
 
         // Kick a quiet check on launch. The menu path marks its events so
@@ -819,10 +832,15 @@ app.whenReady().then(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        const response = await handleIpcMessage(runtime, message);
-        const change = stateChangeForMessage(message, response);
-        if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
-        return response;
+        activeWalletOperations += 1;
+        try {
+            const response = await handleIpcMessage(runtime, message);
+            const change = stateChangeForMessage(message, response);
+            if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
+            return response;
+        } finally {
+            activeWalletOperations -= 1;
+        }
     });
 
     // §24.6 / Cluster Y FOLLOWUP 4: detach a pending tx (or any
