@@ -110,7 +110,11 @@ export function BalanceList({
         ]
         : visible;
     return (
-        <div className={styles.list} role="list" aria-label="Balances">
+        <div
+            className={styles.list}
+            role={typeof onSelectToken === 'function' ? 'group' : 'list'}
+            aria-label="Balances"
+        >
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
                 const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
@@ -260,7 +264,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
     return (
         <Tag
             className={`${styles.row} ${clickable ? styles.rowClickable : ''} ${pinned ? styles.rowPinned : ''}`}
-            role="listitem"
+            role={clickable ? undefined : 'listitem'}
             type={clickable ? 'button' : undefined}
             data-balance-key={pinKey}
             onClick={handleClick}
