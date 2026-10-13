@@ -125,7 +125,22 @@ const PROTOCOL_COIN_TICKER = {
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {SimulationResult}
  */
-export function simulateAction({
+export function simulateAction(opts = {}) {
+    try {
+        if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return malformedSimulation();
+        const { action, params, balances } = opts;
+        if (typeof action !== 'string' || action.trim() === '') return malformedSimulation();
+        if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) {
+            return malformedSimulation();
+        }
+        if (balances !== undefined && !Array.isArray(balances)) return malformedSimulation();
+        return simulateActionData(opts);
+    } catch {
+        return malformedSimulation();
+    }
+}
+
+function simulateActionData({
     action,
     params,
     balances,
@@ -146,7 +161,7 @@ export function simulateAction({
     // whatever coin row that projection produced (a coin SEND folds its own
     // principal in first), and so a new action type gets it for free.
     applyProtocolFee(result, balMap, coinTick, protocolFee);
-    if (coinTick && coinBalanceUnknown(balances)) blankUnknownCoinBalance(result, coinTick);
+    blankUnknownBalances(result, balances, coinTick);
     // Say WHY the coin post-state is absent. Without this the row reads as a
     // rendering gap rather than as a fact about the transaction, and the token
     // rows beside it (which are still exact) lose their credibility with it.
@@ -532,7 +547,17 @@ function simulateBatch(p, balMap, coinTick, feeEstimate, chainId, chainRegistry)
     const notes = [];
 
     for (const cmd of commands) {
-        if (!cmd || typeof cmd !== 'object') continue;
+        if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)
+            || typeof cmd.action !== 'string' || cmd.action.trim() === ''
+            || (cmd.params !== undefined
+                && (!cmd.params || typeof cmd.params !== 'object' || Array.isArray(cmd.params)))) {
+            notes.push('A batch command is malformed and could not be simulated.');
+            continue;
+        }
+        if (cmd.action === 'BATCH') {
+            notes.push('Nested batch commands are malformed and could not be simulated.');
+            continue;
+        }
         const sub = simulateAction({
             action: cmd.action,
             params: cmd.params,
@@ -595,55 +620,55 @@ function indexBalances(balances, coinTick) {
     return map;
 }
 
-// True when the caller's balances say the coin balance could not be read
-// (the `unknown` coin marker balancesFromSdk emits for an unavailable read).
-function coinBalanceUnknown(balances) {
-    return Array.isArray(balances) && balances.some((b) => b && b.isCoin && b.unknown);
-}
-
-// Issue #74. The coin balance is unknown, so indexBalances defaulted it to '0'
-// and every coin row was projected from zero (`0 -> -0.029`). Each coin row that
-// carries a balance keeps its amounts but loses its before/after, and a single
-// balance row says the balance is unknown. Fee label rows keep their amounts,
-// since the fee itself is still known.
-function blankUnknownCoinBalance(result, coinTick) {
+function blankUnknownBalances(result, balances, coinTick) {
     if (!result || !Array.isArray(result.deltas)) return;
     const deltas = result.deltas;
-    let touched = false;
-    let balanceRow = null;
-    for (const d of deltas) {
-        if (d.tick !== coinTick || !d.isCoin) continue;
-        if (!d.isFee) {
-            d.before = '';
-            d.after = '';
-            d.afterUnknown = true;
-            d.beforeUnknown = true;
-            balanceRow = balanceRow || d;
-            touched = true;
-        } else if (d.before !== '' || d.after !== '') {
-            // A standalone fee row also carried the coin's before/after.
-            d.before = '';
-            d.after = '';
-            delete d.afterUnknown;
-            touched = true;
+    const unknown = new Map();
+    if (Array.isArray(balances)) {
+        for (const balance of balances) {
+            if (!balance?.unknown) continue;
+            const tick = balance.tick
+                ? String(balance.tick).toUpperCase()
+                : balance.isCoin ? coinTick : '';
+            if (tick) unknown.set(tick, Boolean(balance.isCoin));
         }
     }
-    if (!touched) return;
-    if (!balanceRow) {
-        const at = deltas.findIndex((d) => d.tick === coinTick && d.isCoin);
-        deltas.splice(at === -1 ? deltas.length : at, 0, {
-            tick: coinTick,
-            before: '',
-            after: '',
-            isCoin: true,
-            isFee: false,
-            afterUnknown: true,
-            beforeUnknown: true,
-        });
-    }
-    if (Array.isArray(result.notes)) {
-        result.notes.push(
-            `Your ${coinTick} balance could not be read, so the current and projected ${coinTick} balance are not shown.`);
+    for (const [tick, isCoin] of unknown) {
+        let touched = false;
+        let balanceRow = null;
+        for (const d of deltas) {
+            if (d.tick !== tick) continue;
+            if (!d.isFee) {
+                d.before = '';
+                d.after = '';
+                d.afterUnknown = true;
+                d.beforeUnknown = true;
+                balanceRow = balanceRow || d;
+                touched = true;
+            } else if (d.before !== '' || d.after !== '') {
+                d.before = '';
+                d.after = '';
+                delete d.afterUnknown;
+                touched = true;
+            }
+        }
+        if (!touched) continue;
+        if (!balanceRow) {
+            const at = deltas.findIndex((d) => d.tick === tick);
+            deltas.splice(at === -1 ? deltas.length : at, 0, {
+                tick,
+                before: '',
+                after: '',
+                isCoin,
+                isFee: false,
+                afterUnknown: true,
+                beforeUnknown: true,
+            });
+        }
+        if (Array.isArray(result.notes)) {
+            result.notes.push(
+                `Your ${tick} balance could not be read, so the current and projected ${tick} balance are not shown.`);
+        }
     }
 }
 
@@ -802,12 +827,20 @@ function toArray(v) {
 }
 
 function neg(amount) {
-    const s = stripLeadingMinus(String(amount));
+    const s = unsignedDecimal(amount);
     return s === '' || s === '0' ? '0' : `-${s}`;
 }
 
 function pos(amount) {
-    return stripLeadingMinus(String(amount));
+    return unsignedDecimal(amount);
+}
+
+function unsignedDecimal(value) {
+    const decimal = String(value).trim();
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(decimal)) {
+        throw new TypeError('Malformed decimal value');
+    }
+    return decimal;
 }
 
 function stripLeadingMinus(s) {
@@ -843,6 +876,9 @@ function subStr(a, b) {
 function parseDec(s) {
     const raw = String(s ?? '0').trim();
     if (raw === '' || raw === '-') return { sign: 1, intPart: 0n, scale: 0 };
+    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) {
+        throw new TypeError('Malformed decimal value');
+    }
     const sign = raw.startsWith('-') ? -1 : 1;
     const body = sign === -1 ? raw.slice(1) : raw;
     const dot = body.indexOf('.');
@@ -869,4 +905,12 @@ function formatScaledBigint(value, scale) {
     while (frac.endsWith('0')) frac = frac.slice(0, -1);
     const body = frac.length > 0 ? `${whole}.${frac}` : whole;
     return negative ? `-${body}` : body;
+}
+
+function malformedSimulation() {
+    return {
+        deltas: [],
+        sideEffects: [],
+        notes: ['Balance changes could not be simulated because the transaction data is malformed.'],
+    };
 }
