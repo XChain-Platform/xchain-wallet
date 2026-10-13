@@ -23,6 +23,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import React from 'react';
+import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { DesktopUpdateBanner } from '../../../packages/desktop/renderer/DesktopUpdateBanner.jsx';
 
 /**
@@ -108,7 +109,7 @@ describe('DesktopUpdateBanner', () => {
         bridge.emit({ type: 'checking', userInitiated: true });
         expect(screen.getByRole('status').textContent).toContain('Checking for updates');
 
-        bridge.emit({ type: 'not-available', userInitiated: true, info: { version: '0.341.2' } });
+        bridge.emit({ type: 'not-available', userInitiated: true, info: { version: WALLET_VERSION } });
         expect(screen.getByRole('status').textContent).toContain('XChain Wallet is up to date');
     });
 
@@ -175,7 +176,7 @@ describe('DesktopUpdateBanner', () => {
         const { container } = render(React.createElement(DesktopUpdateBanner));
 
         bridge.emit({ type: 'checking' });
-        bridge.emit({ type: 'not-available', info: { version: '0.341.2' } });
+        bridge.emit({ type: 'not-available', info: { version: WALLET_VERSION } });
         bridge.emit({ type: 'error', info: { message: 'feed unavailable' } });
 
         expect(container.textContent).toBe('');

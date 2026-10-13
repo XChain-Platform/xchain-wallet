@@ -11,6 +11,7 @@
 // Crash hook helpers behind the diagnostic dump's recent_errors.
 
 import { describe, it, expect } from 'vitest';
+import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 import {
     diagnosticDump,
     createErrorRingBuffer,
@@ -79,7 +80,7 @@ describe('diagnostic dump privacy boundary', () => {
     it('reports the shell platform and whitelists build metadata', async () => {
         const dump = await diagnosticDump({
             env: { shell: 'desktop', platform: 'darwin arm64', userAgent: 'Electron/44' },
-            build: { gitCommit: 'abcdef123456', target: '0.341.2', password: 'build-secret' },
+            build: { gitCommit: 'abcdef123456', target: WALLET_VERSION, password: 'build-secret' },
         });
 
         expect(dump.wallet).toEqual({
@@ -88,7 +89,7 @@ describe('diagnostic dump privacy boundary', () => {
             os: 'darwin arm64',
             browser: 'Electron/44',
         });
-        expect(dump.build).toEqual({ gitCommit: 'abcdef123456', target: '0.341.2' });
+        expect(dump.build).toEqual({ gitCommit: 'abcdef123456', target: WALLET_VERSION });
     });
 
     it('redacts addresses, balances, keys, phrases, and passwords from errors and logs', async () => {
