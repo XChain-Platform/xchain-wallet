@@ -12,18 +12,18 @@ import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
 
 const SETTINGS = createDefaultSettings();
 const DRILLDOWN_SECTIONS = [
-    ['this-wallet', 'This Wallet'],
+    ['this-wallet', 'This wallet'],
     ['display', 'Display'],
     ['keyboard', 'Keyboard'],
     ['privacy', 'Privacy'],
     ['safety', 'Safety'],
-    ['wallet-mode', 'Wallet Mode'],
+    ['wallet-mode', 'Wallet mode'],
     ['backup', 'Backup'],
     ['fees', 'Fees'],
-    ['network-endpoints', 'Network & Endpoints'],
-    ['connected-sites', 'Connected Sites'],
-    ['ads', 'Automatic Donation System'],
-    ['developer', 'Developer Mode'],
+    ['network-endpoints', 'Network & endpoints'],
+    ['connected-sites', 'Connected sites'],
+    ['ads', 'Automatic donation system'],
+    ['developer', 'Developer mode'],
     ['about', 'About'],
 ];
 

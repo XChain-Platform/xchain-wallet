@@ -44,6 +44,55 @@ describe('flows/priceLookup', () => {
         expect(getFiatRate({})).toBeNull();
     });
 
+    it('rehydrates the last known rate synchronously as stale, then replaces it live', async () => {
+        let now = NOW;
+        let quoted = '50000';
+        configureFiatRateSource({
+            now: () => now,
+            fetch: async () => snapshotResponse([snapshotRow('BTC/USD', quoted)]),
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        });
+        await refreshFiatRates({ chainCoins: ['bitcoin'] });
+        const first = getFiatRate({ chainCoin: 'bitcoin' });
+        expect(first).toMatchObject({ rate: 50000, stale: false });
+
+        _resetPriceLookupForTests({ preservePersistent: true });
+        const cached = getFiatRate({ chainCoin: 'bitcoin' });
+        expect(cached).toMatchObject({
+            rate: 50000,
+            fetchedAt: new Date(NOW).toISOString(),
+            stale: true,
+        });
+
+        now += 60_000;
+        quoted = '51000';
+        configureFiatRateSource({
+            now: () => now,
+            fetch: async () => snapshotResponse([snapshotRow('BTC/USD', quoted, Math.floor(now / 1000) - 60)]),
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        });
+        await refreshFiatRates({ chainCoins: ['bitcoin'] });
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toMatchObject({
+            rate: 51000,
+            fetchedAt: new Date(now).toISOString(),
+            stale: false,
+        });
+    });
+
+    it('ignores corrupt persisted rates instead of flashing a zero price', () => {
+        localStorage.setItem('xchain-wallet:fiat-rates:v1', JSON.stringify({
+            version: 1,
+            rates: [
+                { rate: 0, chainCoin: 'bitcoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: new Date(NOW).toISOString() },
+                { rate: 50000, chainCoin: 'litecoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: 'not-a-date' },
+            ],
+        }));
+        _resetPriceLookupForTests({ preservePersistent: true });
+
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+        expect(getFiatRate({ chainCoin: 'litecoin' })).toBeNull();
+    });
+
     it('serves a fresh finalized oracle snapshot as the primary source', async () => {
         const fetchImpl = vi.fn(async (url) => {
             expect(url).toContain('https://explorer.test/BTC/api/price_snapshots/FINALIZED/status');

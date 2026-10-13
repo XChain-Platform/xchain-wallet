@@ -53,6 +53,10 @@
     margin-bottom: var(--xc-space-1);
 }
 
+.mnemonicHeader > * {
+    min-width: 0;
+}
+
 .scanButton {
     background: transparent;
     border: 1px solid var(--xc-border-strong);
@@ -224,10 +228,17 @@
     min-height: var(--xc-tap-min);
 }
 
+.advancedToggle > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .laneSwitcher {
     display: flex;
     gap: var(--xc-space-1);
     margin-bottom: var(--xc-space-3);
+    min-width: 0;
+    width: 100%;
     background: var(--xc-bg-muted);
     border-radius: var(--xc-radius-md);
     padding: 2px;

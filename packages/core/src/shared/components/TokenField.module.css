@@ -8,6 +8,7 @@
 .field {
     display: flex;
     flex-direction: column;
+    min-width: 0;
     gap: var(--xc-space-1);
     margin-bottom: var(--xc-space-3);
 }
@@ -20,9 +21,11 @@
 
 .control {
     display: flex;
+    box-sizing: border-box;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
+    min-width: 0;
     /* space-1 vertical (not Input's space-2): the 20px token icon plus
        borders must fit inside the same 36px outer height as Input md. */
     padding: var(--xc-space-1) var(--xc-space-3);
@@ -118,6 +121,10 @@
 
 .placeholder {
     flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--xc-text-muted);
     text-align: start;
 }
@@ -134,6 +141,7 @@
 .error {
     font-size: var(--xc-text-xs);
     color: var(--xc-danger-fg);
+    overflow-wrap: anywhere;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
