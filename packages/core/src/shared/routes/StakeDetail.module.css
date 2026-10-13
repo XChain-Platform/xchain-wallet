@@ -12,36 +12,10 @@
     margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
 }
 
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
+.quickActions > button,
+.quickActionMoreWrap > button {
     padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -61,7 +35,7 @@
     align-self: stretch;
 }
 
-.quickActionMoreWrap > .quickAction {
+.quickActionMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -81,29 +55,8 @@
     flex-direction: column;
 }
 
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.quickActionMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
+.quickActionMoreMenu > button {
+    justify-content: flex-start;
 }
 
 /* Tab strip, shaped like the home tabs. */

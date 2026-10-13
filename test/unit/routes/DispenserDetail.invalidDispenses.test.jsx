@@ -82,9 +82,10 @@ function mount(dispenses) {
     return messaging;
 }
 
-// The amount also appears in the stats hero, so rows are found as list items.
+// The amount also appears in the stats hero, so rows are found in the named activity list.
 const rowOf = (text) => {
-    const li = Array.from(document.querySelectorAll('li')).find((el) => el.textContent.includes(text));
+    const list = screen.getByRole('list', { name: /^(Dispenses|Dispenser lifecycle)$/ });
+    const li = within(list).getAllByRole('listitem').find((el) => el.textContent.includes(text));
     if (!li) throw new Error(`no list row containing ${text}`);
     return li;
 };
