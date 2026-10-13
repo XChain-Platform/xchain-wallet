@@ -226,10 +226,10 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>
-                        {filtered.map((e) => {
+                        {filtered.map((e, index) => {
                             const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
                             return (
-                                <li key={e.coin} role="presentation">
+                                <li key={`${e.coin}-${index}`} role="presentation">
                                     <button
                                         type="button"
                                         role="option"
