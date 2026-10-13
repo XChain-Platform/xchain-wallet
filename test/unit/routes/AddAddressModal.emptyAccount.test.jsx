@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AddAddressModal } from '../../../packages/core/src/shared/routes/AddAddressModal.jsx';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const REGTEST_SETTINGS = {
     schemaVersion: 1,
@@ -44,6 +45,16 @@ function renderModal(messaging, props = {}) {
 }
 
 describe('Add address on an account with no addresses', () => {
+    it('has no serious axe violations in its open state', async () => {
+        const view = renderModal({
+            getSettings: async () => REGTEST_SETTINGS,
+            generateReceiveAddress: vi.fn(async () => ({ address: 'bcrt1qexample' })),
+        });
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy());
+        await expectNoSeriousAxeViolations(view.container);
+    });
+
     it('offers the chains active on the current network', async () => {
         const messaging = {
             getSettings: async () => REGTEST_SETTINGS,
