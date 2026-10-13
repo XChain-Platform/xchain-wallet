@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
+const desktop = join(wsRoot, 'packages', 'desktop');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
 const components = join(core, 'src', 'shared', 'components');
@@ -45,6 +46,8 @@ for (const field of ['showToast', 'dismissToast', 'clearToasts']) {
 assert.ok(/clearTimeout/.test(th), 'ToastHost clears its setTimeout timers');
 // Default 8s per §37.2.
 assert.ok(/8000/.test(th), 'ToastHost defaults durationMs to 8000 per §37.2');
+assert.ok(/role="status"[\s\S]*aria-live="polite"/.test(th),
+    'ToastHost exposes notifications through one polite status region');
 
 // --- 2. CSS includes the reduced-motion guard + viewport positioning -----
 
@@ -87,11 +90,12 @@ assert.ok(/useToast\b/.test(hist),
 assert.ok(/showToast\(/.test(hist),
     'History.clearAllFilters shows a toast');
 
-// --- 5. Both shells wrap their unlocked tree in <ToastHost> -------------
+// --- 5. Every shell wraps its unlocked tree in <ToastHost> ---------------
 
 for (const appPath of [
     join(web, 'src', 'App.jsx'),
     join(ext, 'src', 'popup', 'App.jsx'),
+    join(desktop, 'renderer', 'App.jsx'),
 ]) {
     const src = readFileSync(appPath, 'utf8');
     assert.ok(

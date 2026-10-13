@@ -68,6 +68,7 @@ import {
     isDispenserPriceStale,
 } from '../utils/dispenserPricing.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useToast } from '../components/ToastHost.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
@@ -263,6 +264,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const { announce } = useToast();
 
     const descriptor = chainRegistry.get(chainId);
 
@@ -813,6 +815,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
             haptic.tap();
+            announce('Copied');
             return;
         }
         setCopied(null);

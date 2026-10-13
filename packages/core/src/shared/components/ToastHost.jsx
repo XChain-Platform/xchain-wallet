@@ -40,8 +40,7 @@ const ACTION_MIN_DURATION_MS = 12000;
 const ToastContext = createContext(null);
 
 /**
- * Mount once at the app root (web + extension App.jsx wrap their
- * unlocked tree in `<ToastHost>`). Children render exactly once;
+ * Mount once at the app root for every shell. Children render exactly once;
  * `<ToastHost>` only adds a fixed viewport at the
  * bottom of its slot.
  */
@@ -123,7 +122,7 @@ export function ToastHost({ children }) {
                 {children}
                 <div
                     className={styles.viewport}
-                    role="region"
+                    role="status"
                     aria-label="Notifications"
                     aria-live="polite"
                     aria-atomic="false"

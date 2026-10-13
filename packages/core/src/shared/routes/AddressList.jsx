@@ -152,7 +152,7 @@ export function AddressList({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
-    const { showToast } = useToast();
+    const { showToast, announce } = useToast();
     const haptic = useHapticFeedback();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
@@ -1071,6 +1071,7 @@ export function AddressList({
                 await messaging.setAddressLabel(selected.record.id, next);
                 setSelected({ ...selected, label: next, record: { ...selected.record, label: next } });
                 setReloadKey((k) => k + 1);
+                announce('Address label saved.');
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not save that label. Try again.'));
             } finally {
@@ -1083,6 +1084,7 @@ export function AddressList({
                 setAddrCopied(true);
                 setTimeout(() => setAddrCopied(false), 1200);
                 haptic.tap();
+                announce('Copied');
                 return;
             }
             showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
