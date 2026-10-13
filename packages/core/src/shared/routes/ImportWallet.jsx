@@ -555,6 +555,23 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         </div>
     ) : null;
 
+    const formDisabledReason = lane === 'backup'
+        ? backupPointer === null && backupContent.trim().length === 0
+            ? 'Choose a backup file, paste its contents, or scan a backup pointer to continue.'
+            : backupPassword.length === 0
+                ? `Enter the ${RESTORE_PASSWORD_LABELS.file.toLowerCase()} to continue.`
+                : backupWalletPassword.length === 0
+                    ? `Enter the ${RESTORE_PASSWORD_LABELS.wallet.toLowerCase()} to continue.`
+                    : backupDevicePassword.length === 0
+                        ? `Enter the ${RESTORE_PASSWORD_LABELS.device.toLowerCase()} to continue.`
+                        : null
+        : mnemonic.trim().length === 0
+            ? 'Enter a recovery phrase to continue.'
+            : password.length === 0
+                ? 'Enter a password to continue.'
+                : confirm.length === 0
+                    ? 'Confirm your password to continue.'
+                    : null;
     const formStatus = error ? (
         <StatusMessage
             variant="error"
@@ -571,6 +588,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         >
             {error}
         </StatusMessage>
+    ) : formDisabledReason ? (
+        <StatusMessage id="import-wallet-disabled-reason">
+            {formDisabledReason}
+        </StatusMessage>
     ) : null;
 
     const formActions = lane === 'backup' ? (
@@ -579,14 +600,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             variant="primary"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={
-                (backupPointer === null && backupContent.trim().length === 0) ||
-                backupPassword.length === 0 ||
-                backupWalletPassword.length === 0 ||
-                backupDevicePassword.length === 0
-            }
+            disabled={Boolean(formDisabledReason)}
+            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            Restore
+            {busy ? 'Restoring…' : 'Restore'}
         </Button>
     ) : (
         <Button
@@ -594,13 +611,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
             variant="primary"
             loading={busy}
             icon={<Icon.KeyIcon />}
-            disabled={
-                mnemonic.trim().length === 0 ||
-                password.length === 0 ||
-                confirm.length === 0
-            }
+            disabled={Boolean(formDisabledReason)}
+            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            Import
+            {busy ? 'Importing…' : 'Import'}
         </Button>
     );
 
