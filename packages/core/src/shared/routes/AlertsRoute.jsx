@@ -16,7 +16,7 @@
 // AlertsOverlay.module.css for the alert-row styling.
 
 import { useState } from 'react';
-import { EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
@@ -61,9 +61,10 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             <span className={styles.unreadCount} aria-live="polite">
                 {unreadAlerts.length} unread
             </span>
-            <button
-                type="button"
-                className={styles.controlButton}
+            <Button
+                variant="secondary"
+                size="sm"
+                icon={null}
                 disabled={unreadAlerts.length === 0}
                 onClick={() => commitState({
                     ...centerState,
@@ -74,10 +75,11 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                 })}
             >
                 Mark all read
-            </button>
-            <button
-                type="button"
-                className={styles.controlButton}
+            </Button>
+            <Button
+                variant="ghost"
+                size="sm"
+                icon={null}
                 onClick={() => commitState({
                     ...centerState,
                     cleared: new Set([
@@ -87,7 +89,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                 })}
             >
                 Clear alerts
-            </button>
+            </Button>
         </div>
     ) : null;
 
@@ -102,8 +104,11 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                         {visibleAlerts.map((a) => {
                             const severity = alertSeverityPresentation(a.severity);
                             const isUnread = !a.read && !centerState.read.has(alertVersion(a));
-                            const content = (
-                                <>
+                            return (
+                                <li
+                                    key={a.id}
+                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
+                                >
                                     <div className={styles.alertHead}>
                                         <span className={styles.severity}>{severity.label}</span>
                                         <span className={styles.alertTitle}>{a.title}</span>
@@ -111,36 +116,28 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                     </div>
                                     <div className={styles.alertMessage}>{a.message}</div>
                                     {a.action ? (
-                                        <span className={styles.alertAction}>{a.action.label}</span>
-                                    ) : null}
-                                </>
-                            );
-                            return (
-                                <li
-                                    key={a.id}
-                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
-                                >
-                                    {a.action ? (
-                                        <button
-                                            type="button"
-                                            className={styles.alertOpen}
-                                            aria-label={a.action.label}
+                                        // Opening an alert's screen also marks it read.
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => openAlert(a)}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
-                                            {content}
-                                        </button>
-                                    ) : (
-                                        <div className={styles.alertContent}>{content}</div>
-                                    )}
+                                            {a.action.label}
+                                        </Button>
+                                    ) : null}
                                     {isUnread ? (
-                                        <button
-                                            type="button"
-                                            className={styles.markRead}
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={null}
                                             aria-label={`Mark ${a.title} read`}
                                             onClick={() => markRead(a)}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             Mark read
-                                        </button>
+                                        </Button>
                                     ) : null}
                                 </li>
                             );
