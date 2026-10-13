@@ -185,12 +185,20 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // so an opted-out user does not reach the CoinGecko fallback before
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
+    const watchedRows = useMemo(
+        () => buildWatchedTokenRows(settings?.watchedTokens, builtRows, chainRegistry),
+        [settings?.watchedTokens, builtRows, chainRegistry],
+    );
+    const displayRows = useMemo(
+        () => [...builtRows, ...watchedRows],
+        [builtRows, watchedRows],
+    );
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
     const nativeCoins = useMemo(() => {
         if (settingsLoading || isDemo) return [];
-        return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
-    }, [builtRows, settingsLoading, isDemo]);
+        return displayRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
+    }, [displayRows, settingsLoading, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
         fiatCurrency: settings?.fiatCurrency || 'USD',
@@ -203,7 +211,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     );
     const tokenRequests = useMemo(() => {
         if (settingsLoading || isDemoWallet(walletId)) return [];
-        return builtRows
+        return displayRows
             .filter((r) => r.kind !== 'native'
                 && typeof r.fiatRate !== 'number'
                 && !spamKeys.has(`${r.chainId}:${r.tick}`))
@@ -215,7 +223,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [builtRows, chainRegistry, settingsLoading, spamKeys, walletId]);
+    }, [displayRows, chainRegistry, settingsLoading, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency: settings?.fiatCurrency || 'USD',
@@ -223,8 +231,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
-        () => priceTokenRows(priceNativeRows(builtRows, nativeRates), tokenRates),
-        [builtRows, nativeRates, tokenRates],
+        () => priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates),
+        [displayRows, nativeRates, tokenRates],
     );
     const nativeChainIds = useMemo(
         () => allRows.filter((row) => row.kind === 'native').map((row) => row.chainId).sort(),
@@ -641,6 +649,35 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             </div>
         </div>
     );
+}
+
+/**
+ * Builds zero-balance rows for watched tokens that are absent from the latest
+ * balance read. Keys stay chain-scoped so the same ticker can be watched on
+ * several chains without one row masking another.
+ *
+ * @param {unknown} watchedTokens
+ * @param {Array<any>} balanceRows
+ * @param {import('../../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Array<any>}
+ */
+export function buildWatchedTokenRows(watchedTokens, balanceRows, chainRegistry) {
+    if (!Array.isArray(watchedTokens)) return [];
+    const present = new Set((balanceRows || []).map((row) => `${row.chainId}:${row.tick}`));
+    const added = new Set();
+    const rows = [];
+    for (const key of watchedTokens) {
+        if (typeof key !== 'string' || present.has(key) || added.has(key)) continue;
+        const separator = key.indexOf(':');
+        if (separator <= 0 || separator === key.length - 1) continue;
+        const chainId = key.slice(0, separator);
+        const tick = key.slice(separator + 1);
+        const row = buildPlatformTokenRow(chainId, tick, null, chainRegistry);
+        if (!row) continue;
+        rows.push(row);
+        added.add(key);
+    }
+    return rows;
 }
 
 // Ticks any of the wallet's addresses owns, balance or not: a token whose
