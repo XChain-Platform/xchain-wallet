@@ -27,18 +27,18 @@
 .avatar {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 28px;
-    width: 28px;
-    height: 28px;
+    flex: 0 0 var(--xc-icon-xl);
+    width: var(--xc-icon-xl);
+    height: var(--xc-icon-xl);
     box-sizing: border-box;
     border: 2px solid var(--xc-wallet-identity);
     border-radius: var(--xc-radius-pill);
     background: color-mix(in srgb, var(--xc-wallet-identity) 14%, var(--xc-surface));
-    /* The tone lives on the ring and tint. The initials are 10px bold text,
+    /* The tone lives on the ring and tint. The initials are extra-small bold text,
        and the danger, warning and accent tones fall under 4.5:1 on their own
        tint, so the text takes the body color in every theme. */
     color: var(--xc-text);
-    font-size: 10px;
+    font-size: var(--xc-text-xs);
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1;
@@ -66,7 +66,7 @@
 
     .active {
         outline: 2px solid Highlight;
-        outline-offset: 2px;
+        outline-offset: var(--xc-space-1);
         box-shadow: none;
     }
 }
