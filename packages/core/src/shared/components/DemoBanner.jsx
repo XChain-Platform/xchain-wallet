@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from './DemoExitConfirm.jsx';
@@ -126,7 +126,11 @@ export function DemoBanner({ activeWalletId, onExited }) {
 
     const expiryHint = formatExpiryHint(expiry, now);
     return (
-        <div className={styles.banner} role="status" aria-label="Demo wallet">
+        <div
+            className={`${styles.banner} ${expanded ? styles.expanded : ''}`.trim()}
+            role="status"
+            aria-label="Demo wallet"
+        >
             <div className={styles.body}>
                 <div className={styles.summary}>
                     <strong className={styles.headline}>
@@ -137,9 +141,13 @@ export function DemoBanner({ activeWalletId, onExited }) {
                         className={styles.detailsToggle}
                         aria-expanded={expanded}
                         aria-controls={detailsId}
+                        aria-label={expanded ? 'Hide demo details' : 'Show demo details'}
                         onClick={() => setExpanded((value) => !value)}
                     >
-                        Details
+                        <span className={styles.icon} aria-hidden="true">
+                            <Icon.InfoIcon />
+                        </span>
+                        <strong>Demo mode</strong>
                     </button>
                 </div>
                 <div id={detailsId} className={styles.disclosure} hidden={!expanded}>
@@ -155,14 +163,16 @@ export function DemoBanner({ activeWalletId, onExited }) {
                     </span>
                 </div>
             </div>
-            <div className={styles.actions} hidden={!expanded}>
+            <div className={styles.actions}>
                 <Button
                     size="sm"
                     variant="danger"
+                    aria-label="Exit demo and wipe"
                     onClick={() => { setError(null); setConfirmOpen(true); }}
                     disabled={busy}
                 >
-                    Exit demo &amp; wipe
+                    <span className={styles.wideExit}>Exit demo &amp; wipe</span>
+                    <span className={styles.compactExit}>Exit</span>
                 </Button>
             </div>
             {error && !confirmOpen ? (
