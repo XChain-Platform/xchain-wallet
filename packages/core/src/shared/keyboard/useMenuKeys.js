@@ -67,8 +67,8 @@ function restoreToOpener(opener) {
     });
 }
 
-/** Handle one keydown; exported so tests can drive it without a hook. */
-export function handleMenuKeyDown(e) {
+/** Handle one delegated menu keydown. */
+function handleMenuKeyDown(e) {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     const target = e.target;
     if (!target || typeof target.closest !== 'function') return;

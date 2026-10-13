@@ -59,7 +59,7 @@ const UNINFORMATIVE_REFUSAL = /^(?:internal encoder error|(?:(?:future )?interna
  * @param {{ severity?: string, data?: { status?: unknown, error?: unknown } }} f
  * @returns {string | null}
  */
-export function consensusRefusalReason(f) {
+function consensusRefusalReason(f) {
     if (f?.severity !== 'error') return null;
     const candidates = [f?.data?.status, f?.data?.error];
     for (const value of candidates) {

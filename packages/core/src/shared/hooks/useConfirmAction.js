@@ -624,7 +624,7 @@ function persistSession(args, id, built, report) {
  * fields that survive: `name` (what the software-unlock path throws) plus a
  * code/message fallback.
  */
-export function isCredentialFailure(err) {
+function isCredentialFailure(err) {
     if (!err) return false;
     if (err.name === 'InvalidPasswordError') return true;
     const code = err.code || err.reason;

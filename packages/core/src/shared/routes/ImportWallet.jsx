@@ -61,7 +61,7 @@ const NO_BACKUP_CONTENT_MESSAGE = 'Pick a backup file, paste its contents, or sc
  * @param {{ restored?: boolean, contactsAdded?: number, contactsUpdated?: number, addressesUpdated?: number } | null | undefined} labelSync
  * @returns {string | null}
  */
-export function labelSyncRestoredMessage(labelSync) {
+function labelSyncRestoredMessage(labelSync) {
     if (!labelSync || labelSync.restored !== true) return null;
     const contacts = Number(labelSync.contactsAdded || 0) + Number(labelSync.contactsUpdated || 0);
     const labels = Number(labelSync.addressesUpdated || 0);

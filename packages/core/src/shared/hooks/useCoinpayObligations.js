@@ -288,7 +288,7 @@ export function useSharedCoinpayObligations(walletId, accountId, opts = {}) {
 // Row filters, shared shape-tolerant readers. Same semantics as the
 // copies in Home.jsx / CoinpayForm.jsx (which predate this hook):
 // pending status + this address on the payer side.
-export function isPendingForPayer(row, address) {
+function isPendingForPayer(row, address) {
     if (!row || typeof row !== 'object') return false;
     const status = String(row.coinpay_status || row.status || '').toLowerCase();
     if (status !== 'pending_coinpay') return false;
@@ -296,7 +296,7 @@ export function isPendingForPayer(row, address) {
     return typeof payer === 'string' && payer === address;
 }
 
-export function extractRows(resp) {
+function extractRows(resp) {
     if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     for (const key of ['data', 'rows', 'obligations', 'coinpay_obligations']) {

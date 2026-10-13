@@ -41,7 +41,7 @@ function shortAddress(addr) {
 // A coin-paid dispenser priced in fiat rather than a fixed coin amount:
 // no GET_TICK (token-paid dispensers set one and always carry a real
 // GET_AMOUNT), a GET_COIN, and GET_AMOUNT 0.
-export function isFiatPricedRow(row) {
+function isFiatPricedRow(row) {
     return !row?.get_tick && Boolean(row?.get_coin) && !(Number(row?.get_amount) > 0);
 }
 
@@ -63,7 +63,7 @@ export function isOraclePricedRow(row) {
  *   while the read is in flight, null when the wallet cannot read one at all
  * @returns {string}
  */
-export function oraclePriceLabel(row, feeds) {
+function oraclePriceLabel(row, feeds) {
     const addr = shortAddress(row.oracle_address);
     const unresolved = `an oracle-set price (oracle ${addr}; open the dispenser for the price)`;
     if (feeds === null) return unresolved;
@@ -111,7 +111,7 @@ export function dispenserRateLabel(row, oracleFeeds) {
  * @param {any} detail
  * @returns {any}
  */
-export function mergeOfferState(row, detail) {
+function mergeOfferState(row, detail) {
     const payload = detail?.state ? detail : detail?.data;
     const state = payload?.state;
     if (!state || typeof state !== 'object') return row;

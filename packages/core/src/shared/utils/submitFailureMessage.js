@@ -64,7 +64,7 @@ import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
  * @param {unknown} err
  * @returns {boolean}
  */
-export function isNativeFeeForfeit(err) {
+function isNativeFeeForfeit(err) {
     if (!err || typeof err !== 'object') return false;
     const e = /** @type {any} */ (err);
     if (e.name === 'NativeFeeForfeitError') return true;
