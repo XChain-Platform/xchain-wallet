@@ -193,7 +193,9 @@ export async function importWif({
         label: label ?? 'Imported Address',
         signerId: walletRecord.id,
     });
-    await vault.addresses.put(addressRecord);
+    if (await vault.addresses.get(addressRecord.id)) {
+        throw new Error(`importWif: address id collision "${addressRecord.id}"`);
+    }
 
     // Append to Wallet.importedKeys.
     const updatedWallet = {
@@ -207,7 +209,30 @@ export async function importWif({
             },
         ],
     };
-    await vault.wallets.put(updatedWallet);
+    let addressPutAttempted = false;
+    let walletPutAttempted = false;
+    try {
+        addressPutAttempted = true;
+        await vault.addresses.put(addressRecord);
+        walletPutAttempted = true;
+        await vault.wallets.put(updatedWallet);
+    } catch (error) {
+        const rollbackErrors = [];
+        if (walletPutAttempted) {
+            try { await vault.wallets.put(walletRecord); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (addressPutAttempted) {
+            try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+                [error, ...rollbackErrors],
+                'importWif: persistence and rollback failed',
+                { cause: error },
+            );
+        }
+        throw error;
+    }
 
     return { wallet: updatedWallet, address: addressRecord };
 }
@@ -221,10 +246,6 @@ export async function importWif({
  * because refusing it here would block a user importing a key they only
  * partially control through the HD tree.
  *
- * Fails OPEN: an unreadable address record cannot prove a duplicate, and
- * blocking a legitimate import on a storage hiccup is the worse outcome -
- * the duplicate's only consequence is a display one, already defended.
- *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {import('../schemas/wallet.js').Wallet} walletRecord
  * @param {{ coin: string, networkKind: string }} descriptor
@@ -234,12 +255,7 @@ async function assertNotAlreadyImported(vault, walletRecord, descriptor, address
     const keys = Array.isArray(walletRecord.importedKeys) ? walletRecord.importedKeys : [];
     for (const k of keys) {
         if (typeof k?.addressId !== 'string') continue;
-        let existing;
-        try {
-            existing = await vault.addresses.get(k.addressId);
-        } catch {
-            continue;
-        }
+        const existing = await vault.addresses.get(k.addressId);
         if (!existing) continue;
         if (
             existing.address === address
