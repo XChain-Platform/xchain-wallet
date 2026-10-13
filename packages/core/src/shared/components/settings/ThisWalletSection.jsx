@@ -12,44 +12,21 @@
 // watch-only export, recovery-format upgrade and removal controls.
 
 import { useEffect, useState } from 'react';
-import { CopyButton } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    CopyButton,
+    FormSection,
+    Input,
+    SectionHeader,
+} from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
 import { useToast } from '../ToastHost.jsx';
 import { clearLastView } from '../../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearBalanceCache } from '../../utils/balanceCache.js';
-import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    cursor: 'pointer',
-};
-const DESTRUCTIVE_BTN = {
-    ...ACTION_BTN,
-    color: 'var(--xc-danger-fg)',
-    borderColor: 'var(--xc-danger-fg)',
-};
-const EXPORT_PANEL = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
-const XPUB_TEXT = {
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text)',
-    overflowWrap: 'anywhere',
-};
+import { Status } from './_settingsPrimitives.jsx';
+import styles from './ThisWalletSection.module.css';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
 
@@ -200,7 +177,7 @@ export function ThisWalletSection({
     };
 
     return (
-        <div style={STACK}>
+        <div className={styles.stack}>
             <Row
                 label="Wallet"
                 hint={activeWallet.name}
@@ -253,23 +230,22 @@ export function ThisWalletSection({
                     onConfirm={onConfirmRemove}
                 />
             ) : (
-                <div style={ROW}>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Remove wallet</span>
-                        <span style={ROW_HINT}>
-                            Deletes the wallet and all linked records (accounts, addresses, signers,
-                            pending txs). The encrypted seed is destroyed; back up first if you need
-                            recovery.
-                        </span>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
-                        style={DESTRUCTIVE_BTN}
-                    >
-                        Remove…
-                    </button>
-                </div>
+                <section className={styles.row}>
+                    <SectionHeader
+                        title="Remove wallet"
+                        description="Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery."
+                        trailing={(
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                icon={null}
+                                onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
+                            >
+                                Remove…
+                            </Button>
+                        )}
+                    />
+                </section>
             )}
         </div>
     );
@@ -357,77 +333,57 @@ function ChangePasswordRow({ walletId, disabled }) {
     };
 
     return (
-        <form onSubmit={submit} style={EXPORT_PANEL} aria-busy={busy}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>Change wallet password</div>
-            <div style={ROW_HINT}>
-                Use at least {MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger.
-                Keep it safe because it cannot be recovered.
-            </div>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                Current wallet password
-                <input
+        <form onSubmit={submit} aria-busy={busy}>
+            <FormSection
+                title="Change wallet password"
+                description={`Use at least ${MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it cannot be recovered.`}
+                className={styles.panel}
+            >
+                <Input
                     type="password"
+                    label="Current wallet password"
                     value={currentPassword}
                     onChange={update(setCurrentPassword)}
                     aria-label="Current wallet password"
                     autoComplete="current-password"
                     autoFocus
                     disabled={busy}
-                    style={PASSWORD_INPUT}
                 />
-            </label>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                New wallet password
-                <input
+                <Input
                     type="password"
+                    label="New wallet password"
                     value={newPassword}
                     onChange={update(setNewPassword)}
                     aria-label="New wallet password"
                     autoComplete="new-password"
                     disabled={busy}
-                    style={PASSWORD_INPUT}
                 />
-            </label>
-            <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                Confirm new wallet password
-                <input
+                <Input
                     type="password"
+                    label="Confirm new wallet password"
                     value={confirmation}
                     onChange={update(setConfirmation)}
                     aria-label="Confirm new wallet password"
                     autoComplete="new-password"
                     disabled={busy}
-                    style={PASSWORD_INPUT}
                 />
-            </label>
-            {(confirmation && confirmation !== newPassword)
-                || error === 'Passwords do not match.' ? (
-                <Status text="Passwords do not match." tone="error" />
-            ) : null}
-            {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={close} disabled={busy} style={ACTION_BTN}>Cancel</button>
-                <button type="submit" disabled={busy} style={ACTION_BTN}>
-                    {busy ? 'Changing password…' : 'Change password'}
-                </button>
-            </div>
+                {(confirmation && confirmation !== newPassword)
+                    || error === 'Passwords do not match.' ? (
+                    <Status text="Passwords do not match." tone="error" />
+                ) : null}
+                {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
+                <div className={styles.actions}>
+                    <Button type="button" variant="ghost" size="sm" icon={null} onClick={close} disabled={busy}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" size="sm" icon={null} disabled={busy}>
+                        {busy ? 'Changing password…' : 'Change password'}
+                    </Button>
+                </div>
+            </FormSection>
         </form>
     );
 }
-
-const PASSWORD_INPUT = {
-    display: 'block',
-    width: '100%',
-    boxSizing: 'border-box',
-    marginBlockStart: 'var(--xc-space-1)',
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
 
 function PublicKeyExport({
     stage,
@@ -441,63 +397,45 @@ function PublicKeyExport({
     onClose,
 }) {
     return (
-        <div style={EXPORT_PANEL}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
-                Extended public keys{accountName ? ` for ${accountName}` : ''}
-            </div>
-            <div style={ROW_HINT}>
-                An extended public key does not contain private keys and cannot spend funds.
-                Anyone with it can derive and monitor every address below that account path,
-                including future addresses. Share it only with a watch-only wallet you trust.
-            </div>
+        <FormSection
+            title={`Extended public keys${accountName ? ` for ${accountName}` : ''}`}
+            description="An extended public key does not contain private keys and cannot spend funds. Anyone with it can derive and monitor every address below that account path, including future addresses. Share it only with a watch-only wallet you trust."
+            className={styles.panel}
+        >
             {stage === 'password' ? (
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                    <label style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                        Confirm wallet password
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(event) => onPasswordChange(event.target.value)}
-                            placeholder="Wallet password"
-                            autoComplete="current-password"
-                            autoFocus
-                            disabled={busy}
-                            style={{
-                                display: 'block',
-                                width: '100%',
-                                boxSizing: 'border-box',
-                                marginBlockStart: 'var(--xc-space-1)',
-                                background: 'var(--xc-bg)',
-                                color: 'var(--xc-text)',
-                                border: '1px solid var(--xc-border)',
-                                borderRadius: 'var(--xc-radius-sm)',
-                                padding: 'var(--xc-space-2) var(--xc-space-3)',
-                                fontSize: 'var(--xc-text-sm)',
-                                fontFamily: 'inherit',
-                            }}
-                        />
-                    </label>
+                <form onSubmit={onSubmit} className={styles.form}>
+                    <Input
+                        type="password"
+                        label="Confirm wallet password"
+                        value={password}
+                        onChange={(event) => onPasswordChange(event.target.value)}
+                        placeholder="Wallet password"
+                        autoComplete="current-password"
+                        autoFocus
+                        disabled={busy}
+                    />
                     {error ? <Status text={error} tone="error" /> : null}
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={onClose} style={ACTION_BTN} disabled={busy}>
+                    <div className={styles.actions}>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose} disabled={busy}>
                             Cancel
-                        </button>
-                        <button type="submit" style={ACTION_BTN} disabled={busy}>
+                        </Button>
+                        <Button type="submit" size="sm" icon={null} disabled={busy}>
                             {busy ? 'Exporting…' : 'Show public keys'}
-                        </button>
+                        </Button>
                     </div>
                 </form>
             ) : (
                 <>
                     {entries.map((entry) => (
-                        <div key={`${entry.chainId}:${entry.path}`} style={EXPORT_PANEL}>
-                            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                                {entry.chainId}
-                                {entry.addressType ? ` (${entry.addressType})` : ''}
-                            </div>
-                            {entry.path ? <div style={ROW_HINT}>Account path: {entry.path}</div> : null}
-                            <div style={XPUB_TEXT}>{entry.xpub}</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                        <FormSection
+                            key={`${entry.chainId}:${entry.path}`}
+                            title={`${entry.chainId}${entry.addressType ? ` (${entry.addressType})` : ''}`}
+                            description={entry.path ? `Account path: ${entry.path}` : undefined}
+                            headingLevel="h3"
+                            className={styles.keyPanel}
+                        >
+                            <div className={styles.xpub}>{entry.xpub}</div>
+                            <div className={styles.qr}>
                                 <KeyQR
                                     value={entry.xpub}
                                     size={180}
@@ -509,28 +447,37 @@ function PublicKeyExport({
                                     sensitive
                                 />
                             </div>
-                        </div>
+                        </FormSection>
                     ))}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={onClose} style={ACTION_BTN}>Done</button>
+                    <div className={styles.actions}>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>Done</Button>
                     </div>
                 </>
             )}
-        </div>
+        </FormSection>
     );
 }
 
 function Row({ label, hint, actionLabel, onClick, disabled = false }) {
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                <span style={ROW_HINT}>{hint}</span>
-            </div>
-            {actionLabel && onClick ? (
-                <button type="button" onClick={onClick} style={ACTION_BTN} disabled={disabled}>{actionLabel}</button>
-            ) : null}
-        </div>
+        <section className={styles.row}>
+            <SectionHeader
+                title={label}
+                description={hint}
+                trailing={actionLabel && onClick ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
+                        onClick={onClick}
+                        disabled={disabled}
+                    >
+                        {actionLabel}
+                    </Button>
+                ) : null}
+            />
+        </section>
     );
 }
 
@@ -539,25 +486,19 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     // Require the exact wallet name so accidental destructive clicks stay disabled.
     const matches = typed === walletName;
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-danger-fg)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
-                Remove {walletName}?
-            </div>
-            <div style={ROW_HINT}>
-                Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
-                Make sure you have a backup before continuing. The encrypted seed is destroyed and
-                cannot be recovered. This cannot be undone. Type the wallet name{' '}
-                <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
-            </div>
-            <input
+        <FormSection
+            title={`Remove ${walletName}?`}
+            description={(
+                <>
+                    Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
+                    Make sure you have a backup before continuing. The encrypted seed is destroyed and
+                    cannot be recovered. This cannot be undone. Type the wallet name{' '}
+                    <strong className={styles.confirmName}>{walletName}</strong> to confirm.
+                </>
+            )}
+            className={`${styles.panel} ${styles.dangerPanel}`}
+        >
+            <Input
                 type="text"
                 enterKeyHint="done"
                 autoCapitalize="off"
@@ -572,36 +513,23 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                 aria-label="Confirm wallet name"
                 autoFocus
                 disabled={busy}
-                style={{
-                    background: 'var(--xc-bg)',
-                    color: 'var(--xc-text)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-2) var(--xc-space-3)',
-                    fontSize: 'var(--xc-text-sm)',
-                    fontFamily: 'inherit',
-                }}
             />
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>
+            <div className={styles.actions}>
+                <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
                     Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                     type="button"
+                    variant="danger"
+                    size="sm"
+                    icon={null}
                     onClick={onConfirm}
                     disabled={!matches || busy}
-                    style={{
-                        ...DESTRUCTIVE_BTN,
-                        background: matches && !busy ? 'var(--xc-danger-fg)' : 'transparent',
-                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-danger-fg)',
-                        opacity: matches && !busy ? 1 : 0.6,
-                        cursor: matches && !busy ? 'pointer' : 'not-allowed',
-                    }}
                 >
                     {busy ? 'Removing…' : 'Remove wallet'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }

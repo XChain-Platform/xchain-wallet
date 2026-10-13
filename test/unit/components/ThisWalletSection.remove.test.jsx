@@ -54,11 +54,11 @@ function mount(walletsAfterRemoval, overrides = {}) {
 
 async function removeActiveWallet() {
     fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-    fireEvent.change(screen.getByLabelText('Confirm wallet name'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), {
         target: { value: ACTIVE_WALLET.name },
     });
     const confirm = screen.getByRole('button', { name: 'Remove wallet' });
-    expect(confirm.style.color).toBe('var(--xc-on-accent)');
+    expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     await screen.findByText('Wallet removed.');
 }
@@ -80,8 +80,7 @@ describe('ThisWalletSection removal completion', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
 
-        expect(screen.getAllByText(ACTIVE_WALLET.name)
-            .some((element) => element.tagName === 'STRONG')).toBe(true);
+        expect(screen.getByRole('heading', { name: `Remove ${ACTIVE_WALLET.name}?` })).toBeTruthy();
         expect(screen.getByText(/Make sure you have a backup before continuing/)).toBeTruthy();
         expect(screen.getByText(/encrypted seed is destroyed and cannot be recovered/)).toBeTruthy();
     });
@@ -90,7 +89,7 @@ describe('ThisWalletSection removal completion', () => {
         const { messaging } = mount([OTHER_WALLET]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-        const confirmation = screen.getByLabelText('Confirm wallet name');
+        const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         expect(screen.getByText('Remove Active Wallet?')).toBeTruthy();
         expect(screen.getByText(/Removing this wallet deletes its accounts, addresses, signers, and pending transactions/)).toBeTruthy();
         expect(screen.getByText(/This cannot be undone/)).toBeTruthy();
@@ -110,7 +109,7 @@ describe('ThisWalletSection removal completion', () => {
             })),
         });
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-        const input = screen.getByLabelText('Confirm wallet name');
+        const input = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         fireEvent.change(input, { target: { value: ACTIVE_WALLET.name } });
         fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
 

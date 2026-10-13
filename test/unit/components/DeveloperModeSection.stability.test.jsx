@@ -52,12 +52,30 @@ describe('DeveloperModeSection unavailable actions', () => {
 
     it('rejects an empty faucet amount before requesting an address', () => {
         render(<DeveloperModeSection />);
-        const input = screen.getByLabelText('Amount (BTC)');
+        const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         fireEvent.change(input, { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Get test BTC' }));
 
         expect(screen.getByText('Enter an amount of BTC greater than 0.')).toBeTruthy();
         expect(messaging.getNewestAddress).not.toHaveBeenCalled();
+    });
+
+    it('exposes the adopted style guide fields and actions by role', async () => {
+        render(<DeveloperModeSection />);
+
+        expect(screen.getByRole('combobox', {
+            name: 'Cache password for localhost auto-sign',
+        })).toBeTruthy();
+        expect(screen.getByRole('textbox', { name: 'Miner URL' })).toBeTruthy();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Add custom chain…' }));
+
+        expect(screen.getByRole('textbox', {
+            name: 'Custom chain descriptor JSON',
+        })).toBeTruthy();
+        expect(screen.getByRole('button', {
+            name: 'Paste custom chain descriptor',
+        })).toBeTruthy();
     });
 
     it('explains when a wallet cannot be loaded for activation', async () => {
