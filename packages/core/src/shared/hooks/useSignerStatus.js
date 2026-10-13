@@ -28,6 +28,54 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const FAST_INTERVAL_MS = 2000;
 const STEADY_INTERVAL_MS = 10000;
 
+function isDocumentHidden() {
+    return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
+// Sign controls for the same signer join one status read. A later mount also
+// reuses the completed answer until the cadence for that status expires.
+const readsByGetStatus = new WeakMap();
+
+function sharedStatusRead(getStatus, chainId, intervalMs, force = false) {
+    let reads = readsByGetStatus.get(getStatus);
+    if (!reads) {
+        reads = new Map();
+        readsByGetStatus.set(getStatus, reads);
+    }
+    const key = chainId || '';
+    let read = reads.get(key);
+    if (!read) {
+        read = {
+            lastStartedAt: null, inFlight: null, result: null, refreshMs: null,
+        };
+        reads.set(key, read);
+    }
+    if (read.inFlight) return read.inFlight;
+    const now = Date.now();
+    const age = read.lastStartedAt === null ? Infinity : now - read.lastStartedAt;
+    const refreshMs = read.refreshMs ?? intervalMs;
+    if (!force && age >= 0 && age < refreshMs) return Promise.resolve(read.result);
+
+    read.lastStartedAt = now;
+    const inFlight = Promise.resolve()
+        .then(() => getStatus({ chainId }))
+        .then((result) => {
+            read.result = result;
+            const status = typeof result === 'string' ? result : result?.status;
+            read.refreshMs = status === 'available' ? STEADY_INTERVAL_MS : FAST_INTERVAL_MS;
+            return result;
+        })
+        .catch((error) => {
+            read.lastStartedAt = null;
+            throw error;
+        })
+        .finally(() => {
+            if (read.inFlight === inFlight) read.inFlight = null;
+        });
+    read.inFlight = inFlight;
+    return inFlight;
+}
+
 /**
  * Poll a signer's status. Returns the latest status, a `detail`
  * string when present, and a `refresh` function for explicit manual
@@ -52,15 +100,19 @@ export function useSignerStatus({ getStatus, chainId }) {
     const statusRef = useRef(status);
     statusRef.current = status;
 
-    const doPoll = useCallback(async () => {
+    const doPoll = useCallback(async (force = false) => {
         if (!getStatus || !aliveRef.current) return;
         try {
-            const res = await getStatus({ chainId });
+            const interval = statusRef.current === 'available'
+                ? STEADY_INTERVAL_MS
+                : FAST_INTERVAL_MS;
+            const res = await sharedStatusRead(getStatus, chainId, interval, force);
             if (!aliveRef.current) return;
             const s = typeof res === 'string' ? res : (res && res.status) || 'error';
             const d = res && typeof res === 'object' && typeof res.detail === 'string'
                 ? res.detail
                 : null;
+            statusRef.current = s;
             setStatus(s);
             setDetail(d);
         } catch (err) {
@@ -70,7 +122,7 @@ export function useSignerStatus({ getStatus, chainId }) {
         }
     }, [getStatus, chainId]);
 
-    const refresh = useCallback(() => { doPoll(); }, [doPoll]);
+    const refresh = useCallback(() => { doPoll(true); }, [doPoll]);
 
     useEffect(() => {
         aliveRef.current = true;
@@ -79,9 +131,6 @@ export function useSignerStatus({ getStatus, chainId }) {
             setDetail(null);
             return () => { aliveRef.current = false; };
         }
-        // Fire once immediately so the caller doesn't flash through
-        // 'idle' before the first poll resolves.
-        doPoll();
         const scheduleNext = () => {
             if (!aliveRef.current) return;
             const interval = statusRef.current === 'available'
@@ -89,16 +138,29 @@ export function useSignerStatus({ getStatus, chainId }) {
                 : FAST_INTERVAL_MS;
             timerRef.current = setTimeout(async () => {
                 if (!aliveRef.current) return;
-                await doPoll();
+                if (!isDocumentHidden()) await doPoll();
                 scheduleNext();
             }, interval);
         };
-        scheduleNext();
+        // The next cadence starts when the immediate answer lands, so an
+        // available signer waits the full steady interval before rereading.
+        const start = async () => {
+            if (!isDocumentHidden()) await doPoll();
+            scheduleNext();
+        };
+        start();
+        const onVisible = () => { if (!isDocumentHidden()) doPoll(); };
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', onVisible);
+        }
         return () => {
             aliveRef.current = false;
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
+            }
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('visibilitychange', onVisible);
             }
         };
     }, [doPoll, getStatus]);
