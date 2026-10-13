@@ -701,7 +701,7 @@ function AppInner() {
         setParallelPrefill(null);
         setSendBackTo('home');
         setGlobalScannerOpen(false);
-        pendingUriView.current = null;
+        launchRouteState.current.clear();
     }
 
     function handleLock() {

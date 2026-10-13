@@ -2767,7 +2767,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     header={(
                         <AppHeader
                             onCommandPalette={palette.openPalette}
-                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onLock={handleLock}
                             isWatcherMode={isWatcherMode}
                             onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                         />

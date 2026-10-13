@@ -39,7 +39,7 @@ const RUNTIME_GLOBALS = new Set([
     'Buffer', 'cancelAnimationFrame', 'chrome', 'clearInterval', 'clearTimeout',
     'ClipboardItem', 'console', 'crypto', 'CustomEvent', 'Date',
     'decodeURIComponent', 'document', 'encodeURIComponent', 'Error', 'Event',
-    'fetch', 'File', 'FileReader', 'getComputedStyle', 'globalThis', 'Image',
+    'fetch', 'File', 'FileReader', 'getComputedStyle', 'globalThis', 'HTMLElement', 'Image',
     'Infinity', 'Intl', 'isFinite', 'JSON', 'localStorage', 'location', 'Map',
     'Math', 'module', 'MutationObserver', 'NaN', 'navigator', 'Notification',
     'Number', 'Object', 'parseFloat', 'parseInt', 'process', 'Promise', 'Proxy',
