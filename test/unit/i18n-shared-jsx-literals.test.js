@@ -28,6 +28,14 @@ const localizedComponents = [
     'settings/UndoSendRow.jsx',
 ];
 
+const localizedRoutes = [
+    'AccountPicker.jsx',
+    'ActionDetail.jsx',
+    'ActionsMenu.jsx',
+    'AlertsRoute.jsx',
+    'BridgeOriginBadge.jsx',
+];
+
 describe('shared route localization', () => {
     test('localized shared components stay in the literal guard', () => {
         for (const component of localizedComponents) {
@@ -56,5 +64,12 @@ describe('shared route localization', () => {
 
         expect(violations).toEqual([]);
         expect(missingKeys).toEqual([]);
+    });
+
+    test('migrated routes remain enrolled in the literal guard', () => {
+        for (const route of localizedRoutes) {
+            const source = sources[`../../packages/core/src/shared/routes/${route}`];
+            expect(source, route).toMatch(/\bt\s*\(/);
+        }
     });
 });

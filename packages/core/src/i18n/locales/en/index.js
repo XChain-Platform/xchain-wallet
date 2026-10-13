@@ -80,6 +80,38 @@ export const en = {
     'settings.undoSend.durationLabel': 'Hold duration in seconds (0 disables)',
     'settings.undoSend.durationAriaLabel': 'Send hold duration in seconds',
 
+    // --- account picker ------------------------------------------
+    'accountPicker.title': 'Accounts',
+    'accountPicker.add': 'Add account',
+    'accountPicker.manage': 'Manage account',
+    'accountPicker.defaultName': 'Account {number}',
+    'accountPicker.renameLabel': 'Rename {label}',
+    'accountPicker.renameTitle': 'Rename account',
+    'accountPicker.empty.title': 'No accounts yet',
+    'accountPicker.empty.body': 'Accounts added to this wallet appear here.',
+    'accountPicker.error.unavailable': 'Could not load accounts. Try again.',
+    'accountPicker.error.load': 'Could not load accounts. Try again.',
+    'accountPicker.loading': 'Loading accounts…',
+    'accountPicker.loadingLabel': 'Loading accounts',
+
+    // --- action routes -------------------------------------------
+    'actionDetail.back': 'Back to history',
+    'actionDetail.title': 'Action',
+    'actionDetail.empty.title': 'No action selected',
+    'actionDetail.empty.body': 'Action details appear here after one is selected.',
+    'actionsMenu.more': 'More actions',
+    'actionsMenu.title': 'Token actions',
+    'actionsMenu.unavailable': 'Unavailable: {reason}',
+
+    // --- alerts --------------------------------------------------
+    'alerts.title': 'Alerts',
+    'alerts.empty.title': 'No alerts',
+    'alerts.empty.body': "You're all caught up.",
+
+    // --- bridged tokens ------------------------------------------
+    'bridgeOrigin.onChainName': 'On-chain token name: {tick}',
+    'bridgeOrigin.from': 'Bridged from {origin}',
+
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
 

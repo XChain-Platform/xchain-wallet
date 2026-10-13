@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * A bridged token's name, as a user should read it.
@@ -50,9 +51,9 @@ export function BridgeOriginTick({ tick, localCoin, className }) {
                 // The wire name is what the explorer, the indexer and any
                 // support conversation use, so it stays reachable on hover
                 // rather than being hidden behind the friendlier rendering.
-                title={`On-chain token name: ${tick}`}
+                title={t('bridgeOrigin.onChainName', { tick })}
             >
-                {`Bridged from ${coinDisplay(origin)}`}
+                {t('bridgeOrigin.from', { origin: coinDisplay(origin) })}
             </span>
         </span>
     );
