@@ -15,6 +15,7 @@
 import {
     createErrorRingBuffer,
     installShellErrorCapture as installCapture,
+    redactDiagnosticText,
 } from '@xchain-wallet/core/flows/diagnosticDump.js';
 
 const buffer = createErrorRingBuffer();
@@ -23,13 +24,20 @@ let uninstall = null;
 /** Idempotent; returns the uninstall function. */
 export function installShellErrorCapture(target = globalThis) {
     if (!uninstall) uninstall = installCapture(target, buffer);
+    const installedUninstall = uninstall;
     return () => {
-        if (uninstall) uninstall();
+        if (uninstall !== installedUninstall) return;
+        installedUninstall();
         uninstall = null;
     };
 }
 
 /** @returns {import('@xchain-wallet/core/flows/diagnosticDump.js').DiagnosticError[]} */
 export function getRecentShellErrors() {
-    return buffer.list();
+    return buffer.list().map((entry) => ({
+        ...entry,
+        kind: redactDiagnosticText(entry.kind),
+        message: redactDiagnosticText(entry.message),
+        ...(entry.phase ? { phase: redactDiagnosticText(entry.phase) } : {}),
+    }));
 }

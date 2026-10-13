@@ -61,4 +61,33 @@ describe('web shell error capture', () => {
         stop = installShellErrorCapture(second);
         expect(second.listeners.has('error')).toBe(true);
     });
+
+    it('does not let stale cleanup remove a later installation', () => {
+        const first = fakeTarget();
+        const second = fakeTarget();
+        const staleStop = installShellErrorCapture(first);
+
+        staleStop();
+        stop = installShellErrorCapture(second);
+        staleStop();
+
+        expect(second.listeners.has('error')).toBe(true);
+        expect(second.listeners.has('unhandledrejection')).toBe(true);
+    });
+
+    it('redacts secrets and address lists before exposing captured errors', () => {
+        const target = fakeTarget();
+        const address = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
+        const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        stop = installShellErrorCapture(target);
+
+        target.listeners.get('error')({
+            error: new Error(`failed for ${address}, ${address}; seed phrase: ${mnemonic}`),
+        });
+
+        const captured = getRecentShellErrors().at(-1);
+        expect(captured.message).not.toContain(address);
+        expect(captured.message).not.toContain(mnemonic);
+        expect(captured.message).toContain('[REDACTED]');
+    });
 });
