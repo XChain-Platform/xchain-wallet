@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = join(process.cwd(), 'packages', 'core', 'src');
 const guide = readFileSync(join(process.cwd(), 'STYLE_GUIDE.md'), 'utf8');
-const documented = ['400px', '420px', '480px', '48rem', '520px', '600px', '640px', '1024px'];
+const documented = ['360px', '400px', '420px', '480px', '48rem', '520px', '600px', '640px', '1024px'];
 
 function filesBelow(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -36,6 +36,7 @@ describe('core CSS module media breakpoints', () => {
     it('uses only the documented viewport width scale', () => {
         const widths = new Set(modules.flatMap((path) => widthValues(readFileSync(path, 'utf8'))));
         expect([...widths].sort()).toEqual([
+            '360px',
             '400px',
             '420px',
             '480px',
@@ -54,7 +55,7 @@ describe('core CSS module media breakpoints', () => {
         ]));
         const combined = [...sources.values()].join('\n');
 
-        expect(combined).not.toMatch(/\b(?:399|599|601|639|1023)px\b/);
+        expect(combined).not.toMatch(/\b(?:359|399|599|601|639|1023)px\b/);
         expect(sources.get('shared/commandPalette/CommandPalette.module.css'))
             .toContain('@media not all and (min-width: 640px)');
         expect(sources.get('shared/routes/IssueTokenForm.module.css'))

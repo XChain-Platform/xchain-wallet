@@ -141,7 +141,7 @@ describe('PortfolioChart on a real wallet', () => {
             includeSparkline: true,
             fiatCurrency: 'EUR',
         }));
-        expect(await screen.findByText(/€/)).toBeInTheDocument();
+        expect(await screen.findByRole('img', { name: /End €40,000\.00 EUR\./ })).toBeInTheDocument();
     });
 });
 

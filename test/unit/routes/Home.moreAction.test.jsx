@@ -127,7 +127,7 @@ describe('Home quick-action policy', () => {
 
     it('reflows to two columns at 320px and lets labels wrap', () => {
         expect(homeStyles).toMatch(
-            /@media \(max-width: 359px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+            /@media not all and \(min-width: 360px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
         );
         expect(homeStyles).toMatch(/overflow-wrap:\s*anywhere/);
     });

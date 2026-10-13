@@ -82,6 +82,8 @@ async function reachBackup(context) {
     fireEvent.click(screen.getByRole('button', { name: 'Generate recovery phrase' }));
 
     expect(await screen.findByText('Write down your recovery phrase')).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
     const phrase = screen.getByRole('list', { name: 'Recovery phrase' });
     expect(within(phrase).getAllByRole('listitem')).toHaveLength(12);
     expect(within(phrase).getByText('about')).toBeTruthy();
@@ -158,6 +160,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(await screen.findByText(/does not match your recovery phrase/)).toBeTruthy();
         expect(context.messaging.addImportedWallet).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Back to phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
         expect(await screen.findByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
         expect(await screen.findByRole('button', { name: 'Generate recovery phrase' })).toBeTruthy();
@@ -183,6 +186,7 @@ describe('MigrateToBip39 safety and completion', () => {
         expect(screen.getByText('Verify your written copy')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
         expect(screen.getByRole('list', { name: 'Recovery phrase' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
         answerQuiz();

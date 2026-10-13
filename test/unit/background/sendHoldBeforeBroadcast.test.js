@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import {
   createHoldBeforeBroadcast,
   createSendHoldRegistry,
@@ -45,6 +45,17 @@ function setup() {
 }
 
 describe('createHoldBeforeBroadcast', () => {
+  // Tests without an injected clock read Date.now(); freeze it so the hold
+  // length does not lose a millisecond on a loaded runner.
+  let frozenNow
+  beforeEach(() => {
+    frozenNow = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+  })
+
+  afterEach(() => {
+    frozenNow.mockRestore()
+  })
+
   it('exports a 30 second ceiling', () => {
     expect(SEND_HOLD_SECONDS_MAX).toBe(30)
   })

@@ -1498,35 +1498,35 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     />
                 </div>
                 <div className={styles.dateTools}>
-                    <div className={styles.datePresets} role="group" aria-label="Date range presets">
+                    <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
                         <button
                             type="button"
                             className={`${styles.chip} ${activeDatePreset === '7' ? styles.chipActive : ''}`}
                             aria-pressed={activeDatePreset === '7'}
                             onClick={() => setDatePreset(7)}
-                        >7 days</button>
+                        >{t('history.filters.last7Days')}</button>
                         <button
                             type="button"
                             className={`${styles.chip} ${activeDatePreset === '30' ? styles.chipActive : ''}`}
                             aria-pressed={activeDatePreset === '30'}
                             onClick={() => setDatePreset(30)}
-                        >30 days</button>
+                        >{t('history.filters.last30Days')}</button>
                         <button
                             type="button"
                             className={`${styles.chip} ${activeDatePreset === 'all' ? styles.chipActive : ''}`}
                             aria-pressed={activeDatePreset === 'all'}
                             onClick={() => setDatePreset(null)}
-                        >All</button>
+                        >{t('history.filters.allDates')}</button>
                     </div>
-                    <span className={styles.dateZone}>Day boundaries use local time.</span>
+                    <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
                 </div>
                 {dateError ? (
                     <div className={styles.dateError} role="alert">{dateError}</div>
                 ) : null}
                 {dateFrom || dateTo ? (
                     <div className={styles.activeDateRange}>
-                        <span>Active range: {dateFrom || 'any date'} to {dateTo || 'any date'}</span>
-                        <button type="button" onClick={() => setDatePreset(null)}>Clear date range</button>
+                        <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
+                        <button type="button" onClick={() => setDatePreset(null)}>{t('history.filters.clearDateRange')}</button>
                     </div>
                 ) : null}
 

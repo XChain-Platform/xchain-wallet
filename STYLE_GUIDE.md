@@ -37,6 +37,7 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 
 | width | use |
 |---|---|
+| `360px` | the extension popup width: fallbacks at or below the popup |
 | `400px` | extension-width detail layouts |
 | `420px` | narrow row and toolbar stacking |
 | `480px` | compact grids and dense controls |
@@ -46,7 +47,7 @@ Core CSS modules use this reviewed set of viewport widths. Choose the narrowest 
 | `48rem` | wide collectible grids |
 | `1024px` | desktop reference frame and future desktop-only refinements |
 
-The current CSS-module audit uses `400px`, `420px`, `480px`, `520px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `520px`, `600px`, `640px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, and 1023px are aliases, not additional breakpoints.
 
 ### The list rule: full width, always
 
