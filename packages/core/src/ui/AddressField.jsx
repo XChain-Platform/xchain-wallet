@@ -10,6 +10,7 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
+import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
 
@@ -65,10 +66,12 @@ export const AddressField = forwardRef(function AddressField(
     ref,
 ) {
     const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
+    const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
     const wrapClass = [
         styles.wrap,
         size === 'lg' ? styles.lg : '',
         label ? '' : styles.noLabel,
+        showReadOnlyAddress ? styles.readOnly : '',
     ].filter(Boolean).join(' ');
 
     const handlePaste = (event) => {
@@ -100,11 +103,17 @@ export const AddressField = forwardRef(function AddressField(
                 autoCorrect="off"
                 spellCheck={false}
                 style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                title={showReadOnlyAddress ? value : undefined}
                 value={value}
                 onChange={onChange}
                 onPaste={handlePaste}
                 {...rest}
             />
+            {showReadOnlyAddress ? (
+                <span className={styles.readOnlyValue} aria-hidden="true">
+                    <AddressText address={value} />
+                </span>
+            ) : null}
             {IconComponent ? (
                 <button
                     type="button"
