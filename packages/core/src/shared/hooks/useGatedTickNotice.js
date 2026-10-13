@@ -33,12 +33,12 @@ export function useGatedTickNotice({ messaging, chainId, tick, enabled = true })
     const seqRef = useRef(0);
 
     useEffect(() => {
+        const seq = seqRef.current + 1;
+        seqRef.current = seq;
         setNotice({ gated: false, packCount: 0, fileCount: 0 });
         const trimmed = typeof tick === 'string' ? tick.trim() : '';
         if (!enabled || !chainId || !trimmed || trimmed.startsWith('^')) return undefined;
         if (typeof messaging?.listGatedContent !== 'function') return undefined;
-        const seq = seqRef.current + 1;
-        seqRef.current = seq;
         const timer = setTimeout(() => {
             messaging.listGatedContent({ chainId, tick: trimmed.toUpperCase() })
                 .then((groups) => {
@@ -60,7 +60,10 @@ export function useGatedTickNotice({ messaging, chainId, tick, enabled = true })
                     // authoring form; the rule itself is enforced elsewhere.
                 });
         }, 400);
-        return () => { clearTimeout(timer); };
+        return () => {
+            clearTimeout(timer);
+            if (seqRef.current === seq) seqRef.current += 1;
+        };
     }, [messaging, chainId, tick, enabled]);
 
     return notice;
