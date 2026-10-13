@@ -197,6 +197,9 @@ export async function exportBackupFile({
         // Persisted records always carry this array. Keeping an unrecognized
         // record intact lets the vault validator report the schema problem.
         if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
         const scopedAccounts = grantedAccounts.filter((id) => accountIds.has(id));
         if (scopedAccounts.length === 0) return [];
         return [{
@@ -832,6 +835,9 @@ function prepareDecodedPayload(decoded) {
     decoded.connectedSites = decoded.connectedSites.flatMap((site) => {
         const grantedAccounts = site?.permissions?.accounts;
         if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
         const scopedAccounts = grantedAccounts.filter((accountId) => accountIds.has(accountId));
         if (scopedAccounts.length === 0) return [];
         return [{
