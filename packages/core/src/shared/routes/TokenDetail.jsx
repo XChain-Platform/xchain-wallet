@@ -466,35 +466,29 @@ function TokenDetailContent({
                                 )}
                             </div>
                             <div className={styles.balanceHeroControls}>
-                                <button
-                                    type="button"
+                                <Button
                                     className={styles.balanceHeroSwap}
                                     onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
                                     disabled={!fiatAvailable}
                                     aria-label="Swap primary unit"
                                     title="Swap primary unit"
-                                >
-                                    <Icon.SwapIcon />
-                                </button>
-                                <button
-                                    type="button"
+                                    icon={<Icon.SwapIcon />}
+                                />
+                                <Button
                                     className={styles.balanceHeroEye}
                                     onClick={toggleChartVisible}
                                     aria-pressed={chartVisible ? 'true' : 'false'}
                                     aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
                                     title={chartVisible ? 'Hide chart' : 'Show chart'}
-                                >
-                                    <Icon.LineChartIcon />
-                                </button>
-                                <button
-                                    type="button"
+                                    icon={<Icon.LineChartIcon />}
+                                />
+                                <Button
                                     className={styles.balanceHeroEye}
                                     onClick={toggleBalanceHidden}
                                     aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
                                     title={balanceHidden ? 'Show balance' : 'Hide balance'}
-                                >
-                                    {balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                                </button>
+                                    icon={balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                                />
                             </div>
                         </div>
                         {!balanceHidden && fiatAvailable ? (
@@ -580,50 +574,61 @@ function TokenDetailContent({
                     reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
                     {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
-                        <button
-                            type="button"
+                        <Button
                             className={styles.quickAction}
                             onClick={onSend}
                             disabled={Boolean(sendDisabledReason)}
                             title={sendDisabledReason || undefined}
                             aria-label="Send"
+                            icon={<span className={styles.quickActionIcon}><Icon.SendIcon /></span>}
                         >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                            <span>Send</span>
-                            {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
-                        </button>
+                            <span className={styles.quickActionContent}>
+                                <span>Send</span>
+                                {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
+                            </span>
+                        </Button>
                     ) : null}
                     {typeof onReceive === 'function' ? (
-                        <button type="button" className={styles.quickAction} onClick={onReceive}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                            <span>Receive</span>
-                        </button>
+                        <Button
+                            className={styles.quickAction}
+                            onClick={onReceive}
+                            icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
+                        >
+                            Receive
+                        </Button>
                     ) : null}
                     {typeof onBuy === 'function' ? (
-                        <button
-                            type="button"
+                        <Button
                             className={styles.quickAction}
                             onClick={onBuy}
                             disabled={Boolean(tradeDisabledReason)}
                             title={tradeDisabledReason || undefined}
                             aria-label="Trade"
+                            icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
                         >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                            <span>Trade</span>
-                            {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
-                        </button>
+                            <span className={styles.quickActionContent}>
+                                <span>Trade</span>
+                                {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
+                            </span>
+                        </Button>
                     ) : null}
                     {typeof onViewActivity === 'function' ? (
-                        <button type="button" className={styles.quickAction} onClick={onViewActivity}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>
-                            <span>History</span>
-                        </button>
+                        <Button
+                            className={styles.quickAction}
+                            onClick={onViewActivity}
+                            icon={<span className={styles.quickActionIcon}><Icon.HistoryIcon /></span>}
+                        >
+                            History
+                        </Button>
                     ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
-                        <button type="button" className={styles.quickAction} onClick={onManageToken}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>
-                            <span>Manage</span>
-                        </button>
+                        <Button
+                            className={styles.quickAction}
+                            onClick={onManageToken}
+                            icon={<span className={styles.quickActionIcon}><Icon.GearIcon /></span>}
+                        >
+                            Manage
+                        </Button>
                     ) : null}
                 </div>
 
@@ -633,6 +638,7 @@ function TokenDetailContent({
                     rather than stacking. */}
                 <div className={styles.tabs} role="tablist" aria-label="Token detail view">
                             {tabs.map((t) => (
+                                // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                                 <button
                                     key={t.id}
                                     id={`${tabsId}-tab-${t.id}`}
@@ -784,7 +790,7 @@ function SupplyChart({ points, divisibility, tick }) {
     const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
     return (
         <section aria-label="Supply over time">
-            <h2 className={styles.sectionTitle}>Supply over time</h2>
+            <SectionHeader title="Supply over time" />
             <svg
                 className={styles.supplyChart}
                 viewBox={`0 0 ${W} ${H}`}
@@ -812,7 +818,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
     };
 
     return (
-        <div className={styles.infoCard} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+        <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
             {open ? (
                 <PriceAlertForm
                     onCreate={onCreate}
@@ -822,23 +828,13 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
                     onCancel={() => setOpen(false)}
                 />
             ) : (
-                <button
-                    type="button"
+                <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => { setOpen(true); setDone(false); }}
-                    style={{
-                        background: 'transparent',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        color: 'var(--xc-text)',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        fontSize: 'var(--xc-text-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-3)',
-                        alignSelf: 'flex-start',
-                    }}
                 >
                     {done ? 'Price alert set ✓ · Add another' : 'Set price alert'}
-                </button>
+                </Button>
             )}
         </div>
     );
@@ -937,6 +933,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         </div>
                         <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                             {CHART_RANGES.map((r) => (
+                                // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                                 <button
                                     key={r.id}
                                     id={`${tabsId}-tab-${r.id}`}
@@ -1033,6 +1030,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             {sparkline && isDemo ? (
                 <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                     {CHART_RANGES.map((r) => (
+                        // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                         <button
                             key={r.id}
                             id={`${tabsId}-tab-${r.id}`}
@@ -1189,11 +1187,10 @@ function DetailsPanel({
 function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    Native coin. Token-information documents are an XChain-issued-token concept.
-                </p>
-            </div>
+            <EmptyState
+                title="Native coin. Token-information documents are an XChain-issued-token concept."
+                titleAs="p"
+            />
         );
     }
     if (loading) {
@@ -1241,7 +1238,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <h2 className={styles.metaBlockTitle}>About</h2>
+                    <SectionHeader title="About" />
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1250,7 +1247,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
             {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
             {hasLinks ? (
                 <div className={styles.metaBlock}>
-                    <h2 className={styles.metaBlockTitle}>Links</h2>
+                    <SectionHeader title="Links" />
                     <LinksAndFiles assetInfo={assetInfo} />
                 </div>
             ) : null}
@@ -1263,7 +1260,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
 function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>DNS</h2>
+            <SectionHeader title="DNS" />
             <table className={styles.metaTable} aria-label="DNS records">
                 <tbody>
                     {dns.map((r, i) => (
@@ -1336,11 +1333,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
 
     if (isNative) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    Native coins don't carry attached media.
-                </p>
-            </div>
+            <EmptyState title="Native coins don't carry attached media." titleAs="p" />
         );
     }
     if (loading) {
@@ -1376,6 +1369,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
         <div className={styles.mediaPanel}>
             <div className={styles.subtabs} role="tablist" aria-label="Token media">
                 {subtabs.map((t) => (
+                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                     <button
                         key={t.id}
                         id={`${tabsId}-tab-${t.id}`}
@@ -1461,6 +1455,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
     }
     if (kind === 'files') {
         return (
+            // The kit has no file-list primitive, so native list semantics group these file links.
             <ul className={styles.filesList}>
                 {files.map((f, i) => (
                     <li key={`${f.url}:${i}`}>
@@ -1492,7 +1487,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
 function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>Owner</h2>
+            <SectionHeader title="Owner" />
             <table className={styles.metaTable} aria-label="Token owner">
                 <tbody>
                     {owner.name ? (
@@ -1530,7 +1525,7 @@ const CONTACT_LABELS = {
 function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>Contact</h2>
+            <SectionHeader title="Contact" />
             <table className={styles.metaTable} aria-label="Token contacts">
                 <tbody>
                     {contacts.map((c, i) => {
@@ -1568,7 +1563,7 @@ const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' }
 function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>Categories</h2>
+            <SectionHeader title="Categories" />
             <table className={styles.metaTable} aria-label="Token categories">
                 <tbody>
                     {categories.map((c, i) => (
@@ -1586,7 +1581,7 @@ function CategoriesBlock({ categories }) {
 function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>PGP signature</h2>
+            <SectionHeader title="PGP signature" />
             <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
         </div>
     );
@@ -2169,10 +2164,8 @@ function GatedGroupCard({
 
     return (
         <div className={styles.metaBlock}>
-            <h2 className={styles.metaBlockTitle}>{heading}</h2>
-            {description ? (
-                <p className={styles.descriptionBody}>{description}</p>
-            ) : null}
+            <SectionHeader title={heading} description={description} />
+            {/* The kit has no file-list primitive, so native list semantics group these file actions. */}
             <ul className={styles.filesList}>
                 {group.files.map((f) => {
                     const plain = unlocked.get(String(f.actionIndex));
@@ -2189,12 +2182,11 @@ function GatedGroupCard({
                     }
                     return (
                         <li key={f.actionIndex}>
-                            <button
-                                type="button"
+                            <Button
                                 onClick={() => handleFileClick(f)}
                                 disabled={submitting}
                                 aria-busy={submitting}
-                                className={styles.fileLink}
+                                className={`${styles.fileLink} ${styles.fileButton}`}
                                 style={{
                                     cursor: 'pointer',
                                     font: 'inherit',
@@ -2205,20 +2197,23 @@ function GatedGroupCard({
                                 aria-label={ownsToken
                                     ? `Unlock and open ${f.name || 'gated file'}`
                                     : `Locked: purchase required to access ${f.name || 'gated file'}`}
+                                icon={null}
                             >
-                                <span className={styles.fileLinkIcon} aria-hidden="true">
-                                    <Icon.FileTypeIcon type={f.type} />
-                                </span>
-                                <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
-                                {f.type ? (
-                                    <span className={styles.fileLinkType}>{f.type}</span>
-                                ) : null}
-                                {f.gateMinAmount ? (
-                                    <span className={styles.fileLinkType}>
-                                        hold ≥ {f.gateMinAmount} {tick} to unlock
+                                <span className={styles.fileLinkContent}>
+                                    <span className={styles.fileLinkIcon} aria-hidden="true">
+                                        <Icon.FileTypeIcon type={f.type} />
                                     </span>
-                                ) : null}
-                            </button>
+                                    <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
+                                    {f.type ? (
+                                        <span className={styles.fileLinkType}>{f.type}</span>
+                                    ) : null}
+                                    {f.gateMinAmount ? (
+                                        <span className={styles.fileLinkType}>
+                                            hold ≥ {f.gateMinAmount} {tick} to unlock
+                                        </span>
+                                    ) : null}
+                                </span>
+                            </Button>
                         </li>
                     );
                 })}
@@ -2315,10 +2310,9 @@ function GatedGroupCard({
 // as the fallback. The declared `type` is cosmetic (icon + chip).
 function UnlockedFileLink({ name, type, onOpen }) {
     return (
-        <button
-            type="button"
+        <Button
             onClick={onOpen}
-            className={styles.fileLink}
+            className={`${styles.fileLink} ${styles.fileButton}`}
             style={{
                 cursor: 'pointer',
                 font: 'inherit',
@@ -2326,15 +2320,18 @@ function UnlockedFileLink({ name, type, onOpen }) {
                 textAlign: 'left',
             }}
             aria-label={`Open unlocked file ${name}`}
+            icon={null}
         >
-            <span className={styles.fileLinkIcon} aria-hidden="true">
-                <Icon.FileTypeIcon type={type} />
+            <span className={styles.fileLinkContent}>
+                <span className={styles.fileLinkIcon} aria-hidden="true">
+                    <Icon.FileTypeIcon type={type} />
+                </span>
+                <span className={styles.fileLinkName}>{name}</span>
+                {type ? (
+                    <span className={styles.fileLinkType}>{type}</span>
+                ) : null}
             </span>
-            <span className={styles.fileLinkName}>{name}</span>
-            {type ? (
-                <span className={styles.fileLinkType}>{type}</span>
-            ) : null}
-        </button>
+        </Button>
     );
 }
 

@@ -122,6 +122,7 @@ describe('TokenDetail keyboard navigation', () => {
             'Manage',
         ]);
         expect(actions.map((button) => button.tabIndex)).toEqual([0, 0, 0, 0, 0]);
+        expect(actions.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
 
         const handlers = [onSend, onReceive, onBuy, onViewActivity, onManageToken];
         actions.forEach((button, index) => {
