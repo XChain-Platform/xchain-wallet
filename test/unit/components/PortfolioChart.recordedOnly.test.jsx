@@ -79,8 +79,9 @@ describe('PortfolioChart on a real wallet', () => {
 
         const chart = screen.getByRole('img');
         expect(chart).toHaveAccessibleName(expect.stringMatching(
-            /^Portfolio performance chart\. Range 7d\. Values range from .* Start .* End \$40,000\.00\. Change \+/,
+            /^Portfolio performance chart\. Range 7d\. Values range from .* USD\. Start .* USD\. End \$40,000\.00 USD\. Change \+/,
         ));
+        expect(chart.querySelector('title')).toHaveTextContent('USD');
 
         const tablist = screen.getByRole('tablist', { name: 'Chart range' });
         const panel = screen.getByRole('tabpanel');
@@ -91,6 +92,31 @@ describe('PortfolioChart on a real wallet', () => {
         expect(selected).toHaveAttribute('aria-controls', panel.id);
         expect(panel).toHaveAttribute('aria-labelledby', selected.id);
         expect(unselected).toHaveAttribute('tabindex', '-1');
+    });
+
+    it('refetches and relabels the tooltip when the selected fiat currency changes', async () => {
+        const sparkline = Array.from({ length: 168 }, (_, i) => 70000 + i * 50);
+        const messaging = mount(
+            'real-wallet-1',
+            { prices: { 'bitcoin-mainnet': { sparkline } } },
+            ROWS,
+            { fiatCurrency: 'USD' },
+        );
+        const chart = await screen.findByRole('img');
+        await waitFor(() => expect(chart.querySelector('title')).toHaveTextContent('USD'));
+
+        window.dispatchEvent(new CustomEvent('xc:settings-changed', {
+            detail: { fiatCurrency: 'EUR' },
+        }));
+
+        await waitFor(() => {
+            expect(chart.querySelector('title')).toHaveTextContent('EUR');
+            expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+                chainIds: ['bitcoin-mainnet'],
+                includeSparkline: true,
+                fiatCurrency: 'EUR',
+            });
+        });
     });
 
     it('draws a neutral, centered line when only one recorded price is available', async () => {
