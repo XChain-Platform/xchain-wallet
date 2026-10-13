@@ -80,12 +80,12 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
-            grepInvert: /@lg-k51/,
+            grepInvert: /@lg-k51(?![-\w])/,
             use: { ...devices['Desktop Chrome'] },
         },
         {
             name: 'android-lg-k51-smoke',
-            grep: /@smoke/,
+            grep: /@smoke|@lg-k51(?![-\w])/,
             use: {
                 browserName: 'chromium',
                 viewport: { width: 412, height: 869 },
