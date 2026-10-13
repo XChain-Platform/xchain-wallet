@@ -418,6 +418,21 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
         }));
         expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 1 DOGE');
     });
+
+    it('discloses when sub-dust change is included in the exact fee', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({
+                networkFeeSats: 1000,
+                dustChangeLimitSats: 546,
+                chainId: 'bitcoin-mainnet',
+            }),
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toContain('Network fee: 0.00001 BTC');
+        expect(utils.getByTestId('confirm-dust-change').textContent).toBe(
+            'No change output was created. Any remainder below 0.00000546 BTC '
+            + 'is included in the network fee shown above.',
+        );
+    });
 });
 
 describe('§4.2 Approve gate is ONE predicate across surfaces', () => {
