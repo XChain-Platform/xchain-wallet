@@ -78,31 +78,43 @@ function loadHostedTrezorConnect() {
         );
     }
     if (!scriptLoadPromise) {
-        scriptLoadPromise = new Promise((resolve, reject) => {
+        const pending = new Promise((resolve, reject) => {
             const existing = /** @type {HTMLScriptElement | null} */ (
                 document.querySelector(`script[src="${TREZOR_CONNECT_SCRIPT_SRC}"]`)
             );
             const el = existing ?? document.createElement('script');
-            el.addEventListener('load', () => {
+            const cleanup = () => {
+                el.removeEventListener('load', onLoad);
+                el.removeEventListener('error', onError);
+            };
+            const fail = (error) => {
+                cleanup();
+                el.remove();
+                if (scriptLoadPromise === pending) scriptLoadPromise = null;
+                reject(error);
+            };
+            const onLoad = () => {
+                cleanup();
                 if (window.TrezorConnect) {
                     resolve({ default: window.TrezorConnect });
                 } else {
-                    reject(new Error(
+                    fail(new Error(
                         'trezorFactory: Trezor Connect script loaded but window.TrezorConnect is undefined',
                     ));
                 }
-            }, { once: true });
-            el.addEventListener('error', () => {
-                // Let a later attempt retry the load rather than caching the failure.
-                scriptLoadPromise = null;
-                reject(new Error(`trezorFactory: failed to load Trezor Connect from ${TREZOR_CONNECT_SCRIPT_SRC}`));
-            }, { once: true });
+            };
+            const onError = () => fail(new Error(
+                `trezorFactory: failed to load Trezor Connect from ${TREZOR_CONNECT_SCRIPT_SRC}`,
+            ));
+            el.addEventListener('load', onLoad, { once: true });
+            el.addEventListener('error', onError, { once: true });
             if (!existing) {
                 el.src = TREZOR_CONNECT_SCRIPT_SRC;
                 el.async = true;
                 document.head.appendChild(el);
             }
         });
+        scriptLoadPromise = pending;
     }
     return scriptLoadPromise;
 }
@@ -117,7 +129,7 @@ function loadHostedTrezorConnect() {
  */
 export async function getTrezorConnect(loader = loadHostedTrezorConnect) {
     if (!connectPromise) {
-        connectPromise = (async () => {
+        const pending = (async () => {
             const mod = await loader();
             const TrezorConnect = mod?.default ?? mod;
             if (!TrezorConnect || typeof TrezorConnect.init !== 'function') {
@@ -129,6 +141,11 @@ export async function getTrezorConnect(loader = loadHostedTrezorConnect) {
             });
             return TrezorConnect;
         })();
+        const retryable = pending.catch((err) => {
+            if (connectPromise === retryable) connectPromise = null;
+            throw err;
+        });
+        connectPromise = retryable;
     }
     return connectPromise;
 }
