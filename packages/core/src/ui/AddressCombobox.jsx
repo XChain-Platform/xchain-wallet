@@ -12,6 +12,7 @@ import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react
 import { Input } from './Input.jsx';
 import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
+import { AddressText } from './AddressText.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
 
@@ -262,7 +263,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                             {s.sublabel ? (
                                 <span className={styles.sublabel}>{s.sublabel}</span>
                             ) : null}
-                            <span className={styles.sublabel}>{s.address}</span>
+                            <AddressText address={s.address} className={styles.sublabel} size="sm" />
                         </li>
                     ))}
                 </ul>

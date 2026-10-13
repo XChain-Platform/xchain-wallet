@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -1109,9 +1109,7 @@ function DetailsPanel({
                             <Skeleton shape="text" width="70%" height={20} />
                         ) : assetInfo?.creator ? (
                             <span className={styles.copyableValue}>
-                                <span className={styles.creatorCell} title={assetInfo.creator}>
-                                    {shorten(assetInfo.creator)}
-                                </span>
+                                <AddressText address={assetInfo.creator} className={styles.creatorCell} />
                                 <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
                             </span>
                         ) : 'N/A'}
@@ -2359,9 +2357,7 @@ function HoldersPanel({
                             <ListRow
                                 title={(
                                     <span className={styles.holdersAddrWrap}>
-                                        <span className={styles.holdersAddr} title={address || undefined}>
-                                            {shorten(address || 'unknown')}
-                                        </span>
+                                        <AddressText address={address || 'unknown'} className={styles.holdersAddr} />
                                         {address ? (
                                             <CopyButton
                                                 value={address}
@@ -2440,11 +2436,6 @@ function kindLabel(kind) {
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
     return tickerForCoin(desc?.coin);
-}
-
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 function safeBigInt(v) {
