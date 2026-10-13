@@ -54,7 +54,7 @@ describe('SendPicker render', () => {
             await balances.promise;
         });
 
-        const sendBitcoin = await screen.findByRole('button', { name: 'Open Bitcoin details' });
+        const sendBitcoin = await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
         fireEvent.click(sendBitcoin);
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
             chainId: 'bitcoin-mainnet',

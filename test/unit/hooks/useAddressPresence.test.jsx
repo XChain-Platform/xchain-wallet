@@ -6,10 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useBtcAddressesPresent } from '../../../packages/core/src/shared/hooks/useBtcAddressesPresent.js';
-import {
-    governanceChainIds,
-    useGovernanceAddressesPresent,
-} from '../../../packages/core/src/shared/hooks/useGovernanceAddressesPresent.js';
+import { useGovernanceAddressesPresent } from '../../../packages/core/src/shared/hooks/useGovernanceAddressesPresent.js';
 import { chainIdsWithAction } from '../../../packages/core/src/shared/hooks/useSupportedChains.js';
 import { useVmAddressesPresent } from '../../../packages/core/src/shared/hooks/useVmAddressesPresent.js';
 
@@ -60,7 +57,7 @@ describe('address-presence hooks', () => {
     });
 
     it('finds an address on a governance-capable chain', async () => {
-        const chainId = governanceChainIds()[0];
+        const chainId = chainIdsWithAction('VOTE')[0];
         expect(chainId).toBeTruthy();
         const messaging = {
             getAddressesByChain: vi.fn(async () => ({ [chainId]: [{ address: 'vote-address' }] })),

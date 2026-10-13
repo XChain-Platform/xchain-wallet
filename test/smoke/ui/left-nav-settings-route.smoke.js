@@ -26,6 +26,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -47,7 +48,7 @@ const navSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/settings:\s*\[\s*'settings',\s*'connected-sites'\s*\]/.test(navSrc),
+assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites'],
     'VIEW_GROUPS.settings covers settings + connected-sites');
 
 // --- 3. Settings footer button gets aria-current ------------------------
@@ -70,7 +71,7 @@ const desktopApp = readFileSync(
 
 for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
     assert.ok(
-        /import\s*\{\s*Settings\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/routes\/Settings\.jsx'/.test(src),
+        /(import\s*\{\s*Settings\s*\}\s*from\s*|const\s+Settings\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/Settings\.jsx'/.test(src),
         `${label} App imports Settings`,
     );
     assert.ok(/const \[walletList, setWalletList\] = useState/.test(src),

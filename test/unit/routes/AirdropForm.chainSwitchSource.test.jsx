@@ -145,7 +145,7 @@ describe('AirdropForm keeps a usable source address across a chain change (D-155
         await waitFor(async () => expect((await fromField()).value).toBe(SOURCE_A));
 
         fireEvent.click(await screen.findByRole('button', { name: /^Token to drop:/ }));
-        const row = await screen.findByLabelText(new RegExp(`Open ${TOKEN_B} details`, 'i'), {}, { timeout: 5000 });
+        const row = await screen.findByLabelText(new RegExp(`^Select ${TOKEN_B}\\b`, 'i'), {}, { timeout: 5000 });
         fireEvent.click(row);
 
         // The token lives on CHAIN_B, so the form follows it there. The source

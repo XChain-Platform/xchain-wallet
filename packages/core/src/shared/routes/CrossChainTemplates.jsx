@@ -56,6 +56,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     const [chainsWithAddresses, setChainsWithAddresses] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [loading, setLoading] = useState(true);
+    const [loadReload, setLoadReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -80,7 +81,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, loadReload]);
 
     const launchTemplate = (template) => {
         if (chainsWithAddresses.length === 0) return;
@@ -142,7 +143,13 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
             );
         }
         return wrap(
-            <StatusMessage variant="error" className={styles.entryDescription}>{loadError}</StatusMessage>,
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{ label: 'Try again', onAction: () => setLoadReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
         );
     }
 

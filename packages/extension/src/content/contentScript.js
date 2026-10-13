@@ -26,10 +26,62 @@
 // bridge handlers (§43.3 + Approvals).
 
 (function installBridge() {
+    // The manifest installs this relay in the top document only. Keep the
+    // same policy here so an accidental all_frames change cannot expose a
+    // second provider with the iframe's origin and permission context.
+    if (window.top !== window) return;
+
     const SOURCE = 'xchain-inject';
     const RESPONSE_SOURCE = 'xchain-inject-response';
     const EVENT_SOURCE = 'xchain-inject-event';
     const INJECT_PATH = 'inject/xchainProvider.js';
+    const PUBLIC_TYPES = new Set([
+        'bridge.connect',
+        'bridge.disconnect',
+        'bridge.getAccounts',
+        'bridge.getAddresses',
+        'bridge.getBalances',
+        'bridge.getSupportedChains',
+        'bridge.getActiveChains',
+        'bridge.signMessage',
+        'bridge.signAction',
+        'bridge.signPsbt',
+        'bridge.coSign',
+        'bridge.signIn',
+        'bridge.parallel',
+    ]);
+
+    function isRecord(value) {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+    }
+
+    function isBridgeError(value) {
+        return isRecord(value)
+            && typeof value.name === 'string'
+            && typeof value.message === 'string'
+            && typeof value.code === 'string';
+    }
+
+    function isBridgeEvent(message) {
+        if (!isRecord(message) || message.type !== 'bridge.event') return false;
+        if (message.event === 'accountsChanged') {
+            return Array.isArray(message.payload) && message.payload.every((account) => (
+                isRecord(account)
+                && typeof account.id === 'string'
+                && account.id.length > 0
+                && (account.name === undefined || typeof account.name === 'string')
+            ));
+        }
+        if (message.event === 'chainChanged') {
+            return typeof message.payload === 'string' && message.payload.length > 0;
+        }
+        if (message.event === 'disconnect') {
+            return typeof message.payload === 'string';
+        }
+        return false;
+    }
 
     try {
         const script = document.createElement('script');
@@ -48,10 +100,29 @@
 
     window.addEventListener('message', (event) => {
         if (event.source !== window) return;
+        if (event.origin !== window.location.origin) return;
         const data = event.data;
-        if (!data || typeof data !== 'object') return;
+        if (!isRecord(data)) return;
         if (data.source !== SOURCE) return;
-        if (typeof data.id !== 'string' || typeof data.type !== 'string') return;
+        if (
+            typeof data.id !== 'string'
+            || data.id.length === 0
+            || data.id.length > 128
+            || typeof data.type !== 'string'
+        ) return;
+
+        const refuse = (message, code = 'INTERNAL_ERROR') => {
+            window.postMessage({
+                source: RESPONSE_SOURCE,
+                id: data.id,
+                ok: false,
+                error: {
+                    name: 'BridgeError',
+                    message,
+                    code,
+                },
+            }, window.location.origin);
+        };
 
         // Trust boundary: a web page may reach ONLY the origin-gated
         // `bridge.*` surface. Refuse to relay privileged extension-internal
@@ -60,23 +131,14 @@
         // pre-unlocked pool and no password). Mirrors publicSurface.isPublicBridgeType;
         // the background re-checks the sender so this is defence-in-depth, not
         // the sole gate.
-        if (!data.type.startsWith('bridge.')) {
-            window.postMessage({
-                source: RESPONSE_SOURCE,
-                id: data.id,
-                ok: false,
-                // `code` is a published BridgeErrorCode, like every other
-                // failure the page can see. The relay's own refusals used to
-                // invent their own names (FORBIDDEN / RUNTIME_UNAVAILABLE /
-                // NO_RESPONSE), which a dApp branching on bridge-spec's union
-                // could not match. The precise reason stays in
-                // `message`, which is where the spec puts human detail.
-                error: {
-                    name: 'BridgeError',
-                    message: 'FORBIDDEN: message type is not available to web pages',
-                    code: 'INVALID_PARAMS',
-                },
-            }, window.location.origin);
+        if (!data.type.startsWith('bridge.') || !PUBLIC_TYPES.has(data.type)) {
+            // `code` is a published BridgeErrorCode, like every other failure
+            // the page can see. Precise refusal detail stays in `message`.
+            refuse('FORBIDDEN: message type is not available to web pages', 'INVALID_PARAMS');
+            return;
+        }
+        if (!isRecord(data.request)) {
+            refuse('INVALID_PARAMS: request must be an object', 'INVALID_PARAMS');
             return;
         }
 
@@ -88,19 +150,6 @@
         // Post exactly one envelope on every path out of this listener: the
         // injected provider parks a promise per request with no deadline, so
         // a silent path hangs the dApp call and leaks its pending entry.
-        const refuse = (message) => {
-            window.postMessage({
-                source: RESPONSE_SOURCE,
-                id: data.id,
-                ok: false,
-                error: {
-                    name: 'BridgeError',
-                    message,
-                    code: 'INTERNAL_ERROR',
-                },
-            }, window.location.origin);
-        };
-
         try {
             chrome.runtime.sendMessage({ type: data.type, request }, (response) => {
                 // Chrome surfaces chrome.runtime.lastError when the
@@ -112,8 +161,12 @@
                     refuse(`RUNTIME_UNAVAILABLE: ${err.message}`);
                     return;
                 }
-                if (!response || typeof response !== 'object') {
-                    refuse('NO_RESPONSE: no response from background');
+                if (
+                    !isRecord(response)
+                    || typeof response.ok !== 'boolean'
+                    || (response.ok === false && !isBridgeError(response.error))
+                ) {
+                    refuse('NO_RESPONSE: invalid response from background');
                     return;
                 }
                 window.postMessage({
@@ -134,16 +187,16 @@
 
     // Relay the background's live dApp events (accountsChanged and the rest,
     // sent by bridge/bridgeEvents.js with account ids and names) to the page.
-    // The origin check below is a required trust gate, never dead code.
+    // The origin and payload checks are required trust gates, never dead code.
     if (chrome.runtime?.onMessage?.addListener) {
         chrome.runtime.onMessage.addListener((message) => {
-            if (!message || message.type !== 'bridge.event') return;
             // The broadcaster picked this tab from a URL snapshot and addressed
             // the send by tab id, so a navigation since then means the event
             // belongs to the previous origin, not this document. This listener
             // is the only check that runs against the page actually loaded, so
             // it is the authoritative gate: drop anything not stamped for us
-            if (message.origin !== window.location.origin) return;
+            if (!isRecord(message) || message.origin !== window.location.origin) return;
+            if (!isBridgeEvent(message)) return;
             window.postMessage({
                 source: EVENT_SOURCE,
                 event: message.event,

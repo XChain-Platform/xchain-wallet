@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Skeleton, StatusMessage, Button, Icon, EmptyState } from '@xchain-wallet/core/ui';
+import { Skeleton, StatusMessage, Icon, EmptyState } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function StatesSection() {
@@ -49,9 +49,11 @@ export function StatesSection() {
 ) : null}
 
 // Inline error: user is still here, needs to act
-<StatusMessage variant="error" recovery={
-    <Button size="sm" onClick={useMax}>Use Max</Button>
-}>
+<StatusMessage
+    variant="error"
+    details={technicalError}
+    recovery={{ label: 'Use Max', onAction: useMax }}
+>
     Insufficient balance.
 </StatusMessage>
 
@@ -60,11 +62,18 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
             </Markup>
 
             <LiveExample label="Skeleton: first paint, shape matches the data">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <Skeleton shape="title" width="40%" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                        <Skeleton shape="avatar" />
+                        <Skeleton shape="title" width={120} />
+                        <Skeleton shape="text" width={90} />
+                        <Skeleton shape="badge" />
+                    </div>
                     <Skeleton shape="row" />
-                    <Skeleton shape="row" />
-                    <Skeleton shape="row" />
+                    <Skeleton shape="card" />
+                    <Skeleton shape="tile" />
+                    <Skeleton.Row />
+                    <Skeleton.List rows={2} avatar={false} />
                 </div>
             </LiveExample>
 
@@ -78,8 +87,12 @@ showToast({ kind: 'success', message: 'Address copied to clipboard.' });`}
                 />
             </LiveExample>
 
-            <LiveExample label="StatusMessage: inline error in a form">
-                <StatusMessage variant="error">
+            <LiveExample label="StatusMessage: error with technical details and one-step recovery">
+                <StatusMessage
+                    variant="error"
+                    details="available=0.001 BTC; required=0.0014 BTC"
+                    recovery={{ label: 'Use Max', onAction: () => {} }}
+                >
                     Insufficient balance. You have 0.001 BTC available.
                 </StatusMessage>
             </LiveExample>

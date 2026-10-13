@@ -57,7 +57,7 @@ for (const [name, file] of [
     assert.ok(existsSync(file), `${name} App.jsx exists`);
     const src = readFileSync(file, 'utf8');
     assert.ok(
-        /from ['"]@xchain-wallet\/core\/shared\/routes\/ViewPrivateKey\.jsx['"]/.test(src),
+        /(from |const\s+ViewPrivateKey\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()['"]@xchain-wallet\/core\/shared\/routes\/ViewPrivateKey\.jsx['"]/.test(src),
         `${name} App imports ViewPrivateKey`,
     );
     assert.ok(/unlockedView === ['"]view-private-key['"]/.test(src),

@@ -55,7 +55,7 @@ describe('desktop update banner lifecycle', () => {
         bridge.emit({ type: 'rejected', info: { reason: 'remote controlled text' } });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('could not be verified');
+        expect(text).toContain('could not be downloaded or verified');
         expect(text).not.toContain('remote controlled text');
     });
 
@@ -66,7 +66,7 @@ describe('desktop update banner lifecycle', () => {
         bridge.emit({ type: 'available', info: { version: '1.2.3' } });
 
         await act(async () => {
-            screen.getByRole('button', { name: /install and restart/i }).click();
+            screen.getByRole('button', { name: /download update/i }).click();
             await Promise.resolve();
         });
 

@@ -89,7 +89,8 @@ describe('watch-only mode audit', () => {
             target: { value: 'WATCH' },
         });
         fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to confirmation' }));
 
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledOnce());
         expect(buildActionPsbtRequest.mock.calls[0][0]).toMatchObject({

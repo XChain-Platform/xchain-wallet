@@ -8,39 +8,64 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useId, useState } from 'react';
+import { Button } from '../../ui/Button.jsx';
 import styles from './MnemonicGrid.module.css';
 
 /**
- * Read-only mnemonic display per §19.2. Renders words in a numbered
- * grid so users can transcribe them to paper. Never interactive;
- * copy-to-clipboard is deliberately NOT provided. The spec wants users
- * to write seeds down rather than park them in clipboard history.
+ * Read-only mnemonic display per §19.2. Keeps the phrase concealed until the
+ * user explicitly reveals it, then renders numbered words for transcription.
+ * Clipboard copying remains disabled because clipboard history can retain key
+ * material after this screen closes.
  *
- * That was true of this component and false of the wallet until 2026-08-01:
- * CreateWallet rendered a "Copy recovery phrase" button one screen away.
- * settled it the way this comment always assumed - key material is
- * not copyable on any shell (wallet spec §12.2.1) - so the rule now holds
- * everywhere, not just here.
- *
- * `variant="small"` renders a compact 3-column grid for the narrow
+ * `variant="small"` renders a compact 2-column grid for the narrow
  * (popup / mobile) viewport; `variant="full"` renders a responsive
- * 3/4-column grid sized for the full web layout.
+ * 2/4-column grid sized for the full web layout.
  *
  * @param {object} props
  * @param {string} props.mnemonic
  * @param {'small' | 'full'} [props.variant]
  */
 export function MnemonicGrid({ mnemonic, variant = 'full' }) {
+    const [revealedMnemonic, setRevealedMnemonic] = useState(null);
+    const contentId = useId();
     const words = mnemonic.trim().split(/\s+/);
     const gridClass = variant === 'small' ? styles.gridPopup : styles.gridFull;
+    const revealed = revealedMnemonic === mnemonic;
+
     return (
-        <ol className={gridClass} aria-label="Recovery phrase">
-            {words.map((word, i) => (
-                <li key={i} className={styles.cell}>
-                    <span className={styles.index}>{i + 1}</span>
-                    <span className={styles.word}>{word}</span>
-                </li>
-            ))}
-        </ol>
+        <div className={styles.container}>
+            <div className={styles.revealAction}>
+                <Button
+                    variant={revealed ? 'ghost' : 'secondary'}
+                    size="sm"
+                    aria-controls={contentId}
+                    aria-expanded={revealed}
+                    onClick={() => setRevealedMnemonic(revealed ? null : mnemonic)}
+                >
+                    {revealed ? 'Hide recovery phrase' : 'Reveal recovery phrase'}
+                </Button>
+            </div>
+            <div id={contentId}>
+                {revealed ? (
+                    <ol
+                        className={gridClass}
+                        aria-label="Recovery phrase"
+                        onCopy={(event) => event.preventDefault()}
+                    >
+                        {words.map((word, i) => (
+                            <li key={i} className={styles.cell} aria-label={`${i + 1}. ${word}`}>
+                                <span className={styles.index} aria-hidden="true">{i + 1}.</span>
+                                <span className={styles.word} aria-hidden="true">{word}</span>
+                            </li>
+                        ))}
+                    </ol>
+                ) : (
+                    <p className={styles.concealedMessage}>
+                        Recovery phrase hidden. Make sure no one can see your screen before revealing it.
+                    </p>
+                )}
+            </div>
+        </div>
     );
 }

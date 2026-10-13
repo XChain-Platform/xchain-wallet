@@ -190,6 +190,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
+    const settings = useSettings();
+    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
+    const isSignerMode = walletMode === 'signer';
+    const isWatcherMode = walletMode === 'watcher';
+    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
+    const quickActionsReason = isDemoActive
+        ? 'Demo wallets are read-only, so actions that receive or move funds are hidden.'
+        : isWatcherMode
+            ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
+            : null;
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -312,7 +322,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
     const homeMoreActions = useMemo(() => {
         const out = [];
-        if (onSwap) {
+        if (onSwap && !isDemoActive) {
             out.push({
                 id: 'swap',
                 label: 'Swap',
@@ -321,7 +331,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             });
         }
         return out;
-    }, [onSwap, runNetworkAction]);
+    }, [isDemoActive, onSwap, runNetworkAction]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -333,6 +343,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // a wallet switch.
     const [addAddressOpen, setAddAddressOpen] = useState(false);
     const [homeReloadKey, setHomeReloadKey] = useState(0);
+    const [portfolioRefreshing, setPortfolioRefreshing] = useState(false);
+    const portfolioRefreshIdRef = useRef(0);
+    useEffect(() => {
+        portfolioRefreshIdRef.current += 1;
+        setPortfolioRefreshing(false);
+    }, [activeWalletId, activeAccountId]);
     // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -691,6 +707,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging]);
 
+    const refreshPortfolio = useCallback(async () => {
+        if (!activeWalletId || portfolioRefreshing || !isNavigatorOnline()) return;
+        const refreshId = portfolioRefreshIdRef.current + 1;
+        portfolioRefreshIdRef.current = refreshId;
+        setPortfolioRefreshing(true);
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        try {
+            await loadHomeData(activeWalletId, activeAccountId || undefined, {
+                reset: false,
+                isCancelled: () => portfolioRefreshIdRef.current !== refreshId,
+            });
+        } finally {
+            if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
+        }
+    }, [activeWalletId, activeAccountId, loadHomeData, portfolioRefreshing]);
+
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
     // `activeAccountId` is null (data layer returned no accounts for this
@@ -838,18 +871,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // local `handleLock` that used to sit here had exactly one consumer,
     // the auto-lock hook, and left with it. Do not re-add a
     // `useAutoLock` call to any route.
-    const settings = useSettings();
-    // §20 / G041: wallet-mode aware. The hook's return is the wrapper
-    // `{ settings, loading, error, refresh, update }`, so the actual
-    // Settings record lives at `.settings`. Read with the explicit
-    // default so v2 records without the field behave like 'full'.
-    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
-    const isSignerMode = walletMode === 'signer';
-    // Demo-wallet detection stays here for the proof-verification gate
-    // below (synthetic balances have no real SPV proofs). The auto-lock
-    // side of this check moved to useAutoLockPolicy with the rest.
-    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
@@ -1100,6 +1121,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
+                        onRefresh={refreshPortfolio}
+                        refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
@@ -1107,89 +1130,93 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         // Same rule as the gear: a lock button for shells with no header.
                         onLockWallet={onLockWallet}
                         actions={(
-                            <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                                <SendQuickAction
-                                    onSend={onSend}
-                                    browserOnline={browserOnline}
-                                    onOffline={() => runNetworkAction('Sending', onSend)}
-                                />
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onReceive}
-                                    disabled={!onReceive}
+                            <div>
+                                {quickActionsReason ? (
+                                    <p className={styles.quickActionsReason} id="home-quick-actions-reason">
+                                        {quickActionsReason}
+                                    </p>
+                                ) : null}
+                                <div
+                                    className={styles.quickActions}
+                                    role="group"
+                                    aria-label="Quick actions"
+                                    aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
                                 >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                                    <span>Receive</span>
-                                </button>
-                                {/* Not rendered at all when the shell wires no
-                                    handler: a build can have compiled the DEX
-                                    surface out, and a greyed-out
-                                    Exchange button still advertises an
-                                    exchange. Locked-wallet states pass a
-                                    handler and disable elsewhere. */}
-                                {onExchange ? (
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        onClick={() => runNetworkAction('Exchange', onExchange)}
-                                        aria-disabled={!browserOnline ? 'true' : undefined}
-                                        title={!browserOnline ? 'Exchange needs a network connection' : undefined}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                        <span>Exchange</span>
-                                    </button>
-                                ) : null}
-                                {/* Absent, not greyed and not empty, when the
-                                    list is empty: a "More" that opens onto
-                                    nothing is a dead control on the primary
-                                    surface. */}
-                                {/* A menu holding one entry costs a tap for
-                                    nothing, so a lone action is the button. */}
-                                {homeMoreActions.length === 1 ? (
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        onClick={homeMoreActions[0].onSelect}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
-                                        <span>{homeMoreActions[0].label}</span>
-                                    </button>
-                                ) : null}
-                                {homeMoreActions.length > 1 ? (
-                                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                                    {!isDemoActive ? (
+                                        <SendQuickAction
+                                            onSend={onSend}
+                                            browserOnline={browserOnline}
+                                            onOffline={() => runNetworkAction('Sending', onSend)}
+                                        />
+                                    ) : null}
+                                    {!isDemoActive ? (
                                         <button
                                             type="button"
                                             className={styles.quickAction}
-                                            aria-haspopup="menu"
-                                            aria-expanded={homeMoreOpen}
-                                            onClick={() => setHomeMoreOpen((o) => !o)}
+                                            onClick={onReceive}
+                                            disabled={!onReceive}
                                         >
-                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                            <span>More</span>
+                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                                            <span>Receive</span>
                                         </button>
-                                        {homeMoreOpen ? (
-                                            <div className={styles.quickActionMoreMenu} role="menu">
-                                                {homeMoreActions.map((action) => (
-                                                    <button
-                                                        key={action.id}
-                                                        type="button"
-                                                        role="menuitem"
-                                                        className={styles.quickActionMoreItem}
-                                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                                    >
-                                                        {action.icon ? (
-                                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                                {action.icon}
-                                                            </span>
-                                                        ) : null}
-                                                        <span>{action.label}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                ) : null}
+                                    ) : null}
+                                    {onExchange ? (
+                                        <button
+                                            type="button"
+                                            className={styles.quickAction}
+                                            onClick={() => runNetworkAction('Exchange', onExchange)}
+                                            aria-disabled={!browserOnline ? 'true' : undefined}
+                                            title={!browserOnline ? 'Exchange needs a network connection' : undefined}
+                                        >
+                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                                            <span>Exchange</span>
+                                        </button>
+                                    ) : null}
+                                    {homeMoreActions.length === 1 ? (
+                                        <button
+                                            type="button"
+                                            className={styles.quickAction}
+                                            onClick={homeMoreActions[0].onSelect}
+                                        >
+                                            <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
+                                            <span>{homeMoreActions[0].label}</span>
+                                        </button>
+                                    ) : null}
+                                    {homeMoreActions.length > 1 ? (
+                                        <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                                            <button
+                                                type="button"
+                                                className={styles.quickAction}
+                                                aria-haspopup="menu"
+                                                aria-expanded={homeMoreOpen}
+                                                onClick={() => setHomeMoreOpen((o) => !o)}
+                                            >
+                                                <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                                                <span>More</span>
+                                            </button>
+                                            {homeMoreOpen ? (
+                                                <div className={styles.quickActionMoreMenu} role="menu">
+                                                    {homeMoreActions.map((action) => (
+                                                        <button
+                                                            key={action.id}
+                                                            type="button"
+                                                            role="menuitem"
+                                                            className={styles.quickActionMoreItem}
+                                                            onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
+                                                        >
+                                                            {action.icon ? (
+                                                                <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                                    {action.icon}
+                                                                </span>
+                                                            ) : null}
+                                                            <span>{action.label}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
                         )}
                     />

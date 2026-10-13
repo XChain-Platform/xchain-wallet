@@ -413,7 +413,7 @@ describe('ListCreateForm checks token items before publishing', () => {
         expect(counts.textContent).toMatch(/1 invalid/);
         await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
         expect(screen.getByRole('alert').textContent).toMatch(/Not found on Dogecoin.*NOSUCHTICKQA/);
-        expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA' });
+        expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA', demo: false });
     });
 
     it('classifyTickItems and tickLookupVerdict keep the three verdicts apart', () => {

@@ -121,7 +121,7 @@ assert.ok(/useState\(initialSearchQuery/.test(histSrc),
 // --- 5. Web + extension App.jsx wire the route ---------------------------
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
-assert.ok(/from '@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(webApp),
+assert.ok(/(from |const\s+TokenDetail\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(webApp),
     'web App.jsx imports TokenDetail');
 assert.ok(/'token-detail'/.test(webApp),
     'web App.jsx adds the token-detail view literal');

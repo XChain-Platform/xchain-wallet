@@ -36,6 +36,7 @@ import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -134,7 +135,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your addresses'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
@@ -212,7 +213,7 @@ export function SignMessageForm({ walletId, onBack }) {
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
-                    : err?.message || 'Signing failed.',
+                    : readFailureMessage(err, 'sign this message'),
             );
         }
     }
@@ -222,7 +223,7 @@ export function SignMessageForm({ walletId, onBack }) {
         if (confirmAction.composing) return;
         setError(null);
         if (!chainId) { setError('Pick a chain.'); return; }
-        if (!addressId) { setError('Pick an address.'); return; }
+        if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
             setError('Message signing is not available in this app.');
@@ -399,6 +400,7 @@ export function SignMessageForm({ walletId, onBack }) {
                     chainRegistry={chainRegistry}
                     value={chainId || ''}
                     onChange={(nextChainId) => {
+                        setAddressId(null);
                         setChainId(nextChainId);
                         if (error) setError(null);
                     }}
@@ -432,8 +434,11 @@ export function SignMessageForm({ walletId, onBack }) {
                         fontSize: 'var(--xc-text-sm)',
                     }}
                 >
+                    <option value="" disabled>Pick an address</option>
                     {addressOptions.map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
+                        <option key={a.id} value={a.id}>
+                            {a.label ? `${a.label}: ` : ''}{a.address}
+                        </option>
                     ))}
                 </select>
             </div>

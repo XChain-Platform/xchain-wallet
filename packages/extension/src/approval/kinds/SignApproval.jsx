@@ -34,6 +34,7 @@ import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/sh
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
+import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
 import {
     listWallets,
     resolveApproval,
@@ -106,7 +107,7 @@ const KIND_TITLE = {
  * @param {() => void} props.onReject
  */
 export function SignApproval({ id, kind, payload, onReject }) {
-    const origin = payload?.origin || '';
+    const origin = neutralizeControlText(payload?.origin || '', { maxLength: 2048 });
     const chainId = payload?.chainId || null;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
@@ -117,6 +118,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [busy, setBusy] = useState(false);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
+    const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Sign-in signs as one address the user picks here, from the list the
@@ -161,6 +163,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // lands. Idempotent under the registry has() guard.
                 try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
+                setSettings(s || null);
                 setDeveloperMode(Boolean(s?.developerMode));
                 setWalletMode(s?.walletMode || 'full');
             })
@@ -615,13 +618,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>{title}</span>
-                    <span className={shared.origin}>{origin}</span>
                 </div>
             }
             footer={
                 <div className={shared.footer}>
                     <Button
-                        variant="ghost"
+                        variant="danger"
                         block
                         icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
@@ -653,11 +655,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
             {origin ? (
                 <section className={styles.source} aria-label="Source">
-                    <p className={styles.sourceLabel}>Verified site</p>
-                    <p className={styles.sourceOrigin}>{origin}</p>
-                    {appName ? (
-                        <p className={styles.sourceApp}>The site calls itself: {appName}</p>
-                    ) : null}
+                    <OriginIdentity
+                        origin={payload?.origin || ''}
+                        label="Requesting site"
+                        headingClassName={styles.sourceLabel}
+                        originClassName={styles.sourceOrigin}
+                        embedded
+                        as="div"
+                    >
+                        {appName ? (
+                            <p className={styles.sourceApp}>The site calls itself: {appName}</p>
+                        ) : null}
+                    </OriginIdentity>
                 </section>
             ) : null}
 
@@ -758,6 +767,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         result={previewResult}
                         loading={previewBalances.loading}
                         error={previewBalances.error}
+                        chainCoin={descriptor?.coin}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
+                        allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     />
                 </>
             ) : null}
@@ -809,7 +821,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                                 onChange={(e) => setSavePermanent(e.target.checked)}
                                 disabled={busy}
                             />
-                            <span>Always allow this on {origin}</span>
+                            <span>Always allow this site. You can revoke this in Connected sites.</span>
                         </label>
                     ) : null}
                 </form>

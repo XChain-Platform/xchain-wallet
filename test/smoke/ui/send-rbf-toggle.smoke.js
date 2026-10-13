@@ -82,11 +82,11 @@ assert.doesNotMatch(
 assert.match(sendSrc, /role="switch"/, 'toggle uses switch role');
 assert.match(sendSrc, /checked=\{rbfForSend\}/);
 assert.match(sendSrc, /disabled=\{!rbfSupported\}/, 'toggle disabled where the chain has no RBF');
-assert.match(sendSrc, /aria-label="Replace-by-fee enabled"/);
-assert.match(sendSrc, /Replace-by-fee/, 'visible label');
+assert.match(sendSrc, /aria-label=\{t\('send\.rbf\.enabledLabel'\)\}/);
+assert.match(sendSrc, /t\('send\.rbf\.label'\)/, 'visible label');
 assert.match(
     sendSrc,
-    /speeding up or cancelling/,
+    /t\('send\.rbf\.enabledHint'\)/,
     'hint copy explains why',
 );
 

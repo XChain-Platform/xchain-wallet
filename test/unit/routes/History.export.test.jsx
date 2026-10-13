@@ -73,3 +73,26 @@ describe('History export button', () => {
         expect(screen.getByText('There are no history rows to export.')).toBeInTheDocument();
     });
 });
+
+describe('History export shortcut (§34.2)', () => {
+    it('opens the export dialog on e when rows are visible', async () => {
+        mountHistory([historyRow()]);
+
+        const button = await screen.findByRole('button', { name: 'Export…' });
+        await waitFor(() => expect(button).toBeEnabled());
+        fireEvent.keyDown(document.body, { key: 'e' });
+
+        expect(await screen.findByRole('dialog', { name: 'Export history' })).toBeInTheDocument();
+        expect(screen.getByText('Fiat currency (EUR)')).toBeInTheDocument();
+    });
+
+    it('leaves the export dialog closed on e when there is no history', async () => {
+        mountHistory([]);
+
+        const button = await screen.findByRole('button', { name: 'Export…' });
+        expect(button).toBeDisabled();
+        fireEvent.keyDown(document.body, { key: 'e' });
+
+        expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();
+    });
+});

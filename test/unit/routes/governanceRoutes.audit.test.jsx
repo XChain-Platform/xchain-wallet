@@ -215,7 +215,24 @@ describe('governance route audit', () => {
         mount(GovernancePolls, {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
-        expect(await screen.findByText('No polls on this chain yet.')).toBeTruthy();
-        expect(screen.getByText('Create the first one.')).toBeTruthy();
+        expect(await screen.findByText('No polls yet')).toBeTruthy();
+        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+    });
+
+    it('retries a failed poll-list load', async () => {
+        const messaging = messagingWith({
+            governancePolls: vi.fn()
+                .mockRejectedValueOnce(new Error('Polls unavailable'))
+                .mockResolvedValueOnce([]),
+        });
+        mount(GovernancePolls, {
+            walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
+        }, messaging);
+
+        expect(await screen.findByText('Polls unavailable')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No polls yet')).toBeTruthy();
+        expect(messaging.governancePolls).toHaveBeenCalledTimes(2);
     });
 });

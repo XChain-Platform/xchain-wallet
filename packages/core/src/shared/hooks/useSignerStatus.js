@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * @typedef {'idle'|'available'|'locked'|'disconnected'|'wrong-app'|'unsupported-network'|'error'} SignerStatus
+ * @typedef {'idle'|'available'|'locked'|'disconnected'|'wrong-app'|'unsupported-network'|'cancelled'|'error'} SignerStatus
  */
 
 const FAST_INTERVAL_MS = 2000;
@@ -30,6 +30,13 @@ const STEADY_INTERVAL_MS = 10000;
 
 function isDocumentHidden() {
     return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
+function isDeviceCancellation(error) {
+    return error?.name === 'UserRejectedError'
+        || error?.reason === 'user-rejected'
+        || error?.code === 'Failure_ActionCancelled'
+        || error?.statusCode === 0x6985;
 }
 
 // Sign controls for the same signer join one status read. A later mount also
@@ -117,9 +124,10 @@ export function useSignerStatus({ getStatus, chainId }) {
             setDetail(d);
         } catch (err) {
             if (!aliveRef.current) return;
-            statusRef.current = 'disconnected';
-            setStatus('disconnected');
-            setDetail(err && err.message ? String(err.message) : null);
+            const cancelled = isDeviceCancellation(err);
+            statusRef.current = cancelled ? 'cancelled' : 'disconnected';
+            setStatus(cancelled ? 'cancelled' : 'disconnected');
+            setDetail(cancelled ? null : (err && err.message ? String(err.message) : null));
         }
     }, [getStatus, chainId]);
 

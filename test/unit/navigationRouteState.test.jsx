@@ -14,6 +14,7 @@ import {
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListDetail } from '../../packages/core/src/shared/routes/ListDetail.jsx';
 import { MarketView } from '../../packages/core/src/shared/routes/MarketView.jsx';
+import { MyOrdersView } from '../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { TokenDetail } from '../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { PageHeader } from '../../packages/core/src/ui/PageHeader.jsx';
@@ -137,7 +138,7 @@ describe('contextual route state', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('List not found.')).toBeInTheDocument();
+        expect(await screen.findByText('List not found')).toBeInTheDocument();
         expect(screen.queryByText('Loading…')).toBeNull();
     });
 
@@ -176,5 +177,20 @@ describe('contextual route state', () => {
             </MessagingProvider>,
         );
         expect(await screen.findByText('Market not found')).toBeInTheDocument();
+    });
+
+    it('renders the orders empty state when a deep orders destination no longer exists', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            listAutopayOrders: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MyOrdersView walletId={WALLET} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(screen.getByText(/orders you place on the DEX/i)).toBeInTheDocument();
     });
 });

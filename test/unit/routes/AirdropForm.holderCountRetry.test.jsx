@@ -191,6 +191,60 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         expect(holders.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
+    it('offers a manual retry after both automatic attempts fail', async () => {
+        let calls = 0;
+        const holders = mountAirdrop(async () => {
+            calls += 1;
+            if (calls <= 2) throw new Error('temporary outage');
+            return { tick: LISTED, total: 3, data: [{ address: 'one-page-row' }] };
+        });
+
+        await listOneTick();
+        const retry = await screen.findByRole(
+            'button',
+            { name: 'Retry holder counts' },
+            { timeout: 8000 },
+        );
+        fireEvent.click(retry);
+
+        await waitFor(() => {
+            expect(preview()?.textContent).toMatch(/~3 holders right now/);
+        }, { timeout: 4000 });
+        expect(holders).toHaveBeenCalledTimes(3);
+    });
+
+    it('uses the full paginated total and keeps a huge count exact', async () => {
+        mountAirdrop(async () => ({
+            tick: LISTED,
+            total: '9007199254740993',
+            data: [{ address: 'first-page-row' }],
+        }));
+
+        await listOneTick();
+
+        await waitFor(() => {
+            expect(preview()?.textContent).toMatch(/~9,007,199,254,740,993 holders right now/);
+        }, { timeout: 3000 });
+    });
+
+    it('reports an empty holder set as zero rather than unknown', async () => {
+        mountAirdrop(async () => ({ tick: LISTED, total: 0, data: [] }));
+
+        await listOneTick();
+
+        await waitFor(() => {
+            expect(preview()?.textContent).toMatch(/~0 holders right now/);
+        }, { timeout: 3000 });
+        expect(screen.queryByText(/holder counts unavailable/i)).toBeNull();
+
+        fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), {
+            target: { value: '1' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review recipients' }));
+        await screen.findByRole('form', { name: 'Review recipient list' });
+        expect(document.body.textContent).toMatch(/~0 HDR550816/);
+    });
+
     it('lists the token and reason for every failed lookup in a partial preview', async () => {
         const holders = mountAirdrop(async ({ tick }) => {
             if (tick === OTHER) throw new Error('Explorer has no route for this token');
@@ -209,6 +263,8 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         expect(screen.getByText(OTHER)).toBeTruthy();
         expect(screen.getByText(/Explorer has no route for this token/)).toBeTruthy();
         expect(holders.mock.calls.filter(([arg]) => arg.tick === OTHER)).toHaveLength(2);
+        const max = screen.queryByRole('button', { name: /max available/i });
+        expect(max === null || max.disabled).toBe(true);
     });
 
     it('asks exactly once and reports the count when the venue answers first time', async () => {
@@ -242,7 +298,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         }), { timeout: 3000 });
         expect(holders.mock.calls.some(([arg]) => arg.tick === 'A..B')).toBe(false);
         expect(screen.getByText(/These don't look like token names: A\.\.B/)).toBeTruthy();
-        expect(ticks).toHaveAttribute('autocapitalize', 'none');
+        expect(ticks).toHaveAttribute('autocapitalize', 'off');
     });
 
     it('keeps a symbol ticker spelling selected for the holder list', async () => {
@@ -250,7 +306,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         const mode = await screen.findByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByLabelText('Open MiXeD! details'));
+        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });

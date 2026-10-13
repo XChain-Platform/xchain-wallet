@@ -102,6 +102,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: BTC,
             tick: 'DOGE:PEPE',
+            demo: false,
         }));
         expect(screen.queryByLabelText('Coin for DOGE:PEPE')).not.toBeInTheDocument();
     });
@@ -122,6 +123,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: DOGE,
             tick: 'PEPE',
+            demo: false,
         }));
         expect(await screen.findByText(/Not found on Dogecoin: PEPE\./)).toBeInTheDocument();
 
@@ -140,7 +142,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         await waitFor(() => expect(messaging.isListTickCoinActive).toHaveBeenCalledTimes(1));
 
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByLabelText('Open PEPE details'));
+        fireEvent.click(await screen.findByLabelText(/^Select PEPE\b/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('DOGE:PEPE');
     });

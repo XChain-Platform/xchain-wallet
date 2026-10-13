@@ -51,7 +51,12 @@ describe('History usability', () => {
         ));
 
         expect(screen.getByText(expected)).toBeInTheDocument();
-        expect(screen.queryByText(/ UTC$/)).toBeNull();
+        // On a host whose local zone is UTC the local rendering legitimately
+        // ends in UTC, so the absence check only means something elsewhere.
+        const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (localZone !== 'UTC' && localZone !== 'Etc/UTC') {
+            expect(screen.queryByText(/ UTC$/)).toBeNull();
+        }
     });
 
     it('opens the selected row', () => {
@@ -81,6 +86,34 @@ describe('History usability', () => {
         fireEvent.click(screen.getByRole('button', { name: /Send.*Confirmed/i }));
 
         expect(onClick).toHaveBeenCalledOnce();
+    });
+
+    it('labels a history address row with its chain and non-mainnet kind', () => {
+        render(provider(
+            {},
+            <ul>
+                <EntryRow
+                    entry={{
+                        key: 'litecoin-regtest:12',
+                        action: 'SEND',
+                        actionIndex: '12',
+                        blockIndex: 100,
+                        chainId: 'litecoin-regtest',
+                        source: 'rltc1qsource',
+                        raw: {},
+                    }}
+                    selected={false}
+                    showConnector={false}
+                    onClick={() => {}}
+                    peerCache={{}}
+                    walletId="wallet-a"
+                />
+            </ul>,
+        ));
+
+        const row = screen.getByRole('button', { name: /Send.*Confirmed/i });
+        expect(row).toHaveTextContent(/Litecoin\s+regtest/i);
+        expect(row).toHaveTextContent('rltc1qsource');
     });
 
     it('caps a large recipient preview without creating a nested scroll area', async () => {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -88,13 +88,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         .flatMap(([cid, v]) => (v.rows || []).map((row) => ({ chainId: cid, row }))), [rowsByChain]);
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
 
-    function handleSearch(event) {
-        event.preventDefault();
+    function runSearch() {
         const q = query.trim();
         if (!q) return;
+        const mode = searchMode;
         const requestId = searchRequestId.current + 1;
         searchRequestId.current = requestId;
-        const tokenError = searchMode === 'token'
+        const tokenError = mode === 'token'
             ? tickerReferenceError(q, { noun: 'Token search', allowRef: true })
             : null;
         if (tokenError) {
@@ -105,7 +105,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         }
         setSearching(true);
         setLastQueried(q);
-        setLastSearchMode(searchMode);
+        setLastSearchMode(mode);
         setRowsByChain({});
 
         const targetChains = chainFilter === 'all' ? chains : [chainFilter];
@@ -115,7 +115,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             setLastQueried(q);
             return;
         }
-        const fetchOne = searchMode === 'token'
+        const fetchOne = mode === 'token'
             ? (cid) => messaging.getDispensersForToken({
                 chainId: cid,
                 token: q,
@@ -132,7 +132,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                 .then((resp) => {
                     const rawRows = extractRows(resp).filter((row) => isOpenDispenserSelling(
                         row,
-                        searchMode === 'token' ? q : '',
+                        mode === 'token' ? q : '',
                     ));
                     const page = explorerPage(resp, rawRows, 1, RESULTS_PAGE_SIZE);
                     return {
@@ -175,6 +175,22 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             setRowsByChain(next);
             setSearching(false);
         });
+    }
+
+    function handleSearch(event) {
+        event.preventDefault();
+        runSearch();
+    }
+
+    function resetFilters() {
+        searchRequestId.current += 1;
+        setSearchMode('token');
+        setQuery('');
+        setChainFilter('all');
+        setSearching(false);
+        setRowsByChain({});
+        setLastQueried(null);
+        setLastSearchMode('token');
     }
 
     function handleLoadMore(cid) {
@@ -323,6 +339,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     onOpenDispenser={onOpenDispenser}
                     oracleFeedsFor={oracleFeedsFor}
                     onLoadMore={handleLoadMore}
+                    onRetry={runSearch}
+                    onReset={resetFilters}
                 />
             ) : (
                 <p className={styles.entryDescription}>
@@ -335,9 +353,13 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     );
 }
 
-function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, onLoadMore }) {
+function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, onLoadMore, onRetry, onReset }) {
     if (searching) {
-        return <p className={styles.entryDescription}>Searching…</p>;
+        return (
+            <div role="status" aria-label="Searching dispensers">
+                <Skeleton.List rows={4} />
+            </div>
+        );
     }
     const entries = Object.entries(rowsByChain);
     if (entries.length === 0) {
@@ -362,7 +384,14 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
     // The raw-404 complaint only ever became visible because ONE chain
     // happened to return rows; the total-failure case was silently worse.
     if (!anyRow && !anyError) {
-        return <EmptyState title="No matching dispensers" body="Try a different ticker or address." />;
+        return (
+            <EmptyState
+                title="No matching dispensers"
+                body="Try a different ticker or address."
+                actionLabel="Reset filters"
+                onAction={onReset}
+            />
+        );
     }
     return (
         <>
@@ -386,7 +415,11 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                             )}
                         />
                         {state.error ? (
-                            <StatusMessage variant="error" className={styles.entryDescription}>
+                            <StatusMessage
+                                variant="error"
+                                className={styles.entryDescription}
+                                recovery={{ label: 'Try again', onAction: onRetry }}
+                            >
                                 Couldn't search: {state.error}
                             </StatusMessage>
                         ) : (
@@ -400,7 +433,11 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                                     />
                                 ))}
                                 {state.moreError ? (
-                                    <StatusMessage variant="error" className={styles.entryDescription}>
+                                    <StatusMessage
+                                        variant="error"
+                                        className={styles.entryDescription}
+                                        recovery={{ label: 'Try again', onAction: () => onLoadMore(cid) }}
+                                    >
                                         Couldn't load more: {state.moreError}
                                     </StatusMessage>
                                 ) : null}

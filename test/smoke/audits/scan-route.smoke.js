@@ -29,6 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -87,6 +88,7 @@ const SCAN_KEYS = [
     'scan.classifyPaste',
     'scan.error.pasteEmpty',
     'scan.error.unknownXchainIntent',
+    'scan.error.paymentRequest',
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
@@ -142,7 +144,7 @@ const leftNavSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/scan:\s*\[[^\]]*'scan'[^\]]*'sign-psbt'[^\]]*\]/.test(leftNavSrc),
+assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
     /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
@@ -159,7 +161,7 @@ const shells = [
 
 for (const shell of shells) {
     const src = readFileSync(join(wsRoot, ...shell.path), 'utf8');
-    assert.ok(/ScanRoute.*from '@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
+    assert.ok(/(ScanRoute.*from |const\s+ScanRoute\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
         `${shell.name} App.jsx imports ScanRoute`);
     assert.ok(/unlockedView === 'scan' && activeWalletId/.test(src),
         `${shell.name} App.jsx ships a 'scan' top-level view guarded on activeWalletId`);

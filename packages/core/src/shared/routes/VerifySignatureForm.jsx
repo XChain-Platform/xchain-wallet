@@ -72,7 +72,7 @@ export function VerifySignatureForm({ onBack }) {
     const [message, setMessage] = useState('');
     const [signature, setSignature] = useState('');
     const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid'} */ (null));
+    const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid' | 'malformed'} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     async function handleSubmit(event) {
@@ -85,7 +85,7 @@ export function VerifySignatureForm({ onBack }) {
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
         const normalizedSignature = normalizeSignatureInput(signature);
-        if (!normalizedSignature) { setError('Enter a valid base64 signature.'); return; }
+        if (!normalizedSignature) { setResult('malformed'); return; }
         if (typeof messaging.verifyMessageRequest !== 'function') {
             setError('Signature verification is not available in this app.');
             return;
@@ -134,9 +134,9 @@ export function VerifySignatureForm({ onBack }) {
                         fontWeight: 600,
                     }}
                 >
-                    {result === 'valid'
-                        ? 'Signature matches this message and address.'
-                        : 'Signature does not match this message and address.'}
+                    {result === 'valid' ? 'Valid signature. Signature matches this message and address.' : null}
+                    {result === 'invalid' ? 'Invalid signature. Signature does not match this message and address.' : null}
+                    {result === 'malformed' ? 'Malformed signature. Enter a base64-encoded signature.' : null}
                 </div>
             ) : null}
         </>

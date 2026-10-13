@@ -8,19 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Android Back key left the wallet from every inner screen (LG K51,
-// 2026-10-12), because a view-state SPA never grows the session history a
-// Back press walks. These guards pin the one invariant that fixes it: a
-// sentinel history entry is on top if and only if some screen has a back
-// action, and popping it runs that screen's own back action.
+// Browser Back follows route history while Android Back directly dispatches
+// through the same overlay and route handlers as the visible controls.
 
+import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen, act } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
-import { registerBackHandler, resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
+import {
+    registerBackHandler,
+    resetBackStackForTests,
+    setRouteHistoryManaged,
+} from '../../../packages/core/src/ui/backStack.js';
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 const armed = () => Boolean(window.history.state && window.history.state.xcBack);
+let nativeBack;
+let capacitorApp;
 /** A system Back press: pop one history entry and let popstate land. */
 async function pressBack() {
     window.history.back();
@@ -30,16 +34,85 @@ async function pressBack() {
 beforeEach(() => {
     resetBackStackForTests();
     window.history.replaceState(null, '');
+    capacitorApp = {
+        addListener: vi.fn((event, listener) => {
+            expect(event).toBe('backButton');
+            nativeBack = listener;
+            return { remove: vi.fn() };
+        }),
+        minimizeApp: vi.fn().mockResolvedValue(undefined),
+    };
+    globalThis.Capacitor = { Plugins: { App: capacitorApp } };
 });
 
 afterEach(async () => {
     cleanup();
     await settle();
     resetBackStackForTests();
+    delete globalThis.Capacitor;
     vi.restoreAllMocks();
 });
 
+function ConfirmStep() {
+    const [draft, setDraft] = useState('12.50');
+    const [confirming, setConfirming] = useState(false);
+    return (
+        <>
+            <PageHeader
+                title={confirming ? 'Confirm send' : 'Send'}
+                onBack={() => setConfirming(false)}
+            />
+            {confirming ? (
+                <output>Confirm {draft}</output>
+            ) : (
+                <>
+                    <input aria-label="Amount" value={draft} onChange={(event) => setDraft(event.target.value)} />
+                    <button type="button" onClick={() => setConfirming(true)}>Review</button>
+                </>
+            )}
+        </>
+    );
+}
+
 describe('back stack', () => {
+    it('minimizes through the Capacitor App plugin on a root screen', async () => {
+        render(<PageHeader title="Home" />);
+        await settle();
+        expect(capacitorApp.addListener).toHaveBeenCalledTimes(1);
+
+        nativeBack({ canGoBack: false });
+
+        expect(capacitorApp.minimizeApp).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves a confirm step draft when native Back returns to its form', async () => {
+        setRouteHistoryManaged(true);
+        const historyBack = vi.spyOn(window.history, 'back');
+        render(<ConfirmStep />);
+        fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '21.75' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.getByText('Confirm 21.75')).toBeInTheDocument();
+
+        act(() => nativeBack({ canGoBack: true }));
+
+        expect(screen.getByLabelText('Amount')).toHaveValue('21.75');
+        expect(historyBack).not.toHaveBeenCalled();
+    });
+
+    it('dispatches native Back to the newest overlay before the route', async () => {
+        const route = vi.fn();
+        const overlay = vi.fn();
+        const offRoute = registerBackHandler(route, 'route');
+        const offOverlay = registerBackHandler(overlay, 'overlay');
+
+        nativeBack({ canGoBack: true });
+
+        expect(overlay).toHaveBeenCalledTimes(1);
+        expect(route).not.toHaveBeenCalled();
+        offOverlay();
+        offRoute();
+    });
+
     it('leaves the history alone while nothing can go back', async () => {
         const push = vi.spyOn(window.history, 'pushState');
         render(<PageHeader title="Home" />);
@@ -135,5 +208,33 @@ describe('back stack', () => {
         await pressBack();
         expect(under).toHaveBeenCalledTimes(1);
         offUnder();
+    });
+
+    it('sends Escape only to the top overlay', () => {
+        const under = vi.fn();
+        const over = vi.fn();
+        const offUnder = registerBackHandler(under);
+        const offOver = registerBackHandler(over);
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(over).toHaveBeenCalledTimes(1);
+        expect(under).not.toHaveBeenCalled();
+
+        offOver();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(under).toHaveBeenCalledTimes(1);
+        offUnder();
+    });
+
+    it('does not turn Escape into route navigation', () => {
+        const overlayBack = vi.fn();
+        const routeBack = vi.fn();
+        const unregisterOverlay = registerBackHandler(overlayBack);
+        const unregister = registerBackHandler(routeBack, 'route');
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(overlayBack).toHaveBeenCalledTimes(1);
+        expect(routeBack).not.toHaveBeenCalled();
+        unregister();
+        unregisterOverlay();
     });
 });
