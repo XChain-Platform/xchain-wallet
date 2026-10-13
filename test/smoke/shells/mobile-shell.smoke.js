@@ -1037,6 +1037,16 @@ assert.equal(
     false,
     'no WebView debugging in the shipped app',
 );
+// Capacitor's debug-build logging writes every plugin call's arguments to
+// logcat, and the argon2id and biometricEnroll calls carry the wallet
+// password: a debug build then left it readable to anyone with USB
+// debugging (seen on an LG K51, 2026-10-12). Android logs nothing from the
+// bridge in any build; iOS keeps its debug-only console (ios-console.sh).
+assert.equal(
+    capConfig.android?.loggingBehavior,
+    'none',
+    'no Capacitor bridge logging on Android: plugin arguments include the wallet password',
+);
 
 // Screenshot protection: the switch is native, the policy is in core, and
 // every screen that shows or accepts key material asks for it.
