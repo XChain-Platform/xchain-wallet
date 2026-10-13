@@ -79,8 +79,8 @@ export function DemoBanner({ activeWalletId, onExited }) {
             if (reloaded) return;
             setConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
-        } catch (err) {
-            setError(err?.message || 'Could not exit demo mode.');
+        } catch {
+            setError('Could not exit demo mode. Please try again.');
         } finally {
             setBusy(false);
         }

@@ -99,7 +99,7 @@ export function HwSignBlock({
                 <div className={styles.statusRow} data-status={status} role="status">
                     <span className={styles.statusDot} aria-hidden="true" />
                     <span className={styles.statusText}>
-                        {statusCopy(status, signerKind, chainId, detail)}
+                        {statusCopy(status, signerKind, chainId)}
                     </span>
                     {status !== 'available' ? (
                         <button
@@ -120,7 +120,6 @@ export function HwSignBlock({
  * @param {string} status
  * @param {'trezor'|'ledger'} signerKind
  * @param {string | undefined} chainId
- * @param {string | null} detail
  */
 export function statusCopy(status, signerKind, chainId, detail) {
     switch (status) {
@@ -136,8 +135,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
                 : 'Device is locked. Unlock it and try again.';
         case 'disconnected':
             return detail
-                ? `Device not detected. ${userFacingMessage(detail, 'Plug in and unlock, then try again.')}`
-                : 'Device not detected. Plug in and unlock.';
+                ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
+                : 'Device not detected. Check its connection, unlock it, and try again.';
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HwSignBlock } from '../../../packages/core/src/shared/components/HwSignBlock.jsx';
@@ -44,5 +44,32 @@ describe('HwSignBlock device instructions', () => {
             'Signing was cancelled on your device. Nothing was signed.',
         );
         expect(screen.queryByText(/Device not detected/i)).not.toBeInTheDocument();
+    });
+
+    it('hides transport errors and lets the user retry the status check', async () => {
+        const transport = vi.fn()
+            .mockRejectedValueOnce(new Error('usb://ledger-7 transport exploded'))
+            .mockResolvedValueOnce({ status: 'available' });
+        const { container } = render(<HwSignBlock {...baseProps} getStatus={transport} />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-status="disconnected"]')).toBeTruthy();
+        });
+        expect(screen.getByRole('status')).toHaveTextContent(
+            'Device not detected. Check its connection, unlock it, and try again.',
+        );
+        expect(screen.getByRole('status')).not.toHaveTextContent('usb://ledger-7');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await waitFor(() => {
+            expect(container.querySelector('[data-status="available"]')).toBeTruthy();
+        });
+        expect(transport).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the async status area empty when no status reader is available', () => {
+        const { container } = render(<HwSignBlock {...baseProps} getStatus={null} />);
+
+        expect(container.querySelector('[data-status]')).toBeNull();
     });
 });

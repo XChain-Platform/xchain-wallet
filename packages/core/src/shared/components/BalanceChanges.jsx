@@ -88,13 +88,11 @@ export function BalanceChanges({
     }
 
     if (error) {
-        // Plain copy only; the raw simulation error string stays in the
-        // hover title (unpredictable backend text does not belong in copy).
         return (
             <section className={styles.root} data-state="error">
                 <h3 className={styles.heading}>{title}</h3>
-                <p className={styles.error} title={String(error)}>
-                    (preview unavailable; we couldn’t estimate this transaction’s effect)
+                <p className={styles.error}>
+                    We couldn’t estimate this transaction’s effect (preview unavailable).
                 </p>
             </section>
         );
