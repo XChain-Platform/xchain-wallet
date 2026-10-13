@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { userEvent } from '../../helpers/userEvent.js';
 import {
@@ -56,30 +56,38 @@ afterEach(async () => {
 });
 
 describe('settings form validation', () => {
-    it('opens and saves the custom currency field with Enter', async () => {
-        const user = userEvent.setup();
+    it('searches supported currencies by code and name, shows symbols, and saves the choice', () => {
         render(<LanguageRegionSection />);
-        fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
+        const picker = screen.getByLabelText('Fiat currency');
 
-        const input = screen.getByLabelText('Custom currency code');
-        fireEvent.change(input, { target: { value: 'nzd' } });
-        input.focus();
-        await user.keyboard('{Enter}');
+        fireEvent.focus(picker);
+        fireEvent.change(picker, { target: { value: 'yen' } });
+        expect(screen.getByRole('option', { name: /Japanese Yen \(JPY\).*¥/ })).toBeTruthy();
+        expect(screen.queryByRole('option', { name: /US Dollar/ })).toBeNull();
 
-        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'NZD' });
+        fireEvent.change(picker, { target: { value: 'EUR' } });
+        const euro = screen.getByRole('option', { name: /Euro \(EUR\).*€/ });
+        fireEvent.click(euro);
+
+        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'EUR' });
+
+        fireEvent.focus(picker);
+        fireEvent.change(picker, { target: { value: 'XYZ' } });
+        expect(within(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .queryAllByRole('option')).toHaveLength(0);
+        expect(screen.getByText('No supported currencies match.')).toBeTruthy();
     });
 
-    it('rejects malformed custom currency codes submitted with Enter', async () => {
+    it('saves the single matching supported currency with Enter', async () => {
         const user = userEvent.setup();
         render(<LanguageRegionSection />);
-        fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
-        const input = screen.getByLabelText('Custom currency code');
-        fireEvent.change(input, { target: { value: 'US' } });
-        input.focus();
+        const picker = screen.getByLabelText('Fiat currency');
+
+        picker.focus();
+        fireEvent.change(picker, { target: { value: 'JPY' } });
         await user.keyboard('{Enter}');
 
-        expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/three-letter ISO currency code/)).toBeTruthy();
+        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'JPY' });
     });
 
     it('does not turn an empty test-send threshold into zero', () => {
