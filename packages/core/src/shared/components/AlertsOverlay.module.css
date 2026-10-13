@@ -19,7 +19,7 @@
     color: var(--xc-text);
     display: flex;
     flex-direction: column;
-    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--xc-shadow-side-panel);
     animation: slideIn 160ms ease-out;
 }
 
@@ -58,7 +58,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     padding: 1px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     text-transform: none;
     letter-spacing: 0;
 }
@@ -116,7 +116,7 @@
 .alert {
     background: var(--xc-bg-muted);
     border-inline-start: 4px solid var(--xc-text-muted);
-    border-radius: 8px;
+    border-radius: var(--xc-radius-md);
     padding: var(--xc-space-3);
     display: flex;
     flex-direction: column;

@@ -12,7 +12,7 @@
     min-height: 24px;
     padding: 2px 7px;
     border: 1px solid var(--xc-border-strong);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     color: var(--xc-text-muted);
     background: var(--xc-surface);
     font-size: var(--xc-text-xs);
@@ -39,7 +39,7 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border-strong);
-    border-radius: 8px;
+    border-radius: var(--xc-radius-md);
     width: 38px;
     height: 38px;
     display: inline-flex;
@@ -73,7 +73,7 @@
     height: 8px;
     border-radius: 50%;
     background: var(--xc-accent-primary);
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
 }
 
 /* ───── Popover ───── */
@@ -87,8 +87,8 @@
     max-width: calc(100vw - 24px);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-popover);
     padding: var(--xc-space-2);
     display: flex;
     flex-direction: column;
@@ -150,7 +150,7 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border);
-    border-radius: 8px;
+    border-radius: var(--xc-radius-md);
     width: 100%;
     display: flex;
     align-items: center;

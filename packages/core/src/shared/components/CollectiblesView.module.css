@@ -56,7 +56,7 @@
 
 .cardPinned {
     border-color: var(--xc-accent-primary, var(--xc-border-strong));
-    box-shadow: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+    box-shadow: var(--xc-shadow-accent-ring);
 }
 
 .cardHidden {
@@ -101,7 +101,7 @@
     border-radius: 50%;
     /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
 }
 
