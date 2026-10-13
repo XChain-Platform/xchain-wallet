@@ -95,7 +95,7 @@ describe('AlertsOverlay', () => {
 
     it('keeps mobile actions above the safe area and removes entrance motion on request', () => {
         expect(overlayCss).toMatch(
-            /padding-bottom:\s*calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, 0px\)\)/,
+            /padding-bottom:\s*calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, 0\)\)/,
         );
         expect(overlayCss).toMatch(
             /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.panel\s*\{\s*animation:\s*none/,
