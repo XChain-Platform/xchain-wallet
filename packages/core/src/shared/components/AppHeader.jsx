@@ -145,6 +145,7 @@ export function AppHeader({
                         onClick={onMenuOpen}
                         aria-label="Open menu"
                         aria-haspopup="dialog"
+                        title="Open menu"
                     >
                         <Icon.MenuIcon />
                     </button>
