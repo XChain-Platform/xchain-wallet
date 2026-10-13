@@ -15,7 +15,7 @@
 // destination (Decentralized Exchange, Marketplace, ...). Reuses
 // AlertsOverlay.module.css for the alert-row styling.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
@@ -33,18 +33,35 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const variant = screenVariantFor(shell);
     const header = <PageHeader onBack={onBack} title="Alerts" />;
     const sourceAlerts = Array.isArray(alerts) ? alerts : [];
+    const emptyStateRef = useRef(null);
+    const [pendingFocus, setPendingFocus] = useState(null);
     const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
     const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alertVersion(alert)));
     const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
+
+    useEffect(() => {
+        setCenterState(readAlertCenter(walletId));
+    }, [walletId]);
+
+    // Focus follows the control the user just removed, so keyboard users are not dropped to the page top.
+    useEffect(() => {
+        if (!pendingFocus) return;
+        const target = pendingFocus === 'empty'
+            ? emptyStateRef.current
+            : document.querySelector(`[data-alert-focus="${pendingFocus}"]`);
+        target?.focus();
+        setPendingFocus(null);
+    }, [centerState, pendingFocus]);
 
     const commitState = (next) => {
         writeAlertCenter(walletId, next);
         setCenterState(next);
     };
 
-    const markRead = (alert) => {
+    const markRead = (alert, restoreFocus = false) => {
         const key = alertVersion(alert);
         if (centerState.read.has(key)) return;
+        if (restoreFocus) setPendingFocus(alert.action ? `open-${alert.id}` : 'clear');
         commitState({
             ...centerState,
             read: new Set([...centerState.read, key]),
@@ -66,13 +83,16 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                 size="sm"
                 icon={null}
                 disabled={unreadAlerts.length === 0}
-                onClick={() => commitState({
-                    ...centerState,
-                    read: new Set([
-                        ...centerState.read,
-                        ...visibleAlerts.map(alertVersion),
-                    ]),
-                })}
+                onClick={() => {
+                    setPendingFocus('clear');
+                    commitState({
+                        ...centerState,
+                        read: new Set([
+                            ...centerState.read,
+                            ...visibleAlerts.map(alertVersion),
+                        ]),
+                    });
+                }}
             >
                 Mark all read
             </Button>
@@ -80,13 +100,17 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                 variant="ghost"
                 size="sm"
                 icon={null}
-                onClick={() => commitState({
-                    ...centerState,
-                    cleared: new Set([
-                        ...centerState.cleared,
-                        ...visibleAlerts.map(alertVersion),
-                    ]),
-                })}
+                data-alert-focus="clear"
+                onClick={() => {
+                    setPendingFocus('empty');
+                    commitState({
+                        ...centerState,
+                        cleared: new Set([
+                            ...centerState.cleared,
+                            ...visibleAlerts.map(alertVersion),
+                        ]),
+                    });
+                }}
             >
                 Clear alerts
             </Button>
@@ -97,7 +121,13 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
         <Screen variant={variant} header={header}>
             <ListPage toolbar={toolbar}>
                 {visibleAlerts.length === 0 ? (
-                    <EmptyState title="No alerts" body="You're all caught up." />
+                    <div
+                        ref={emptyStateRef}
+                        tabIndex={-1}
+                        aria-label="No alerts. You're all caught up."
+                    >
+                        <EmptyState title="No alerts" body="You're all caught up." />
+                    </div>
                 ) : (
                     /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
@@ -121,6 +151,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                             variant="primary"
                                             size="sm"
                                             icon={null}
+                                            data-alert-focus={`open-${a.id}`}
                                             onClick={() => openAlert(a)}
                                             style={{ alignSelf: 'flex-start' }}
                                         >
@@ -133,7 +164,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                             size="sm"
                                             icon={null}
                                             aria-label={`Mark ${a.title} read`}
-                                            onClick={() => markRead(a)}
+                                            onClick={() => markRead(a, true)}
                                             style={{ alignSelf: 'flex-start' }}
                                         >
                                             Mark read

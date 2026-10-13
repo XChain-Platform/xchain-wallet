@@ -10,7 +10,8 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 let messaging = {};
@@ -135,6 +136,82 @@ describe('AlertsRoute alert list', () => {
 
         expect(onSelect).toHaveBeenCalledTimes(1);
         expect(within(plainItem).queryByRole('button', { name: 'Review' })).toBeNull();
+    });
+
+    it('opens every alert, marks read, and clears with only the keyboard', async () => {
+        const user = userEvent.setup();
+        const firstAction = vi.fn();
+        const secondAction = vi.fn();
+        mount({
+            walletId: 'wallet-1',
+            alerts: [
+                {
+                    id: 'one',
+                    severity: 'warning',
+                    title: 'First alert',
+                    message: 'First message',
+                    action: { label: 'Open first', onSelect: firstAction },
+                },
+                {
+                    id: 'two',
+                    severity: 'info',
+                    title: 'Second alert',
+                    message: 'Second message',
+                    action: { label: 'Open second', onSelect: secondAction },
+                },
+            ],
+        });
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Mark all read' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Clear alerts' })).toHaveFocus());
+        expect(screen.getByText('0 unread')).toBeInTheDocument();
+        expect(screen.getAllByText('Read')).toHaveLength(2);
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open first' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(firstAction).toHaveBeenCalledOnce();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open second' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(secondAction).toHaveBeenCalledOnce();
+
+        await user.tab({ shift: true });
+        await user.tab({ shift: true });
+        expect(screen.getByRole('button', { name: 'Clear alerts' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+
+        const clearedState = screen.getByLabelText("No alerts. You're all caught up.");
+        await waitFor(() => expect(clearedState).toHaveFocus());
+        expect(screen.queryByRole('list')).toBeNull();
+    });
+
+    it('returns focus to the alert action when marking only that alert read', async () => {
+        const user = userEvent.setup();
+        mount({ alerts: [{
+            id: 'message',
+            severity: 'info',
+            title: 'Unread message',
+            message: 'Review the conversation.',
+            action: { label: 'Open Messaging', onSelect: vi.fn() },
+        }] });
+
+        await user.tab();
+        await user.tab();
+        await user.tab();
+        await user.tab();
+        await user.tab();
+        const markRead = screen.getByRole('button', { name: 'Mark Unread message read' });
+        expect(markRead).toHaveFocus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Open Messaging' })).toHaveFocus());
+        expect(markRead).not.toBeInTheDocument();
     });
 
     it('counts only unread list rows and can mark one or every alert read', () => {
