@@ -244,8 +244,13 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
+    // The asset-kind tabs are the kit Tabs, so the tab stop is declared once
+    // in Tabs.jsx and the route renders no tab buttons of its own.
     it('declares one tab stop for each asset-kind tab', () => {
-        const kindTab = tokenPickerSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
+        const tabsSource = readFileSync(join(process.cwd(), 'packages/core/src/ui/Tabs.jsx'), 'utf8');
+        expect(tokenPickerSource).toMatch(/<Tabs\b/);
+        expect(tokenPickerSource).not.toMatch(/role="tab"/);
+        const kindTab = tabsSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
         expect(kindTab.match(/\btabIndex=/g)).toHaveLength(1);
     });
 

@@ -225,7 +225,8 @@ describe('320x568 modal layout contracts', () => {
 
         expect(sidePanel).toContain('data-xc-extension-surface="sidepanel"');
         expect(sidePanel).toContain('href="./src/popup/popup.css"');
-        expect(extensionCss).toMatch(/html\s*\{[^}]*width:\s*min\(360px,\s*100vw\)/s);
+        // The 360px cap belongs to the toolbar popup only; main.jsx tags that html.
+        expect(extensionCss).toMatch(/html\.xchain-toolbar-popup\s*\{[^}]*width:\s*min\(360px,\s*100vw\)/s);
         expect(extensionCss).toMatch(/html\[data-xc-extension-surface='sidepanel'\]\s*\{[^}]*width:\s*100%/s);
         expect(extensionCss).toMatch(/body,\s*#xchain-popup-root\s*\{[^}]*max-width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden/s);
     });

@@ -93,7 +93,9 @@ describe('Home honours the host active wallet', () => {
         await act(async () => { finishBalances({}); });
 
         const walletTabs = await screen.findByRole('tablist', { name: 'Wallet view' });
-        expect(walletTabs.parentElement.previousElementSibling).toBe(slotAnchor);
+        // The balance surface takes the skeleton's slot: the element right
+        // after the same anchor now holds the wallet tabs.
+        expect(slotAnchor.nextElementSibling).toContainElement(walletTabs);
         expect(screen.queryByRole('status', { name: /loading balances/i })).toBeNull();
     });
 
