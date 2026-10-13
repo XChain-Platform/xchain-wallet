@@ -77,6 +77,10 @@ class MainViewController: CAPBridgeViewController {
         // handler as the visible Back control instead.
         webView?.allowsBackForwardNavigationGestures = false
 
+        // The fixed shell does not rubber-band; route-owned scrollers still
+        // handle long content and keyboard-focused fields.
+        webView?.scrollView.bounces = false
+
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
     }

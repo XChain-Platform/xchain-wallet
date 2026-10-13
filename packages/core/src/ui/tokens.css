@@ -498,6 +498,9 @@ body {
     color: var(--xc-text);
     background: var(--xc-bg);
     -webkit-font-smoothing: antialiased;
+    /* Rotation must not inflate text independently of the responsive layout. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 
     /* Keep the app out from under the hardware. On an iPhone with a Dynamic
      * Island or a notch, the WebView is laid out edge to edge, so without this

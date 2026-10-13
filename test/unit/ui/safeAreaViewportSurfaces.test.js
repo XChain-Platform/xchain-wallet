@@ -73,6 +73,14 @@ afterEach(() => {
 });
 
 describe('viewport surfaces keep content inside device safe areas', () => {
+    it('keeps WebKit text sizing stable when the device rotates', () => {
+        const tokens = read('packages/core/src/ui/tokens.css');
+        const body = tokens.match(/body\s*\{[^}]*\}/)[0];
+
+        expect(body).toMatch(/-webkit-text-size-adjust:\s*100%/);
+        expect(body).toMatch(/(?:^|\s)text-size-adjust:\s*100%/);
+    });
+
     it('applies safe-area rules to the rendered compact header, tab bar, toast host, and sheet', () => {
         const { container } = renderShell(390);
         const layout = container.querySelector(`.${layoutStyles.layout}`);
