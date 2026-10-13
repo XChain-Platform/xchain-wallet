@@ -23,6 +23,8 @@ const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const SAVED_LOOKALIKE = 'bc1q111111111111111111111111abcdef';
+const POISONED_TO = 'bc1qzzzzzzzzzzzzzzzzzzzzzzzzabcdef';
 const LTC_TO = 'ltc1qxvenxvenxvenxvenxvenxvenxvenxvenwcpknh';
 const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
@@ -209,6 +211,9 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
         await user.tab();
+        // The recipient field's paste control sits below it, after its in-field icon.
+        expect(document.activeElement).toBe(screen.getAllByRole('button', { name: 'Paste from clipboard' })[0]);
+        await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText('Token'));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
@@ -303,6 +308,39 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.mouseDown(screen.getByRole('option', { name: /Recent/ }));
 
         expect(to).toHaveValue(recent);
+    });
+
+    it.each([
+        {
+            source: 'a contact',
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [{ chain: 'bitcoin', address: SAVED_LOOKALIKE }],
+            }],
+            history: [],
+            sourceLabel: 'contact "Alice"',
+        },
+        {
+            source: 'send history',
+            contacts: [],
+            history: [{ action: 'SEND', destination: SAVED_LOOKALIKE, timestamp: 123 }],
+            sourceLabel: 'an address you have sent to before',
+        },
+    ])('warns before review when a recipient copies both ends of $source', async ({
+        contacts,
+        history,
+        sourceLabel,
+    }) => {
+        const messaging = mount({ contacts, history });
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.change(to, { target: { value: POISONED_TO } });
+
+        const warning = await screen.findByRole('alert');
+        expect(warning).toHaveTextContent(sourceLabel);
+        expect(warning).toHaveTextContent(SAVED_LOOKALIKE);
+        expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('reviews every payment field, signs with the password, and shows the txid', async () => {

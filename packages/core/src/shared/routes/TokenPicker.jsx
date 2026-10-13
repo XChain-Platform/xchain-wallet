@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -27,6 +27,7 @@ import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
+const LOCAL_QUERY_DEBOUNCE_MS = 200;
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -130,6 +131,7 @@ export function TokenPicker({
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
     const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
+    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState(tokenQuery);
 
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
@@ -147,6 +149,11 @@ export function TokenPicker({
             && window.matchMedia('(pointer: coarse)').matches;
         if (!coarse) searchRef.current?.focus();
     }, []);
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), LOCAL_QUERY_DEBOUNCE_MS);
+        return () => clearTimeout(handle);
+    }, [tokenQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -235,7 +242,7 @@ export function TokenPicker({
         return ordered;
     }, [allRows]);
 
-    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    const tokenQueryTrim = debouncedTokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
         let next = isReceive
             ? allRows
@@ -292,7 +299,7 @@ export function TokenPicker({
     }, [allRows]);
 
     useEffect(() => {
-        const query = tokenQuery.trim().toUpperCase();
+        const query = debouncedTokenQuery.trim().toUpperCase();
         if (!isReceive
             || !query
             || query.length < PLATFORM_QUERY_MIN_CHARS
@@ -349,7 +356,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+    }, [isReceive, debouncedTokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
 
     const resetFilters = () => {
         setTokenQuery('');
@@ -367,6 +374,21 @@ export function TokenPicker({
         displayName: tok.displayName,
         imageUrl: tok.imageUrl,
     });
+    const resultsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const firstResult = () => resultsRef.current?.querySelector('button[aria-label^="Select "]');
+    const handleSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+        const result = firstResult();
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+    const clearSearch = () => {
+        setDebouncedTokenQuery('');
+        setTokenQuery('');
+        searchRef.current?.focus();
+    };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
     const headerIcon = titleIcon ?? (isReceive ? <Icon.ReceiveIcon /> : <Icon.SendIcon />);
@@ -424,20 +446,28 @@ export function TokenPicker({
 
     const toolbar = (
         <>
-            <input
-                ref={searchRef}
-                type="search"
-                enterKeyHint="search"
-                className={styles.search}
-                placeholder="Search"
-                value={tokenQuery}
-                onChange={(e) => setTokenQuery(e.target.value)}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                aria-label="Search coins or tokens"
-            />
+            <div style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
+                <input
+                    ref={searchRef}
+                    type="search"
+                    enterKeyHint="search"
+                    className={styles.search}
+                    placeholder="Search"
+                    value={tokenQuery}
+                    onChange={(e) => setTokenQuery(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    aria-label="Search coins or tokens"
+                />
+                {tokenQuery ? (
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
+                        <Icon.XIcon />
+                    </Button>
+                ) : null}
+            </div>
             <div className={styles.networkFilter}>
                 <NetworkFilter
                     chainRegistry={chainRegistry}
@@ -494,7 +524,7 @@ export function TokenPicker({
                 </div>
             ) : null}
             {balances ? (
-                <>
+                <div ref={resultsRef}>
                     {rows.length > 0 ? (
                         <BalanceList
                             rows={rows}
@@ -554,7 +584,7 @@ export function TokenPicker({
                             ) : null}
                         </div>
                     ) : null}
-                </>
+                </div>
             ) : null}
         </ListPage>
     );

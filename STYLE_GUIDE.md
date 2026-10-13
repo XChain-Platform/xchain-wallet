@@ -31,9 +31,9 @@ One rule on every platform (phone, extension popup, desktop app, browser), decid
 
 The breakpoint is a viewport media query, not a container query (the Android WebView 102 the app ships to has no container queries) and not the shell: the old `isFull ? <div className={styles.card}>` pattern, chosen from `screenVariantFor(shell)`, put a card on a phone browser and is superseded. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
 
-### The list rule: full width, always
+### The list rule: fluid, with a readable maximum
 
-`<ListPage>` content fills the full width of the content area up to the scrollbar and never runs under it (Screen reserves the scrollbar gutter), at every width. There is no narrow/wide switch and no 560px column for lists. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+`<ListPage>` content fills the available width on phones, split view and tablet portrait, then stops at a centred 48rem maximum so rows remain easy to scan. Screen reserves the scrollbar gutter, so content never runs under it. Lists remain wider than the 560px form column to leave room for tables and card grids. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
 
 ### Props
 

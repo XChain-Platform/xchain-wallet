@@ -8,9 +8,9 @@
     gap: var(--xc-space-2);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-md);
-    border: 1px solid var(--xc-info, #3b82f6);
-    background: var(--xc-info-bg, rgba(59, 130, 246, 0.08));
-    color: var(--xc-info-text, #0f3a8e);
+    border: 1px solid var(--xc-info);
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
     font-size: var(--xc-text-sm);
     margin: var(--xc-space-2);
 }
@@ -117,6 +117,6 @@
 }
 
 .error {
-    color: var(--xc-danger-text, #5c1216);
+    color: var(--xc-danger-text);
     font-size: var(--xc-text-xs);
 }

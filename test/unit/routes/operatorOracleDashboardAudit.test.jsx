@@ -142,4 +142,12 @@ describe('operator and oracle dashboard audit', () => {
         expect(oracleCss).toMatch(/@media \(max-width: 480px\)/);
         expect(oracleCss).toMatch(/white-space:\s*normal/);
     });
+
+    it('lays operator metrics out in readable columns on wide screens', () => {
+        const operatorCss = readFileSync('packages/core/src/shared/routes/OperatorDashboard.module.css', 'utf8');
+
+        expect(operatorCss).toMatch(/\.dashboard\s*\{[^}]*display:\s*grid/s);
+        expect(operatorCss).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(22rem,\s*100%\),\s*1fr\)\)/);
+        expect(operatorCss).toMatch(/\.dashboard > :not\(section\)\s*\{[^}]*grid-column:\s*1 \/ -1/s);
+    });
 });
