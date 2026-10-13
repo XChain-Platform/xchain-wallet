@@ -293,7 +293,7 @@ function RawTransactionBroadcast({
                     </p>
                 ) : null}
                 {broadcastTime.timedOut ? (
-                    <StatusMessage variant="error" className={styles.error} data-testid="raw-broadcast-timeout">
+                    <StatusMessage variant="error" className={styles.error}>
                         The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
                     </StatusMessage>
                 ) : null}

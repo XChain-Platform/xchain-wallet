@@ -112,7 +112,7 @@ describe('UTF-8 transaction text measurement', () => {
 describe('BroadcastForm text limits', () => {
     it('passes a valid multibyte message to compose without changing it', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message');
+        const message = await screen.findByLabelText('Message (optional)');
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });
         fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
