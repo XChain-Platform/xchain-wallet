@@ -222,19 +222,26 @@
     :root:not([data-xc-reduced-motion="no-preference"]) {
         --xc-transition: 0ms;
     }
+
+    :root:not([data-xc-reduced-motion="no-preference"]),
+    :root:not([data-xc-reduced-motion="no-preference"]) *,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::before,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 :root[data-xc-reduced-motion="reduce"] {
     --xc-transition: 0ms;
 }
 
-/* The token only covers transitions declared through it. Component CSS
- * modules carry their own keyframe animations behind
- * `@media (prefers-reduced-motion: reduce)` blocks, which an in-app override
- * cannot reach, so the forced case suppresses animation globally instead of
- * asking ~15 modules to each learn about the attribute. Durations are near
- * zero rather than zero so animation/transition end events still fire and
- * nothing that waits on them hangs. */
+/* The global selectors cover component styles and inline transitions that do
+ * not use the token. Durations are near zero rather than zero so motion-end
+ * events still fire and nothing that waits on them hangs. */
+:root[data-xc-reduced-motion="reduce"],
 :root[data-xc-reduced-motion="reduce"] *,
 :root[data-xc-reduced-motion="reduce"] *::before,
 :root[data-xc-reduced-motion="reduce"] *::after {
