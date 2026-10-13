@@ -34,6 +34,7 @@ import {
     entriesToJson,
     filterEntriesByDateRange,
     EXPORT_COLUMNS,
+    EXPORT_COLUMN_DETAILS,
 } from '../../../packages/core/src/flows/historyExport.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,8 @@ assert.equal(typeof entriesToJson, 'function');
 assert.equal(typeof filterEntriesByDateRange, 'function');
 assert.ok(Array.isArray(EXPORT_COLUMNS) && EXPORT_COLUMNS.length > 0,
     'EXPORT_COLUMNS exported and non-empty');
+assert.deepEqual(Object.keys(EXPORT_COLUMN_DETAILS), EXPORT_COLUMNS,
+    'every export column has user-facing documentation');
 
 // --- 2. CSV / JSON honour columns option ------------------------------
 
@@ -59,7 +62,11 @@ const sample = [
         blockIndex: 800000,
         timestamp: 1714000000,
         source: 'decoder',
-        raw: { memo: 'First, "quoted"\nnext line' },
+        raw: {
+            tick: 'BTC',
+            amount: '9007199254740993.123456789',
+            memo: 'First, "quoted"\nnext line',
+        },
         link: { peer: 'something' },
     },
     {
@@ -75,12 +82,12 @@ const sample = [
 ];
 
 const csvAll = entriesToCsv(sample);
-assert.ok(csvAll.startsWith(EXPORT_COLUMNS.join(',') + '\n'),
-    'default CSV header lists every EXPORT_COLUMNS field');
+assert.ok(csvAll.startsWith(Object.values(EXPORT_COLUMN_DETAILS).map((detail) => detail.label).join(',') + ' (USD)\n'),
+    'default CSV header documents every EXPORT_COLUMNS field and selected fiat code');
 
 const csvSubset = entriesToCsv(sample, { columns: ['chainId', 'action', 'iso'] });
 const csvLines = csvSubset.trim().split('\n');
-assert.equal(csvLines[0], 'chainId,action,iso',
+assert.equal(csvLines[0], 'Chain,Action,Date (ISO 8601 UTC)',
     'CSV header reflects the requested column subset');
 assert.equal(csvLines[1].split(',').length, 3,
     'each CSV row drops to the subset width');
@@ -88,19 +95,25 @@ assert.ok(csvLines[1].includes('SEND') && csvLines[1].includes('BTC.mainnet'),
     'subset CSV row carries the picked fields');
 
 const csvMemo = entriesToCsv(sample, {
-    columns: ['iso', 'memo', 'fiatCurrency'],
+    columns: ['iso', 'amount', 'memo', 'fiatCurrency'],
     fiatCurrency: 'eur',
 });
 assert.ok(csvMemo.includes('2024-04-24T23:06:40.000Z'),
     'CSV renders timestamps as ISO dates');
+assert.ok(csvMemo.includes('9007199254740993.123456789'),
+    'CSV preserves exact decimal amount text');
 assert.ok(csvMemo.includes('"First, ""quoted""\nnext line"'),
     'CSV quotes commas, quotes, and newlines in memos');
+assert.ok(csvMemo.startsWith('Date (ISO 8601 UTC),Amount,Memo,Fiat currency (EUR)\n'),
+    'CSV labels the fiat column with the selected currency');
 assert.ok(csvMemo.includes(',EUR\n'),
     'CSV uses the selected fiat currency');
 
 const jsonAll = JSON.parse(entriesToJson(sample));
 assert.deepEqual(jsonAll.columns, EXPORT_COLUMNS.slice(),
     'JSON payload echoes the column set used');
+assert.equal(jsonAll.columnHeaders.fiatCurrency, 'Fiat currency (USD)',
+    'JSON documents the normalized fiat column label');
 assert.equal(jsonAll.entries[0].chainId, 'BTC.mainnet');
 assert.equal(jsonAll.entries[0].link?.peer, 'something',
     'JSON preserves link sidecar even when not in column set');
@@ -114,10 +127,10 @@ assert.deepEqual(Object.keys(jsonSubset.entries[0]).sort(),
 // Bad / empty columns array falls back to default; preserves existing
 // caller behaviour.
 const csvBadCols = entriesToCsv(sample, { columns: ['nonsense'] });
-assert.ok(csvBadCols.startsWith(EXPORT_COLUMNS.join(',') + '\n'),
+assert.equal(csvBadCols.split('\n')[0], csvAll.split('\n')[0],
     'unknown-only column subset falls back to all columns');
 const csvEmptyCols = entriesToCsv(sample, { columns: [] });
-assert.ok(csvEmptyCols.startsWith(EXPORT_COLUMNS.join(',') + '\n'),
+assert.equal(csvEmptyCols.split('\n')[0], csvAll.split('\n')[0],
     'empty column subset falls back to all columns');
 
 // --- 3. Date-range filter --------------------------------------------
@@ -144,6 +157,8 @@ const indexSrc = readFileSync(
 );
 assert.ok(/EXPORT_COLUMNS,/.test(indexSrc),
     'flows/index.js re-exports EXPORT_COLUMNS');
+assert.ok(/EXPORT_COLUMN_DETAILS,/.test(indexSrc),
+    'flows/index.js re-exports EXPORT_COLUMN_DETAILS');
 assert.ok(/filterEntriesByDateRange,/.test(indexSrc),
     'flows/index.js re-exports filterEntriesByDateRange');
 
@@ -157,7 +172,7 @@ assert.ok(!/Export CSV<\/button>/.test(historySrc),
     'History.jsx no longer renders the bare Export-CSV chip');
 assert.ok(!/Export JSON<\/button>/.test(historySrc),
     'History.jsx no longer renders the bare Export-JSON chip');
-assert.ok(/Export…/.test(historySrc),
+assert.ok(/t\('history\.export\.open'\)/.test(historySrc),
     'History.jsx now renders a single "Export…" trigger');
 assert.ok(/aria-haspopup="dialog"/.test(historySrc),
     'Export trigger announces it opens a dialog');
@@ -173,7 +188,9 @@ assert.ok(!/name="export-scope"/.test(historySrc),
     'ExportModal cannot switch away from the filtered view');
 assert.ok(/EXPORT_COLUMNS\.map/.test(historySrc),
     'ExportModal renders one checkbox per EXPORT_COLUMNS entry');
-assert.ok(/filtered row/.test(historySrc),
+assert.ok(/EXPORT_COLUMN_DETAILS\[col\]/.test(historySrc),
+    'ExportModal explains each selectable column');
+assert.ok(/t\('history\.export\.rowCount', \{ count: visibleCount \}\)/.test(historySrc),
     'ExportModal explains that it exports filtered rows');
 assert.ok(/e\.key === 'Escape'/.test(historySrc),
     'ExportModal closes on Escape');

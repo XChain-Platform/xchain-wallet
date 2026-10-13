@@ -82,13 +82,13 @@ describe('storedSizeLine', () => {
     it('leads with the stored size, which is the number the user is paying for', () => {
         const line = storedSizeLine(storedSizeSummary({ compressed: true, rawLength: 5200, storedLength: 133 }));
         expect(line).toMatch(/^Stored on-chain: 133 bytes/);
-        expect(line).toContain('5,200');
+        expect(line).toContain((5200).toLocaleString());
         expect(line).toContain('97% smaller');
     });
 
     it('does not claim a saving for an incompressible file', () => {
         const line = storedSizeLine(storedSizeSummary({ compressed: false, rawLength: 4000, storedLength: 4000 }));
-        expect(line).toContain('4,000');
+        expect(line).toContain((4000).toLocaleString());
         expect(line).not.toMatch(/smaller|compressed from/);
     });
 

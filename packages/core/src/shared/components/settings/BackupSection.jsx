@@ -58,6 +58,7 @@ import { copyText } from '../../clipboard.js';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import styles from './BackupSection.module.css';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;
@@ -416,7 +417,7 @@ export function BackupSection({ activeWallet }) {
             ) : pendingPassword !== null ? (
                 <PasswordPrompt
                     label="Backup password"
-                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters. It encrypts this backup file and is separate from your wallet password.`}
+                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters. It encrypts this backup file and is separate from your wallet password. Your browser saves the file to its configured download location, usually the Downloads folder.`}
                     busy={exporting}
                     onCancel={() => { setPendingPassword(null); setExportError(null); }}
                     onSubmit={(pw) => onExport(pw)}
@@ -446,9 +447,11 @@ export function BackupSection({ activeWallet }) {
                 <RevealedMnemonic
                     mnemonic={mnemonic}
                     hidden={mnemonicHidden}
+                    walletName={activeWallet?.name || activeWallet?.id || 'Wallet'}
                     passphraseEnabled={revealPassphraseEnabled}
                     passphrase={revealPassphrase}
                     onToggle={() => setMnemonicHidden((h) => !h)}
+                    onPrint={printRecoverySheet}
                     onDone={handleHideMnemonic}
                 />
             ) : (
@@ -692,9 +695,18 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
  * passphrase yet (`passphraseEnabled` true, nothing stored) gets one
  * line saying so instead of a blank row.
  */
-function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onToggle, onDone }) {
+function RevealedMnemonic({
+    mnemonic,
+    hidden,
+    walletName,
+    passphraseEnabled,
+    passphrase,
+    onToggle,
+    onPrint,
+    onDone,
+}) {
     return (
-        <div style={{
+        <div className={styles.recoverySheet} data-xc-recovery-sheet style={{
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--xc-space-2)',
@@ -706,6 +718,7 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
                 Your seed phrase
             </div>
+            <div className={styles.sheetMeta}>Wallet: {walletName}</div>
             <div style={ROW_HINT}>
                 Write it on paper or store it in a password manager. Never type or
                 paste it into anything else. The wallet has nothing else that can
@@ -715,6 +728,7 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                 type="button"
                 onClick={onToggle}
                 aria-label={hidden ? 'Reveal seed phrase' : 'Hide seed phrase'}
+                className={styles.secret}
                 style={{
                     background: 'var(--xc-bg)',
                     border: '1px solid var(--xc-border)',
@@ -743,6 +757,7 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                         type="button"
                         onClick={onToggle}
                         aria-label={hidden ? 'Reveal passphrase' : 'Hide passphrase'}
+                        className={styles.secret}
                         style={{
                             background: 'var(--xc-bg)',
                             border: '1px solid var(--xc-border)',
@@ -769,14 +784,19 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                     stored on this device yet.
                 </div>
             ) : null}
-            <div style={{
+            <div className={styles.screenOnly} style={{
                 color: 'var(--xc-text-muted)',
                 fontSize: 'var(--xc-text-xs)',
                 textAlign: 'center',
             }}>
                 {hidden ? 'Tap to reveal.' : 'Tap to hide again.'}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className={styles.screenOnly} style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                {!hidden ? (
+                    <button type="button" onClick={onPrint} style={ACTION_BTN}>
+                        Print recovery sheet
+                    </button>
+                ) : null}
                 <button type="button" onClick={onDone} style={ACTION_BTN}>
                     Done
                 </button>
@@ -1098,7 +1118,7 @@ function BackupExportResult({ result, onDone }) {
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Backup file saved</div>
             <Status text={result.fileName} />
             <div style={ROW_HINT}>
-                Store this file somewhere you can recover it. The password is not in the file and cannot be recovered.
+                Your browser sent this file to its configured download location, usually the Downloads folder. Move it somewhere safe and recoverable. The password is not in the file and cannot be recovered.
             </div>
             <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Optional backup pointer QR</div>
             <div style={ROW_HINT}>
@@ -1126,6 +1146,15 @@ function BackupExportResult({ result, onDone }) {
             </div>
         </div>
     );
+}
+
+function printRecoverySheet() {
+    document.body.classList.add('xc-print-recovery-sheet');
+    try {
+        window.print();
+    } finally {
+        document.body.classList.remove('xc-print-recovery-sheet');
+    }
 }
 
 const passwordStyle = {

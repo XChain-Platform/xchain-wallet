@@ -45,6 +45,7 @@ import {
 import { regtestSidecarPlugin } from '../web/regtestSidecar.js';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';
+import { EXTENSION_ICON_SIZES, EXTENSION_ICON_SOURCE } from './iconConfig.js';
 
 // Absolute paths for our workspace-local Node shims that xchain-sdk
 // pulls in at module load. Vite resolves these via resolve.alias below.
@@ -311,12 +312,9 @@ export default defineConfig({
             outDir: new URL('./dist/chain-icons/', import.meta.url),
         }),
         iconResizePlugin({
-            source: new URL(
-                '../core/src/branding/images/favicon.png',
-                import.meta.url,
-            ),
+            source: new URL(EXTENSION_ICON_SOURCE, import.meta.url),
             outDir: new URL('./dist/icons/', import.meta.url),
-            sizes: [16, 32, 48, 128],
+            sizes: EXTENSION_ICON_SIZES,
         }),
     ],
 });

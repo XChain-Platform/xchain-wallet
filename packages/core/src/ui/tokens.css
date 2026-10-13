@@ -23,12 +23,12 @@
     /* Typography - system fonts by default per §5.4 */
     --xc-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    --xc-text-xs: 11px;
-    --xc-text-sm: 13px;
-    --xc-text-md: 14px;
-    --xc-text-lg: 16px;
-    --xc-text-xl: 20px;
-    --xc-text-2xl: 24px;
+    --xc-text-xs: 0.6875rem;
+    --xc-text-sm: 0.8125rem;
+    --xc-text-md: 0.875rem;
+    --xc-text-lg: 1rem;
+    --xc-text-xl: 1.25rem;
+    --xc-text-2xl: 1.5rem;
 
     /* Minimum interactive target (responsive-first, slice 2).
      *
@@ -50,6 +50,14 @@
     --xc-radius-md: 8px;
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
+
+    /* Shared stacking contexts stay ordered across every shell. */
+    --xc-z-base: 1;
+    --xc-z-sticky: 20;
+    --xc-z-dropdown: 50;
+    --xc-z-overlay: 60;
+    --xc-z-modal: 1000;
+    --xc-z-toast: 9999;
 
     /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
@@ -76,17 +84,19 @@
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
-    --xc-border: #E4E7EB;
-    --xc-border-strong: #C7CCD4;
+    /* Borders identify controls and regions against every theme surface, so
+     * both tiers clear the 3:1 non-text contrast floor. */
+    --xc-border: #818B9B;
+    --xc-border-strong: #727D8E;
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
 
-    /* Labels sitting on accent, danger, or success fills. In the normal
-     * palettes they are white; the forced-colors block re-pairs them with
-     * the matching system on-color (Canvas on LinkText, MarkText on Mark),
-     * which keeps button labels readable in Windows high-contrast mode. */
+    /* Labels sitting on semantic fills. Accent and danger use white; success
+     * uses dark text when its dark-theme fill is bright. The forced-colors
+     * block re-pairs accent and danger with the system color of their fills
+     * (Canvas on LinkText, MarkText on Mark). */
     --xc-on-accent: #FFFFFF;
     --xc-on-danger: #FFFFFF;
     --xc-on-success: #FFFFFF;
@@ -107,7 +117,12 @@
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
     --xc-success-fill: #146F34;
-    --xc-focus-ring: rgba(26, 123, 172, 0.45);
+    /* The translucent ring clears 3:1 after compositing on every surface. */
+    --xc-focus-ring: rgba(26, 123, 172, 0.80);
+    /* Saturation communicates inactivity without blending labels and borders
+     * into their backgrounds. */
+    --xc-disabled-opacity: 1;
+    --xc-disabled-saturation: 0.35;
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
 
@@ -162,11 +177,12 @@
         --xc-bg-muted: #121824;
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
-        --xc-border: #243044;
-        --xc-border-strong: #364257;
+        --xc-border: #5F6D83;
+        --xc-border-strong: #718096;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
         --xc-text-inverted: #0B0F17;
+        --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
         --xc-danger-text: #FCA5A5;
         --xc-info: #4AA8D8;
@@ -179,8 +195,8 @@
         --xc-danger-fg: #F87171;
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
-        --xc-success-fill: #146F34;
-        --xc-focus-ring: rgba(30, 144, 199, 0.6);
+        --xc-success-fill: #4ADE80;
+        --xc-focus-ring: rgba(74, 168, 216, 0.75);
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     }
@@ -191,11 +207,12 @@
     --xc-bg-muted: #121824;
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
-    --xc-border: #243044;
-    --xc-border-strong: #364257;
+    --xc-border: #5F6D83;
+    --xc-border-strong: #718096;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
     --xc-text-inverted: #0B0F17;
+    --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
     --xc-danger-text: #FCA5A5;
     --xc-info: #4AA8D8;
@@ -208,8 +225,8 @@
     --xc-danger-fg: #F87171;
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
-    --xc-success-fill: #146F34;
-    --xc-focus-ring: rgba(30, 144, 199, 0.6);
+    --xc-success-fill: #4ADE80;
+    --xc-focus-ring: rgba(74, 168, 216, 0.75);
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
@@ -235,19 +252,26 @@
     :root:not([data-xc-reduced-motion="no-preference"]) {
         --xc-transition: 0ms;
     }
+
+    :root:not([data-xc-reduced-motion="no-preference"]),
+    :root:not([data-xc-reduced-motion="no-preference"]) *,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::before,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 :root[data-xc-reduced-motion="reduce"] {
     --xc-transition: 0ms;
 }
 
-/* The token only covers transitions declared through it. Component CSS
- * modules carry their own keyframe animations behind
- * `@media (prefers-reduced-motion: reduce)` blocks, which an in-app override
- * cannot reach, so the forced case suppresses animation globally instead of
- * asking ~15 modules to each learn about the attribute. Durations are near
- * zero rather than zero so animation/transition end events still fire and
- * nothing that waits on them hangs. */
+/* The global selectors cover component styles and inline transitions that do
+ * not use the token. Durations are near zero rather than zero so motion-end
+ * events still fire and nothing that waits on them hangs. */
+:root[data-xc-reduced-motion="reduce"],
 :root[data-xc-reduced-motion="reduce"] *,
 :root[data-xc-reduced-motion="reduce"] *::before,
 :root[data-xc-reduced-motion="reduce"] *::after {
@@ -417,6 +441,33 @@ body {
     box-sizing: border-box;
 }
 
+/* Taps activate controls immediately while pan and pinch gestures remain
+ * available to the page. ARIA roles cover tappable rows that are not native
+ * buttons, and :where() lets a component override this for a gesture surface. */
+:where(
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'],
+    a[href],
+    [role='button'],
+    [role='link'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='option'],
+    summary,
+    label
+) {
+    touch-action: manipulation;
+}
+
+/* A dialog can place its scrollport on the panel, body, list, or viewer.
+ * Applying containment through the subtree keeps every such scroll boundary
+ * from chaining into the page behind it. */
+:where([role='dialog'], [role='dialog'] *) {
+    overscroll-behavior: contain;
+}
+
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
@@ -427,19 +478,15 @@ fieldset {
     min-width: 0;
 }
 
-/* iOS WebKit zooms the whole page in when a form control under 16px takes
- * focus, and the zoom stays after the keyboard closes: the layout runs off
- * the right edge and the shell can be dragged sideways. Every Input is 14px
- * (--xc-text-md), so tapping Send's From field zoomed an iPhone 17 Pro
- * simulator by 1.14 (2026-10-12). The 16px floor is the documented way to
- * stop it without disabling pinch zoom. -webkit-touch-callout exists only in
- * iOS WebKit, so Android, desktop and macOS Safari keep their sizes. The
- * !important outranks the module classes and inline styles that set 14px. */
-@supports (-webkit-touch-callout: none) {
+/* iOS WebKit zooms the page when a focused form control renders below 16px.
+ * Keep narrow layouts at that floor without disabling pinch zoom or changing
+ * the compact control sizes on desktop. !important also covers module and
+ * inline font declarations on shared form controls. */
+@media (max-width: 599px) {
     input:not([type='checkbox']):not([type='radio']):not([type='range']),
     select,
     textarea {
-        font-size: 16px !important;
+        font-size: 1rem !important;
     }
 }
 
@@ -469,6 +516,13 @@ fieldset {
     outline-offset: 2px;
 }
 
+/* Disabled controls retain the contrast of their semantic color pairs.
+ * Reduced saturation supplies the visual state without alpha compositing. */
+:where(input, select, textarea, button):disabled {
+    opacity: var(--xc-disabled-opacity) !important;
+    filter: saturate(var(--xc-disabled-saturation));
+}
+
 :where(select:not([class])):focus {
     outline: none;
     border-color: var(--xc-accent-primary);
@@ -476,6 +530,10 @@ fieldset {
 }
 
 @media (forced-colors: active) {
+    :where(input, select, textarea, button):disabled {
+        filter: none;
+    }
+
     :where(select:not([class])):focus {
         outline: 2px solid Highlight;
         outline-offset: 2px;

@@ -75,6 +75,7 @@ export function AlertsOverlay({ alerts, onClose }) {
                     {alerts.length === 0 ? (
                         <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
                     ) : (
+                        /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={styles.list} role="list">
                             {alerts.map((a) => {
                                 const severity = alertSeverityPresentation(a.severity);

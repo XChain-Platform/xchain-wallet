@@ -37,6 +37,7 @@ export function AlertsRoute({ onBack, alerts = [] }) {
                 {visibleAlerts.length === 0 ? (
                     <EmptyState title="No alerts" body="You're all caught up." />
                 ) : (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
                         {visibleAlerts.map((a) => {
                             const severity = alertSeverityPresentation(a.severity);

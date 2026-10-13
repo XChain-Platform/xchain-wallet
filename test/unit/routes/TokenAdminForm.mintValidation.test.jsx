@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = {
@@ -19,7 +20,16 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-function mountMintSettings() {
+const TOKEN_INFO = {
+    chainId: CHAIN,
+    tick: 'MINTABLE',
+    divisibility: 0,
+    locks: {},
+};
+
+// tokenInfo, when given, is the promise getTokenInfo returns, so a case can
+// hold the token record back until after the owner has typed.
+function mountMintSettings(tokenInfo = Promise.resolve(TOKEN_INFO)) {
     const composeForConfirm = vi.fn();
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
@@ -27,12 +37,7 @@ function mountMintSettings() {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
-        getTokenInfo: vi.fn().mockResolvedValue({
-            chainId: CHAIN,
-            tick: 'MINTABLE',
-            divisibility: 0,
-            locks: {},
-        }),
+        getTokenInfo: vi.fn().mockReturnValue(tokenInfo),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
         composeForConfirm,
     };
@@ -57,7 +62,21 @@ function mountMintSettings() {
     return composeForConfirm;
 }
 
-afterEach(() => cleanup());
+// Submit only once the button is live: it stays disabled until the source
+// address list resolves and a mint field holds text, and a click on a
+// disabled button is silently dropped.
+async function submitWhenEnabled() {
+    const button = screen.getByRole('button', { name: /update token/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+}
+
+// The token-info cache is module-level; clearing it keeps every case on the
+// same cold fetch path instead of only the first one.
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('TokenAdminForm mint setting validation', () => {
     it.each([
@@ -69,9 +88,23 @@ describe('TokenAdminForm mint setting validation', () => {
     ])('refuses malformed text in %s before composing', async (label, value, message) => {
         const composeForConfirm = mountMintSettings();
         fireEvent.change(await screen.findByLabelText(label), { target: { value } });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        await submitWhenEnabled();
 
         expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps a mint setting typed before the token record arrives', async () => {
+        let resolveTokenInfo;
+        const composeForConfirm = mountMintSettings(new Promise((resolve) => { resolveTokenInfo = resolve; }));
+        const field = await screen.findByLabelText('Max mint per transaction (optional)');
+        fireEvent.change(field, { target: { value: '1,000' } });
+
+        await act(async () => { resolveTokenInfo({ ...TOKEN_INFO, mintMax: '500' }); });
+
+        expect(field).toHaveValue('1,000');
+        await submitWhenEnabled();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Max mint per transaction must be a positive number.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -80,7 +113,7 @@ describe('TokenAdminForm mint setting validation', () => {
         fireEvent.change(await screen.findByLabelText('Send that new supply to (optional)'), {
             target: { value: SOURCE.address },
         });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        await submitWhenEnabled();
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Sending new supply needs a mint supply amount.');
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -91,7 +124,7 @@ describe('TokenAdminForm mint setting validation', () => {
         fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
             target: { value: '1.5' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        await submitWhenEnabled();
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Mint supply must be a whole number because MINTABLE is indivisible.',
@@ -107,7 +140,7 @@ describe('TokenAdminForm mint setting validation', () => {
         fireEvent.change(screen.getByLabelText('Send that new supply to (optional)'), {
             target: { value: 'not-an-address' },
         });
-        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+        await submitWhenEnabled();
 
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i));
         expect(composeForConfirm).not.toHaveBeenCalled();
