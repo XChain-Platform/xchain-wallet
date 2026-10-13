@@ -14,7 +14,10 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
+import { FORGOT_PASSWORD_RESTORE_LANE_KEY } from '../../../packages/core/src/shared/utils/forgotPasswordRecovery.js';
+import { POST_DEMO_INTENT_KEY, takePostDemoIntent } from '../../../packages/core/src/shared/utils/demoGraduation.js';
 import {
     clearDemoWalletId,
     clearLockoutState,
@@ -34,12 +37,18 @@ function mount() {
 
 function openForgotDialog() {
     fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-    return screen.getByRole('dialog', { name: 'Wipe wallet data' });
+    return screen.getByRole('alertdialog', { name: 'Restore wallet access' });
+}
+
+function chooseRestorePath(name) {
+    fireEvent.click(screen.getByRole('button', { name }));
 }
 
 beforeEach(() => {
     clearDemoWalletId();
     clearLockoutState();
+    globalThis.localStorage?.removeItem(FORGOT_PASSWORD_RESTORE_LANE_KEY);
+    globalThis.localStorage?.removeItem(POST_DEMO_INTENT_KEY);
     wipeWalletStorage.mockReset();
     wipeWalletStorage.mockResolvedValue(undefined);
     reload = vi.fn();
@@ -52,18 +61,32 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     clearLockoutState();
+    globalThis.localStorage?.removeItem(FORGOT_PASSWORD_RESTORE_LANE_KEY);
+    globalThis.localStorage?.removeItem(POST_DEMO_INTENT_KEY);
     delete globalThis.location;
 });
 
 describe('Locked forgot-password wipe', () => {
-    it('names the local data being destroyed and requires the typed confirmation', () => {
+    it('plainly explains recovery and offers both restore paths without wiping', () => {
         mount();
         const dialog = openForgotDialog();
+        expect(dialog).toHaveAttribute('aria-modal', 'false');
+        expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+        expect(dialog).toHaveTextContent(/password cannot be recovered or reset/i);
+        expect(dialog).toHaveTextContent(/choose a new password/i);
+        expect(screen.getByRole('button', { name: 'Use recovery phrase' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Use backup file' })).toBeEnabled();
+
+        chooseRestorePath('Use recovery phrase');
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
         expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
         expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
+        expect(dialog).toHaveTextContent(/opens the recovery-phrase restore form/i);
 
-        const wipe = screen.getByRole('button', { name: 'Wipe wallet data' });
+        const wipe = screen.getByRole('button', { name: 'Erase vault and restore' });
         expect(wipe).toBeDisabled();
+        fireEvent.click(wipe);
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: ' wipe ' } });
         expect(wipe).toBeEnabled();
         expect(wipe.className).toMatch(/danger/);
@@ -72,40 +95,61 @@ describe('Locked forgot-password wipe', () => {
     it('cancels without wiping and resets the typed confirmation', () => {
         mount();
         openForgotDialog();
+        chooseRestorePath('Use backup file');
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         expect(wipeWalletStorage).not.toHaveBeenCalled();
-        expect(screen.queryByRole('dialog', { name: 'Wipe wallet data' })).not.toBeInTheDocument();
-        openForgotDialog();
-        expect(screen.getByLabelText('Type WIPE to confirm')).toHaveValue('');
+        expect(screen.queryByRole('alertdialog', { name: 'Restore wallet access' })).not.toBeInTheDocument();
+        const dialog = openForgotDialog();
+        expect(dialog).toHaveTextContent(/password cannot be recovered or reset/i);
+        expect(screen.queryByLabelText('Type WIPE to confirm')).not.toBeInTheDocument();
     });
 
-    it('shows a busy state and reloads into onboarding after a successful wipe', async () => {
+    it.each([
+        ['Use recovery phrase', 'mnemonic', 'Recovery phrase'],
+        ['Use backup file', 'backup', 'Encrypted backup'],
+    ])('carries %s to its restore form only after a confirmed wipe', async (choice, lane, selectedTab) => {
         let resolveWipe;
         wipeWalletStorage.mockReturnValue(new Promise((resolve) => { resolveWipe = resolve; }));
         mount();
         openForgotDialog();
+        chooseRestorePath(choice);
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
-        const wipe = screen.getByRole('button', { name: 'Wipe wallet data' });
+        const wipe = screen.getByRole('button', { name: 'Erase vault and restore' });
         fireEvent.click(wipe);
 
         expect(wipe).toHaveAttribute('aria-busy', 'true');
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
         resolveWipe();
         await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+        expect(wipeWalletStorage).toHaveBeenCalledTimes(1);
+        expect(globalThis.localStorage.getItem(FORGOT_PASSWORD_RESTORE_LANE_KEY)).toBe(lane);
+        expect(takePostDemoIntent()).toBe('import');
+
+        cleanup();
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <ImportWallet onBack={() => {}} onImported={() => {}} />
+            </MessagingProvider>,
+        );
+        expect(screen.getByRole('tab', { name: selectedTab })).toHaveAttribute('aria-selected', 'true');
+        expect(globalThis.localStorage.getItem(FORGOT_PASSWORD_RESTORE_LANE_KEY)).toBeNull();
     });
 
     it('reports a failed wipe and re-enables both actions for retry or cancel', async () => {
         wipeWalletStorage.mockRejectedValueOnce(new Error('host storage is busy'));
         mount();
         openForgotDialog();
+        chooseRestorePath('Use backup file');
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Wipe wallet data' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Erase vault and restore' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('host storage is busy');
-        expect(screen.getByRole('button', { name: 'Wipe wallet data' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Erase vault and restore' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+        expect(globalThis.localStorage.getItem(FORGOT_PASSWORD_RESTORE_LANE_KEY)).toBeNull();
+        expect(globalThis.localStorage.getItem(POST_DEMO_INTENT_KEY)).toBeNull();
         expect(reload).not.toHaveBeenCalled();
     });
 });

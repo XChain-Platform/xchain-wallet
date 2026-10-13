@@ -302,7 +302,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 await two.getByRole('option', { name: /^Switch wallet/ }).first().click();
                 await expect(dialog).toBeHidden({ timeout: 15_000 });
 
-                await two.getByRole('button', { name: 'Add Wallet' }).click();
+                await two.getByRole('button', { name: 'Add wallet' }).click();
                 await two.getByRole('button', { name: 'Import wallet' }).click();
                 await two.getByRole('tab', { name: 'Encrypted backup' }).click();
 

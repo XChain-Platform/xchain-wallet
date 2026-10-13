@@ -233,6 +233,18 @@ export function pickDeepLinkTarget(live, focused, isDetached) {
     return primary.length ? primary[primary.length - 1] : null;
 }
 
+/**
+ * Bring the window receiving a deep link to the front, including when the OS
+ * has minimized or hidden it.
+ *
+ * @param {import('electron').BrowserWindow} win
+ */
+export function focusDeepLinkTarget(win) {
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+}
+
 function dispatch(url, onDeepLink) {
     const event = classifyDeepLink(url);
     if (event) onDeepLink(event);

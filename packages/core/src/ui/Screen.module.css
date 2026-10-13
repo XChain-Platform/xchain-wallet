@@ -16,7 +16,6 @@
        is the viewport MINUS the top safe-area inset that body pads by, so a
        Screen that owns the whole window ends where the screen ends. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
-    height: var(--xc-screen-h, var(--xc-viewport-h, 100dvh));
     overflow: hidden;
 }
 
@@ -87,13 +86,6 @@
     margin-inline: auto;
 }
 
-.footer {
-    flex: 0 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    border-top: 1px solid var(--xc-border);
-    background: var(--xc-surface-raised);
-}
-
 /* Keep the screen's last row clear of the iOS home indicator. Whichever of
    body and footer ends the screen pays the bottom inset, unless a bottom tab
    bar below already pays it (LeftNav.module.css sets the variable to 0). */
@@ -101,6 +93,10 @@
     padding-bottom: calc(var(--xc-space-2) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
 }
 .footer {
+    flex: 0 0 auto;
+    padding: var(--xc-space-3) var(--xc-space-4);
+    border-top: 1px solid var(--xc-border);
+    background: var(--xc-surface-raised);
     padding-bottom: calc(var(--xc-space-3) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
 }
 

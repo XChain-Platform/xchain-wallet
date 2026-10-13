@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 vi.mock('../../../packages/core/src/ui/backStack.js', () => ({
     useBackHandler: () => {},
@@ -26,6 +27,23 @@ const overlayCss = readFileSync(
     'utf8',
 );
 
+const AXE_STATES = [
+    ['unread', [{
+        id: 'unread-message',
+        severity: 'info',
+        title: 'Unread message',
+        message: 'A new message is ready to review.',
+        action: { label: 'Open message', onSelect: () => {} },
+    }]],
+    ['read', [{
+        id: 'read-message',
+        severity: 'info',
+        title: 'Read message',
+        message: 'This message has already been reviewed.',
+    }]],
+    ['empty', []],
+];
+
 afterEach(() => {
     cleanup();
     document.body.style.overflow = '';
@@ -42,6 +60,17 @@ function OverlayHarness({ alerts }) {
 }
 
 describe('AlertsOverlay', () => {
+    it.each(AXE_STATES)('has no serious axe violations in the %s state', async (
+        _state,
+        alerts,
+    ) => {
+        const { container } = render(
+            <AlertsOverlay alerts={alerts} onClose={() => {}} />,
+        );
+
+        await expectNoSeriousAxeViolations(container);
+    });
+
     it('stacks every alert in one ordered, scrollable list', () => {
         const alerts = [
             { id: 'one', severity: 'critical', title: 'First', message: 'First message' },

@@ -81,7 +81,14 @@ function mountForm(mode, extra = {}) {
 async function pickToken(messaging) {
     const openPicker = await screen.findByRole('button', { name: /Token/i });
     fireEvent.click(openPicker);
-    const row = await screen.findByRole('button', { name: /MEMEVALID/i })
+    // The wallet picker also renders a favorite toggle per row, whose label
+    // names the token too; pick the row itself.
+    const row = await screen.findAllByRole('button', { name: /MEMEVALID/i })
+        .then((buttons) => {
+            const rows = buttons.filter((button) => !/pin|favou?rite/i.test(button.getAttribute('aria-label') || ''));
+            if (rows.length !== 1) throw new Error(`expected one MEMEVALID row, found ${rows.length}`);
+            return rows[0];
+        })
         .catch(() => screen.findByLabelText(/MEMEVALID/i));
     fireEvent.click(row);
     return messaging;

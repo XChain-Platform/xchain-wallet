@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
 import { alertSeverityPresentation } from '../components/alertSeverity.js';
 
@@ -34,18 +35,15 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const sourceAlerts = Array.isArray(alerts) ? alerts : [];
     const emptyStateRef = useRef(null);
     const [pendingFocus, setPendingFocus] = useState(null);
-    const [centerState, setCenterState] = useState(() => readAlertState(walletId));
-    const visibleAlerts = sourceAlerts.filter((alert) => (
-        !centerState.cleared.has(alertVersion(alert))
-    ));
-    const unreadAlerts = visibleAlerts.filter((alert) => (
-        !alert.read && !centerState.read.has(alertVersion(alert))
-    ));
+    const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
+    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alertVersion(alert)));
+    const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
 
     useEffect(() => {
-        setCenterState(readAlertState(walletId));
+        setCenterState(readAlertCenter(walletId));
     }, [walletId]);
 
+    // Focus follows the control the user just removed, so keyboard users are not dropped to the page top.
     useEffect(() => {
         if (!pendingFocus) return;
         const target = pendingFocus === 'empty'
@@ -56,7 +54,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     }, [centerState, pendingFocus]);
 
     const commitState = (next) => {
-        writeAlertState(walletId, next);
+        writeAlertCenter(walletId, next);
         setCenterState(next);
     };
 
@@ -76,8 +74,10 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     };
 
     const toolbar = visibleAlerts.length > 0 ? (
-        <>
-            <span aria-live="polite">{unreadAlerts.length} unread</span>
+        <div className={styles.controls}>
+            <span className={styles.unreadCount} aria-live="polite">
+                {unreadAlerts.length} unread
+            </span>
             <Button
                 variant="secondary"
                 size="sm"
@@ -114,7 +114,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             >
                 Clear alerts
             </Button>
-        </>
+        </div>
     ) : null;
 
     return (
@@ -133,14 +133,20 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                     <ul className={styles.list} role="list">
                         {visibleAlerts.map((a) => {
                             const severity = alertSeverityPresentation(a.severity);
+                            const isUnread = !a.read && !centerState.read.has(alertVersion(a));
                             return (
-                                <li key={a.id} className={`${styles.alert} ${styles[severity.kind]}`}>
+                                <li
+                                    key={a.id}
+                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
+                                >
                                     <div className={styles.alertHead}>
                                         <span className={styles.severity}>{severity.label}</span>
                                         <span className={styles.alertTitle}>{a.title}</span>
+                                        <span className={styles.readStatus}>{isUnread ? 'Unread' : 'Read'}</span>
                                     </div>
                                     <div className={styles.alertMessage}>{a.message}</div>
                                     {a.action ? (
+                                        // Opening an alert's screen also marks it read.
                                         <Button
                                             variant="primary"
                                             size="sm"
@@ -152,7 +158,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                             {a.action.label}
                                         </Button>
                                     ) : null}
-                                    {!a.read && !centerState.read.has(alertVersion(a)) ? (
+                                    {isUnread ? (
                                         <Button
                                             variant="ghost"
                                             size="sm"
@@ -163,9 +169,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                         >
                                             Mark read
                                         </Button>
-                                    ) : (
-                                        <span>Read</span>
-                                    )}
+                                    ) : null}
                                 </li>
                             );
                         })}
@@ -174,35 +178,4 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             </ListPage>
         </Screen>
     );
-}
-
-const ALERT_STATE_PREFIX = 'xc:alertCenter:';
-
-function alertVersion(alert) {
-    return JSON.stringify([alert.id, alert.title, alert.message]);
-}
-
-function readAlertState(walletId) {
-    if (!walletId) return { read: new Set(), cleared: new Set() };
-    try {
-        const saved = JSON.parse(globalThis.localStorage?.getItem(ALERT_STATE_PREFIX + walletId) || 'null');
-        return {
-            read: new Set(Array.isArray(saved?.read) ? saved.read : []),
-            cleared: new Set(Array.isArray(saved?.cleared) ? saved.cleared : []),
-        };
-    } catch (_err) {
-        return { read: new Set(), cleared: new Set() };
-    }
-}
-
-function writeAlertState(walletId, state) {
-    if (!walletId) return;
-    try {
-        globalThis.localStorage?.setItem(ALERT_STATE_PREFIX + walletId, JSON.stringify({
-            read: [...state.read],
-            cleared: [...state.cleared],
-        }));
-    } catch (_err) {
-        // Storage can be unavailable while the in-memory alert center remains usable.
-    }
 }
