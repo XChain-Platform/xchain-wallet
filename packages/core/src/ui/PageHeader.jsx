@@ -32,6 +32,7 @@ import styles from './PageHeader.module.css';
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
  * @param {import('react').ReactNode} props.title     centered title text.
  * @param {string} [props.titleId]                    id for naming the screen body.
+ * @param {import('react').Ref<HTMLHeadingElement>} [props.titleRef] ref for moving focus to the screen heading.
  * @param {import('react').ReactNode} [props.titleIcon]   optional inline icon
  *   placed immediately to the left of the title (e.g. a route-action glyph
  *   like Send / Receive).
@@ -45,6 +46,7 @@ export function PageHeader({
     backDisabled = false,
     title,
     titleId,
+    titleRef,
     titleIcon = null,
     trailing = null,
 }) {
@@ -75,7 +77,15 @@ export function PageHeader({
                 ) : null}
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
-                <h1 id={titleId} className={styles.title} title={typeof title === 'string' ? title : undefined}>{title}</h1>
+                <h1
+                    ref={titleRef}
+                    id={titleId}
+                    className={styles.title}
+                    title={typeof title === 'string' ? title : undefined}
+                    tabIndex={titleRef ? -1 : undefined}
+                >
+                    {title}
+                </h1>
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

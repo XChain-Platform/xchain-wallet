@@ -707,9 +707,15 @@ describe('Send flow with mocked messaging', () => {
 
     it('reviews the payment and builds an unsigned PSBT in watcher mode', async () => {
         const messaging = mount({ walletMode: 'watcher' });
-        await fillSendForm();
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const scroller = screen.getByRole('main');
+        scroller.scrollTop = 420;
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(scroller.scrollTop).toBe(0);
+        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
         expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
         expect(review).toHaveTextContent('Chain');
         expect(review).toHaveTextContent('Bitcoin');

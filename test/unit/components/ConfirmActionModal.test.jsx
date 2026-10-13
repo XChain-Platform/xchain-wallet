@@ -9,6 +9,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { Screen as LayoutScreen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
@@ -421,6 +422,41 @@ describe('ConfirmActionModal', () => {
         render(<ConfirmActionModal {...base()} />);
         expect(screen.getByText('Confirm')).toBeTruthy();
         expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it('opens each review at the top with focus on its heading', () => {
+        const firstComposed = { psbt: 'first' };
+        const { rerender } = render(
+            <ScrollRestoration routeKey="send">
+                <LayoutScreen><button type="button">Open review</button></LayoutScreen>
+            </ScrollRestoration>,
+        );
+        const composeScroller = screen.getByRole('main');
+        composeScroller.scrollTop = 480;
+        screen.getByRole('button', { name: 'Open review' }).focus();
+
+        rerender(
+            <ScrollRestoration routeKey="send">
+                <ConfirmActionModal {...base({ composed: firstComposed })} />
+            </ScrollRestoration>,
+        );
+        const heading = screen.getByRole('heading', { name: 'Confirm' });
+        const scroller = screen.getByRole('main');
+
+        expect(scroller.scrollTop).toBe(0);
+        expect(heading).toHaveFocus();
+        scroller.scrollTop = 480;
+        screen.getByTestId('confirm-approve').focus();
+
+        rerender(
+            <ScrollRestoration routeKey="send">
+                <ConfirmActionModal {...base({ composed: { psbt: 'second' } })} />
+            </ScrollRestoration>,
+        );
+
+        expect(scroller.scrollTop).toBe(0);
+        expect(heading).toHaveFocus();
+        expect(screen.getByTestId('confirm-approve')).not.toHaveFocus();
     });
 
     it('the header back arrow rejects in the ready phase', () => {

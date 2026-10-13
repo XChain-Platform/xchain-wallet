@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback, useContext, useEffect, useRef } from 'react';
+import { useState, useCallback, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -290,10 +290,18 @@ export function ConfirmActionModal({
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
     const pageRef = useRef(null);
-    useFocusTrap(pageRef, { active: open });
+    const titleRef = useRef(null);
+    useFocusTrap(pageRef, { active: open, initialFocusRef: titleRef });
     const previewReady = phase === 'ready' && !reportLoading;
     const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
+
+    useLayoutEffect(() => {
+        if (!open) return;
+        const scroller = pageRef.current?.querySelector('main');
+        if (scroller) scroller.scrollTop = 0;
+        titleRef.current?.focus({ preventScroll: true });
+    }, [composed, open]);
 
     useEffect(() => {
         if (!open) return;
@@ -352,11 +360,12 @@ export function ConfirmActionModal({
             onBack={handleReject}
             backDisabled={exitsLocked}
             title="Confirm"
+            titleRef={titleRef}
         />
     );
 
     return (
-        <Screen rootRef={pageRef} variant={screenVariant} header={header}>
+        <Screen rootRef={pageRef} variant={screenVariant} header={header} restoreScroll={false}>
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
