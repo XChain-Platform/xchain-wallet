@@ -2,11 +2,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { MarketChart } from '../../../packages/core/src/shared/components/MarketChart.jsx';
+import { OpenOrdersPanel } from '../../../packages/core/src/shared/components/OpenOrdersPanel.jsx';
+import { OrderbookPanel } from '../../../packages/core/src/shared/components/OrderbookPanel.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
 import { TradeHistoryPanel } from '../../../packages/core/src/shared/components/TradeHistoryPanel.jsx';
+import { MarketView } from '../../../packages/core/src/shared/routes/MarketView.jsx';
+
+vi.mock('lightweight-charts', () => ({
+    createChart: () => ({
+        addLineSeries: () => ({ setData: () => {}, applyOptions: () => {} }),
+        applyOptions: () => {},
+        remove: () => {},
+        timeScale: () => ({ fitContent: () => {} }),
+    }),
+}));
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = { id: 'address-1', address: 'bc1qownerexample', source: 'hd' };
@@ -163,7 +176,7 @@ describe('trading history panel display states', () => {
         expect(screen.queryByText('No trades on this market yet.')).toBeNull();
     });
 
-    it('removes stale Trade History rows when refresh fails', async () => {
+    it('keeps the last good Trade History rows when refresh fails', async () => {
         const getMarketHistory = vi.fn()
             .mockResolvedValueOnce([{
                 action_index: 3,
@@ -186,7 +199,106 @@ describe('trading history panel display states', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your trade history.");
-        expect(screen.queryByText('3.5')).toBeNull();
+        expect(screen.getByText('3.5')).toBeInTheDocument();
         expect(screen.queryByText('No trades on this market yet.')).toBeNull();
+    });
+
+    it('reports a malformed Recent Trades response and retries inline', async () => {
+        const getMarketHistory = vi.fn()
+            .mockResolvedValueOnce({ unexpected: true })
+            .mockResolvedValueOnce([]);
+        render(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory }}>
+                <RecentTradesPanel chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load recent trades.");
+        expect(alert).not.toHaveTextContent('Malformed');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No trades yet.')).toBeInTheDocument();
+        expect(getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports malformed chart and order-book responses and retries each inline', async () => {
+        const getMarketHistory = vi.fn()
+            .mockResolvedValueOnce({ unexpected: true })
+            .mockResolvedValueOnce([]);
+        const getOrderbook = vi.fn()
+            .mockResolvedValueOnce({ unexpected: true })
+            .mockResolvedValueOnce({ bids: [], asks: [] });
+        render(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory, getOrderbook }}>
+                <MarketChart chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+                <OrderbookPanel chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const alerts = await screen.findAllByRole('alert');
+        expect(alerts.map((alert) => alert.textContent)).toEqual(expect.arrayContaining([
+            expect.stringContaining("Couldn't load the price chart."),
+            expect.stringContaining("Couldn't load the order book."),
+        ]));
+        for (const alert of alerts) {
+            fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+        }
+
+        expect(await screen.findByText('No trades yet in this market.')).toBeInTheDocument();
+        expect(await screen.findByText('No open orders on this market.')).toBeInTheDocument();
+        expect(getMarketHistory).toHaveBeenCalledTimes(2);
+        expect(getOrderbook).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries an open-orders address failure instead of replacing it with an empty state', async () => {
+        const getAddressesByChain = vi.fn()
+            .mockResolvedValueOnce('not an address map')
+            .mockResolvedValueOnce({ [CHAIN]: [] });
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain,
+                getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            }}>
+                <OpenOrdersPanel walletId="wallet-1" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load your open orders.");
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No open orders on this market.')).toBeInTheDocument();
+        expect(getAddressesByChain).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives the market summary a plain retry for malformed responses', async () => {
+        const getMarket = vi.fn()
+            .mockResolvedValueOnce('not a market summary')
+            .mockResolvedValueOnce({});
+        const messaging = {
+            getMarket,
+            getMarketHistory: vi.fn().mockResolvedValue([]),
+            getOrderbook: vi.fn().mockResolvedValue({ bids: [], asks: [] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketView
+                    walletId="wallet-1"
+                    chainId={CHAIN}
+                    tick1="XCHAIN"
+                    tick2="BTC"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load this market.");
+        expect(alert).not.toHaveTextContent('Malformed');
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+        await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+        expect(getMarket).toHaveBeenCalledTimes(2);
     });
 });

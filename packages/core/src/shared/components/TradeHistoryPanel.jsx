@@ -44,18 +44,29 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     const [addressesLoading, setAddressesLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressRetryKey, setAddressRetryKey] = useState(0);
+
+    useEffect(() => {
+        setAddresses([]);
+        setRows([]);
+    }, [walletId, chainId]);
 
     useEffect(() => {
         let cancelled = false;
-        setAddresses([]);
-        setRows([]);
         setAddressesLoading(true);
         setLoading(true);
         setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddresses(byChain?.[chainId] || []);
+                if (!byChain || typeof byChain !== 'object' || Array.isArray(byChain)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                const nextAddresses = byChain[chainId] || [];
+                if (!Array.isArray(nextAddresses)) {
+                    throw new Error('getAddressesByChain: malformed response');
+                }
+                setAddresses(nextAddresses);
                 setAddressesLoading(false);
             })
             .catch((err) => {
@@ -65,7 +76,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId]);
+    }, [messaging, walletId, chainId, addressRetryKey]);
 
     const reload = useCallback(async () => {
         if (addressesLoading) return;
@@ -92,7 +103,6 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             flat.sort((a, b) => rowTime(b) - rowTime(a));
             setRows(flat);
         } catch (err) {
-            setRows([]);
             setLoadError(readFailureMessage(err, 'load your trade history'));
         } finally {
             setLoading(false);
@@ -106,6 +116,14 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     useEffect(() => {
         setRows([]);
     }, [chainId, tick1, tick2, walletId]);
+
+    const retryLoad = () => {
+        if (addresses.length === 0) {
+            setAddressRetryKey((key) => key + 1);
+        } else {
+            reload();
+        }
+    };
 
     const summaries = rows
         .map((row) => summarizeRow(row, tick1, tick2))
@@ -133,7 +151,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 <p style={{ margin: 0, fontWeight: 600 }}>Trade history</p>
                 <button
                     type="button"
-                    onClick={reload}
+                    onClick={retryLoad}
                     disabled={addressesLoading || loading}
                     style={{
                         background: 'none',
@@ -154,7 +172,12 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 <StatusMessage variant="status">Loading trade history…</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: 'Try again', onAction: retryLoad }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loadError && !addressesLoading && !loading && summaries.length === 0 ? (
                 <p
@@ -262,10 +285,9 @@ function formatTime(unixSeconds) {
 }
 
 function extractRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    return [];
+    throw new Error('getMarketHistory: malformed response');
 }
