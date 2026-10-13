@@ -115,8 +115,8 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                     <div className={styles.detail}>Checking selected chains.</div>
                 ) : affected.length > 0 ? (
                     <ul className={styles.chains}>
-                        {affected.map((chain) => (
-                            <li key={chain.chainId}>
+                        {affected.map((chain, index) => (
+                            <li key={`${chain.chainId}-${index}`}>
                                 <strong>{chainLabel(chain.chainId)}</strong>: {serviceSummary(chain)}
                             </li>
                         ))}

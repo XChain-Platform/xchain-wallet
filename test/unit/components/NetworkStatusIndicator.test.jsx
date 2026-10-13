@@ -21,6 +21,7 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 
 afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     reachability.value = { overall: 'normal', perChain: [] };
 });
 
@@ -56,6 +57,25 @@ describe('NetworkStatusIndicator', () => {
         expect(screen.getByText('Litecoin').closest('li')).toHaveTextContent('Litecoin: explorer unavailable');
         expect(screen.getByText('Dogecoin').closest('li')).toHaveTextContent('Dogecoin: unreachable');
         expect(screen.queryByText(/Bitcoin:/)).toBeNull();
+    });
+
+    it('keeps repeated chain rows uniquely keyed', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        reachability.value = {
+            overall: 'degraded',
+            perChain: [
+                { chainId: 'litecoin-mainnet', mode: 'degraded', services: {} },
+                { chainId: 'litecoin-mainnet', mode: 'offline', services: {} },
+            ],
+        };
+
+        render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
+        fireEvent.click(screen.getByRole('button', {
+            name: 'Network degraded: Litecoin, Litecoin',
+        }));
+
+        expect(screen.getAllByText('Litecoin')).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique "key" prop/i);
     });
 
     it('distinguishes a fully offline result without per-chain evidence', () => {
