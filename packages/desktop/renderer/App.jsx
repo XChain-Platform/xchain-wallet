@@ -341,11 +341,12 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
-    // destination. Inert unless unlocked. Contacts feed its fuzzy search and
-    // are loaded lazily the first time it opens.
+    // destination. It stays disabled while locked or while shortcut help owns
+    // the modal layer. Contacts load lazily the first time it opens.
     const palette = useCommandPalette({
-        enabled: status.state === 'unlocked',
+        enabled: status.state === 'unlocked' && !shortcutHelpOpen,
         binding: settings?.keyboard?.bindings?.['command-palette'],
         navigate: setUnlockedView,
         currentView: unlockedView,
@@ -381,8 +382,6 @@ function AppInner() {
         }
         return () => { cancelled = true; };
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
-    // §34 keyboard shortcuts (see the web shell for the reference wiring).
-    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
@@ -396,6 +395,7 @@ function AppInner() {
         if (returnView === 'settings') setSettingsInitialSection('this-wallet');
         setUnlockedView('wallet-picker');
     };
+    // §34 keyboard shortcuts (see the web shell for the reference wiring).
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
         overrides: settings?.keyboard?.bindings,
