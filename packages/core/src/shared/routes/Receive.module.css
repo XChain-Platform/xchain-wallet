@@ -1,13 +1,3 @@
-.card {
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-}
-
 .assetCard {
     display: flex;
     align-items: center;
@@ -57,6 +47,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
+    /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
     box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
     object-fit: cover;
@@ -71,7 +62,7 @@
     justify-content: center;
     border-radius: 50%;
     font-weight: 700;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-md);
 }
 
@@ -115,6 +106,7 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    /* raw-color-ok: fixed white preserves QR scanner contrast. */
     background: #FFFFFF;
     border-radius: var(--xc-radius-md);
     border: 1px solid var(--xc-border);
@@ -135,6 +127,7 @@
     height: auto;
     aspect-ratio: 1;
     border-radius: var(--xc-radius-sm);
+    /* raw-color-ok: fixed white preserves QR scanner contrast. */
     background: #FFFFFF;
 }
 
@@ -216,7 +209,7 @@
     min-width: 0;
 }
 
-@media (max-width: 380px) {
+@media not all and (min-width: 400px) {
     .qrActions {
         flex-direction: column;
     }

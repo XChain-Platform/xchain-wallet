@@ -18,12 +18,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { populate, vaultClose, deriveAsync } = vi.hoisted(() => ({
-    populate: vi.fn(), vaultClose: vi.fn(), deriveAsync: vi.fn(),
-}));
-
-vi.mock('@xchain-wallet/core', async (importOriginal) => {
-    const actual = await importOriginal();
+const { populate, vaultClose, deriveAsync, hoisted } = vi.hoisted(() => {
+    const populate = vi.fn();
+    const vaultClose = vi.fn();
+    const deriveAsync = vi.fn();
     class FakeSignerPool {
         populate(...args) { return populate(...args); }
         lockAll() { /* nothing pooled */ }
@@ -37,33 +35,53 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
         // Some call sites `.catch()` the refresh, so it has to be thenable.
         refresh() { return Promise.resolve(); }
     }
-    return {
-        ...actual,
-        crypto: {
-            ...actual.crypto,
-            deriveMasterKeyAsync: (...args) => deriveAsync(...args),
-            // The unlock lane must not block the page on the synchronous KDF.
-            deriveMasterKey: () => { throw new Error('sync KDF on the web unlock path'); },
-        },
-        storage: {
-            ...actual.storage,
-            Vault: class FakeVault {
-                async open() { /* password accepted */ }
-                close() { vaultClose(); }
-            },
-        },
-        signers: { ...actual.signers, SignerPool: FakeSignerPool },
-        notifications: {
-            ...actual.notifications,
-            NotificationService: InertWatcher,
-            PriceAlertWatcher: InertWatcher,
-            GovernancePollWatcher: InertWatcher,
-            CoinpayAutopayWatcher: InertWatcher,
-            DeadlineWatcher: InertWatcher,
-            DispenserEscrowWatcher: InertWatcher,
-        },
-    };
+    class FakeVault {
+        async open() { /* password accepted */ }
+        close() { vaultClose(); }
+    }
+    return { populate, vaultClose, deriveAsync, hoisted: { FakeSignerPool, InertWatcher, FakeVault } };
 });
+
+// hostBridge imports these modules directly (not through the core barrel),
+// so each seam is mocked at its own file.
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    deriveMasterKeyAsync: (...args) => deriveAsync(...args),
+    // The unlock lane must not block the page on the synchronous KDF.
+    deriveMasterKey: () => { throw new Error('sync KDF on the web unlock path'); },
+}));
+vi.mock('../../../packages/core/src/storage/Vault.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    Vault: hoisted.FakeVault,
+}));
+vi.mock('../../../packages/core/src/signers/SignerPool.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    SignerPool: hoisted.FakeSignerPool,
+}));
+vi.mock('../../../packages/core/src/notifications/NotificationService.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    NotificationService: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/PriceAlertWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    PriceAlertWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/GovernancePollWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    GovernancePollWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/CoinpayAutopayWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    CoinpayAutopayWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/DeadlineWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    DeadlineWatcher: hoisted.InertWatcher,
+}));
+vi.mock('../../../packages/core/src/notifications/DispenserEscrowWatcher.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    DispenserEscrowWatcher: hoisted.InertWatcher,
+}));
 
 vi.mock('../../../packages/web/src/storage/backends.js', () => ({
     createStorageBackend: () => ({ load: async () => null, save: async () => {} }),

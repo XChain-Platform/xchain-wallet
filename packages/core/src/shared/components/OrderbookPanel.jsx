@@ -104,7 +104,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
             <div className={styles.orderBookGrid}>
                 <LevelsColumn
-                    title="Bids"
+                    title="Buy bids"
                     side="bid"
                     levels={book.bids}
                     maxCumulative={book.maxCumulative}
@@ -113,7 +113,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                     tick1={tick1}
                 />
                 <LevelsColumn
-                    title="Asks"
+                    title="Sell asks"
                     side="ask"
                     levels={book.asks}
                     maxCumulative={book.maxCumulative}
@@ -233,7 +233,7 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
             <button
                 type="button"
                 onClick={onPick}
-                aria-label={`Pick price ${level.displayPrice}`}
+                aria-label={`Pick ${side === 'bid' ? 'buy bid' : 'sell ask'} price ${level.displayPrice}`}
                 style={{
                     display: 'block',
                     width: '100%',

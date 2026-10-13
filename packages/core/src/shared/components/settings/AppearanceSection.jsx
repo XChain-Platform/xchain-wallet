@@ -24,7 +24,7 @@
 //   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
 import { useSettings } from '../../hooks/useSettings.js';
-import { ROW, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { SELECT, STACK, SettingsFieldRow, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -64,32 +64,34 @@ export function AppearanceSection() {
 
     return (
         <div style={STACK}>
-            <div style={ROW}>
-                <span style={ROW_LABEL}>Theme</span>
+            <SettingsFieldRow
+                label="Theme"
+                hint="Choose a light or dark wallet theme, or follow your device setting."
+            >
                 <select
                     value={settings.theme}
                     onChange={(e) => onThemeChange(e.target.value)}
-                    aria-label="Theme"
                     style={SELECT}
                 >
                     {THEME_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                 </select>
-            </div>
-            <div style={ROW}>
-                <span style={ROW_LABEL}>Reduced motion</span>
+            </SettingsFieldRow>
+            <SettingsFieldRow
+                label="Reduced motion"
+                hint="Control interface animation, or follow your device accessibility setting."
+            >
                 <select
                     value={settings.reducedMotion ?? 'auto'}
                     onChange={(e) => onReducedMotionChange(e.target.value)}
-                    aria-label="Reduced motion"
                     style={SELECT}
                 >
                     {REDUCED_MOTION_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                 </select>
-            </div>
+            </SettingsFieldRow>
         </div>
     );
 }

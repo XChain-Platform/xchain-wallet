@@ -8,12 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A user who issued a token had no way from the holder
-// view (TokenDetail) into the issuer surface (ManageToken); the only
-// path was Menu -> My Tokens. The "Manage token" entry in the quick-
-// actions "More" menu is gated on the same all-addresses ownership
-// check ManageToken itself uses (useIsTokenIssuer.js), never on the
-// active address alone.
+// TokenDetail gates its direct Manage action on the same all-addresses
+// ownership check ManageToken itself uses, never on the active address alone.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
@@ -46,8 +42,9 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const OTHER = 'bcrt1qotherotherotherotherotherotherotherot';
 
-function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
+function renderDetail({ creator, kind = 'token', onManageToken = vi.fn(), withPrimaryActions = false } = {}) {
     const messaging = {
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getTokenInfo: vi.fn().mockResolvedValue({ creator }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: MINE }] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
@@ -60,9 +57,12 @@ function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
             walletId: 'w1',
             chainId: CHAIN,
             tick: 'S18PROBE',
-            kind: 'token',
+            kind,
             quantity: '100',
             onBack() {},
+            onSend: withPrimaryActions ? vi.fn() : undefined,
+            onReceive: withPrimaryActions ? vi.fn() : undefined,
+            onBuy: withPrimaryActions ? vi.fn() : undefined,
             onManageToken,
         }),
     ));
@@ -85,14 +85,18 @@ describe('TokenDetail "Manage token" action', () => {
     });
 
     it('renders and navigates for the issuing wallet', async () => {
-        const { onManageToken } = renderDetail({ creator: MINE });
+        const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
 
-        // The gate starts at null (owner-gate fetch in flight), so no
-        // destination is shown until ownership resolves true.
-        const moreButton = await screen.findByRole('button', { name: 'More' });
-        fireEvent.click(moreButton);
-        const entry = await screen.findByRole('menuitem', { name: 'Manage token' });
-        fireEvent.click(entry);
+        const manage = await screen.findByRole('button', { name: 'Manage' });
+        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+            .getAllByRole('button');
+        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
+            'Send',
+            'Receive',
+            'Trade',
+            'Manage',
+        ]);
+        fireEvent.click(manage);
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
@@ -100,11 +104,13 @@ describe('TokenDetail "Manage token" action', () => {
     it('does not render for a wallet that only holds (never issued) the tick', async () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
-        // Let the owner-gate fetch settle (isOwner: null -> false) before
-        // asserting absence. With no destination, no inert menu button is
-        // rendered.
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.queryByText('Manage token')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+    });
+
+    it('does not render Manage for a native coin', () => {
+        renderDetail({ creator: MINE, kind: 'native' });
+
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
     });
 });

@@ -550,8 +550,9 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                 Remove {walletName}?
             </div>
             <div style={ROW_HINT}>
-                Removing this wallet deletes its accounts, addresses, signers, and pending transactions,
-                and destroys its encrypted seed. This cannot be undone. Type the wallet name{' '}
+                Removing this wallet deletes its accounts, addresses, signers, and pending transactions.
+                Make sure you have a backup before continuing. The encrypted seed is destroyed and
+                cannot be recovered. This cannot be undone. Type the wallet name{' '}
                 <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
             </div>
             <input

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
 
@@ -43,6 +43,9 @@ function isExtensionContext() {
 export function LayoutModeToggle() {
     const [mode, setMode] = useState(/** @type {'popup' | 'sidepanel'} */ ('popup'));
     const [available, setAvailable] = useState(false);
+    const groupId = useId();
+    const labelId = `${groupId}-label`;
+    const descriptionId = `${groupId}-description`;
 
     useEffect(() => {
         if (!isExtensionContext()) return;
@@ -70,12 +73,20 @@ export function LayoutModeToggle() {
 
     return (
         <div className={styles.wrap}>
-            <span className={styles.label}>Open as</span>
-            <div className={styles.buttons} role="radiogroup" aria-label="Open as">
+            <span id={labelId} className={styles.label}>Open as</span>
+            <span id={descriptionId} className={styles.description}>
+                Choose how the wallet opens from the extension toolbar.
+            </span>
+            <div
+                className={styles.buttons}
+                role="radiogroup"
+                aria-labelledby={labelId}
+                aria-describedby={descriptionId}
+            >
                 <button
                     type="button"
                     role="radio"
-                    aria-checked={mode === 'popup' ? 'true' : 'false'}
+                    aria-checked={mode === 'popup'}
                     className={`${styles.btn} ${mode === 'popup' ? styles.btnActive : ''}`}
                     onClick={() => pick('popup')}
                 >
@@ -85,7 +96,7 @@ export function LayoutModeToggle() {
                 <button
                     type="button"
                     role="radio"
-                    aria-checked={mode === 'sidepanel' ? 'true' : 'false'}
+                    aria-checked={mode === 'sidepanel'}
                     className={`${styles.btn} ${mode === 'sidepanel' ? styles.btnActive : ''}`}
                     onClick={() => pick('sidepanel')}
                 >

@@ -12,7 +12,7 @@
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 10px;
+    border-radius: var(--xc-radius-control);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -85,8 +85,8 @@
     z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-popover);
     max-height: 360px;
     display: flex;
     flex-direction: column;

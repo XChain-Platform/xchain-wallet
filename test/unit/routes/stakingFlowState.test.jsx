@@ -332,7 +332,7 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
 
             const listNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/routes/StakingList.module.css',
-            ), '(max-width: 399px)');
+            ), 'not all and (min-width: 400px)');
             expect(ruleBody(listNarrow, '.row')).toMatch(
                 /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
             );
@@ -340,12 +340,12 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
 
             const detailNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/routes/StakeDetail.module.css',
-            ), '(max-width: 399px)');
+            ), 'not all and (min-width: 400px)');
             expect(ruleBody(detailNarrow, '.eventRow')).toMatch(/flex-direction:\s*column/);
 
             const amountNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/components/AmountField.module.css',
-            ), '(max-width: 399px)');
+            ), 'not all and (min-width: 400px)');
             expect(ruleBody(amountNarrow, '.amountFooter')).toMatch(/flex-direction:\s*column/);
         } finally {
             cleanup();

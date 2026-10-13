@@ -315,4 +315,21 @@ describe('governance route audit', () => {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }
     });
+
+    it('retries a failed poll-list load', async () => {
+        const messaging = messagingWith({
+            governancePolls: vi.fn()
+                .mockRejectedValueOnce(new Error('Polls unavailable'))
+                .mockResolvedValueOnce([]),
+        });
+        mount(GovernancePolls, {
+            walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
+        }, messaging);
+
+        expect(await screen.findByText('Polls unavailable')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No polls yet')).toBeTruthy();
+        expect(messaging.governancePolls).toHaveBeenCalledTimes(2);
+    });
 });

@@ -49,15 +49,14 @@ assert.match(selectJs, /\$\{styles\[size\]/, 'Select applies the size class');
 assert.match(textareaJs, /size = 'md'/, 'Textarea takes size');
 assert.match(textareaJs, /\$\{styles\[size\]/, 'Textarea applies the size class');
 
-// --- AmountField forwards size; big-field CSS is gone ------------------
+// --- AmountField forwards size and composes shared controls ------------
 
 assert.match(amountJs, /size = 'md'/, 'AmountField defaults size to md');
 assert.match(amountJs, /<Input\s+ref=\{inputRef\}\s+size=\{size\}/s, 'AmountField forwards size to Input');
-assert.match(amountJs, /data-size=\{size\}/, 'AmountField tags the wrap with the size for Max positioning');
-assert.doesNotMatch(amountCss, /\.bigField/, 'AmountField no longer defines its own bigField rules');
-assert.doesNotMatch(amountJs, /fontSize: 'var\(--xc-text-lg\)'/, 'AmountField no longer inlines the big-field style');
-// Max button re-anchored to the input box (bottom-anchored, size-keyed).
-assert.match(amountCss, /\[data-size='lg'\] \.amountMaxInline\s*\{[^}]*bottom/s, 'Max button offset keyed to size');
+assert.doesNotMatch(amountCss, /\.bigField/, 'AmountField leaves big-field rules to Input');
+assert.doesNotMatch(amountJs, /fontSize: 'var\(--xc-text-lg\)'/, 'AmountField leaves big-field styles to Input');
+assert.match(amountJs, /<Button\s+variant="primary"\s+size="sm"/s, 'Max uses the shared small primary Button');
+assert.match(amountJs, /bottom: size === 'lg' \? '10px' : '4px'/, 'Max button offset is keyed to field size');
 
 // --- Send opts its hero fields into lg ---------------------------------
 

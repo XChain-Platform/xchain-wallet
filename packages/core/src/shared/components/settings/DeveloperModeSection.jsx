@@ -45,12 +45,21 @@
 import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
+import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
-import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    ROW_HINT,
+    SELECT,
+    STACK,
+    SettingsFieldRow,
+    SettingsLoadError,
+    Status,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -141,15 +150,11 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
         ? value
         : schemas.settings.AUTO_SIGN_LOCALHOST_OFF;
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Cache password for localhost auto-sign</span>
-                <span style={ROW_HINT}>
-                    After you approve one sign request from a localhost dApp, reuse that password for further sign requests for this long, instead of prompting each time. The password is held in memory only and cleared when the browser closes. Off by default. Requires Developer Mode. For local development only.
-                </span>
-            </div>
+        <SettingsFieldRow
+            label="Cache password for localhost auto-sign"
+            hint="After you approve one sign request from a localhost dApp, reuse that password for further sign requests for this long, instead of prompting each time. The password is held in memory only and cleared when the browser closes. Off by default. Requires Developer Mode. For local development only."
+        >
             <select
-                aria-label="Cache password for localhost auto-sign"
                 value={current}
                 disabled={!developerMode}
                 onChange={(e) => onChange(Number(e.target.value))}
@@ -159,7 +164,7 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
                     <option key={ms} value={ms}>{AUTO_SIGN_LABELS[ms]}</option>
                 ))}
             </select>
-        </div>
+        </SettingsFieldRow>
     );
 }
 
@@ -187,6 +192,8 @@ function LogConsoleRow({ developerMode }) {
                     type="button"
                     onClick={() => setOpen((v) => !v)}
                     disabled={!developerMode}
+                    aria-expanded={open && developerMode}
+                    aria-controls="settings-log-console"
                     style={{
                         background: 'transparent',
                         border: '1px solid var(--xc-border)',
@@ -201,7 +208,7 @@ function LogConsoleRow({ developerMode }) {
                     {open ? 'Hide' : 'Show'}
                 </button>
             </div>
-            {open && developerMode ? <LogConsole /> : null}
+            {open && developerMode ? <div id="settings-log-console"><LogConsole /></div> : null}
         </div>
     );
 }
@@ -773,37 +780,33 @@ function CustomChainsRow({ developerMode }) {
                             {d?.id}{d?.networkKind ? ` · ${d.networkKind}` : ''}
                         </span>
                     </div>
-                    <button
-                        type="button"
+                    <Button
+                        variant="danger"
+                        size="sm"
+                        icon={null}
                         onClick={() => onRemove(d?.id)}
                         disabled={!developerMode || busy}
                         aria-label={`Remove custom chain ${d?.id}`}
-                        style={{
-                            background: 'transparent',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
-                            opacity: !developerMode || busy ? 0.5 : 1,
-                        }}
-                    >Remove</button>
+                    >Remove</Button>
                 </div>
             ))}
             {open ? (
                 <form onSubmit={onAdd} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <label style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                        Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).
+                    <label htmlFor="custom-chain-descriptor" style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                        Custom chain descriptor JSON
                     </label>
+                    <span id="custom-chain-descriptor-hint" style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
+                        Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).
+                    </span>
                     <textarea
+                        id="custom-chain-descriptor"
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
                         placeholder={'{\n  "id": "my-fork-regtest",\n  "coin": "myfork",\n  "networkKind": "regtest",\n  ...\n}'}
                         rows={8}
                         spellCheck={false}
                         disabled={busy}
-                        aria-label="Custom chain descriptor JSON"
+                        aria-describedby="custom-chain-descriptor-hint"
                         style={{
                             background: 'var(--xc-bg)',
                             color: 'var(--xc-text)',

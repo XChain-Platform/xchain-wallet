@@ -29,6 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -143,7 +144,7 @@ const leftNavSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/scan:\s*\[[^\]]*'scan'[^\]]*'sign-psbt'[^\]]*\]/.test(leftNavSrc),
+assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
     /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),

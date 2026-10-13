@@ -23,11 +23,11 @@ import styles from './EmptyStateNudge.module.css';
 /**
  * @param {object} props
  * @param {string} props.title                       short headline ("No balances yet")
- * @param {string} [props.body]                      one or two sentences explaining what would populate this view
+ * @param {string} [props.body]                      one short sentence explaining what would populate this view
  * @param {string} [props.actionLabel]               omit + onAction to skip the button
  * @param {() => void} [props.onAction]
  * @param {import('react').ReactNode} [props.icon]   leading icon for the action button
- * @param {string} [props.role]                      defaults to 'status' so screen readers announce empty results
+ * @param {string} [props.role]                      optional role when the parent does not own announcements
  */
 export function EmptyStateNudge({
     title,
@@ -35,7 +35,7 @@ export function EmptyStateNudge({
     actionLabel,
     onAction,
     icon,
-    role = 'status',
+    role,
 }) {
     return (
         <div className={styles.wrap} role={role}>

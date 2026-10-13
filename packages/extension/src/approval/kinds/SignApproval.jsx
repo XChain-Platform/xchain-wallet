@@ -13,7 +13,6 @@ import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui'
 import {
     registry as registryLib,
     decoder as decoderLib,
-    schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
@@ -119,6 +118,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [busy, setBusy] = useState(false);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
+    const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Sign-in signs as one address the user picks here, from the list the
@@ -163,6 +163,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // lands. Idempotent under the registry has() guard.
                 try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
+                setSettings(s || null);
                 setDeveloperMode(Boolean(s?.developerMode));
                 setWalletMode(s?.walletMode || 'full');
             })
@@ -766,6 +767,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         result={previewResult}
                         loading={previewBalances.loading}
                         error={previewBalances.error}
+                        chainCoin={descriptor?.coin}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
+                        allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     />
                 </>
             ) : null}
@@ -1140,16 +1144,4 @@ function CoSignIntentSummary({ loading, error, preview }) {
             ) : null}
         </div>
     );
-}
-
-function formatSats(value) {
-    const n = Number(value || 0);
-    return `${n.toLocaleString()} sats`;
-}
-
-function ellipsizeMiddle(s, head = 12, tail = 8) {
-    const str = String(s ?? '');
-    return str.length > head + tail + 1
-        ? `${str.slice(0, head)}…${str.slice(-tail)}`
-        : str;
 }

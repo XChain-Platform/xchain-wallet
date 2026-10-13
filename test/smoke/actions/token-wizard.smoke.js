@@ -313,7 +313,6 @@ assert.ok(
 // --- 7. CSS module -----------------------------------------------------
 
 for (const cls of [
-    '.card',
     '.progress',
     '.templateGrid',
     '.templateCard',
@@ -328,6 +327,8 @@ for (const cls of [
         `TokenWizard.module.css defines ${cls}`,
     );
 }
+assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
+assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');
 
 // --- 8. Uses the shared messaging + shell context ---------------------
 

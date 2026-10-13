@@ -30,7 +30,7 @@ describe('transactionReceiptText', () => {
             'Date: 2024-01-15T20:30:00.000Z',
             'Chain: Litecoin Testnet',
             'Amount: 12.5 PEPE',
-            'Fee: 0.001 LTC',
+            'Network fee: 0.001 LTC',
             `Transaction ID: ${TXID}`,
             `Explorer: https://explorer.xchain.io/TLTC/tx/${TXID}`,
         ].join('\n'));
@@ -60,7 +60,7 @@ describe('transactionReceiptText', () => {
             raw: { amount: '21', tick: 'BTC', fee: '0.0001' },
         }, { balancesHidden: true });
 
-        expect(receipt).toContain('Amount: Hidden\nFee: Hidden');
+        expect(receipt).toContain('Amount: Hidden\nNetwork fee: Hidden');
         expect(receipt).not.toContain('21 BTC');
         expect(receipt).not.toContain('0.0001 BTC');
     });

@@ -483,6 +483,15 @@ export function Locked({ onUnlocked }) {
         >
             {hero}
             {lockoutBanner}
+            <input
+                type="text"
+                name="username"
+                value="xchain-wallet"
+                autoComplete="username"
+                readOnly
+                aria-label="Wallet username"
+                hidden
+            />
             <Input
                 ref={inputRef}
                 type="password"

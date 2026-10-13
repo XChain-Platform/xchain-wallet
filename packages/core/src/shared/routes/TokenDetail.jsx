@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -28,6 +28,7 @@ import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
@@ -43,7 +44,6 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
-import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './TokenDetail.module.css';
 
@@ -104,6 +104,9 @@ export function TokenDetail({
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const walletModeReady = settings !== null;
+    const isWatcherMode = settings?.walletMode === 'watcher';
+    const browserOnline = useOnlineStatus();
     const variant = screenVariantFor(shell);
     const tabsId = useId();
 
@@ -363,52 +366,6 @@ export function TokenDetail({
     // is one tap away for users who think in USD.
     const [primaryUnit, setPrimaryUnit] = useState('tick');
 
-    // 4th quick-action button is now a "More" dropdown (matches the
-    // pattern from the ActionDetail page). Buy lives inside the menu so
-    // less-frequent actions stay out of the primary row.
-    const [moreOpen, setMoreOpen] = useState(false);
-    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    useEffect(() => {
-        if (!moreOpen) return undefined;
-        const onClick = (e) => {
-            if (moreWrapRef.current?.contains(e.target)) return;
-            setMoreOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [moreOpen]);
-    const moreOptions = [];
-    const tokenExplorerUrl = !isNative ? explorerPageUrl({
-        chainId,
-        kind: 'token',
-        value: tick,
-        settings,
-    }) : null;
-    if (typeof onViewActivity === 'function') {
-        moreOptions.push({
-            id: 'history',
-            label: 'History',
-            icon: <Icon.HistoryIcon />,
-            onClick: () => { setMoreOpen(false); onViewActivity(); },
-        });
-    }
-    // Issuer-only hop into ManageToken; gated on isTokenOwner (not just
-    // the handler being wired) so a holder who isn't the issuer never
-    // sees an entry that would 404 or open someone else's token.
-    if (typeof onManageToken === 'function' && isTokenOwner) {
-        moreOptions.push({
-            id: 'manage-token',
-            label: 'Manage token',
-            icon: <Icon.GearIcon />,
-            onClick: () => { setMoreOpen(false); onManageToken(); },
-        });
-    }
-
     const fiatAvailable = fiat != null && isFinite(fiat);
     const hasDexPrice = !isNative && (
         fiatRateSource === 'market'
@@ -427,6 +384,10 @@ export function TokenDetail({
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
+    const sendDisabledReason = safeBigInt(quantity) <= 0n
+        ? 'No balance to send.'
+        : !browserOnline ? 'Send needs a network connection.' : null;
+    const tradeDisabledReason = !browserOnline ? 'Trade needs a network connection.' : null;
 
     if (tokenMissing) {
         return (
@@ -577,13 +538,22 @@ export function TokenDetail({
                     />
                 ) : null}
 
-                {/* Quick actions: Send / Receive / Swap / Buy, matching
-                    Home's 4-up grid. */}
+                {/* Every shell shares this action order. Missing capabilities
+                    disappear, while temporary blocks stay visible with the
+                    reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    {typeof onSend === 'function' ? (
-                        <button type="button" className={styles.quickAction} onClick={onSend}>
+                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
+                        <button
+                            type="button"
+                            className={styles.quickAction}
+                            onClick={onSend}
+                            disabled={Boolean(sendDisabledReason)}
+                            title={sendDisabledReason || undefined}
+                            aria-label="Send"
+                        >
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
                             <span>Send</span>
+                            {sendDisabledReason ? <span className={styles.quickActionReason}>{sendDisabledReason}</span> : null}
                         </button>
                     ) : null}
                     {typeof onReceive === 'function' ? (
@@ -592,65 +562,25 @@ export function TokenDetail({
                             <span>Receive</span>
                         </button>
                     ) : null}
-                    {/* Absent, not greyed, when the shell wires no handler: a
-                        build can have compiled the DEX surface out,
-                        and there is then no market for this token to open. */}
                     {typeof onBuy === 'function' ? (
-                        <button type="button" className={styles.quickAction} onClick={onBuy}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                            <span>Markets</span>
-                        </button>
-                    ) : null}
-                    {typeof onBuy === 'function' && !isNative && safeBigInt(quantity) > 0n ? (
-                        <button type="button" className={styles.quickAction} onClick={onBuy}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                            <span>Sell on DEX</span>
-                        </button>
-                    ) : null}
-                    {tokenExplorerUrl ? (
-                        <a
+                        <button
+                            type="button"
                             className={styles.quickAction}
-                            href={tokenExplorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            onClick={onBuy}
+                            disabled={Boolean(tradeDisabledReason)}
+                            title={tradeDisabledReason || undefined}
+                            aria-label="Trade"
                         >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                            <span>Explorer</span>
-                        </a>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                            <span>Trade</span>
+                            {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
+                        </button>
                     ) : null}
-                    {moreOptions.length > 0 ? (
-                        <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
-                            <button
-                                type="button"
-                                className={styles.quickAction}
-                                onClick={() => setMoreOpen((o) => !o)}
-                                aria-haspopup="menu"
-                                aria-expanded={moreOpen}
-                            >
-                                <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                <span>More</span>
-                            </button>
-                            {moreOpen ? (
-                                <div className={styles.quickActionMoreMenu} role="menu">
-                                    {moreOptions.map((opt) => (
-                                        <button
-                                            key={opt.id}
-                                            type="button"
-                                            role="menuitem"
-                                            className={styles.quickActionMoreItem}
-                                            onClick={opt.onClick}
-                                        >
-                                            {opt.icon ? (
-                                                <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                    {opt.icon}
-                                                </span>
-                                            ) : null}
-                                            <span>{opt.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : null}
-                        </div>
+                    {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
+                        <button type="button" className={styles.quickAction} onClick={onManageToken}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>
+                            <span>Manage</span>
+                        </button>
                     ) : null}
                 </div>
 
@@ -2553,17 +2483,4 @@ function AutoShrinkText({ children }) {
             </span>
         </span>
     );
-}
-
-const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
-];
-function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
 }

@@ -15,7 +15,7 @@
 // width check, no shell check), and the stylesheet carries the card only
 // inside the one `(min-width: 600px)` block.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -254,6 +254,26 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
 
     it('lets the action row wrap', () => {
         expect(ruleBody(text, '.actions')).toMatch(/flex-wrap:\s*wrap/);
+    });
+
+    it('keeps raised page-card styling out of shared route CSS', () => {
+        const routesDir = join(uiDir(), '..', 'shared', 'routes');
+        const exceptions = new Set(['AddAddressModal.module.css']);
+        const duplicates = [];
+
+        for (const name of readdirSync(routesDir).filter((file) => file.endsWith('.module.css'))) {
+            if (exceptions.has(name)) continue;
+            const card = ruleBody(readFileSync(join(routesDir, name), 'utf8'), '.card');
+            if (card
+                && /background:\s*var\(--xc-surface-raised\)/.test(card)
+                && /border:\s*1px solid var\(--xc-border\)/.test(card)
+                && /border-radius:\s*var\(--xc-radius-lg\)/.test(card)
+            ) {
+                duplicates.push(name);
+            }
+        }
+
+        expect(duplicates).toEqual([]);
     });
 });
 

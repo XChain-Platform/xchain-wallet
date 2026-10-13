@@ -43,6 +43,7 @@ import { MarketChart } from '../../../packages/core/src/shared/components/Market
 afterEach(() => {
     cleanup();
     reducedMotionHarness.value = false;
+    document.documentElement.removeAttribute('data-xc-theme');
     vi.clearAllMocks();
 });
 
@@ -128,9 +129,15 @@ describe('MarketChart states and timeframes', () => {
         });
         expect(chartHarness.createChart.mock.calls.at(-1)[1]).toMatchObject({
             layout: { textColor: '#111111' },
+            grid: {
+                horzLines: { color: '#777777' },
+                vertLines: { color: '#777777' },
+            },
             rightPriceScale: { borderColor: '#222222' },
             timeScale: { borderColor: '#222222' },
         });
+        expect(chartHarness.addLineSeries.mock.calls.at(-1)[0].priceFormat.formatter(0.125))
+            .toBe('0.125 BTC');
 
         cleanup();
         renderChart(vi.fn().mockResolvedValue([
@@ -139,6 +146,56 @@ describe('MarketChart states and timeframes', () => {
         ]));
         await waitFor(() => {
             expect(chartHarness.seriesApplyOptions).toHaveBeenLastCalledWith({ color: '#333333' });
+        });
+        computedStyle.mockRestore();
+    });
+
+    it('re-reads label, grid, crosshair, and series tokens when the theme changes', async () => {
+        let dark = false;
+        const computedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({
+            color: dark ? '#e5eaf2' : '#0f172a',
+            getPropertyValue: (name) => (dark ? {
+                '--xc-text': '#e5eaf2',
+                '--xc-text-muted': '#94a3b8',
+                '--xc-border': '#243044',
+                '--xc-accent-primary': '#1a7bac',
+                '--xc-success': '#4ade80',
+                '--xc-danger': '#dc2626',
+            } : {
+                '--xc-text': '#0f172a',
+                '--xc-text-muted': '#5f7086',
+                '--xc-border': '#e4e7eb',
+                '--xc-accent-primary': '#1a7bac',
+                '--xc-success': '#146f34',
+                '--xc-danger': '#dc2626',
+            })[name] || '',
+        }));
+        renderChart(vi.fn().mockResolvedValue([
+            { price: '0.01', amount: '10', type: 'buy', timestamp: 60 },
+            { price: '0.02', amount: '20', type: 'sell', timestamp: 3660 },
+        ]));
+
+        await waitFor(() => {
+            expect(chartHarness.seriesApplyOptions).toHaveBeenCalledWith({ color: '#146f34' });
+        });
+        dark = true;
+        act(() => document.documentElement.setAttribute('data-xc-theme', 'dark'));
+
+        await waitFor(() => {
+            expect(chartHarness.chartApplyOptions).toHaveBeenCalledWith({
+                layout: { background: { color: 'transparent' }, textColor: '#e5eaf2' },
+                grid: {
+                    horzLines: { color: '#94a3b8' },
+                    vertLines: { color: '#94a3b8' },
+                },
+                rightPriceScale: { borderColor: '#243044' },
+                timeScale: { borderColor: '#243044' },
+                crosshair: {
+                    vertLine: { color: '#94a3b8' },
+                    horzLine: { color: '#94a3b8' },
+                },
+            });
+            expect(chartHarness.seriesApplyOptions).toHaveBeenCalledWith({ color: '#4ade80' });
         });
         computedStyle.mockRestore();
     });

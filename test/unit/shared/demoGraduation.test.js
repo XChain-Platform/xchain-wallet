@@ -35,6 +35,10 @@ import {
     isDemoWallet,
     markDemoWallet,
 } from '../../../packages/core/src/flows/demoMode.js';
+import {
+    readActiveWallet,
+    writeActiveWallet,
+} from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
 
 const DEMO_ID_KEY = 'xc:demoWalletId';
 
@@ -123,6 +127,7 @@ describe('exitDemoWallet', () => {
 
     it('removes the demo record, clears the flags, and wipes when nothing is left', async () => {
         markDemoWallet('demo-1', { password: 'throwaway-password', now: 1000 });
+        writeActiveWallet('demo-1');
         const h = harness({ wallets: [] });
         const r = await exitDemoWallet({
             messaging: h.messaging,
@@ -136,6 +141,7 @@ describe('exitDemoWallet', () => {
         expect(getDemoWalletId()).toBe(null);
         expect(getDemoWalletPassword()).toBe(null);
         expect(getDemoWalletExpiry()).toBe(null);
+        expect(readActiveWallet()).toBe(null);
         expect(isDemoWallet('real-wallet-created-next')).toBe(false);
     });
 
@@ -152,6 +158,7 @@ describe('exitDemoWallet', () => {
     });
 
     it('keeps a real wallet alongside the demo: no wipe, no intent, no reload', async () => {
+        writeActiveWallet('demo-1');
         const h = harness({ wallets: [{ id: 'real-1' }] });
         const r = await exitDemoWallet({
             messaging: h.messaging,
@@ -163,6 +170,7 @@ describe('exitDemoWallet', () => {
         expect(r).toEqual({ wiped: false, reloaded: false, remaining: 'occupied' });
         expect(h.calls.wiped).toBe(0);
         expect(h.calls.reloaded).toBe(0);
+        expect(readActiveWallet()).toBe(null);
         expect(takePostDemoIntent()).toBe(null);
     });
 

@@ -99,7 +99,7 @@
     color: var(--xc-text-muted);
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .row,
     .delta {
         grid-template-columns: minmax(0, 1fr);

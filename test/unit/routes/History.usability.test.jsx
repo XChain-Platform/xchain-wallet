@@ -336,7 +336,7 @@ describe('History usability', () => {
                 'Date: 2024-01-15T20:30:00.000Z',
                 'Chain: Dogecoin Testnet',
                 'Amount: 15 DOGE',
-                'Fee: 0.25 DOGE',
+                'Network fee: 0.25 DOGE',
                 `Transaction ID: ${txHash}`,
                 `Explorer: https://explorer.xchain.io/TDOGE/tx/${txHash}`,
             ].join('\n')));

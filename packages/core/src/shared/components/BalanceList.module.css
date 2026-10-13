@@ -92,7 +92,7 @@
     height: 20px;
     border-radius: 50%;
     background: var(--xc-surface);
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
     display: block;
 }

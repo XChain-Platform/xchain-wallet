@@ -1185,7 +1185,7 @@ export function AddressList({
             }
         };
         return (
-            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
+            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View address" titleIcon={<Icon.ScanIcon />} />}>
                 <ListPage>
                     <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
@@ -1468,7 +1468,7 @@ export function AddressList({
                         : "Try a different search or network filter."}
                 />
             ) : (
-            <ul className={local.addrList} aria-label="Wallet addresses">
+            <ul className={local.addrList} aria-label="Addresses">
                 {listedRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (

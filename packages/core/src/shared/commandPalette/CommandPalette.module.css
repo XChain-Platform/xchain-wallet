@@ -165,7 +165,7 @@
     display: none;
 }
 
-@media (max-width: 639px) {
+@media not all and (min-width: 640px) {
     .overlay {
         align-items: flex-end;
         padding: 0;

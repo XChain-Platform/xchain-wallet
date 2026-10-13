@@ -13,9 +13,15 @@
     line-height: 1.5;
 }
 
-.title {
-    display: block;
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-1);
+}
+
+.title {
     color: var(--xc-text);
     font-size: var(--xc-text-xs);
     font-weight: 600;
@@ -23,6 +29,32 @@
     letter-spacing: 0.04em;
 }
 
+/* Inline link-style button; the flex box lets it meet the 24px pointer
+   target floor without padding that would push the text out of line. */
+.dismiss {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.dismiss:focus-visible {
+    border-radius: var(--xc-radius-sm);
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .body {
     margin: 0;
+}
+
+.body a {
+    color: var(--xc-accent-primary);
 }

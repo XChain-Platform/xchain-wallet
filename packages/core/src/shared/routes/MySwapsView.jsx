@@ -22,7 +22,7 @@
 // or older detail read falls back to the creation expiration. Cancel/edit
 // are offered only while open.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
     Button,
@@ -198,6 +198,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     // PC-21: which swap's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    const loadRequestId = useRef(0);
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -205,12 +206,14 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     }, []);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestId.current;
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;
         }
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
+            if (requestId !== loadRequestId.current) return;
             setByChain(chains);
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
@@ -222,6 +225,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
+            if (requestId !== loadRequestId.current) return;
 
             const cancelledKeys = collectCancelledKeys(results);
             const seen = new Set();
@@ -239,15 +243,20 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             const candidates = all.filter((it) => !cancelledKeys.has(it.key)
                 && String(it.row.status || 'valid') === 'valid');
             const states = await readSwapStates(messaging, candidates);
+            if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, live: states.get(it.key) || null })));
             setLoadError(null);
         } catch (err) {
+            if (requestId !== loadRequestId.current) return;
             setLoadError(err?.message || 'Failed to load swaps.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        return () => { loadRequestId.current += 1; };
+    }, [load]);
 
     const header = (
         <PageHeader

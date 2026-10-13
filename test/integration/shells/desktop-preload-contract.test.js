@@ -255,7 +255,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         await bridge.wipeStorage();
         await win.openDetached({ initialView: 'history' });
         await registry.getRemoteDescriptors();
-        signer.postMessage({ kind: 'announce', signerIds: [] });
+        signer.postMessage({ kind: 'register', signerIds: [] });
         // row 142: the install call is walked here specifically so
         // the agreement check below covers it. A preload that invoked a
         // channel main never registered would be the same failure the
@@ -354,15 +354,14 @@ describe('desktop preload: request/response bridge', () => {
 });
 
 describe('desktop preload: wipeStorage stays un-aimable', () => {
-    it('invokes with the channel and NO arguments, whatever the caller passes', async () => {
+    it('rejects arguments before invoking the fixed wipe channel', () => {
         const pre = runPreload();
         pre.setReply(async () => ({ ok: true, cleared: ['storage'] }));
 
-        // A compromised renderer trying to point the wipe at a path.
-        await pre.worlds.get('xchainWalletBridge').wipeStorage('/Users/someone/.ssh', { force: true });
+        expect(() => pre.worlds.get('xchainWalletBridge').wipeStorage('/outside/wallet', { force: true }))
+            .toThrow(TypeError);
 
-        expect(pre.invokes).toHaveLength(1);
-        expect(pre.invokes[0]).toEqual(['xchain:wipe-storage']);
+        expect(pre.invokes).toEqual([]);
     });
 
     it('carries main\'s failure back to core\'s wipe, which must refuse to report success', async () => {
@@ -425,7 +424,7 @@ describe('desktop preload: signer-bridge duplex port', () => {
 
     it('sends renderer → main fire-and-forget (send, never invoke)', () => {
         const pre = runPreload();
-        const msg = { kind: 'announce', signerIds: ['trezor-1'] };
+        const msg = { kind: 'register', signerIds: ['trezor-1'] };
 
         pre.worlds.get('xchainWalletSignerBridge').postMessage(msg);
 
@@ -540,7 +539,7 @@ describe('desktop preload: deep-link bridge', () => {
         const parked = { scheme: 'xchain', raw: 'xchain:receive', parsed: null };
         pre.setReply(async () => parked);
 
-        const res = await pre.worlds.get('xchainWalletDeepLink').takePending('ignored');
+        const res = await pre.worlds.get('xchainWalletDeepLink').takePending();
 
         expect(pre.invokes).toEqual([['xchain:deep-link-take']]);
         expect(res).toBe(parked);

@@ -48,7 +48,7 @@ for (const [name, path] of SHELLS) {
 
     assert.match(
         src,
-        /errorKind: coreStorageLib\.vaultErrorKind\(err\)/,
+        /errorKind: (?:coreStorageLib\.)?vaultErrorKind\(err\)/,
         `${name}: must narrow the error AT THE CATCH; the shells keep only`
         + ' err.message, so the type is unrecoverable one line later',
     );

@@ -232,7 +232,7 @@
     background: var(--xc-surface);
     font-weight: 600;
     color: var(--xc-accent-text, var(--xc-text));
-    box-shadow: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
+    box-shadow: var(--xc-shadow-nav-indicator);
 }
 
 .icon {
@@ -258,7 +258,7 @@
     flex: 0 0 auto;
     min-width: 1.1rem;
     padding: 0 0.35rem;
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);

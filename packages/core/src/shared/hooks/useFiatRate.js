@@ -43,11 +43,14 @@ export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFal
 
     useEffect(() => {
         if (!chainCoin) return;
+        const controller = new AbortController();
         refreshFiatRates({
             chainCoins: [chainCoin],
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
+        return () => controller.abort();
     }, [chainCoin, fiatCurrency, allowCoingeckoFallback]);
 
     return rate;
@@ -149,13 +152,16 @@ export function useTickFiatRate({
 
     useEffect(() => {
         if (!isToken || !chainCoin) return;
+        const controller = new AbortController();
         refreshTokenFiatRate({
             chainCoin,
             tick,
             nativeTicker,
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
+        return () => controller.abort();
     }, [isToken, chainCoin, tick, nativeTicker, fiatCurrency, allowCoingeckoFallback]);
 
     if (isToken) return tokenRate;
@@ -208,11 +214,14 @@ export function useNativeFiatRates({
 
     useEffect(() => {
         if (coinKey.length === 0) return;
+        const controller = new AbortController();
         refreshFiatRates({
             chainCoins: coinKey.split(','),
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; rows stay unpriced */ });
+        return () => controller.abort();
     }, [coinKey, fiatCurrency, allowCoingeckoFallback, refreshKey]);
 
     return useMemo(() => {
@@ -276,11 +285,14 @@ export function useTokenFiatRates({
 
     useEffect(() => {
         if (wanted.length === 0) return;
+        const controller = new AbortController();
         Promise.all(wanted.map((t) => refreshTokenFiatRate({
             ...t,
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }))).catch(() => { /* individual misses leave their rows unpriced */ });
+        return () => controller.abort();
     }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return useMemo(() => {

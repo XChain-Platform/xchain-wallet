@@ -198,7 +198,7 @@
     text-overflow: clip;
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .footer {
         flex-direction: column;
     }

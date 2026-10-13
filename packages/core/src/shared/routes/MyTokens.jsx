@@ -17,6 +17,7 @@ import {
     Icon,
     ListPage,
     EmptyState,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -57,6 +58,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [tokensReload, setTokensReload] = useState(0);
     const [query, setQuery] = useState('');
     // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
     // it also still holds supply of (row.youOwn is a balance check, not an
@@ -78,11 +81,11 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setLoadError('Could not load addresses. Try again.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, addressesReload]);
 
     useEffect(() => {
         if (!addressesByChain) return undefined;
@@ -144,7 +147,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             setTokens(merged);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, tokensReload]);
 
     const filteredTokens = useMemo(() => {
         if (!tokens) return null;
@@ -162,13 +165,13 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     const isLoading = tokens === null && loadError === null;
     const isEmpty = tokens !== null && tokens.length === 0 && tokensError === null;
     const isFilteredEmpty = tokens !== null && tokens.length > 0
-        && filteredTokens !== null && filteredTokens.length === 0 && tokensError === null;
+        && filteredTokens !== null && filteredTokens.length === 0;
 
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My Tokens"
+            title="My tokens"
             titleIcon={<Icon.TokenIcon />}
             trailing={
                 <button
@@ -221,30 +224,54 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             )}>
 
                 {loadError ? (
-                    <p className={styles.error}>{loadError}</p>
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => setAddressesReload((value) => value + 1),
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
                 ) : null}
 
                 {tokensError ? (
-                    <p className={styles.error} role="alert">{tokensError}</p>
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => setTokensReload((value) => value + 1),
+                        }}
+                    >
+                        {tokensError}
+                    </StatusMessage>
                 ) : null}
 
                 {isLoading ? (
-                    <div className={styles.list}>
-                        <Skeleton height={64} />
-                        <Skeleton height={64} />
-                        <Skeleton height={64} />
+                    <div className={styles.list} role="status" aria-label="Loading owned tokens">
+                        <Skeleton.List rows={3} />
                     </div>
                 ) : null}
 
                 {isEmpty ? (
                     <EmptyState
                         title="No owned tokens yet"
-                        body="Tokens issued to or received by this wallet appear here."
+                        body="Tokens this wallet owns appear here."
+                        actionLabel="Issue token"
+                        onAction={onIssue}
                     />
                 ) : null}
 
                 {isFilteredEmpty ? (
-                    <EmptyState title="No matching tokens" body="Try a different search or network filter." />
+                    <EmptyState
+                        title="No results for these filters"
+                        body="Reset the filters to see all tokens."
+                        actionLabel="Reset filters"
+                        onAction={() => {
+                            setQuery('');
+                            setMode('all');
+                        }}
+                    />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (
@@ -256,6 +283,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                     type="button"
                                     className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
+                                    aria-label={`Open ${row.tick} token details`}
                                 >
                                     <span className={styles.rowChain} aria-hidden="true">
                                         <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />

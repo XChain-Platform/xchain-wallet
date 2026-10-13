@@ -107,15 +107,16 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
         setAddressesError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
             })
-            .catch((err) => {
+            .catch(() => {
                 if (!cancelled) {
-                    setAddressesError(err?.message || 'Failed to load addresses.');
+                    setAddressesError('Could not load addresses. Try again.');
                 }
             });
         return () => { cancelled = true; };
@@ -125,7 +126,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         if (!addressesByChain) return [];
         return vmChains.filter((cid) => {
             const rows = addressesByChain[cid];
-            return Array.isArray(rows) && rows.length > 0;
+            return Array.isArray(rows)
+                && rows.some((row) => typeof row?.address === 'string' && row.address.length > 0);
         });
     }, [vmChains, addressesByChain]);
 
@@ -149,7 +151,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
         let cancelled = false;
         for (const cid of activeChains) {
-            const addrs = (addressesByChain[cid] || []).map((a) => a.address);
+            const addrs = (addressesByChain[cid] || [])
+                .map((a) => a.address)
+                .filter((address) => typeof address === 'string' && address.length > 0);
             Promise.all(addrs.map((addr) =>
                 messaging.getContractsForSource({ chainId: cid, address: addr })
                     .then((resp) => ({ addr, rows: extractRows(resp) }))
@@ -194,7 +198,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
         let cancelled = false;
         for (const cid of activeChains) {
-            const addrs = (addressesByChain[cid] || []).map((a) => a.address);
+            const addrs = (addressesByChain[cid] || [])
+                .map((a) => a.address)
+                .filter((address) => typeof address === 'string' && address.length > 0);
             const ops = [];
             for (const addr of addrs) {
                 ops.push(
@@ -376,6 +382,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No published contracts"
                                     emptyText="No contracts published from this chain's addresses yet."
+                                    emptyActionLabel={onDeploy ? 'Publish contract' : undefined}
+                                    onEmptyAction={onDeploy}
+                                    searchActive={searchQuery.trim().length > 0}
+                                    hasUnfilteredRows={state.rows.length > 0}
                                     onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
@@ -391,6 +401,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No contract interactions"
                                     emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
+                                    searchActive={searchQuery.trim().length > 0}
+                                    hasUnfilteredRows={state.rows.length > 0}
                                     onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <InteractionRow row={row} chainId={cid} />} />
@@ -414,6 +426,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No indexed contracts"
                                     emptyText="Contracts indexed on this chain appear here."
+                                    searchActive={searchQuery.trim().length > 0}
+                                    hasUnfilteredRows={state.rows.length > 0}
                                     onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
@@ -437,7 +451,7 @@ function Section({ title, children }) {
 function ChainFilterBar({ chains, value, onChange }) {
     return (
         <div role="tablist" aria-label="Chain filter" className={contractStyles.chainFilters}>
-            <button
+            <Button
                 type="button"
                 role="tab"
                 aria-selected={value === 'all'}
@@ -446,11 +460,11 @@ function ChainFilterBar({ chains, value, onChange }) {
                 style={{ padding: '0.25rem 0.5rem' }}
             >
                 All
-            </button>
+            </Button>
             {chains.map((cid) => {
                 const d = chainRegistry.get(cid);
                 return (
-                    <button
+                    <Button
                         type="button"
                         role="tab"
                         key={cid}
@@ -461,14 +475,28 @@ function ChainFilterBar({ chains, value, onChange }) {
                         style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                     >
                         {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
     );
 }
 
-function ChainGroup({ descriptor, chainId, state, emptyTitle, emptyText, onRetry, onOpenContract, renderRow }) {
+function ChainGroup({
+    descriptor,
+    chainId,
+    state,
+    emptyTitle,
+    emptyText,
+    emptyActionLabel,
+    onEmptyAction,
+    searchActive,
+    hasUnfilteredRows,
+    onRetry,
+    onOpenContract,
+    renderRow,
+}) {
+    const noSearchMatches = searchActive && hasUnfilteredRows && state.rows.length === 0;
     return (
         <section>
             <SectionHeader
@@ -489,22 +517,30 @@ function ChainGroup({ descriptor, chainId, state, emptyTitle, emptyText, onRetry
                             className={styles.entryDescription}
                             recovery={{ label: 'Try again', onAction: onRetry }}
                         >
-                            Couldn't load contracts: {state.error}
+                            Couldn't load contracts on {descriptor?.displayName || chainId}. Try again.
                         </StatusMessage>
                     ) : null}
                     {state.rows.length === 0 ? (
-                        state.error ? null : <EmptyState title={emptyTitle} body={emptyText} titleAs="p" />
+                        state.error ? null : (
+                            <EmptyState
+                                title={noSearchMatches ? 'No matching contracts' : emptyTitle}
+                                body={noSearchMatches ? 'Try a different name or number.' : emptyText}
+                                actionLabel={noSearchMatches ? undefined : emptyActionLabel}
+                                onAction={noSearchMatches ? undefined : onEmptyAction}
+                                titleAs="p"
+                            />
+                        )
                     ) : (
                         state.rows.map((row, i) => (
-                            <button
+                            <Button
                                 key={String(rowKey(row)) + ':' + i}
                                 type="button"
                                 className={`${styles.entry} ${contractStyles.contractRow}`}
-                                aria-label={contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}
+                                aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
                                 onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                             >
                                 {renderRow(row)}
-                            </button>
+                            </Button>
                         ))
                     )}
                 </>
@@ -517,7 +553,7 @@ function ContractRow({ row, chainId }) {
     // Name and version off the chain's own record, printed with the derived
     // address: "Escrow v1.0.0 (C:BTC:12)". Never the name alone - names are not
     // unique, so two contracts would look like one.
-    const owner = row.source || row.SOURCE || row.owner || row.OWNER;
+    const publisher = row.source || row.SOURCE;
     const status = String(row.status || row.STATUS || '(unknown)');
     return (
         <span className={styles.entryText}>
@@ -525,8 +561,8 @@ function ContractRow({ row, chainId }) {
                 {contractDisplayLabel(row, { chainId, actionIndex: row.action_index })}
             </span>
             <span className={styles.entryDescription}>
-                {owner ? (
-                    <>owner <AddressText address={String(owner)} /> · </>
+                {publisher ? (
+                    <>published by <AddressText address={String(publisher)} /> · </>
                 ) : null}
                 status {status}
             </span>

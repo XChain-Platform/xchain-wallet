@@ -409,7 +409,7 @@ describe('ListCreateForm checks token items before publishing', () => {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
         });
         const counts = await screen.findByText(/2 valid token names/);
-        expect(counts.textContent).toMatch(/1 duplicate removed/);
+        expect(counts.textContent).toMatch(/1 duplicate ignored/);
         expect(counts.textContent).toMatch(/1 invalid/);
         await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
         expect(screen.getByRole('alert').textContent).toMatch(/Not found on Dogecoin.*NOSUCHTICKQA/);

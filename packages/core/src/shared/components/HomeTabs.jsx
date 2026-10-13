@@ -604,11 +604,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-function shortenAddress(s) {
-    if (typeof s !== 'string' || s.length < 12) return s || '';
-    return `${s.slice(0, 6)}…${s.slice(-4)}`;
-}
-
 // Format a satoshi-string amount using the tick's divisibility. Plain
 // string math, no BigInt; these are demo values and stay small.
 function formatAmount(raw, divisibility) {

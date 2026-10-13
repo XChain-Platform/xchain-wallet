@@ -58,7 +58,7 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /const \[xcwCollector, setXcwCollector\] = useState\(\(\) => createXcwCollector\(\)\)/,
+    /const \[, setXcwCollector\] = useState\(\(\) => createXcwCollector\(\)\)/,
     'PsbtSignForm seeds the XCW collector via lazy init',
 );
 assert.match(

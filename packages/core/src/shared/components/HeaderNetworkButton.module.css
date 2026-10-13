@@ -77,7 +77,7 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-header-menu);
     max-height: 220px;
     overflow-y: auto;
 }

@@ -29,7 +29,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_HINT, ROW_VALUE, STACK, Status } from './_settingsPrimitives.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -53,13 +53,10 @@ const ACTION_BTN = {
 };
 
 const SITE_BLOCK = {
-    display: 'flex',
+    ...ROW,
     flexDirection: 'column',
+    alignItems: 'stretch',
     gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
 };
 
 export function ConnectedSitesSection() {
@@ -142,14 +139,23 @@ export function ConnectedSitesSection() {
         }
     };
 
-    const onBlock = async (origin) => {
-        if (pendingAction) return;
-        setPendingAction(`block:${origin}`);
+    const onBlock = async (origin, pendingKey = `block:${origin}`) => {
+        if (pendingAction) return false;
+        const confirmed = await confirmDialog.confirm({
+            title: `Block ${origin}?`,
+            message: 'This revokes any connected session and prevents the origin from connecting or requesting signatures until you unblock it.',
+            confirmLabel: 'Block origin',
+            danger: true,
+        });
+        if (!confirmed) return false;
+        setPendingAction(pendingKey);
         try {
             await messaging.blockOrigin({ origin });
             await reload();
+            return true;
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+            return false;
         } finally {
             setPendingAction(null);
         }
@@ -172,15 +178,9 @@ export function ConnectedSitesSection() {
         e.preventDefault();
         const trimmed = manualBlock.trim();
         if (!trimmed || pendingAction) return;
-        setPendingAction('block:manual');
-        try {
-            await messaging.blockOrigin({ origin: trimmed });
+        const blockedOrigin = await onBlock(trimmed, 'block:manual');
+        if (blockedOrigin) {
             setManualBlock('');
-            await reload();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            setPendingAction(null);
         }
     };
 
@@ -202,7 +202,7 @@ export function ConnectedSitesSection() {
                         <div key={site.id} style={SITE_BLOCK}>
                             <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                                    <span style={ROW_VALUE}>
                                         {site.appName || site.origin}
                                     </span>
                                     <span style={ROW_HINT}>{site.origin}</span>
@@ -262,7 +262,7 @@ export function ConnectedSitesSection() {
             ) : null}
             {blocklistWired
                 && typeof messaging?.listBlocklistAuditLog === 'function' ? (
-                    <BlocklistAuditPanel />
+                    <BlocklistAuditPanel confirm={confirmDialog.confirm} />
                 ) : null}
             <SignThrottlePanel />
             {confirmDialog.request ? (
@@ -279,7 +279,7 @@ export function ConnectedSitesSection() {
 // Cluster S FOLLOWUP 4: Blocklist audit-log panel.
 // Reads the persisted ring-buffer via messaging.listBlocklistAuditLog,
 // renders newest-first, and exposes a Clear log button.
-function BlocklistAuditPanel() {
+function BlocklistAuditPanel({ confirm }) {
     const { messaging } = useMessaging();
     const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -299,6 +299,13 @@ function BlocklistAuditPanel() {
 
     const onClear = async () => {
         if (clearing) return;
+        const confirmed = await confirm({
+            title: 'Clear blocklist audit log?',
+            message: 'This permanently removes the recorded history of blocklist changes.',
+            confirmLabel: 'Clear log',
+            danger: true,
+        });
+        if (!confirmed) return;
         setClearing(true);
         try {
             await messaging.clearBlocklistAuditLog();
@@ -314,15 +321,16 @@ function BlocklistAuditPanel() {
     return (
         <div style={SITE_BLOCK}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Blocklist audit log</span>
-                <button
+                <span style={ROW_VALUE}>Blocklist audit log</span>
+                <Button
                     type="button"
                     onClick={onClear}
                     disabled={clearing || entries.length === 0}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="danger"
                 >
                     {clearing ? 'Clearing…' : 'Clear log'}
-                </button>
+                </Button>
             </div>
             <span style={ROW_HINT}>
                 Recent blocklist mutations (most recent last). Capped at 50
@@ -457,15 +465,7 @@ function SignThrottlePanel() {
         ? formatWindowSeconds(currentWindowMs)
         : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
 
-    const FIELD = {
-        background: 'var(--xc-surface)',
-        border: '1px solid var(--xc-border)',
-        color: 'var(--xc-text)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-2)',
-        fontSize: 'var(--xc-text-sm)',
-        width: '5rem',
-    };
+    const FIELD = { ...INPUT, width: '5rem' };
     const throttleErrorTarget = /^Burst /i.test(error || '')
         ? { id: 'sign-throttle-burst', label: 'Burst' }
         : /^Window /i.test(error || '')
@@ -474,7 +474,7 @@ function SignThrottlePanel() {
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
         <div style={SITE_BLOCK}>
-            <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Sign-request throttle</span>
+            <span style={ROW_VALUE}>Sign-request throttle</span>
             <span style={ROW_HINT}>
                 Limits how many signing requests a single site can make in a
                 short window; anything over the limit is rejected until the
@@ -554,7 +554,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
     return (
         <div style={{ ...SITE_BLOCK, borderColor: 'var(--xc-border)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Blocked origins</span>
+                <span style={ROW_VALUE}>Blocked origins</span>
                 <span style={ROW_HINT}>
                     Blocked sites cannot connect or ask you to sign anything
                     until you remove them from this list. Wildcards like{' '}
@@ -603,13 +603,8 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         placeholder="https://example.com or *.example.com"
                         aria-label="Origin or wildcard to block"
                         style={{
+                            ...INPUT,
                             flex: 1,
-                            background: 'var(--xc-surface)',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
                         }}
                     />
                     <Button

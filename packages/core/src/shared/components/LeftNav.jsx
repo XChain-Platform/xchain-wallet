@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
+import { ROUTE_NAV_GROUPS } from '../routeRegistry.js';
 import styles from './LeftNav.module.css';
 
 /**
@@ -38,44 +39,7 @@ import styles from './LeftNav.module.css';
  * resolves to Home, matching the shell's Home fallback.
  */
 
-export const LEFT_NAV_VIEW_GROUPS = {
-    home: [
-        'home', 'menu', 'alerts', 'actions', 'resume-confirm',
-        'token-detail', 'my-tokens', 'manage-token', 'wizard', 'issue',
-        'mint', 'destroy', 'sweep', 'lock', 'mint-settings',
-        'callback-settings', 'bridge-settings', 'description', 'transfer',
-        'bridge-move', 'execute-callback', 'pause-token', 'lock-address',
-        'broadcast', 'oracle', 'controller-bind', 'dividend', 'airdrop',
-        'advanced', 'pair-signer', 'sign-message', 'verify-signature',
-        'link-form', 'attach-content', 'gated-publish', 'publish-file',
-        'project-roster', 'parallel-compose', 'batch-compose', 'sell-name',
-        'multisig-create', 'multisig-sign', 'governance-polls',
-        'governance-create-poll', 'governance-poll-detail',
-        'governance-delegate', 'cosigner-accounts', 'cosigner-provision',
-        'cosigner-detail', 'addresses', 'view-private-key',
-        'address-preferences', 'wallet-picker', 'account-picker',
-        'wallet-details', 'wallet-rename', 'account-rename', 'add-account',
-        'add-wallet', 'migrate-bip39',
-    ],
-    history: ['history', 'action-detail'],
-    send: ['send', 'send-picker'],
-    receive: ['receive', 'receive-picker'],
-    scan: ['scan', 'sign-psbt'],
-    markets: [
-        'markets', 'market', 'markets-picker', 'market-activity', 'swap',
-        'create-order', 'my-orders', 'my-swaps', 'cross-chain-swap',
-        'cross-chain-order', 'cross-chain-templates', 'bet-markets',
-        'bet-market-detail', 'bet-oracle-record', 'bet-create', 'my-bets',
-        'bet-oracle-console',
-    ],
-    'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
-    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'contract-stake', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
-    messaging: ['messaging', 'compose-message'],
-    contacts: ['contacts'],
-    lists: ['lists', 'list-detail', 'list-create', 'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union', 'shared-lists', 'access-lists'],
-    obligations: ['obligations', 'coinpay'],
-    settings: ['settings', 'connected-sites'],
-};
+export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
 export function activeLeftNavItem(currentView) {
     return Object.entries(LEFT_NAV_VIEW_GROUPS)

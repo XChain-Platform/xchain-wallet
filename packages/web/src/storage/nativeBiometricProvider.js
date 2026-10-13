@@ -200,9 +200,7 @@ export const nativeBiometricProvider = {
             throw new BiometricCancelledError();
         }
         if (reply?.status !== VaultStatus.OK) {
-            throw new BiometricUnsupportedError(
-                reply?.detail || `native enrollment refused (${reply?.status})`,
-            );
+            throw new BiometricUnsupportedError('native enrollment refused');
         }
         enrolledCache = true;
     },
@@ -231,9 +229,7 @@ export const nativeBiometricProvider = {
                 if (reply?.detail === RETRY_EXHAUSTED_DETAIL) {
                     throw new Error(RETRY_EXHAUSTED_MESSAGE);
                 }
-                throw new BiometricUnsupportedError(
-                    reply?.detail || `biometric unlock failed (${reply?.status})`,
-                );
+                throw new BiometricUnsupportedError('biometric unlock failed');
         }
     },
 
@@ -245,7 +241,7 @@ export const nativeBiometricProvider = {
         }
         const reply = await callNativeVault('biometricClear');
         if (reply?.status !== VaultStatus.OK && reply?.status !== VaultStatus.ABSENT) {
-            throw new Error(`biometricUnlock: native clear failed (${reply?.status || 'unknown'})`);
+            throw new Error('biometricUnlock: native clear failed');
         }
         enrolledCache = false;
     },

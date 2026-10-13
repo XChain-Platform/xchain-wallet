@@ -14,17 +14,23 @@
 // layouts (once extracted) swap-compatible across shells.
 
 import { getRecentShellErrors } from './errorCapture.js';
-import {
-    sendMessage,
-    getSessionStatus,
-    unlockWalletLocal,
-    lockWalletLocal,
-    createWalletLocal,
-    importMnemonicLocal,
-    importBackupLocal,
-} from './hostBridge.js';
 
-export { sendMessage, getSessionStatus };
+let hostBridgePromise;
+const loadHostBridge = () => (hostBridgePromise ??= import('./hostBridge.js'));
+
+// An arrow binding exported by name: the host route-table test reads a
+// declared parameter list as a computed send type, and the shell parity
+// smoke reads exports from declarations or an export list.
+const sendMessage = async (type, request) => {
+    const { sendMessage: sendToHost } = await loadHostBridge();
+    return sendToHost(type, request);
+};
+export { sendMessage };
+
+export async function getSessionStatus() {
+    const { getSessionStatus: getStatus } = await loadHostBridge();
+    return getStatus();
+}
 
 /**
  * @param {string} password
@@ -40,10 +46,12 @@ export async function unlockWallet(password, opts) {
     const bip39Passphrase = typeof opts?.bip39Passphrase === 'string' && opts.bip39Passphrase.length > 0
         ? opts.bip39Passphrase
         : undefined;
+    const { unlockWalletLocal } = await loadHostBridge();
     return unlockWalletLocal(bip39Passphrase ? { password, bip39Passphrase } : { password });
 }
 
 export async function lockWallet() {
+    const { lockWalletLocal } = await loadHostBridge();
     return lockWalletLocal();
 }
 
@@ -59,6 +67,7 @@ export async function lockWallet() {
  * @returns {Promise<{ mnemonic: string, walletName: string }>}
  */
 export async function createWallet(opts) {
+    const { createWalletLocal } = await loadHostBridge();
     return createWalletLocal(opts);
 }
 
@@ -73,6 +82,7 @@ export async function createWallet(opts) {
  * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
  */
 export async function importMnemonic(opts) {
+    const { importMnemonicLocal } = await loadHostBridge();
     return importMnemonicLocal(opts);
 }
 
@@ -84,6 +94,7 @@ export async function importMnemonic(opts) {
  * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} opts
  */
 export async function importBackupFresh(opts) {
+    const { importBackupLocal } = await loadHostBridge();
     return importBackupLocal(opts);
 }
 

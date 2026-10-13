@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -877,7 +877,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         ...hwDispatch, software: 'airdropAction', hardware: 'airdropActionHw',
     });
     // Which leg the confirm page is showing, so its decoded intent matches.
-    const [confirmLeg, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
+    const [, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
 
     function sourceDescriptor() {
         return {
@@ -1844,13 +1844,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
                     {recipients.invalid.length > 0 ? (
                         <div className={styles.hint}>
-                            <button
+                            <Button
                                 type="button"
                                 className={styles.back}
                                 onClick={() => setShowInvalid((s) => !s)}
                             >
                                 {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
-                            </button>
+                            </Button>
                             {showInvalid ? (
                                 <ul>
                                     {recipients.invalid.map((a, i) => (
@@ -1876,6 +1876,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
                                     message: `Does not belong to ${descriptor?.displayName || chainId}.`,
@@ -2110,7 +2111,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                         key={String(row.action_index)}
                         style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}
                     >
-                        <button
+                        <Button
                             type="button"
                             className={styles.back}
                             style={{ width: '100%', textAlign: 'left' }}
@@ -2118,7 +2119,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                         >
                             {isTick ? 'Token' : 'Address'} list #{row.action_index ?? '?'}
                             {status !== 'valid' ? ` (${status})` : ''}
-                        </button>
+                        </Button>
                     </li>
                 );
             })}

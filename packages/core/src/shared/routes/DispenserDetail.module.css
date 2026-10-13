@@ -312,7 +312,7 @@
     box-sizing: border-box;
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .dispenseRow {
         display: grid;
         grid-template-columns: minmax(0, 1fr);

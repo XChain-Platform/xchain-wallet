@@ -64,7 +64,7 @@ const CHAIN = 'bitcoin-mainnet';
 // change index 0, which every form auto-selects as the source.
 const HD_ADDRESS = Object.freeze({
     id: 'addr-hd-0',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock02aabbcc',
     publicKey: '02aabbcc',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -842,7 +842,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SwapForm,
             props: { initialChainId: CHAIN },
-            actionLabel: 'Swap',
+            actionLabel: 'Review',
             steps: [
                 // Give and get must differ: SwapForm rejects a same-ticker pair.
                 openTokenField('Give token:'), pickToken('XCHAIN'),

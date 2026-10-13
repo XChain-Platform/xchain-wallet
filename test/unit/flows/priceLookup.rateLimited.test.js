@@ -69,19 +69,19 @@ describe('priceLookup under explorer rate limiting', () => {
     it('waits a minute after a refused refresh before asking again', async () => {
         const { urls, advance } = source({ oracle: () => tooMany, coingecko: () => tooMany });
         await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false });
-        expect(urls).toHaveLength(1);
+        expect(urls).toHaveLength(2);
         expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
 
         // A balance poll 20 seconds later does not re-ask.
         advance(20 * 1000);
         await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false });
-        expect(urls).toHaveLength(1);
+        expect(urls).toHaveLength(2);
 
         // Past the back-off it does, and force always does.
         advance(45 * 1000);
         await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false });
-        expect(urls).toHaveLength(2);
+        expect(urls).toHaveLength(4);
         await refreshFiatRates({ chainCoins: ['bitcoin'], allowCoingeckoFallback: false, force: true });
-        expect(urls).toHaveLength(3);
+        expect(urls).toHaveLength(6);
     });
 });

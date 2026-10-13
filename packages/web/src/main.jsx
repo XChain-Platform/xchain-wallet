@@ -13,7 +13,8 @@
 // design-token custom properties install on `:root` for every route.
 
 import { createRoot } from 'react-dom/client';
-import { registry } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../core/src/registry/index.js';
+import { syncChainRegistryFromHub } from '../../core/src/registry/remote.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import {
@@ -35,7 +36,7 @@ installShellErrorCapture();
 // failure (offline, tampered, unsigned) leaves the bundled descriptors
 // serving. Never blocks boot.
 try {
-    registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
+    syncChainRegistryFromHub({ registry: defaultRegistry() })
         .then((r) => {
             if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
         })

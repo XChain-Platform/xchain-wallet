@@ -15,6 +15,8 @@ import {
     diagnosticDump,
     createErrorRingBuffer,
     installShellErrorCapture,
+    redactDiagnosticText,
+    sanitizeDiagnosticValue,
 } from '../../../packages/core/src/flows/diagnosticDump.js';
 
 function fakeTarget() {
@@ -70,5 +72,60 @@ describe('installShellErrorCapture', () => {
         expect(serialized).not.toContain('42 BTC');
         expect(serialized).not.toContain(wif);
         expect(serialized).not.toContain(phrase);
+    });
+});
+
+describe('diagnostic dump privacy boundary', () => {
+    it('reports the shell platform and whitelists build metadata', async () => {
+        const dump = await diagnosticDump({
+            env: { shell: 'desktop', platform: 'darwin arm64', userAgent: 'Electron/44' },
+            build: { gitCommit: 'abcdef123456', target: '0.341.2', password: 'build-secret' },
+        });
+
+        expect(dump.wallet).toEqual({
+            version: null,
+            platform: 'desktop',
+            os: 'darwin arm64',
+            browser: 'Electron/44',
+        });
+        expect(dump.build).toEqual({ gitCommit: 'abcdef123456', target: '0.341.2' });
+    });
+
+    it('redacts addresses, balances, keys, phrases, and passwords from errors and logs', async () => {
+        const address = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+        const wif = 'L1aW4aubDFB7yfras2S1mN3bqg9w7Z5e7U7J9T5h8V7Q5M2L1K9A';
+        const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        const legacyPhrase = 'like just love know never want time out there make look eye';
+        const sensitive = `${address} has balance 1.25 BTC; password="hunter2"; WIF=${wif}; ${phrase}; ${legacyPhrase}`;
+        const dump = await diagnosticDump({
+            recentErrors: [{ at: '2026-01-01', kind: 'Error', message: sensitive }],
+            recentLogs: [{ id: 1, timestamp: 2, level: 'error', source: 'wallet', message: sensitive }],
+        });
+        const report = JSON.stringify(dump);
+
+        for (const secret of [address, '1.25 BTC', 'hunter2', wif, phrase, legacyPhrase]) {
+            expect(report).not.toContain(secret);
+        }
+        expect(dump.recent_errors[0].message).toMatch(/^redacted:sha256:[0-9a-f]{8}$/);
+        expect(dump.recent_logs[0].message).toMatch(/^redacted:sha256:[0-9a-f]{8}$/);
+    });
+
+    it('redacts sensitive fields from a serialized report returned by an older host', () => {
+        const text = JSON.stringify(sanitizeDiagnosticValue({
+            password: 'correct horse battery staple',
+            address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+            nested: { privateKey: 'a'.repeat(64), balance: 12.5 },
+        }), null, 2);
+
+        expect(() => JSON.parse(text)).not.toThrow();
+        expect(text).not.toContain('correct horse battery staple');
+        expect(text).not.toContain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
+        expect(text).not.toContain('a'.repeat(64));
+        expect(text).not.toContain('12.5');
+    });
+
+    it('is idempotent when a report passes through both host and UI boundaries', () => {
+        const once = redactDiagnosticText('password="hunter2"; balance=1.25 BTC');
+        expect(redactDiagnosticText(once)).toBe(once);
     });
 });

@@ -43,7 +43,6 @@ describe('governance and staking screen theme colors', () => {
 
 describe('governance screen narrow layout', () => {
     it.each([
-        'BetFeedsList.jsx',
         'MyBets.jsx',
         'BetFeedDetail.jsx',
         'OracleRecord.jsx',
@@ -53,6 +52,13 @@ describe('governance screen narrow layout', () => {
         ));
         expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
+    });
+
+    it('wraps betting market headers through the shared list row class', () => {
+        const source = route('BetFeedsList.jsx');
+        const css = route('BetFeedsList.module.css');
+        expect(source).toContain('className={local.marketHeader}');
+        expect(css).toMatch(/\.marketHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
     });
 
     it('wraps Oracle Console market headers through its phone layout styles', () => {
@@ -87,6 +93,6 @@ describe('governance screen narrow layout', () => {
         expect(detail).toMatch(/\.resultValues > span\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
         expect(detail).toMatch(/\.splitOptionInput :global\(label\)\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
         expect(detail).toMatch(/\.optionLabel\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/@media \(max-width:\s*399px\)[\s\S]*?\.resultValues\s*\{[\s\S]*?flex:\s*1 1 100%/);
+        expect(detail).toMatch(/@media not all and \(min-width:\s*400px\)[\s\S]*?\.resultValues\s*\{[\s\S]*?flex:\s*1 1 100%/);
     });
 });

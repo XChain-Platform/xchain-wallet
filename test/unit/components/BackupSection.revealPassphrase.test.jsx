@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §15.6: the reveal-seed row also reveals a stored 25th-word passphrase,
+// §15.6: the recovery-phrase row also reveals a stored 25th-word passphrase,
 // under the same tap-to-reveal blur and the same password gate as the
-// seed phrase itself. No copy control anywhere in that block (the row's
+// recovery phrase itself. No copy control anywhere in that block (the row's
 // own hint says "Never type or paste it into anything else", so a
 // clipboard button would contradict the sentence directly above it),
 // and a wallet without a stored passphrase renders nothing extra.
@@ -40,7 +40,7 @@ async function revealSeed() {
     fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
     fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
-    await waitFor(() => expect(screen.getByText('Your seed phrase')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
 }
 
 describe('BackupSection reveal: stored 25th-word passphrase', () => {
@@ -77,8 +77,8 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         expect(wordsBtn.style.filter).toBe('blur(8px)');
         expect(passBtn.style.filter).toBe('blur(8px)');
 
-        // One toggle (the seed button's own reveal control) uncovers both.
-        fireEvent.click(screen.getByLabelText('Reveal seed phrase'));
+        // One toggle (the recovery-phrase button's own reveal control) uncovers both.
+        fireEvent.click(screen.getByLabelText('Reveal recovery phrase'));
         expect(wordsBtn.style.filter).toBe('none');
         expect(passBtn.style.filter).toBe('none');
     });
@@ -97,7 +97,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         await revealSeed();
 
         expect(screen.queryByRole('button', { name: 'Print recovery sheet' })).toBeNull();
-        fireEvent.click(screen.getByLabelText('Reveal seed phrase'));
+        fireEvent.click(screen.getByLabelText('Reveal recovery phrase'));
         fireEvent.click(screen.getByRole('button', { name: 'Print recovery sheet' }));
 
         expect(print).toHaveBeenCalledOnce();

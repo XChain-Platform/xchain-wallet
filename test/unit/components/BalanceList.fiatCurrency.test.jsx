@@ -26,17 +26,17 @@ describe('formatFiat', () => {
     it('keeps USD as the default', () => {
         expect(formatFiat('0')).toBe('$0.00');
         expect(formatFiat('1234.5')).toBe('$1,234.50');
-        expect(formatFiat('0.004')).toBe('<$0.01');
+        expect(formatFiat('0.004')).toBe('< $0.01');
     });
 
     it('formats in the currency asked for', () => {
         expect(formatFiat('0', 'EUR')).toBe('€0.00');
         expect(formatFiat('1234.5', 'eur')).toBe('€1,234.50');
-        expect(formatFiat('0.004', 'GBP')).toBe('<£0.01');
+        expect(formatFiat('0.004', 'GBP')).toBe('< £0.01');
     });
 
     it('still renders an unknown code', () => {
-        expect(formatFiat('5', 'NOTACODE')).toBe('5 NOTACODE');
+        expect(formatFiat('5', 'NOTACODE')).toBe('5.00 NOTACODE');
     });
 
     it('uses currency names for spoken fiat values', () => {

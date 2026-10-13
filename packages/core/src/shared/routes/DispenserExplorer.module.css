@@ -81,7 +81,7 @@
     overflow-wrap: anywhere;
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .chainField,
     .factRow {
         grid-template-columns: minmax(0, 1fr);

@@ -31,14 +31,6 @@ function extractRows(resp) {
     return [];
 }
 
-function unwrap(resp) {
-    if (!resp) return null;
-    if (Array.isArray(resp)) return resp[0] || null;
-    if (Array.isArray(resp.data)) return resp.data[0] || null;
-    if (resp.data && typeof resp.data === 'object') return resp.data;
-    return resp;
-}
-
 // Plain-language countdown. An oracle's whole job is to act inside a window, so
 // the console leads with time remaining rather than a raw unix stamp.
 function countdown(targetSec, nowSec) {

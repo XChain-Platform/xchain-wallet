@@ -332,10 +332,6 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                 {chipText}
             </div>
 
-            {report.restricted ? (
-                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
-            ) : null}
-
             {errors.length > 0 ? (
                 <ul className={styles.errors}>
                     {/* Keyed on the finding, never on the code: a BATCH report
@@ -384,6 +380,10 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                         );
                     })}
                 </ul>
+            ) : null}
+
+            {report.restricted ? (
+                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
             ) : null}
 
             {notices.length > 0 ? (

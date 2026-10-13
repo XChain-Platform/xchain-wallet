@@ -75,11 +75,11 @@ function markExplainerSeen() {
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
     {
-        text: 'The wallet is provided as-is, with no warranties of any kind and no remedy if you lose your seed phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
+        text: 'The wallet is provided as-is, with no warranties of any kind and no remedy if you lose your recovery phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
         critical: true,
     },
     {
-        text: 'Your seed phrase never leaves this device. It is not uploaded, not transmitted, and not stored on any server. The team behind this software has no copy of it and no way to retrieve it. Backing it up is entirely your responsibility: write it down, store it somewhere safe, and never share it. If you lose this device AND your written copy, the keys are gone forever. Customer support cannot recover them. Nobody can.',
+        text: 'Your recovery phrase never leaves this device. It is not uploaded, not transmitted, and not stored on any server. The team behind this software has no copy of it and no way to retrieve it. Backing it up is entirely your responsibility: write it down, store it somewhere safe, and never share it. If you lose this device AND your written copy, the keys are gone forever. Customer support cannot recover them. Nobody can.',
         critical: true,
     },
     { text: 'You are solely responsible for your private keys, your transactions, and any tax or legal consequences thereof. The wallet does not withhold or report taxes. You are the bank.' },

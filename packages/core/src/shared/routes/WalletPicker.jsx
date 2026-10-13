@@ -88,7 +88,7 @@ export function WalletPicker({
                 disabled={switching}
                 icon={<Icon.PlusIcon />}
             >
-                Add Wallet
+                Add wallet
             </Button>
             {onShowDetails && activeWallet ? (
                 <Button

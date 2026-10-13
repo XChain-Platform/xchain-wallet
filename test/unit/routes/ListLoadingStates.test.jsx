@@ -14,6 +14,7 @@ import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
+import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 
 const CHAIN = 'bitcoin-testnet';
@@ -166,5 +167,105 @@ describe('list first-load states', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(messaging.getMarkets).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No markets for BTC')).toBeInTheDocument();
+    });
+});
+
+describe('filtered list empty states', () => {
+    it('resets a contact search without showing the address-book empty state', async () => {
+        const contact = {
+            id: 'alice',
+            name: 'Alice',
+            notes: '',
+            entries: [{ chain: 'bitcoin', address: ADDRESS, label: '' }],
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+        };
+        mount(ContactsList, { listContacts: vi.fn().mockResolvedValue([contact]) });
+        await screen.findByText('Alice');
+
+        fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'missing' } });
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(screen.getByLabelText('Search contacts')).toHaveValue('');
+        expect(await screen.findByText('Alice')).toBeInTheDocument();
+        expect(screen.queryByText('No contacts yet')).toBeNull();
+    });
+
+    it('resets a dispenser search without showing the dispenser empty state', async () => {
+        const row = {
+            action_index: '7',
+            block_index: 100,
+            source: ADDRESS,
+            give_tick: 'FILTERTOKEN',
+            give_amount: '2',
+            get_coin: 'BTC',
+            get_amount: '1',
+            current_status: 'open',
+            escrow_remaining: '10',
+        };
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
+            getDispensersForSource: vi.fn().mockResolvedValue({ data: [row] }),
+        };
+        mount(DispensersList, messaging, { onOpenDispenser: () => {} });
+        await screen.findByText('open');
+
+        fireEvent.change(screen.getByLabelText('Search dispensers'), { target: { value: 'missing' } });
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(screen.getByLabelText('Search dispensers')).toHaveValue('');
+        expect(await screen.findByText('open')).toBeInTheDocument();
+        expect(screen.queryByText('No dispensers yet')).toBeNull();
+    });
+
+    it('resets market search and tab filters to reveal existing markets', async () => {
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue([{ tick1: 'BTC', tick2: 'DOGE', depth: 10 }]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        mount(MarketsList, messaging, {
+            selectedAsset: { chainId: 'bitcoin-mainnet', tick: 'BTC' },
+            onChangeAsset: () => {},
+            onOpenMarket: () => {},
+        });
+        await screen.findByText('DOGE');
+
+        fireEvent.change(screen.getByLabelText('Search markets'), { target: { value: 'missing' } });
+        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(screen.getByLabelText('Search markets')).toHaveValue('');
+        expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+        expect(await screen.findByText('DOGE')).toBeInTheDocument();
+    });
+
+    it('resets token filters without showing the owned-token empty state', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
+            getOwnedTokens: vi.fn().mockResolvedValue([{
+                tick: 'FILTERME',
+                description: 'owned but no balance held',
+                locked: false,
+                divisibility: 8,
+                totalSupply: '1000',
+                maxSupply: null,
+                youOwn: false,
+            }]),
+        };
+        mount(MyTokens, messaging, { onIssue: () => {}, onSelectTick: () => {} });
+        await screen.findByText('FILTERME');
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Holding' }));
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(screen.getByRole('radio', { name: 'All' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByLabelText('Search your tokens by ticker or description')).toHaveValue('');
+        expect(await screen.findByText('FILTERME')).toBeInTheDocument();
+        expect(screen.queryByText('No owned tokens yet')).toBeNull();
     });
 });

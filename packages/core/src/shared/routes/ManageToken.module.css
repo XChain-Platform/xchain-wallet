@@ -125,7 +125,7 @@
     gap: var(--xc-space-3);
 }
 
-@media (max-width: 599px) {
+@media not all and (min-width: 600px) {
     .statsStrip {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -197,7 +197,7 @@
     gap: var(--xc-space-2);
 }
 
-@media (max-width: 599px) {
+@media not all and (min-width: 600px) {
     .manageGrid {
         grid-template-columns: repeat(2, 1fr);
     }

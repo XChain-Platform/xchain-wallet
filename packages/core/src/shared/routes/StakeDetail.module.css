@@ -213,7 +213,7 @@
     color: var(--xc-warning);
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .quickActions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

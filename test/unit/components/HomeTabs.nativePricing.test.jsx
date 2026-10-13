@@ -238,7 +238,7 @@ describe('Home hidden-token totals', () => {
 
         expect(within(hero()).getByText('$100.00')).toBeInTheDocument();
         const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
-        expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$100\.00\./));
+        expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$100\.00 USD\./));
         expect(hero()).not.toHaveTextContent('$300.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));

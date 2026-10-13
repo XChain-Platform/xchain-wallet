@@ -175,10 +175,10 @@ export function buildCommands(ctx) {
         // opened; a buyer with no link in hand needs the search, which was
         // reachable only through the Token Actions catalogue.
         { id: 'nav-browse-dispensers', category: 'Navigate', title: 'Browse dispensers', subtitle: 'Find open dispensers by token or address', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'], Icon: Icon.DollarIcon, run: go('dispenser-explorer') },
-        { id: 'nav-my-tokens', category: 'Navigate', title: 'My Tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
+        { id: 'nav-my-tokens', category: 'Navigate', title: 'My tokens', subtitle: 'Tokens you own', keywords: ['issued', 'owned', 'assets', 'manage'], Icon: Icon.TokenIcon, run: go('my-tokens') },
         { id: 'nav-messaging', category: 'Navigate', title: 'Messaging', subtitle: 'Encrypted inbox', keywords: ['inbox', 'messages', 'chat'], Icon: Icon.MessageIcon, run: go('messaging') },
         { id: 'nav-addresses', category: 'Navigate', title: 'Addresses', subtitle: 'Manage your addresses', keywords: ['accounts', 'keys'], Icon: Icon.AddressIcon, run: go('addresses') },
-        { id: 'nav-lists', category: 'Navigate', title: 'My Lists', subtitle: 'Address and token lists', keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
+        { id: 'nav-lists', category: 'Navigate', title: 'My lists', subtitle: 'Address and token lists', keywords: ['list', 'roster', 'allowlist', 'blocklist'], Icon: Icon.TokenListIcon, run: go('lists') },
         // Plain-language subtitle, opcode in `keywords` only: 'coinpay' still
         // matches in search, and no palette row renders a raw protocol verb.
         { id: 'nav-obligations', category: 'Navigate', title: 'Payments due', subtitle: 'Coin payments you still owe', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'], Icon: Icon.ClockIcon, run: go('obligations') },
@@ -404,18 +404,18 @@ export function sitesToCommands(sites, ctx) {
 // Sections whose visibility is conditional in Settings (accounts-addresses)
 // or that duplicate a dedicated palette entry (connected-sites) are omitted.
 const SETTINGS_SECTIONS = /** @type {const} */ ([
-    { id: 'this-wallet', title: 'This Wallet', keywords: ['wallet', 'rename', 'remove'] },
+    { id: 'this-wallet', title: 'This wallet', keywords: ['wallet', 'rename', 'remove'] },
     { id: 'appearance', title: 'Appearance', keywords: ['theme', 'dark', 'light'] },
     { id: 'display', title: 'Display', keywords: ['pinned', 'hidden', 'tokens'] },
     { id: 'keyboard', title: 'Keyboard', keywords: ['shortcuts', 'rebind', 'keys', 'hotkeys'] },
-    { id: 'language-region', title: 'Language & Region', keywords: ['language', 'currency', 'fiat'] },
+    { id: 'language-region', title: 'Language & region', keywords: ['language', 'currency', 'fiat'] },
     { id: 'privacy', title: 'Privacy', keywords: ['tor', 'rotation', 'blur'] },
     { id: 'safety', title: 'Safety', keywords: ['autolock', 'panic', 'undo'] },
-    { id: 'wallet-mode', title: 'Wallet Mode', keywords: ['watcher', 'signer', 'air-gapped'] },
+    { id: 'wallet-mode', title: 'Wallet mode', keywords: ['watcher', 'signer', 'air-gapped'] },
     { id: 'backup', title: 'Backup', keywords: ['seed', 'phrase', 'restore', 'export'] },
     { id: 'fees', title: 'Fees', keywords: ['fee', 'rbf', 'strategy'] },
     { id: 'network', title: 'Network', keywords: ['mainnet', 'testnet', 'regtest'] },
-    { id: 'network-endpoints', title: 'Network & Endpoints', keywords: ['explorer', 'encoder', 'hub', 'url'] },
+    { id: 'network-endpoints', title: 'Network & endpoints', keywords: ['explorer', 'encoder', 'hub', 'url'] },
     { id: 'notifications', title: 'Notifications', keywords: ['alerts', 'notify'] },
     { id: 'ads', title: 'Donations', keywords: ['donation', 'ads', 'support'] },
     { id: 'developer', title: 'Developer', keywords: ['dev', 'debug', 'regtest'] },

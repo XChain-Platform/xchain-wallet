@@ -29,7 +29,7 @@
 // isn't injected, or when the user dismisses it for the session.
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton } from '@xchain-wallet/core/ui';
+import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';
 import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
@@ -40,14 +40,8 @@ import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
-import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
-import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
-import { WalletPicker } from '@xchain-wallet/core/shared/routes/WalletPicker.jsx';
-import { AccountPicker } from '@xchain-wallet/core/shared/routes/AccountPicker.jsx';
-import { WalletDetails } from '@xchain-wallet/core/shared/routes/WalletDetails.jsx';
-import { RenameWalletForm } from '@xchain-wallet/core/shared/routes/RenameWalletForm.jsx';
-import { RenameAccountForm } from '@xchain-wallet/core/shared/routes/RenameAccountForm.jsx';
+import { vaultErrorKind } from '../../core/src/storage/backend.js';
 import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
@@ -76,12 +70,11 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
-import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
-import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../core/src/registry/index.js';
+import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
-const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
+const APP_CHAIN_REGISTRY = defaultRegistry();
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 // The DEX surface, as one module rather than nine route blocks. A
 // build whose profile hides `dex` gets the inert twin instead (vite.config.js),
@@ -91,7 +84,6 @@ import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
-import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
@@ -109,6 +101,15 @@ import devShellStyles from './DevVariantShell.module.css';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
+const AddAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AddAccountForm.jsx'), 'AddAccountForm');
+const WalletPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletPicker.jsx'), 'WalletPicker');
+const AccountPicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AccountPicker.jsx'), 'AccountPicker');
+const WalletDetails = lazyRoute(() => import('@xchain-wallet/core/shared/routes/WalletDetails.jsx'), 'WalletDetails');
+const RenameWalletForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RenameWalletForm.jsx'), 'RenameWalletForm');
+const RenameAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RenameAccountForm.jsx'), 'RenameAccountForm');
+const MenuRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MenuRoute.jsx'), 'MenuRoute');
+const AlertsRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AlertsRoute.jsx'), 'AlertsRoute');
+const KeyQR = lazyRoute(() => import('@xchain-wallet/core/shared/components/KeyQR.jsx'), 'KeyQR');
 const CreateWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateWallet.jsx'), 'CreateWallet');
 const ImportWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ImportWallet.jsx'), 'ImportWallet');
 const PairPartnerWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairPartnerWallet.jsx'), 'PairPartnerWallet');
@@ -390,7 +391,7 @@ function AppInner() {
     // loading because a Testnet or Regtest wallet would be mislabeled.
     const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     const headerCoinFamilies = useMemo(
-        () => registryLib.coinFamiliesForUser(supportedChains, { developerMode }),
+        () => coinFamiliesForUser(supportedChains, { developerMode }),
         [supportedChains, developerMode],
     );
     // Free-text token filter: lifted alongside the network filter so the
@@ -674,7 +675,7 @@ function AppInner() {
                     // screen of its own, and which of the three it is decides
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
-                    errorKind: coreStorageLib.vaultErrorKind(err),
+                    errorKind: vaultErrorKind(err),
                 }),
             );
     }, []);
@@ -1057,9 +1058,7 @@ function AppInner() {
                         onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         prefill={sendPrefill}
                         onChangeAsset={(carry) => {
-                            // Carry the typed To address + amount so picking a
-                            // new asset doesn't wipe those fields.
-                            setSendPrefill({ address: carry?.address || '', amount: carry?.amount || '' });
+                            setSendPrefill({ assetSwitchDraft: carry });
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -1077,15 +1076,31 @@ function AppInner() {
                         hideOwnFilter
                         onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
                         onSelect={(sel) => {
-                            // Preserve any To address + amount carried in via onChangeAsset.
                             setSendPrefill((prev) => ({
                                 chainId: sel.chainId,
                                 tick: sel.tick,
                                 kind: sel.kind,
                                 displayName: sel.displayName,
                                 imageUrl: sel.imageUrl,
-                                address: prev?.address || undefined,
-                                amount: prev?.amount || undefined,
+                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? (prev.assetSwitchDraft.address || undefined)
+                                    : undefined,
+                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                        === String(sel.tick || '').trim().toUpperCase()
+                                    ? (prev.assetSwitchDraft.amount || undefined)
+                                    : undefined,
+                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? prev.assetSwitchDraft.feeSelection
+                                    : undefined,
+                                assetSwitchNotice: prev?.assetSwitchDraft
+                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
+                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
+                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                            !== String(sel.tick || '').trim().toUpperCase()
+                                            ? 'Token changed. Amount was reset for the new token precision.'
+                                            : undefined)
+                                    : undefined,
                             }));
                             setSendBackTo('send-picker');
                             setUnlockedView('send');

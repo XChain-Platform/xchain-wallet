@@ -89,6 +89,12 @@ import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { Settings } from './Settings.jsx';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -478,6 +484,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     historyLoadedRef.current = historyLoaded;
     const [refreshing, setRefreshing] = useState(false);
     const [addressesReload, setAddressesReload] = useState(0);
+    const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
@@ -509,11 +516,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [searchContacts, setSearchContacts] = useState(/** @type {any[]} */ ([]));
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
-    // Default to the last 30 days so a fresh History view surfaces
-    // recent activity without the user having to pick a range. ISO
-    // YYYY-MM-DD format matches what <input type="date"> expects.
-    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
+    // The inclusive endpoints cover exactly 30 local calendar days.
+    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(29));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
+    const [dateError, setDateError] = useState('');
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
     // The export modal controls only the file representation. Row selection
     // remains owned by the History filters so the file matches the list.
@@ -1233,6 +1239,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setStatusFilter(new Set());
         setDateFrom('');
         setDateTo('');
+        setDateError('');
         setEnabledChains(new Set(activeChainIds));
         setCrossChainOnly(false);
         setMultisigOnly(false);
@@ -1260,14 +1267,42 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
 
     const updateDateFrom = (value) => {
+        if (value && dateTo && value > dateTo) {
+            setDateError('From date must be on or before To date.');
+            return;
+        }
         setDateFrom(value);
-        if (value && dateTo && value > dateTo) setDateTo(value);
+        setDateError('');
     };
 
     const updateDateTo = (value) => {
+        if (value && dateFrom && value < dateFrom) {
+            setDateError('To date must be on or after From date.');
+            return;
+        }
         setDateTo(value);
-        if (value && dateFrom && value < dateFrom) setDateFrom(value);
+        setDateError('');
     };
+
+    const setDatePreset = (days) => {
+        if (days == null) {
+            setDateFrom('');
+            setDateTo('');
+        } else {
+            setDateFrom(isoDateDaysAgo(days - 1));
+            setDateTo(isoDateDaysAgo(0));
+        }
+        setDateError('');
+    };
+
+    const todayIso = isoDateDaysAgo(0);
+    const activeDatePreset = !dateFrom && !dateTo
+        ? 'all'
+        : dateTo === todayIso && dateFrom === isoDateDaysAgo(6)
+            ? '7'
+            : dateTo === todayIso && dateFrom === isoDateDaysAgo(29)
+                ? '30'
+                : '';
 
     // For drawing the vertical connector: an entry is "threaded with
     // the entry above it" iff both sides are linked AND the row above
@@ -1433,20 +1468,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
     };
 
-    const toggleChain = (cid) => {
-        // §23.5 / G052: persist the new filter set so the user's
-        // choice survives navigation. Capture the post-toggle Set
-        // inside the updater so the write reflects the new state
-        // even if React batches multiple toggles.
-        setEnabledChains((prev) => {
-            const next = new Set(prev);
-            if (next.has(cid)) next.delete(cid);
-            else next.add(cid);
-            writeChainSet(historyChainFilterKey(walletId), next);
-            return next;
-        });
-    };
-
     // "Remove from history" on a failed local record. The host refuses
     // anything but a failed record, so this cannot make a live send vanish.
     // The row closes and the list re-reads; a refused or failed delete
@@ -1537,6 +1558,29 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {children}
         </Screen>
     );
+
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain(proofSettings, chainRegistry)) {
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title={NO_CHAINS_TITLE}
+                    body={NO_CHAINS_BODY}
+                    actionLabel={t('common.openNetworkSettings')}
+                    onAction={() => setNetworkSettingsOpen(true)}
+                    actionIcon={<Icon.GearIcon />}
+                />
+            </ListPage>,
+        );
+    }
 
     if (loadError) {
         return wrap(
@@ -1634,6 +1678,38 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onChange={(ev) => updateDateTo(ev.target.value)}
                     />
                 </div>
+                <div className={styles.dateTools}>
+                    <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === '7' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === '7'}
+                            onClick={() => setDatePreset(7)}
+                        >{t('history.filters.last7Days')}</button>
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === '30' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === '30'}
+                            onClick={() => setDatePreset(30)}
+                        >{t('history.filters.last30Days')}</button>
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === 'all' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === 'all'}
+                            onClick={() => setDatePreset(null)}
+                        >{t('history.filters.allDates')}</button>
+                    </div>
+                    <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
+                </div>
+                {dateError ? (
+                    <div className={styles.dateError} role="alert">{dateError}</div>
+                ) : null}
+                {dateFrom || dateTo ? (
+                    <div className={styles.activeDateRange}>
+                        <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
+                        <button type="button" onClick={() => setDatePreset(null)}>{t('history.filters.clearDateRange')}</button>
+                    </div>
+                ) : null}
 
                 <div className={styles.filterFooter}>
                     <button
@@ -2767,7 +2843,7 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
 const DETAIL_FIELD_LABELS = Object.freeze({
     action: 'Action',
     action_index: 'Action number',
-    address: 'Wallet address',
+    address: 'Address',
     block_index: 'Block',
     chain: 'Chain',
     chain_id: 'Chain',
@@ -2892,7 +2968,7 @@ function fullDetailRows(entry, balancesHidden = false) {
         )]);
     }
     if (entry.address) {
-        rows.push(['Wallet address', (
+        rows.push(['Address', (
             <CopyableValue
                 display={entry.address}
                 fullValue={entry.address}
@@ -3711,11 +3787,6 @@ function peerCacheKey(chainId, actionIndex) {
     return `${chainId}:${actionIndex}`;
 }
 
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
 // Longer middle-ellipsis truncation used in the ActionDetail "Source"
 // table cell. The cell has more horizontal room than the row meta so
 // we can show more of each end before collapsing.
@@ -3742,33 +3813,6 @@ function StatusPill({ status }) {
 
 function formatTimestamp(ts) {
     return formatLocalDateTime(ts) || '-';
-}
-
-/**
- * Best-effort one-line summary for a row. Different ACTIONs join in
- * different fields; we surface the most useful per-action shape, then
- * fall back to a generic descriptor.
- */
-function summarizeRow(row, action) {
-    if (!row) return action;
-    if (action === 'SEND') {
-        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
-        const tick = row.tick ?? row.TICK ?? row.token;
-        const dest = row.destination ?? row.DESTINATION ?? row.recipient;
-        if (amt != null && tick && dest) return `${amt} ${tick} → ${shorten(String(dest))}`;
-    }
-    if (action === 'ISSUE') {
-        const tick = row.tick ?? row.TICK;
-        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
-        if (tick && amt != null) return `Issued ${amt} ${tick}`;
-    }
-    if (action === 'LINK') {
-        const c1 = row.coin1 || row.COIN1;
-        const c2 = row.coin2 || row.COIN2;
-        if (c1 && c2) return `Link ${c1} ↔ ${c2}`;
-    }
-    if (row.memo || row.MEMO) return String(row.memo || row.MEMO);
-    return action;
 }
 
 // Field names whose values are financial amounts the privacy toggle

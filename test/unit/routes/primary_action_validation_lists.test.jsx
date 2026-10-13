@@ -63,7 +63,7 @@ describe('primary actions explain missing list, publisher, and migration input',
         mount(OperatorDashboard, {
             walletId: 'wallet-1', chainId: CHAIN, address: ADDRESS.address, onBack() {},
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Show' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
         await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
         const action = screen.getByRole('button', { name: 'Publish value' });
 

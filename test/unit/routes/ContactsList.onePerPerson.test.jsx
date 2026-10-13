@@ -93,7 +93,7 @@ function mount(messaging, props = {}) {
 }
 
 const rowNames = () => within(screen.getByRole('list', { name: 'Contacts' }))
-    .getAllByRole('listitem').map((r) => (r.firstElementChild ?? r).textContent.trim());
+    .getAllByRole('listitem').map((r) => (r.querySelector('[class*="rowName"]') ?? r).textContent.trim());
 
 describe('ContactsList for one person with many addresses', () => {
     it('lists contacts A to Z whatever order the vault returns', async () => {

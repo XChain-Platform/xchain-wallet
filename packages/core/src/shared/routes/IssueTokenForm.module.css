@@ -27,18 +27,8 @@
     outline-offset: 2px;
 }
 
-.card {
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-}
-
 /* Lists and tables (inbox, signing session, settlement) fill the content
-   area; only genuine forms keep the 560px column of .card. */
+   area; only genuine forms keep the FormPage column. */
 .listCard {
     width: 100%;
     margin: var(--xc-space-6) 0 0;
@@ -68,6 +58,7 @@
 }
 
 .picker {
+    display: block;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -79,6 +70,57 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
+    resize: vertical;
+}
+
+.tickItems {
+    list-style: none;
+    padding: 0;
+    margin: var(--xc-space-2) 0;
+}
+
+.tickItem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-space-1) 0;
+}
+
+.tickItem:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--xc-radius-sm);
+}
+
+.tickItemName {
+    flex: 1 1 6rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.tickItemCoin {
+    max-width: 100%;
+}
+
+.tickItemActions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: var(--xc-space-1);
+    margin-inline-start: auto;
+}
+
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .fromLine {
@@ -246,7 +288,7 @@
     overflow-wrap: anywhere;
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .betActions,
     .betWagerChoices {
         display: grid;
@@ -447,7 +489,7 @@
     margin-bottom: var(--xc-space-1);
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .radioGroup {
         align-items: flex-start;
         flex-direction: column;

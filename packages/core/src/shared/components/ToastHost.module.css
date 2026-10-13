@@ -34,6 +34,18 @@
     ));
 }
 
+.liveAnnouncement {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* The fitted viewport height follows an overlay keyboard on iOS. Android
    resizes 100vh, making this adjustment zero there. */
 :global(html[data-xc-keyboard='open']) .viewport {
@@ -50,7 +62,7 @@
     pointer-events: none;
     align-self: center;
     padding: 2px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-surface-raised);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
@@ -69,7 +81,7 @@
     background: var(--xc-surface-raised);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--xc-shadow-toast);
     animation: toast-in 160ms ease-out;
 }
 

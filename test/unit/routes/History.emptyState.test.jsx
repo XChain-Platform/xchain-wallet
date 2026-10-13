@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // A wallet with no activity at all says so, even with a search typed;
-// "No matches for the current filters" is reserved for a filter that hides
+// "No results for these filters" is reserved for a filter that hides
 // rows that exist.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -88,7 +88,7 @@ describe('History empty state', () => {
         // History re-renders once the per-chain loads settle; wait on the
         // settled screen rather than the first node that matched.
         await waitFor(() => expect(screen.getByText('No activity yet')).toBeInTheDocument());
-        expect(screen.queryByText(/No matches/)).toBeNull();
+        expect(screen.queryByText(/No results for these filters/)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 
@@ -97,7 +97,7 @@ describe('History empty state', () => {
         await screen.findByText('No activity yet');
         fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'abc' } });
         expect(await screen.findByText('No activity yet')).toBeInTheDocument();
-        expect(screen.queryByText(/No matches/)).toBeNull();
-        expect(screen.queryByText(/Adjust or clear/)).toBeNull();
+        expect(screen.queryByText(/No results for these filters/)).toBeNull();
+        expect(screen.queryByText(/Reset the filters/)).toBeNull();
     });
 });

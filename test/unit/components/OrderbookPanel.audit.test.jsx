@@ -65,7 +65,7 @@ describe('OrderbookPanel market display', () => {
         const columns = screen.getByText('Order book').nextElementSibling;
         expect(columns.className).toMatch(/orderBookGrid/);
 
-        const bidScroller = screen.getByRole('region', { name: 'Bids order book levels' });
+        const bidScroller = screen.getByRole('region', { name: 'Buy bids order book levels' });
         expect(bidScroller.className).toMatch(/levelsScroller/);
         expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 
@@ -73,7 +73,10 @@ describe('OrderbookPanel market display', () => {
         expect(header.style.textAlign).toBe('right');
         expect(header.style.fontVariantNumeric).toBe('tabular-nums');
 
-        const rowButton = screen.getByRole('button', { name: 'Pick price 0.010000' });
+        expect(screen.getByText('Buy bids')).toBeInTheDocument();
+        expect(screen.getByText('Sell asks')).toBeInTheDocument();
+
+        const rowButton = screen.getByRole('button', { name: 'Pick buy bid price 0.010000' });
         const row = rowButton.firstElementChild;
         expect(row.style.textAlign).toBe('right');
         expect(row.style.fontVariantNumeric).toBe('tabular-nums');

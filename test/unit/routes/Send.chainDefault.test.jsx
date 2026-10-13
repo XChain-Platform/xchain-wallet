@@ -44,6 +44,7 @@ const ACTIVE = {
     [DOGE]: { id: 'addr-doge', address: DOGE_FROM },
     [LTC]: { id: 'addr-ltc', address: LTC_FROM },
 };
+const NO_SAVED_FEE = Object.freeze({ strategy: null, customSatsPerKb: null, rbfByDefault: null });
 const NATIVE_TICK = { [BTC]: 'BTC', [DOGE]: 'DOGE', [LTC]: 'LTC' };
 
 function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}) {
@@ -93,7 +94,7 @@ function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}
 
 const fromField = () => screen.getByLabelText(/^From$/);
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
 describe('Send opens on the last-used chain', () => {
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
@@ -168,5 +169,51 @@ describe('Send records the chain a send succeeded on', () => {
 
         await new Promise((r) => { setTimeout(r, 50); });
         expect(messaging.updateSettings).not.toHaveBeenCalled();
+    });
+});
+
+describe('Send resets asset-specific draft fields', () => {
+    it('clears an amount when a typed token changes precision', async () => {
+        mount({ prefill: { chainId: BTC, tick: 'PEPE', amount: '1.123456789' } });
+
+        const amount = await screen.findByLabelText('Amount (PEPE)');
+        expect(amount).toHaveValue('1.123456789');
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+
+        expect(await screen.findByLabelText('Amount (BTC)')).toHaveValue('');
+        expect(screen.getByText('Token changed. Amount was reset for the new token precision.'))
+            .toBeInTheDocument();
+    });
+
+    it('clears cross-chain fields and never restores an old custom fee', async () => {
+        mount({
+            prefill: { chainId: BTC, tick: 'BTC', address: BTC_FROM, amount: '0.25' },
+            // Seeded fee records with no saved custom rate: an explicitly empty
+            // record would mean no chain is configured at all.
+            settings: { fees: { [BTC]: NO_SAVED_FEE, [DOGE]: NO_SAVED_FEE } },
+        });
+        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+        fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '77' } });
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toContain('Custom: 77');
+
+        const to = screen.getByLabelText(/^To$/);
+        fireEvent.paste(to, {
+            clipboardData: { getData: () => 'xchain://dogecoin-mainnet/DOGE' },
+        });
+
+        await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
+        expect(screen.getByLabelText(/^To$/)).toHaveValue('');
+        expect(screen.getByLabelText('Amount (DOGE)')).toHaveValue('');
+        expect(screen.getByText('Chain changed. Incompatible draft values and the fee rate were reset.'))
+            .toBeInTheDocument();
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toMatch(/^Normal:/);
+
+        fireEvent.paste(screen.getByLabelText(/^To$/), {
+            clipboardData: { getData: () => 'xchain://bitcoin-mainnet/BTC' },
+        });
+        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toMatch(/^Normal:/);
+        expect(screen.queryByDisplayValue('77')).not.toBeInTheDocument();
     });
 });

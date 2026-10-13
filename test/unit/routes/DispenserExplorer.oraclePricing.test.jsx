@@ -167,13 +167,13 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
     it('pins the no-overflow rules shared by all four dispenser screens', () => {
         const listNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispensersList.module.css',
-        ), '(max-width: 399px)');
+        ), 'not all and (min-width: 400px)');
         expect(ruleBody(listNarrow, '.row')).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\)/);
         expect(ruleBody(listNarrow, '.status')).toMatch(/overflow-wrap:\s*anywhere/);
 
         const detailNarrow = mediaBlock(readCss(
             'packages/core/src/shared/routes/DispenserDetail.module.css',
-        ), '(max-width: 399px)');
+        ), 'not all and (min-width: 400px)');
         expect(ruleBody(detailNarrow, '.buyFillsRow')).toMatch(/flex-direction:\s*column/);
         expect(ruleBody(detailNarrow, '.dispenseRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
 
