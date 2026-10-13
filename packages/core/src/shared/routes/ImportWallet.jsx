@@ -132,8 +132,17 @@ function labelSyncRestoredMessage(labelSync) {
  * @param {() => void} props.onImported             refreshes App.jsx state
  * @param {'default' | 'freewallet'} [props.variant]
  * @param {'fresh' | 'add'} [props.mode]   'fresh' → first wallet (pre-host `wallet.import`); 'add' → adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
+ * @param {'mnemonic' | 'backup'} [props.initialLane]
+ * @param {(state: { lane: 'mnemonic' | 'backup' }) => void} [props.onOpenInTab]
  */
-export function ImportWallet({ onBack, onImported, variant: importVariant = 'default', mode = 'fresh' }) {
+export function ImportWallet({
+    onBack,
+    onImported,
+    variant: importVariant = 'default',
+    mode = 'fresh',
+    initialLane = 'mnemonic',
+    onOpenInTab,
+}) {
     // S4: The phrase is TYPED here, and a keyboard-visible screen recording is
     // as good as a screenshot of it.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -149,7 +158,11 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
     // §19.4 / G036: two import lanes: recovery phrase (default) and
     // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
-    const [lane, setLane] = useState(/** @type {'mnemonic' | 'backup'} */ ('mnemonic'));
+    const [lane, setLane] = useState(
+        /** @type {'mnemonic' | 'backup'} */ (
+            !isFreeWallet && initialLane === 'backup' ? 'backup' : 'mnemonic'
+        ),
+    );
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
@@ -952,7 +965,16 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <Icon.BackIcon />
             </button>
             <span />
-            <span />
+            {onOpenInTab ? (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onOpenInTab({ lane })}
+                    disabled={busy}
+                >
+                    Open in tab
+                </Button>
+            ) : <span />}
         </div>
     );
 

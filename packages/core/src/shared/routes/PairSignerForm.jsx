@@ -57,6 +57,7 @@ const { checkFirmware } = signersLib;
  * @param {() => void} [props.onPaired]
  * @param {(signerId: string, signer: any) => void} [props.onSignerPaired]   called after the SignerRecord is persisted. The shell registers the live Signer instance with its port bridge so background sign requests can reach it
  * @param {(signerId: string) => void} [props.onSignerUnpaired]
+ * @param {() => void} [props.onOpenInTab]
  *
  * @typedef {{ vendor: 'trezor' | 'ledger', model: string, deviceIdentifier: string, firmwareVersion: string | null }} PairingInfo
  */
@@ -68,6 +69,7 @@ export function PairSignerForm({
     onPaired,
     onSignerPaired,
     onSignerUnpaired,
+    onOpenInTab,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -237,6 +239,9 @@ export function PairSignerForm({
             onBack={handleCancel}
             backDisabled={stage === 'saving'}
             title="Pair hardware signer"
+            trailing={onOpenInTab && (stage === 'vendor' || stage === 'error') ? (
+                <Button variant="ghost" size="sm" onClick={onOpenInTab}>Open in tab</Button>
+            ) : null}
         />
     );
     const wrap = (children) => (

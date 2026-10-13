@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
@@ -71,6 +71,7 @@ import styles from './ActionsMenu.module.css';
  * @param {() => void} [props.onOpenAccountPicker]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
+ * @param {() => void} [props.onOpenBackupInTab]
  * @param {() => void} [props.reload]
  */
 export function Settings({
@@ -81,6 +82,7 @@ export function Settings({
     onOpenAccountPicker,
     initialSubpageId = null,
     onNavigateToMint,
+    onOpenBackupInTab,
     reload = reloadPage,
 }) {
     const { messaging, shell } = useMessaging();
@@ -352,6 +354,9 @@ export function Settings({
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel="Back to settings"
                     title={section.title}
+                    trailing={section.id === 'backup' && onOpenBackupInTab ? (
+                        <Button variant="ghost" size="sm" onClick={onOpenBackupInTab}>Open in tab</Button>
+                    ) : null}
                 />
             );
             return (
