@@ -421,8 +421,10 @@ export function decimalToBaseUnits(value, decimals = 8) {
 
 /** Convert an integer quantity and divisibility into a decimal amount. */
 export function decimalFromBaseUnits(value, decimals = 8) {
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0) return null;
     try {
-        return renderDecimal(BigInt(String(value)), decimals);
+        return renderDecimal(BigInt(String(value)), scale);
     } catch {
         return null;
     }

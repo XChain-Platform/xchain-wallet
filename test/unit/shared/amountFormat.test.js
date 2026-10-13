@@ -17,9 +17,11 @@ import {
     formatTokenQuantity,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
+    decimalFromBaseUnits,
     formatDisplayAmount,
     formatHistoryAmount,
     indexAfterNonCommaCount,
+    roundDecimalString,
     trimAmountTail,
     tokenAmountPrecisionError,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
@@ -239,5 +241,34 @@ describe('shared/amountFormat token precision validation', () => {
         })).toBe('Price can have at most 2 decimal places for CENTS.');
         expect(tokenAmountPrecisionError('1.23', { divisibility: 2, tick: 'CENTS' })).toBeNull();
         expect(tokenAmountPrecisionError('1.234', { divisibility: null, tick: 'CENTS' })).toBeNull();
+    });
+});
+
+describe('shared/amountFormat exact rendering', () => {
+    it.each([
+        ['zero scale', '123', 0, '123'],
+        ['fractional scale', '123', 2, '1.23'],
+        ['numeric string scale', '123', '2', '1.23'],
+        ['leading fractional zeros', '1', 8, '0.00000001'],
+        ['negative quantity', '-123', 2, '-1.23'],
+        ['invalid quantity', '1.2', 2, null],
+        ['negative scale', '123', -1, null],
+        ['fractional scale value', '123', 1.5, null],
+        ['non-numeric scale', '123', Number.NaN, null],
+    ])('converts %s', (_label, value, decimals, expected) => {
+        expect(decimalFromBaseUnits(value, decimals)).toBe(expected);
+    });
+
+    it.each([
+        ['pads exact values', '1.2', 3, '1.200'],
+        ['rounds below half down', '1.234', 2, '1.23'],
+        ['rounds half up', '1.235', 2, '1.24'],
+        ['rounds negative halves away from zero', '-1.235', 2, '-1.24'],
+        ['carries into the whole part', '9.99', 0, '10'],
+        ['rejects invalid values', 'not-a-number', 2, null],
+        ['rejects negative precision', '1.2', -1, null],
+        ['rejects fractional precision', '1.2', 1.5, null],
+    ])('%s', (_label, value, precision, expected) => {
+        expect(roundDecimalString(value, precision)).toBe(expected);
     });
 });
