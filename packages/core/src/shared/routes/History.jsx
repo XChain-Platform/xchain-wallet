@@ -73,7 +73,11 @@ import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { transactionReceiptText } from '../utils/transactionReceipt.js';
-import { formatDecimalAmount } from '../utils/amountFormat.js';
+import {
+    formatDecimalAmount,
+    formatDisplayAmount,
+    formatHistoryAmount,
+} from '../utils/amountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -387,6 +391,24 @@ function pendingAmountAnnotation(entry) {
     const outputs = desc.outputs.filter((o) => o.amount !== '' && o.tick !== '');
     if (outputs.length === 0) return null;
     return { direction: entry.pending.direction ?? null, outputs };
+}
+
+function historyAmountDirection(entry) {
+    const pendingDirection = entry?.pending?.direction;
+    if (pendingDirection === 'in' || pendingDirection === 'out') return pendingDirection;
+    const source = String(entry?.raw?.source ?? entry?.raw?.SOURCE ?? entry?.source ?? '');
+    const address = String(entry?.address ?? '');
+    if (!source || !address) return null;
+    return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
+}
+
+function settledAmountAnnotation(entry) {
+    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    const raw = entry.raw || {};
+    const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    const tick = raw.tick ?? raw.TICK ?? raw.token;
+    if (amount == null || !tick) return null;
+    return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
 }
 
 /**
@@ -2381,7 +2403,9 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
     const meta = entry?.pending || null;
     const failure = failed ? failedReasonOf(meta?.error) : null;
     const desc = describePendingAction(entry);
-    const amountOf = (value) => (balancesHidden ? '•••••' : value);
+    const amountOf = (value) => (balancesHidden
+        ? '•••••'
+        : formatHistoryAmount(value, historyAmountDirection(entry)));
 
     return (
         <section
@@ -2531,7 +2555,9 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     if (nativeAmount != null) {
         rows.push(['Amount', (
             <span>
-                {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
+                {balancesHidden
+                    ? '•••••'
+                    : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
                         {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
@@ -2752,6 +2778,12 @@ function fullDetailRows(entry, balancesHidden = false) {
             display = 'none';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
+        } else if (AMOUNT_KEY_RE.test(k) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v))) {
+            const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
+                && /^(amount|quantity)$/i.test(k);
+            display = isPrimarySendAmount
+                ? formatHistoryAmount(v, historyAmountDirection(entry))
+                : formatDisplayAmount(v);
         } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
@@ -3259,7 +3291,9 @@ function PendingAmountLabel({ entry }) {
     if (!annotation) return null;
     const amounts = annotation.outputs
         .map((o) => t('pending.amount.entry', {
-            amount: balancesHidden ? '•••••' : o.amount,
+            amount: balancesHidden
+                ? '•••••'
+                : formatHistoryAmount(o.amount, annotation.direction),
             tick: o.tick,
         }))
         .join(t('pending.amount.separator'));
@@ -3314,6 +3348,7 @@ function contractRowLabel(entry) {
 
 export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
     const d = chainRegistry.get(entry.chainId);
+    const settledAmount = settledAmountAnnotation(entry);
     const receiveLabel = entry.receiveLabel
         && classifyEntryAction(entry, walletAddresses) === 'receive'
         ? entry.receiveLabel
@@ -3365,6 +3400,14 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                             <span>{t('history.row.block', {
                                 block: formatDecimalAmount(entry.blockIndex),
                             })}</span>
+                            {settledAmount ? (
+                                <span
+                                    className={styles.pendingAmount}
+                                    data-history-amount={settledAmount.direction || 'unknown'}
+                                >
+                                    {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+                                </span>
+                            ) : null}
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
                                     {t('history.row.confirmations', {

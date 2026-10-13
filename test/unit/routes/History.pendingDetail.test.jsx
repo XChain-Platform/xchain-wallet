@@ -191,8 +191,8 @@ describe('History pending detail branch', () => {
         // one output's amount with another output's destination.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(`100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`7 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(within(region).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(within(region).getByText(`+7 SPARE to ${THEIRS}`)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {
@@ -216,7 +216,7 @@ describe('History pending detail branch', () => {
             'Taken from this wallet\'s own record of the send. '
             + 'The network has not reported the transaction data yet.',
         )).toBeTruthy();
-        expect(within(panel).getByText(`100 XCHAIN to ${THEIRS}`)).toBeTruthy();
+        expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
     });
 
     it('upgrades the open detail in place when the transaction confirms', async () => {
@@ -382,7 +382,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
-        expect(within(panel).getByText(`30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(within(panel).getByText(`-30 LTC to ${THEIRS}`)).toBeTruthy();
         expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });
