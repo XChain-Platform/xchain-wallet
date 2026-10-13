@@ -9,8 +9,10 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '../../../packages/core/src/ui/Button.jsx';
+import { SendIcon } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('<Button>', () => {
     it('renders children as label', () => {
@@ -50,5 +52,23 @@ describe('<Button>', () => {
     it('forwards arbitrary props like aria-label', () => {
         render(<Button aria-label="Advance">→</Button>);
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Advance');
+    });
+
+    it('uses the shared size scale and hides decorative icons', () => {
+        render(<Button size="sm" icon={<SendIcon />}>Send</Button>);
+        const icon = screen.getByRole('button').querySelector('svg');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
+        // Attributes hold a plain pixel fallback; var() there renders at 300px
+        // on Android WebView 102. The size scale comes from the tokens.css rule.
+        expect(icon).toHaveAttribute('width', '18');
+        expect(icon).toHaveAttribute('height', '18');
+        expect(icon).toHaveAttribute('data-xc-icon');
+        expect(readFileSync('packages/core/src/ui/tokens.css', 'utf8'))
+            .toMatch(/svg\[data-xc-icon\]\)\s*\{[^}]*width:\s*var\(--xc-icon-size,\s*var\(--xc-icon-md\)\)/s);
+        expect(icon).toHaveAttribute('aria-hidden', 'true');
+        expect(icon).toHaveAttribute('focusable', 'false');
+        expect(css).toMatch(/\.sm\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-sm\)/s);
+        expect(css).toMatch(/\.md\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-md\)/s);
     });
 });
