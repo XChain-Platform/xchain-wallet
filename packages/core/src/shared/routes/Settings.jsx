@@ -357,7 +357,10 @@ export function Settings({
             return (
                 <Screen variant={variant} header={subpageHeader}>
                     <ListPage>
-                        <SectionComponent {...(section.props || {})} />
+                        <SectionComponent
+                            key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
+                            {...(section.props || {})}
+                        />
                     </ListPage>
                 </Screen>
             );

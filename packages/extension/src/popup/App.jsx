@@ -587,6 +587,7 @@ function AppInner() {
     const handleSwitchWallet = (id) => {
         // Only a real change is announced to connected dApps; a restore never comes through here.
         const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
+        setActiveAccountId(null);
         setActiveWalletId(id);
         if (id) writeActiveWallet(id);
         // Best-effort: a failed notice must never undo the switch itself.
@@ -861,7 +862,9 @@ function AppInner() {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {
                             setHistoryInitialQuery('');
                             setHistoryInitialFocus(target || null);
@@ -928,6 +931,7 @@ function AppInner() {
             if (unlockedView === 'receive' && activeWalletId) {
                 return (
                     <Receive
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         prefill={receivePrefill}
@@ -1894,6 +1898,7 @@ function AppInner() {
             if (unlockedView === 'contacts' && activeWalletId) {
                 return (
                     <ContactsList
+                        key={activeWalletId}
                         walletId={activeWalletId}
                         onSend={(prefill) => {
                             setSendPrefill(prefill);
@@ -2173,6 +2178,7 @@ function AppInner() {
             if (unlockedView === 'history' && activeWalletId) {
                 return (
                     <History
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
@@ -2432,7 +2438,7 @@ function AppInner() {
             if (unlockedView === 'settings') {
                 return (
                     <Settings
-                        key={settingsInitialSection || 'root'}
+                        key={`${activeWalletId || 'none'}:${activeAccountId || 'all'}:${settingsInitialSection || 'root'}`}
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
                         activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
@@ -2578,7 +2584,7 @@ function AppInner() {
                 );
             }
             return (
-                <>
+                <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
                     {activeWalletId ? <QueuedBroadcastBanner walletId={activeWalletId} /> : null}
                     <Home
                         activeWalletId={activeWalletId}
@@ -2650,7 +2656,7 @@ function AppInner() {
                         // button that web and desktop keep in their header.
                         onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
                     />
-                </>
+                </Fragment>
             );
             })();
             return (

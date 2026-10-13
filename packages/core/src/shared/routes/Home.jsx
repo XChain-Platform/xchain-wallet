@@ -513,6 +513,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             if (!onSwitchAccount) setActiveAccountIdLocal(null);
             return undefined;
         }
+        setAccounts(null);
         let cancelled = false;
         const walletId = activeWalletId;
         messaging.listAccounts(walletId)

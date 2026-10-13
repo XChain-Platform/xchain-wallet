@@ -78,7 +78,7 @@ function balancesFor(address, { issuerHasToken = true } = {}) {
         : { native, tokens: [] };
 }
 
-function mount(balanceOptions) {
+function mount(balanceOptions, props = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'addr-1', address: ACTIVE } }),
@@ -107,7 +107,7 @@ function mount(balanceOptions) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {} }),
+            React.createElement(Send, { walletId: 'w', onBack() {}, ...props }),
         ),
     );
     return messaging;
@@ -124,6 +124,16 @@ async function selectToken() {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('Send: the funding address is shown and changeable', () => {
+    it('loads source addresses for the active account', async () => {
+        const messaging = mount(undefined, { accountId: 'account-2' });
+
+        await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledWith(
+            'w',
+            'account-2',
+        ));
+        expect(messaging.getActiveAddresses).toHaveBeenCalledWith('w', 'account-2');
+    });
+
     it('renders the funding address on the compose form, defaulted to the active one', async () => {
         mount();
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));

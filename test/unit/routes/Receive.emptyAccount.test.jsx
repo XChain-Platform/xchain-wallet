@@ -12,7 +12,7 @@
 // also has to offer the cure: a generate CTA that opens Add addresses.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 
@@ -44,6 +44,34 @@ function renderReceive(messaging, props = {}) {
 }
 
 describe('Receive with no addresses on any chain', () => {
+    it('ignores an address list that resolves after the wallet changes', async () => {
+        let resolveOld;
+        const oldRead = new Promise((resolve) => { resolveOld = resolve; });
+        const getAddressesByChain = vi.fn()
+            .mockImplementationOnce(() => oldRead)
+            .mockResolvedValueOnce({});
+        const messaging = baseMessaging({
+            getAddressesByChain,
+            getNewestAddress: vi.fn().mockResolvedValue(null),
+        });
+        const view = renderReceive(messaging);
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Receive walletId="w2" accountId="acct-2" />
+            </MessagingProvider>,
+        );
+        await screen.findByText(/^No addresses yet$/);
+
+        await act(async () => {
+            resolveOld({
+                'bitcoin-regtest': [{ id: 'old', address: 'bcrt1qoldwallet', addressType: 'p2wpkh' }],
+            });
+        });
+        expect(screen.queryByDisplayValue('bcrt1qoldwallet')).toBeNull();
+        expect(getAddressesByChain).toHaveBeenLastCalledWith('w2', 'acct-2');
+    });
+
     it('offers a generate CTA instead of dead-ending on the error string', async () => {
         renderReceive(baseMessaging());
 

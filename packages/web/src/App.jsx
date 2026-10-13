@@ -827,6 +827,7 @@ function AppInner() {
     // instead of snapping back to the first wallet. Twin of the account
     // handler below.
     const handleSwitchWallet = (id) => {
+        setActiveAccountId(null);
         setActiveWalletId(id);
         if (id) writeActiveWallet(id);
     };
@@ -1000,7 +1001,9 @@ function AppInner() {
             if (unlockedView === 'send' && activeWalletId) {
                 return (
                     <Send
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
+                        accountId={activeAccountId || undefined}
                         onViewHistory={(target) => {
                             setHistoryInitialQuery('');
                             setHistoryInitialFocus(target || null);
@@ -1076,6 +1079,7 @@ function AppInner() {
             if (unlockedView === 'receive' && activeWalletId) {
                 return (
                     <Receive
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         prefill={receivePrefill}
@@ -1972,6 +1976,7 @@ function AppInner() {
             if (unlockedView === 'contacts' && activeWalletId) {
                 return (
                     <ContactsList
+                        key={activeWalletId}
                         walletId={activeWalletId}
                         onSend={(prefill) => {
                             setSendPrefill(prefill);
@@ -2253,6 +2258,7 @@ function AppInner() {
             if (unlockedView === 'history' && activeWalletId) {
                 return (
                     <History
+                        key={`${activeWalletId}:${activeAccountId || 'all'}`}
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={() => setUnlockedView(historyReturnTo)}
@@ -2509,7 +2515,7 @@ function AppInner() {
                     : settingsInitialSection;
                 return (
                     <Settings
-                        key={settingsSubpage || 'root'}
+                        key={`${activeWalletId || 'none'}:${activeAccountId || 'all'}:${settingsSubpage || 'root'}`}
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
                         activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
@@ -2651,7 +2657,7 @@ function AppInner() {
             // mounted in FullLayoutWithNav.header below so it persists
             // across every unlocked view, not only Home.
             return (
-                <>
+                <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
                     {/* `demoBannerInHeader`: this shell mounts
                         DemoBanner in the layout header, which already renders
                         above Home, so Home must not mount a second one. */}
@@ -2720,7 +2726,7 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
                     />
-                </>
+                </Fragment>
             );
             })();
             const handleNavLock = () => {

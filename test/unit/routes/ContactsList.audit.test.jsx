@@ -41,13 +41,19 @@ function makeMessaging(initial) {
     };
 }
 
-function mount(messaging) {
-    return render(
+function contactsTree(messaging, walletId = 'w1') {
+    return (
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <ContactsList walletId="w1" onBack={() => {}} />
+                <ContactsList walletId={walletId} onBack={() => {}} />
             </ToastHost>
-        </MessagingProvider>,
+        </MessagingProvider>
+    );
+}
+
+function mount(messaging, walletId = 'w1') {
+    return render(
+        contactsTree(messaging, walletId),
     );
 }
 
@@ -111,6 +117,39 @@ describe('ContactsList audited behavior', () => {
         expect(listedNames()).toEqual(['Zed', 'Alice']);
     });
 
+    it('keeps sort preferences separate for each wallet', async () => {
+        const rows = [
+            contact('old', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+            contact('new', 'Zed', LTC, '2026-02-01T00:00:00.000Z'),
+        ];
+        const first = mount(makeMessaging(rows), 'wallet-a');
+        await screen.findByText('Alice');
+        fireEvent.change(screen.getByLabelText('Sort contacts'), { target: { value: 'newest' } });
+        first.unmount();
+
+        mount(makeMessaging(rows), 'wallet-b');
+        await waitFor(() => expect(screen.getByLabelText('Sort contacts').value).toBe('name'));
+        expect(listedNames()).toEqual(['Alice', 'Zed']);
+    });
+
+    it('does not let a late contact read from the previous wallet replace the new list', async () => {
+        let resolveOld;
+        const oldRead = new Promise((resolve) => { resolveOld = resolve; });
+        const messaging = makeMessaging([]);
+        messaging.listContacts
+            .mockImplementationOnce(() => oldRead)
+            .mockResolvedValueOnce([contact('new', 'New wallet contact', LTC, '2026-02-01T00:00:00.000Z')]);
+        const view = render(contactsTree(messaging, 'wallet-a'));
+
+        view.rerender(contactsTree(messaging, 'wallet-b'));
+        expect(await screen.findByText('New wallet contact')).toBeTruthy();
+
+        resolveOld([contact('old', 'Old wallet contact', BTC, '2026-01-01T00:00:00.000Z')]);
+        await Promise.resolve();
+        expect(screen.queryByText('Old wallet contact')).toBeNull();
+        expect(screen.getByText('New wallet contact')).toBeTruthy();
+    });
+
     it('searches notes and address labels', async () => {
         const messaging = makeMessaging([
             contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z', { notes: 'Met at conference' }),
@@ -130,7 +169,7 @@ describe('ContactsList audited behavior', () => {
     it('stores an ambiguous valid address under the chain the user selects', async () => {
         const messaging = makeMessaging([]);
         mount(messaging);
-        await screen.findByText('No contacts yet.');
+        await screen.findByText('No contacts yet');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Testnet friend' } });
