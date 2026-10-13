@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -52,7 +52,6 @@ const COIN_TICKER_TO_NAME = {
 export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [chainsWithAddresses, setChainsWithAddresses] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -120,15 +119,19 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
-                {children}
-            </div>
-            <div className={styles.actions}>
-            </div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
     if (loadError) {
+        if (chainsWithAddresses.length === 0 && loadError.startsWith('No addresses yet.')) {
+            return wrap(
+                <EmptyState
+                    title="No addresses yet."
+                    body="Use Receive to generate addresses on at least two chains before launching a cross-chain template."
+                />,
+            );
+        }
         return wrap(
             <StatusMessage variant="error" className={styles.entryDescription}>{loadError}</StatusMessage>,
         );

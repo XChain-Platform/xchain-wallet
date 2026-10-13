@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -81,7 +81,6 @@ export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -468,9 +467,10 @@ export function LinkForm({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
+    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -558,8 +558,42 @@ export function LinkForm({ walletId, onBack }) {
         const preview1 = preview1Key ? previewCache[preview1Key] : null;
         const preview2 = preview2Key ? previewCache[preview2Key] : null;
 
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Review link"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={stage === 'submitting'}
+                            onClick={() => setStage('form')}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign link'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Link {ticker1} #{actionIndex1} to {ticker2} #{actionIndex2}
                     {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
@@ -630,37 +664,7 @@ export function LinkForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={stage === 'submitting'}
-                        onClick={() => setStage('form')}
-                    >
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign link'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -668,11 +672,38 @@ export function LinkForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
-    return wrap(
-        <form onSubmit={handleReview} noValidate>
+    return wrapForm(
+        <FormPage
+            label="Link two actions across chains"
+            onSubmit={handleReview}
+            status={validationError || formError ? (
+                <>
+                    {validationError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {validationError}
+                        </StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Link' : 'Review'}
+                </Button>
+            )}
+        >
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
                 gap: 'var(--xc-space-3)',
             }}>
                 <SidePanel
@@ -728,12 +759,6 @@ export function LinkForm({ walletId, onBack }) {
                 </label>
             </div>
 
-            {validationError ? (
-                <StatusMessage variant="error" className={styles.error}>
-                    {validationError}
-                </StatusMessage>
-            ) : null}
-
             {fromAddress && submitChainId ? (
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Submit on</dt>
@@ -767,23 +792,7 @@ export function LinkForm({ walletId, onBack }) {
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker || ''} />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : singleEncode ? 'Link' : 'Review'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

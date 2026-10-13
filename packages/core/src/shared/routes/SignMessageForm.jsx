@@ -23,7 +23,7 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -48,7 +48,6 @@ export function SignMessageForm({ walletId, onBack }) {
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -244,9 +243,11 @@ export function SignMessageForm({ walletId, onBack }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
-                    {loadError}
-                </div>
+                <ListPage>
+                    <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
+                        {loadError}
+                    </div>
+                </ListPage>
             </Screen>
         );
     }
@@ -319,7 +320,7 @@ export function SignMessageForm({ walletId, onBack }) {
         );
         return (
             <Screen variant={variant} header={header}>
-                {isFull ? <div className={styles.card}>{body}</div> : body}
+                <ListPage>{body}</ListPage>
             </Screen>
         );
     }
@@ -351,7 +352,23 @@ export function SignMessageForm({ walletId, onBack }) {
     ) : null;
 
     const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Sign message"
+            onSubmit={handleSubmit}
+            status={error ? (
+                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={confirmAction.composing}
+                    disabled={confirmAction.composing}
+                >
+                    {confirmAction.composing ? 'Preparing signature…' : 'Sign message'}
+                </Button>
+            )}
+        >
             {draftBanner}
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
@@ -428,19 +445,7 @@ export function SignMessageForm({ walletId, onBack }) {
             {/* The password lives on the confirm page, so the form does not ask
                 for it twice. Errors still surface here: the page is gone by the
                 time we render them. */}
-            {error ? (
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            ) : null}
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={confirmAction.composing}
-                disabled={confirmAction.composing}
-            >
-                {confirmAction.composing ? 'Preparing signature…' : 'Sign message'}
-            </Button>
-        </form>
+        </FormPage>
     );
 
     // §5.5 confirm page (message variant), rendered in place of the
@@ -463,7 +468,7 @@ export function SignMessageForm({ walletId, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }

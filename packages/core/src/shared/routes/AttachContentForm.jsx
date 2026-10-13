@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -19,7 +19,6 @@ import { useDropZone } from '../hooks/useDropZone.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { normalizeGenesisRow } from './ManageToken.jsx';
-import { FeeSelector } from '@xchain-wallet/core/ui';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -86,7 +85,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -659,9 +657,10 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
+    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
 
     if (isWatcherMode) {
         return wrap(
@@ -819,8 +818,29 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }
 
     if (stage === 'review-tis' && fileMeta && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignTis} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Upload token info"
+                onSubmit={handleSignTis}
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                            Skip (artwork only)
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            Upload token info
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Store {tick}'s information on the chain: a small document
                     naming the token and pointing at the artwork you just
@@ -858,29 +878,34 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
-                        Skip (artwork only)
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        Upload token info
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review-desc' && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignDescribe} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Update token description"
+                onSubmit={handleSignDescribe}
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
+                            Skip
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            Update description
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Point {tick}'s description at the on-chain token info.
                     this is what the explorer and wallets will read.
@@ -920,29 +945,34 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" type="button" onClick={() => setStage('done')} disabled={submitting}>
-                        Skip
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        Update description
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review-file' && fileMeta && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignFile} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Review artwork upload"
+                onSubmit={handleSignFile}
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            Upload file
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Upload {fileMeta.name} to the chain, then link it to {tick}.
                 </p>
@@ -1000,29 +1030,29 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
+            </FormPage>,
+        );
+    }
+
+    if (stage === 'review-link' && fromAddress) {
+        return wrapForm(
+            <FormPage
+                label="Review artwork link"
+                onSubmit={handleSignLink}
+                status={hw && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
-                        Back
-                    </Button>
+                actions={(
                     <Button
                         type="submit"
                         variant="primary"
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        Upload file
+                        Link artwork to {tick}
                     </Button>
-                </div>
-            </form>,
-        );
-    }
-
-    if (stage === 'review-link' && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignLink} noValidate>
+                )}
+            >
                 <p className={styles.summary}>
                     Link the uploaded file to {tick}. This makes it the
                     token's official artwork.
@@ -1071,27 +1101,25 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        Link artwork to {tick}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose' (also the fallback if review stages lose
     // their prerequisites, e.g. addresses reloaded)
-    return wrap(
-        <form onSubmit={handleReviewFile} noValidate>
+    return wrapForm(
+        <FormPage
+            label="Attach artwork"
+            onSubmit={handleReviewFile}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button type="submit" variant="primary">
+                    Review upload
+                </Button>
+            )}
+        >
             <p className={styles.summary}>
                 Store the artwork on the chain itself and link it to {tick}.
                 Two signatures: one to upload the file, one to make it
@@ -1189,17 +1217,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                >
-                    Review upload
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
