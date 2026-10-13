@@ -57,7 +57,13 @@ import { requireSdkDeep } from '../../helpers/sdkDeepPaths.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { joinEndpoint } from '../../../packages/core/src/sdk/SDKRegistry.js';
 import { gotoSection, openSettings } from './wallet.js';
-import { REGTEST_COIN, expectConfirmModal, mintXchain, unlockAfterReload } from './regtest.js';
+import {
+    REGTEST_COIN,
+    activeNetworkControl,
+    expectConfirmModal,
+    mintXchain,
+    unlockAfterReload,
+} from './regtest.js';
 import { priceVerdict } from './priceSeed.js';
 
 const { XChainSDK, WalletUtils } = xchainSdk;
@@ -633,7 +639,7 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
-    await page.getByLabel('Active network').selectOption('testnet');
+    await activeNetworkControl(page).selectOption('testnet');
     await unlockAfterReload(page, password);
 }
 
