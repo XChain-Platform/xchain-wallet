@@ -1,8 +1,8 @@
 .headerIcon {
     display: block;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
+    border-radius: var(--xc-avatar-shape);
     object-fit: contain;
     flex: 0 0 auto;
 }
@@ -20,12 +20,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
+    border-radius: var(--xc-avatar-shape);
     background: var(--xc-accent-primary);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-avatar-initials-header);
     font-weight: 700;
     flex: 0 0 auto;
 }
@@ -124,31 +124,30 @@
 .balanceHeroIconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 4.5rem;
-    height: 4.5rem;
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
 }
 
 .balanceHeroIcon {
     display: block;
-    /* Sized to match the height of the right-side content stack (label
-       + amount + fiat ≈ 4.5rem) so the icon dominates the left side
-       and visually fills the hero without forcing it taller. */
-    width: 4.5rem;
-    height: 4.5rem;
+    /* The shared hero size keeps detail artwork aligned with other asset heroes. */
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
     flex: 0 0 auto;
     object-fit: contain;
+    border-radius: var(--xc-avatar-shape);
 }
 
 .balanceHeroIconFallback {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 4.5rem;
-    height: 4.5rem;
-    border-radius: var(--xc-radius-sm);
+    width: var(--xc-avatar-size-hero);
+    height: var(--xc-avatar-size-hero);
+    border-radius: var(--xc-avatar-shape);
     background: rgba(255, 255, 255, 0.2);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xl);
+    font-size: var(--xc-avatar-initials-hero);
     font-weight: 800;
 }
 
