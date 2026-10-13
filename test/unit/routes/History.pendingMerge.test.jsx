@@ -168,9 +168,9 @@ describe('History shows unconfirmed transactions', () => {
             }],
         });
         await waitFor(() => expect(screen.getByText('Pending')).toBeTruthy());
-        // The row identifies a transaction by its source, the same way it
-        // does for a confirmed one; on our own send that source is us.
-        expect(view.container.textContent).toContain(OURS);
+        // The row identifies a transaction by its counterparty, the same way it
+        // does for a confirmed one; on our own send that is the recipient.
+        expect(view.container.textContent).toContain(THEIRS);
     });
 
     it('upgrades in place rather than showing the transaction twice once it confirms', async () => {

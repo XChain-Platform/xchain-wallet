@@ -63,7 +63,7 @@ import {
     pendingDisplayState,
     pendingTxToEntry,
 } from '../utils/pendingHistory.js';
-import { t } from '../../i18n/index.js';
+import { getFormatLocale, t } from '../../i18n/index.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
@@ -119,6 +119,21 @@ function historyChainFilterKey(walletId) {
 
 function groupingModeStorageKey(walletId) {
     return `${GROUPING_MODE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function formatFilterDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return value;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    try {
+        return date.toLocaleDateString(getFormatLocale(), {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+    } catch {
+        return value;
+    }
 }
 
 function readPersistedGroupingMode(walletId) {
@@ -1833,7 +1848,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 ) : null}
                 {dateFrom || dateTo ? (
                     <div className={styles.activeDateRange}>
-                        <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
+                        <span>{t('history.filters.activeRange', {
+                            from: dateFrom ? formatFilterDate(dateFrom) : t('history.filters.anyDate'),
+                            to: dateTo ? formatFilterDate(dateTo) : t('history.filters.anyDate'),
+                        })}</span>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -1867,11 +1885,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
+                        aria-label={showFiatInHistory
+                            ? undefined
+                            : `${t('history.filters.showFiat')}: Off`}
                         title={t('history.filters.fiatHelp')}
                     >
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
-                            : t('history.filters.showFiat')}
+                            : t('history.filters.fiatCurrency', { currency: 'Off' })}
                     </Button>
                     <SegmentedControl
                         aria-label={t('history.filters.groupingMode')}
@@ -3706,6 +3727,8 @@ function contractRowLabel(entry) {
 export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
+    const peerAddress = peerAddressOfEntry(entry);
+    const rowAddress = peerAddress || entry.source || '-';
     const receiveLabel = entry.receiveLabel
         && classifyEntryAction(entry, walletAddresses) === 'receive'
         ? entry.receiveLabel
@@ -3747,8 +3770,8 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 )}
                 subtitle={(
                     <span className={styles.rowDetails}>
-                        <span className={styles.rowSourceAddress} title={entry.source || undefined}>
-                            {entry.source || '-'}
+                        <span className={styles.rowSourceAddress} title={rowAddress === '-' ? undefined : rowAddress}>
+                            {rowAddress}
                         </span>
                         {receiveLabel ? (
                             <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>

@@ -1425,9 +1425,9 @@
 }
 
 /* Compact history layouts wrap controls and row metadata, while detail keys
-   stack above their values. This keeps each piece of content in its own track
-   when the available width reaches the 320px phone viewport. */
-@media not all and (min-width: 400px) {
+   stack above their values. The 420px ceiling also covers iOS viewports whose
+   native date controls need more room than their CSS grid tracks. */
+@media not all and (min-width: 421px) {
     .filterCard {
         min-width: 0;
     }

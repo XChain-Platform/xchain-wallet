@@ -18,6 +18,7 @@ import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -168,10 +169,18 @@ function TokenDetailContent({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative ? chainId : null, {
+    const queriedNativePrice = useNativePrice(isNative && !isDemo ? chainId : null, {
         includeSparkline: true,
         fiatCurrency,
     });
+    const nativePrice = isNative && isDemo
+        ? {
+            entry: synthesizeDemoNativePrices([chainId])[chainId] ?? null,
+            loading: false,
+            disabled: false,
+            error: null,
+        }
+        : queriedNativePrice;
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
