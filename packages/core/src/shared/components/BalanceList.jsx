@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -69,7 +69,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
  */
-export function BalanceList({
+export const BalanceList = memo(function BalanceList({
     rows,
     multisig,
     multisigChainId,
@@ -237,9 +237,9 @@ export function BalanceList({
             ) : null}
         </div>
     );
-}
+});
 
-function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
+const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
@@ -484,7 +484,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
             ) : null}
         </div>
     );
-}
+});
 
 function FitAmount({ children, title }) {
     const containerRef = useRef(null);

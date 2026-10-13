@@ -179,6 +179,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         () => buildBalanceRows(balances, chainRegistry, activeByChain),
         [balances, chainRegistry, activeByChain],
     );
+    const balanceChainIds = useMemo(() => Object.keys(balances || {}), [balances]);
     // Real balance reads carry no price, so native rows get the coin's live
     // §45 rate here; without it the hero and the chart count every coin as
     // unpriced. A demo wallet asks for nothing (its fixtures price
@@ -281,14 +282,17 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // Tokens = every non-native tick, regardless of divisibility or
     // imagery. The single canonical "what do I hold?" surface.
     const tokens = useMemo(
-        () => sortBalanceRows(filteredRows.filter(
-            (r) => r.kind !== 'native',
-        ), sortBy, nativePriceMap),
-        [filteredRows, sortBy, nativePriceMap],
+        () => active === 'tokens'
+            ? sortBalanceRows(filteredRows.filter(
+                (r) => r.kind !== 'native',
+            ), sortBy, nativePriceMap)
+            : [],
+        [active, filteredRows, sortBy, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const ownedTokens = useOwnedTokens(balances, active === 'tokens');
     const issuedUnheld = useMemo(() => {
+        if (active !== 'tokens') return [];
         const held = new Set(allRows.map((r) => `${r.chainId}:${r.tick}`));
         const out = [];
         for (const o of ownedTokens) {
@@ -301,7 +305,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             out.push(Number.isFinite(o.divisibility) ? { ...row, divisibility: o.divisibility } : row);
         }
         return sortByChainThenAsset(out);
-    }, [ownedTokens, allRows, networkFilter, tokenQueryTrim, chainRegistry]);
+    }, [active, ownedTokens, allRows, networkFilter, tokenQueryTrim, chainRegistry]);
     const filteredTokens = useMemo(() => {
         if (!tokenQueryTrim) return tokens;
         return tokens.filter((r) => {
@@ -336,13 +340,15 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // pretty icon (e.g. PEPECASH) belongs in Tokens, not here, and a true
     // collectible with no artwork still earns its tile (letter fallback).
     // A tick can appear in BOTH Tokens (balance row) and NFTs (tile).
-    const collectibleKeys = useCollectibleKeys(filteredRows, isDemo);
+    const collectibleKeys = useCollectibleKeys(active === 'nfts' ? filteredRows : [], isDemo);
     const nfts = useMemo(
-        () => sortByChainThenAsset(filteredRows.filter(
-            (r) => r.kind !== 'native'
-                && collectibleKeys.has(`${r.chainId}:${r.tick}`),
-        )),
-        [filteredRows, collectibleKeys],
+        () => active === 'nfts'
+            ? sortByChainThenAsset(filteredRows.filter(
+                (r) => r.kind !== 'native'
+                    && collectibleKeys.has(`${r.chainId}:${r.tick}`),
+            ))
+            : [],
+        [active, filteredRows, collectibleKeys],
     );
 
     const tabs = [
@@ -632,7 +638,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 {active === 'activity' ? (
                     isDemo ? (
                         <DemoActivityList
-                            chainIds={Object.keys(balances || {})}
+                            chainIds={balanceChainIds}
                             balances={balances}
                             networkFilter={networkFilter}
                             walletId={walletId}
@@ -715,6 +721,7 @@ function useOwnedTokens(balances, enabled) {
     const { messaging } = useMessaging();
     const [owned, setOwned] = useState([]);
     const addressKey = useMemo(() => {
+        if (!enabled) return '';
         const pairs = [];
         for (const [chainId, entries] of Object.entries(balances || {})) {
             if (!Array.isArray(entries)) continue;
@@ -723,7 +730,7 @@ function useOwnedTokens(balances, enabled) {
             }
         }
         return [...new Set(pairs)].sort().join(',');
-    }, [balances]);
+    }, [balances, enabled]);
 
     useEffect(() => {
         if (!enabled || !addressKey || typeof messaging?.getOwnedTokens !== 'function') return undefined;
@@ -838,7 +845,7 @@ const ACTION_ICON = {
 //   1. action icon + action label + status pill (right)
 //   2. amount + tick (primary content)
 //   3. Block N + Confirms pill + relative time (right)
-function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor, onClick, allowRemoteImages }) {
+const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor, onSelectEntry, allowRemoteImages }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
@@ -875,7 +882,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor
         <li>
             <button
                 type="button"
-                onClick={onClick}
+                onClick={typeof onSelectEntry === 'function' ? () => onSelectEntry(entry) : undefined}
                 className={styles.demoRowButton}
             >
                 <div className={balanceStyles.iconWrap}>
@@ -945,7 +952,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor
             </button>
         </li>
     );
-}
+});
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
@@ -1010,9 +1017,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, chainRe
                     chainTip={chainTips[e.chainId] || null}
                     descriptor={chainRegistry.get(e.chainId)}
                     allowRemoteImages={allowRemoteImages}
-                    onClick={() => {
-                        if (typeof onSelectEntry === 'function') onSelectEntry(e);
-                    }}
+                    onSelectEntry={onSelectEntry}
                 />
             ))}
         </ul>
