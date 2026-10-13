@@ -114,7 +114,30 @@ function pickFundingAddress(addrs, active) {
  *   succeeds; the host navigates (e.g. back to the thread) and surfaces its
  *   own confirmation.
  */
-export function ComposeMessage({
+export function ComposeMessage(props) {
+    const {
+        walletId,
+        chainId,
+        fromAddressId,
+        toAddress,
+        initialMessage,
+        fixedEncryption,
+    } = props;
+    const composeKey = JSON.stringify([
+        walletId,
+        chainId || null,
+        fromAddressId || null,
+        toAddress || null,
+        initialMessage || null,
+        fixedEncryption || null,
+    ]);
+    return <ComposeMessageForm key={composeKey} {...props} />;
+}
+
+// Prefill identity defines one draft. A new recipient or thread prefill gets a
+// fresh form instance, which also cancels recipient lookups and confirm flows
+// owned by the prior draft.
+function ComposeMessageForm({
     walletId,
     chainId: initialChainId,
     fromAddressId: initialFromAddressId,
