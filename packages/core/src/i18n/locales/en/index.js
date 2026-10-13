@@ -82,7 +82,7 @@ export const en = {
 
     'import.title': 'Import an existing wallet',
     'import.help':
-        'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.',
+        'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word recovery phrase. The format is detected automatically.',
     'import.phrase': 'Recovery phrase',
     'import.phraseRequired': 'Recovery phrase is required.',
     'import.wordCount':

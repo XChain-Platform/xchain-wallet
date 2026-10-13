@@ -1054,7 +1054,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         [addressesByChain, chainId, changeAddressId],
     );
     const automaticChangeLabel = settings?.privacy?.changeAddressRotation === true && signerReady
-        ? 'Fresh wallet address (change rotation)'
+        ? 'Fresh address (change rotation)'
         : (fromAddress?.address || 'Source address');
     const changeAddressLabel = changeAddress?.address || automaticChangeLabel;
     const coinControlLabel = coinControlEnabled

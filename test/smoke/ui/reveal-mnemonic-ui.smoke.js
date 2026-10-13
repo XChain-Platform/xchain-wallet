@@ -53,14 +53,14 @@ assert.match(
 );
 assert.match(
     sectionSrc,
-    /no seed phrase to reveal/,
+    /no recovery phrase to reveal/,
     'wif-only friendly copy text',
 );
 
 // `Show…` button only enabled when a wallet is active.
 assert.match(
     sectionSrc,
-    /label="Back up seed phrase"[\s\S]*disabled=\{!activeWallet\}/,
+    /label="Back up recovery phrase"[\s\S]*disabled=\{!activeWallet\}/,
     'reveal row disabled until activeWallet is supplied',
 );
 
