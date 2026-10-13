@@ -235,6 +235,7 @@
     color: var(--xc-on-accent);
     background: var(--xc-accent-primary);
     border: 1px solid var(--xc-accent-primary);
+    --xc-focus-ring: var(--xc-on-accent);
     border-radius: 0 var(--xc-radius-md) var(--xc-radius-md) 0;
     cursor: pointer;
 }
