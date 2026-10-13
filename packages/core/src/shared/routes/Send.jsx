@@ -208,6 +208,21 @@ function utxoAmount(utxo) {
     }
 }
 
+function utxoValueSats(utxo) {
+    try {
+        const value = BigInt(utxo?.value ?? 0);
+        return value >= 0n ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function utxoOutpoint(utxo) {
+    const txid = String(utxo?.txid || 'Unknown transaction');
+    const compactTxid = txid.length > 18 ? `${txid.slice(0, 8)}…${txid.slice(-8)}` : txid;
+    return `${compactTxid}:${utxo?.vout ?? '?'}`;
+}
+
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
 // for the right coin on the wrong network, or simply mistyped, is unspendable:
@@ -1071,6 +1086,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
         [availableUtxos, selectedUtxoKeys],
     );
+    const selectedUtxoTotalSats = useMemo(
+        () => selectedUtxos.reduce((total, utxo) => total + (utxoValueSats(utxo) ?? 0n), 0n),
+        [selectedUtxos],
+    );
     const changeAddress = useMemo(
         () => (addressesByChain?.[chainId] || []).find((address) => address.id === changeAddressId) || null,
         [addressesByChain, chainId, changeAddressId],
@@ -1366,6 +1385,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (liveTier) return liveTier;
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
+
+    const coinControlChange = useMemo(() => {
+        const ticker = nativeTickerFor(descriptor) || '';
+        if (selectedUtxos.length === 0) return `0 ${ticker}`.trim();
+        if (!isNativeSend) return 'Calculated when composed';
+        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        const feeSats = utxoValueSats({ value: feeEstimate?.sats });
+        if (amountSats === null || feeSats === null) return 'Enter an amount to estimate';
+        const changeSats = selectedUtxoTotalSats - amountSats - feeSats;
+        if (changeSats < 0n) return 'Not enough selected';
+        return `${decimalStringFromSats(changeSats)} ${ticker}`.trim();
+    }, [amount, descriptor, feeEstimate?.sats, isNativeSend, selectedUtxoTotalSats, selectedUtxos.length]);
 
     // The picked rate converted to the encoder's feePerKb unit (smallest-unit
     // per KB), so the tier/custom choice actually prices the broadcast tx (not
@@ -3008,27 +3039,84 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {coinControlEnabled ? (
                     <fieldset className={styles.coinControlList}>
                         <legend>{t('send.advanced.inputs')}</legend>
-                        {availableUtxos.length > 0 ? availableUtxos.map((utxo) => {
-                            const key = utxoKey(utxo);
-                            return (
-                                <label key={key} className={styles.coinControlRow}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedUtxoKeys.has(key)}
-                                        onChange={(e) => setSelectedUtxoKeys((current) => {
-                                            const next = new Set(current);
-                                            if (e.target.checked) next.add(key);
-                                            else next.delete(key);
-                                            return next;
-                                        })}
-                                    />
-                                    <span>
-                                        {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
-                                        <small>{String(utxo.txid).slice(0, 10)}…:{utxo.vout}</small>
-                                    </span>
-                                </label>
-                            );
-                        }) : <p className={styles.hint}>{t('send.advanced.noInputs')}</p>}
+                        <div className={styles.coinControlToolbar}>
+                            <span>{availableUtxos.length} available</span>
+                            <span className={styles.coinControlActions}>
+                                <button
+                                    type="button"
+                                    disabled={availableUtxos.length === 0
+                                        || selectedUtxos.length === availableUtxos.length}
+                                    onClick={() => setSelectedUtxoKeys(
+                                        new Set(availableUtxos.map((utxo) => utxoKey(utxo))),
+                                    )}
+                                >
+                                    Select all
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selectedUtxos.length === 0}
+                                    onClick={() => setSelectedUtxoKeys(new Set())}
+                                >
+                                    Clear
+                                </button>
+                            </span>
+                        </div>
+                        {availableUtxos.length > 0 ? (
+                            <div className={styles.coinControlRows}>
+                                {availableUtxos.map((utxo) => {
+                                    const key = utxoKey(utxo);
+                                    const valueSats = utxoValueSats(utxo);
+                                    const dustFloor = dustThresholdForCoin(descriptor?.coin);
+                                    const isDust = valueSats !== null && dustFloor !== null
+                                        && valueSats < BigInt(dustFloor);
+                                    return (
+                                        <label key={key} className={styles.coinControlRow}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUtxoKeys.has(key)}
+                                                onChange={(e) => setSelectedUtxoKeys((current) => {
+                                                    const next = new Set(current);
+                                                    if (e.target.checked) next.add(key);
+                                                    else next.delete(key);
+                                                    return next;
+                                                })}
+                                            />
+                                            <span className={styles.coinControlValue}>
+                                                <span>
+                                                    {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
+                                                    {isDust ? (
+                                                        <span
+                                                            className={styles.coinControlDust}
+                                                            title={`Below the ${formatWithThousands(String(dustFloor))} sat dust threshold`}
+                                                        >
+                                                            Dust
+                                                        </span>
+                                                    ) : null}
+                                                </span>
+                                                <small>{utxoOutpoint(utxo)}</small>
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        ) : <p className={styles.hint}>{t('send.advanced.noInputs')}</p>}
+                        <dl
+                            className={styles.coinControlSummary}
+                            aria-label="Coin control summary"
+                            aria-live="polite"
+                        >
+                            <div>
+                                <dt>Selected total</dt>
+                                <dd>
+                                    {decimalStringFromSats(selectedUtxoTotalSats)}{' '}
+                                    {nativeTickerFor(descriptor)}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Approx. change</dt>
+                                <dd>{coinControlChange}</dd>
+                            </div>
+                        </dl>
                     </fieldset>
                 ) : null}
                 <label className={styles.advancedSelectLabel}>
