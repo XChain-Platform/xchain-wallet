@@ -8,9 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { createContext, useContext, useLayoutEffect, useRef } from 'react';
 import styles from './Screen.module.css';
 
 const MAIN_ID = 'xc-main';
+const ScrollRestorationContext = createContext(null);
+
+/**
+ * Keeps route scroll offsets for the lifetime of the unlocked shell.
+ *
+ * @param {object} props
+ * @param {string} props.routeKey
+ * @param {import('react').ReactNode} props.children
+ */
+export function ScrollRestoration({ routeKey, children }) {
+    const positionsRef = useRef(new Map());
+    return (
+        <ScrollRestorationContext.Provider value={{ routeKey, positions: positionsRef.current }}>
+            {children}
+        </ScrollRestorationContext.Provider>
+    );
+}
 
 /**
  * Top-level layout wrapper.
@@ -32,11 +50,23 @@ const MAIN_ID = 'xc-main';
  * @param {import('react').ReactNode} props.children
  */
 export function Screen({ header, footer, variant = 'small', children }) {
+    const mainRef = useRef(null);
+    const restoration = useContext(ScrollRestorationContext);
+    const routeKey = restoration?.routeKey;
+    const positions = restoration?.positions;
+
+    useLayoutEffect(() => {
+        const main = mainRef.current;
+        if (!main || routeKey == null || !positions) return undefined;
+        main.scrollTop = positions.get(routeKey) ?? 0;
+        return () => positions.set(routeKey, main.scrollTop);
+    }, [positions, routeKey]);
+
     const className = `${styles.screen} ${styles[variant]}`;
     return (
         <div className={className}>
             {header ? <header className={styles.header}>{header}</header> : null}
-            <main id={MAIN_ID} tabIndex={-1} className={styles.body}>
+            <main ref={mainRef} id={MAIN_ID} tabIndex={-1} className={styles.body}>
                 {children}
             </main>
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}

@@ -85,6 +85,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -2678,14 +2679,16 @@ function AppInner() {
                         <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                     ) : null}
                     <WatchOnlyBadge visible={isWatcherMode} />
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

@@ -144,6 +144,7 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
@@ -2711,14 +2712,16 @@ function AppInner() {
                         </>
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

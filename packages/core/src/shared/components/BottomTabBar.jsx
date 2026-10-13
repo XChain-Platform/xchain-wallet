@@ -70,6 +70,11 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
+function scrollMainToTop() {
+    const main = typeof document === 'undefined' ? null : document.getElementById('xc-main');
+    if (main) main.scrollTop = 0;
+}
+
 export function BottomTabBar({
     currentView,
     onSelect,
@@ -154,7 +159,10 @@ export function BottomTabBar({
                             type="button"
                             className={`${styles.tab} ${active ? styles.tabActive : ''}`}
                             aria-current={active ? 'page' : undefined}
-                            onClick={() => onSelect(tab.id)}
+                            onClick={() => {
+                                if (active) scrollMainToTop();
+                                onSelect(tab.id);
+                            }}
                         >
                             <span className={styles.tabIcon} aria-hidden="true">
                                 <tab.Icon />
