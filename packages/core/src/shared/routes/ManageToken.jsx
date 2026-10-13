@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -562,7 +562,7 @@ export function ManageToken({
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
+            <ListPage className={styles.body}>
                 {/* Hero: identity (no Total Balance; this is the issuer view). */}
                 <section className={styles.hero} aria-label="Token identity">
                     {locked ? (
@@ -701,9 +701,10 @@ export function ManageToken({
                             </div>
                         </>
                     ) : (
-                        <p className={styles.chartHint} role="status">
-                            {isDemo ? 'No market data yet for this token.' : 'No price history yet'}
-                        </p>
+                        <EmptyState
+                            title={isDemo ? 'No market data yet for this token.' : 'No price history yet'}
+                            titleAs="p"
+                        />
                     )}
                 </section>
 
@@ -833,7 +834,7 @@ export function ManageToken({
                     present (dev mock returns nothing). */}
                 {(genesisInfo || subassetTicks.length > 0) ? (
                     <section className={styles.genesisPanel} aria-label="Genesis and subassets">
-                        <h3 className={styles.genesisHeading}>Genesis</h3>
+                        <SectionHeader as="h3" title="Genesis" />
                         {genesisInfo ? (
                             <dl className={styles.genesisList}>
                                 {genesisInfo.actionIndex ? (
@@ -862,11 +863,11 @@ export function ManageToken({
                                 ) : null}
                             </dl>
                         ) : (
-                            <p className={styles.empty}>No genesis row indexed for {tick} yet.</p>
+                            <EmptyState title={`No genesis row indexed for ${tick} yet.`} titleAs="p" />
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
-                                <h3 className={styles.genesisHeading}>Subassets ({subassetTicks.length})</h3>
+                                <SectionHeader as="h3" title={`Subassets (${subassetTicks.length})`} />
                                 <ul className={styles.subassetList} role="list">
                                     {subassetTicks.slice(0, 20).map((t) => (
                                         <li key={t} className={styles.subassetItem}>{t}</li>
@@ -876,7 +877,7 @@ export function ManageToken({
                         ) : null}
                     </section>
                 ) : null}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -898,12 +899,12 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     );
     if (listings.length === 0) {
         return (
-            <p className={styles.empty}>
-                No open dispensers selling {tick}.
-                {typeof onCreateDispenser === 'function' ? (
-                    <> <button type="button" className={styles.inlineLink} onClick={onCreateDispenser}>Create one</button>.</>
-                ) : null}
-            </p>
+            <EmptyState
+                title={`No open dispensers selling ${tick}.`}
+                titleAs="p"
+                actionLabel={typeof onCreateDispenser === 'function' ? 'Create one' : undefined}
+                onAction={onCreateDispenser}
+            />
         );
     }
     return (
@@ -950,7 +951,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
             <Skeleton height={72} />
         </div>
     );
-    if (orders.length === 0) return <p className={styles.empty}>No open orders involving {tick}.</p>;
+    if (orders.length === 0) return <EmptyState title={`No open orders involving ${tick}.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {orders.slice(0, 50).map((o, i) => {
@@ -987,7 +988,7 @@ function SwapsPanel({ swaps, error, tick }) {
             <Skeleton height={72} />
         </div>
     );
-    if (swaps.length === 0) return <p className={styles.empty}>No recent swaps involving {tick}.</p>;
+    if (swaps.length === 0) return <EmptyState title={`No recent swaps involving ${tick}.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {swaps.slice(0, 50).map((s, i) => {
@@ -1029,7 +1030,7 @@ function HoldersPanel({ holders, error, onViewAll }) {
         </div>
     );
     if (holders.length === 0) return (
-        <p className={styles.empty}>No holders yet. Mint or distribute supply to start populating this list.</p>
+        <EmptyState title="No holders yet. Mint or distribute supply to start populating this list." titleAs="p" />
     );
     return (
         <>
@@ -1066,7 +1067,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <p className={styles.empty}>No activity yet for {tick}.</p>
+        <EmptyState title={`No activity yet for ${tick}.`} titleAs="p" />
     );
     return (
         <>

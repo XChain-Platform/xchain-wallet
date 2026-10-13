@@ -171,12 +171,6 @@
     transition: width 0.2s ease-out;
 }
 
-.chartHint {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
 /* Owner-mismatch banner above the action grid. Yellow / warning tone
    so it reads as informational rather than error; sits flush above the
    action buttons whose disabled-state it explains. */
@@ -431,14 +425,6 @@ button.row:hover:not(:disabled) {
     font-variant-numeric: tabular-nums;
 }
 
-.empty {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    text-align: center;
-    padding: var(--xc-space-4);
-}
-
 .error {
     margin: 0;
     color: var(--xc-status-error, var(--xc-danger, #DC2626));
@@ -459,17 +445,6 @@ button.row:hover:not(:disabled) {
 
 .viewAll:hover { text-decoration: underline; }
 
-.inlineLink {
-    background: transparent;
-    border: 0;
-    color: var(--xc-accent-primary);
-    font: inherit;
-    cursor: pointer;
-    padding: 0;
-}
-
-.inlineLink:hover { text-decoration: underline; }
-
 /* ───── Genesis + subassets section - read-only metadata block at
    the bottom of the page. Two-column key/value list + chip-style
    subasset list so the bottom of the page has structured info
@@ -483,15 +458,6 @@ button.row:hover:not(:disabled) {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-}
-
-.genesisHeading {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--xc-text-muted);
 }
 
 .genesisList {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -71,7 +71,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const vmChains = useChainIdsWithAction('DEPLOY');
 
@@ -292,13 +291,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             title="Contracts"
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
-                {children}
-            </div>
-            <div className={styles.actions}>
-            </div>
+            <ListPage toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
@@ -310,43 +305,36 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     }
     if (vmChainsWithAddresses.length === 0) {
         return wrap(
-            <p className={styles.entryDescription}>
-                To use contracts, you need an
-                address on a chain that supports them. Use Receive to generate one first.
-            </p>,
+            <EmptyState title="To use contracts, you need an address on a chain that supports them. Use Receive to generate one first." />,
         );
     }
 
+    const toolbar = (
+        <>
+            <div style={{ flex: '1 1 200px', minWidth: 0, marginBottom: 'calc(var(--xc-space-3) * -1)' }}>
+                <Input
+                    type="search"
+                    placeholder="Filter by name or number"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label="Filter contracts"
+                />
+            </div>
+            <ChainFilterBar
+                chains={vmChainsWithAddresses}
+                value={chainFilter}
+                onChange={setChainFilter}
+            />
+            {onDeploy ? (
+                <Button variant="primary" onClick={onDeploy}>
+                    + Publish contract
+                </Button>
+            ) : null}
+        </>
+    );
+
     return wrap(
         <>
-            {/* Centre-aligned: with the default stretch, the search box and
-                the button grew to the tallest item on their wrapped line and
-                drew as 150px-tall blocks at phone width (2026-10-12). */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <ChainFilterBar
-                    chains={vmChainsWithAddresses}
-                    value={chainFilter}
-                    onChange={setChainFilter}
-                />
-                {/* The flex sizing sits on a wrapper: Input renders its own column
-                    wrapper, so a flex-basis on the <input> itself became the
-                    field height (200px) instead of its width; the negative margin
-                    cancels the field's own bottom margin so the row stays centred. */}
-                <div style={{ flex: '1 1 200px', minWidth: 0, marginBottom: 'calc(var(--xc-space-3) * -1)' }}>
-                    <Input
-                        type="search"
-                        placeholder="Filter by name or number"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        aria-label="Filter contracts"
-                    />
-                </div>
-                {onDeploy ? (
-                    <Button variant="primary" onClick={onDeploy} style={{ flex: '0 0 auto' }}>
-                        + Publish contract
-                    </Button>
-                ) : null}
-            </div>
             <Section title="My contracts (published by me)">
                 {activeChains.map((cid) => {
                     const d = chainRegistry.get(cid);
@@ -395,13 +383,14 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 })}
             </Section>
         </>,
+        toolbar,
     );
 }
 
 function Section({ title, children }) {
     return (
         <section style={{ marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1rem', margin: '0.5rem 0' }}>{title}</h2>
+            <SectionHeader title={title} />
             {children}
         </section>
     );
@@ -444,11 +433,12 @@ function ChainFilterBar({ chains, value, onChange }) {
 function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, renderRow }) {
     return (
         <section>
-            <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                {descriptor
+            <SectionHeader
+                as="h3"
+                title={descriptor
                     ? <ChainBadge descriptor={descriptor} size="sm" />
                     : <span>{chainId}</span>}
-            </header>
+            />
             {state.loading ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : state.error && state.rows.length === 0 ? (
@@ -456,7 +446,7 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                     Couldn't load contracts: {state.error}
                 </StatusMessage>
             ) : state.rows.length === 0 ? (
-                <p className={styles.entryDescription}>{emptyText}</p>
+                <EmptyState title={emptyText} titleAs="p" />
             ) : (
                 state.rows.map((row, i) => (
                     <button
