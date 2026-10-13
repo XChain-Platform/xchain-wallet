@@ -159,6 +159,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState(/** @type {string | null} */ (null));
+    const [editVersion, setEditVersion] = useState(/** @type {string | null} */ (null));
     // An error answers the last Save; once the user edits the form it no
     // longer describes it ("Name is required." stayed up under a typed name).
     useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries]);
@@ -275,10 +276,15 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             for (const group of duplicateGroups) {
                 const { keep, dropIds } = mergeContactGroup(group);
                 // eslint-disable-next-line no-await-in-loop
-                await messaging.saveContact({ record: keep, replaceIds: dropIds });
+                await messaging.saveContact({
+                    record: keep,
+                    replaceIds: dropIds,
+                    expectedUpdatedAt: keep.updatedAt,
+                });
                 for (const id of dropIds) {
+                    const dropped = group.find((contact) => contact.id === id);
                     // eslint-disable-next-line no-await-in-loop
-                    await messaging.deleteContact({ id });
+                    await messaging.deleteContact({ id, expectedUpdatedAt: dropped?.updatedAt });
                 }
             }
             await loadContacts();
@@ -330,12 +336,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     function startEdit(contact) {
         if (contact) {
+            setEditVersion(contact.updatedAt);
             setFormName(contact.name);
             setFormNotes(contact.notes || '');
             setFormEntries(contact.entries.length
                 ? contact.entries.map((e) => ({ chain: e.chain, address: e.address, label: e.label || '' }))
                 : [{ chain: 'bitcoin', address: '', label: '' }]);
         } else {
+            setEditVersion(null);
             setFormName('');
             setFormNotes('');
             setFormEntries([{ chain: 'bitcoin', address: '', label: '' }]);
@@ -424,7 +432,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             return;
         }
         const addressOwner = cleanedEntries
-            .map((entry) => findContactByAddress(contacts, entry.address))
+            .map((entry) => findContactByAddress(contacts, entry.address, entry.chain))
             .find((contact) => contact && contact.id !== active?.id);
         if (addressOwner) {
             setSubmitError(`This address is already saved for ${addressOwner.name}.`);
@@ -436,13 +444,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             if (active) {
                 await messaging.saveContact({
                     record: { ...active, name: formName.trim(), notes: formNotes, entries: cleanedEntries },
+                    expectedUpdatedAt: editVersion,
                 });
             } else {
                 // A name the book already holds is the same person: add the
                 // address to that contact rather than start a second one.
                 const existing = findContactByName(contacts, formName);
                 if (existing) {
-                    await messaging.saveContact({ record: withEntriesAdded(existing, cleanedEntries) });
+                    await messaging.saveContact({
+                        record: withEntriesAdded(existing, cleanedEntries),
+                        expectedUpdatedAt: existing.updatedAt,
+                    });
                     await loadContacts();
                     setActiveId(existing.id);
                     setMode('detail');
@@ -467,21 +479,18 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         setDeleting(`contact:${id}`);
         const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
         const displayName = snapshot?.name || 'this contact';
-        if (!(await confirmDialog.confirm({
-            title: `Delete ${displayName} from contacts?`,
-            message: `${displayName} and all saved addresses will be removed. You can restore the contact with Undo.`,
-            confirmLabel: 'Delete contact',
-            danger: true,
-        }))) {
-            setDeleting(null);
-            return;
-        }
         // Snapshot the full record before deletion so the §37.2 Undo
         // toast can re-create it via saveContact. We freeze the
         // displayed name here so the toast text doesn't change if the
         // user quickly creates another contact with the same id.
         try {
-            await messaging.deleteContact({ id });
+            if (!(await confirmDialog.confirm({
+                title: `Delete ${displayName} from contacts?`,
+                message: `${displayName} and all saved addresses will be removed. You can restore the contact with Undo.`,
+                confirmLabel: 'Delete contact',
+                danger: true,
+            }))) return;
+            await messaging.deleteContact({ id, expectedUpdatedAt: snapshot?.updatedAt });
             setActiveId(null);
             setMode('list');
             await loadContacts();
@@ -491,7 +500,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     actionLabel: 'Undo',
                     onAction: async () => {
                         try {
-                            await messaging.saveContact({ record: snapshot });
+                            await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
                             await loadContacts();
                         } catch (err) {
                             setLoadError(err?.message || 'Restore failed.');
@@ -511,13 +520,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     async function handleDeleteAddress(index) {
         if (!active || deleting) return;
         setDeleting(`address:${index}`);
-        if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) {
-            setDeleting(null);
-            return;
-        }
         const nextEntries = active.entries.filter((_, i) => i !== index);
         try {
-            await messaging.saveContact({ record: { ...active, entries: nextEntries } });
+            if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
+            await messaging.saveContact({
+                record: { ...active, entries: nextEntries },
+                expectedUpdatedAt: active.updatedAt,
+            });
             await loadContacts();
         } catch (err) {
             setLoadError(err?.message || 'Delete failed.');
@@ -540,21 +549,24 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrError('This is not a valid Bitcoin, Litecoin, or Dogecoin address.');
             return;
         }
-        const addressOwner = findContactByAddress(contacts, address);
-        if (addressOwner) {
-            setAddAddrError(`This address is already saved for ${addressOwner.name}.`);
-            return;
-        }
         const chain = chainFor(address, addAddrChain);
         if (chain === 'unknown') {
             setAddAddrError('Pick the network this address belongs to.');
+            return;
+        }
+        const addressOwner = findContactByAddress(contacts, address, chain);
+        if (addressOwner) {
+            setAddAddrError(`This address is already saved for ${addressOwner.name}.`);
             return;
         }
         setAddAddrSaving(true);
         setAddAddrError(null);
         const entry = { chain, address, label: '' };
         try {
-            await messaging.saveContact({ record: { ...active, entries: [...active.entries, entry] } });
+            await messaging.saveContact({
+                record: { ...active, entries: [...active.entries, entry] },
+                expectedUpdatedAt: active.updatedAt,
+            });
             await loadContacts();
             setAddAddrOpen(false);
             setAddAddrValue('');
@@ -1021,24 +1033,31 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 // Find an existing contact that already holds `address`. Bech32 comparison is
 // case-insensitive by specification, while Base58 comparison remains
 // case-sensitive. Returns the first match, or null.
-export function findContactByAddress(contacts, address) {
+export function findContactByAddress(contacts, address, chain) {
     const needle = contactAddressKey(address);
     if (!needle || !Array.isArray(contacts)) return null;
     return contacts.find((c) =>
         Array.isArray(c.entries)
-        && c.entries.some((e) => contactAddressKey(e.address) === needle),
+        && c.entries.some((e) => (
+            (!chain || normalizedContactChain(e.chain) === normalizedContactChain(chain))
+            && contactAddressKey(e.address) === needle
+        )),
     ) || null;
 }
 
 function findRepeatedAddress(entries) {
     const seen = new Set();
     for (const entry of entries || []) {
-        const key = contactAddressKey(entry?.address);
+        const key = `${normalizedContactChain(entry?.chain)}|${contactAddressKey(entry?.address)}`;
         if (!key) continue;
         if (seen.has(key)) return entry.address.trim();
         seen.add(key);
     }
     return null;
+}
+
+function normalizedContactChain(chain) {
+    return String(chain || '').trim().toLowerCase();
 }
 
 function contactAddressKey(address) {

@@ -10,6 +10,26 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
+const confirmFailure = vi.hoisted(() => ({ message: null }));
+vi.mock('../../../packages/core/src/shared/hooks/useConfirmModal.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useConfirmModal() {
+            const modal = actual.useConfirmModal();
+            return {
+                ...modal,
+                confirm(options) {
+                    if (!confirmFailure.message) return modal.confirm(options);
+                    const message = confirmFailure.message;
+                    confirmFailure.message = null;
+                    return Promise.reject(new Error(message));
+                },
+            };
+        },
+    };
+});
+
 const BTC = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const LTC = 'ltc1qg82rffhs37lynnvf3tfxcuvtlhm0fwwpv3l5z6';
 const AMBIGUOUS_TESTNET = base58check(sha256).encode(new Uint8Array([0x6f, ...new Uint8Array(20).fill(7)]));
@@ -66,6 +86,7 @@ function listedNames() {
 
 afterEach(() => {
     cleanup();
+    confirmFailure.message = null;
     globalThis.localStorage?.clear();
 });
 
@@ -102,6 +123,8 @@ describe('ContactsList audited behavior', () => {
         await user.keyboard('{Enter}');
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledOnce());
         expect(messaging.saveContact.mock.calls[0][0].record.name).toBe('Alice Keys');
+        expect(messaging.saveContact.mock.calls[0][0].expectedUpdatedAt)
+            .toBe('2026-01-01T00:00:00.000Z');
     });
 
     it('leaves an empty contact form directly but confirms before discarding real input', async () => {
@@ -253,7 +276,24 @@ describe('ContactsList audited behavior', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
 
         await waitFor(() => expect(messaging.store.get('alice')).toEqual(alice));
-        expect(messaging.deleteContact).toHaveBeenCalledWith({ id: 'alice' });
-        expect(messaging.saveContact).toHaveBeenCalledWith({ record: alice });
+        expect(messaging.deleteContact).toHaveBeenCalledWith({
+            id: 'alice',
+            expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+        });
+        expect(messaging.saveContact).toHaveBeenCalledWith({ record: alice, expectedUpdatedAt: null });
+    });
+
+    it('surfaces a rejected confirmation without leaking the event-handler promise', async () => {
+        const messaging = makeMessaging([
+            contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+        ]);
+        mount(messaging);
+
+        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        confirmFailure.message = 'Confirmation failed.';
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Confirmation failed.');
+        expect(messaging.deleteContact).not.toHaveBeenCalled();
     });
 });
