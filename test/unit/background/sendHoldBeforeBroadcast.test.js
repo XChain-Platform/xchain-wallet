@@ -89,6 +89,39 @@ describe('createHoldBeforeBroadcast', () => {
     expect(sendHold.isHeld('a')).toBe(false)
   })
 
+  it('counts signing time against the displayed undo window', async () => {
+    const { t, sendHold } = setup()
+    let now = 10_000
+    const fn = createHoldBeforeBroadcast({
+      sendHold,
+      holdId: 'a',
+      undoSeconds: 5,
+      now: () => now,
+    })
+    now += 2_000
+
+    const p = fn()
+    expect([...t.timers.values()][0].ms).toBe(3000)
+    t.fireAll()
+    await expect(p).resolves.toBeUndefined()
+  })
+
+  it('still consumes a cancellation when signing outlasts the window', async () => {
+    const { t, sendHold } = setup()
+    let now = 10_000
+    const fn = createHoldBeforeBroadcast({
+      sendHold,
+      holdId: 'a',
+      undoSeconds: 5,
+      now: () => now,
+    })
+    expect(sendHold.cancel('a')).toBe(false)
+    now += 6_000
+
+    await expect(fn()).rejects.toBeInstanceOf(SendHoldCancelledError)
+    expect(t.timers.size).toBe(0)
+  })
+
   it('resolves once the window ends, ignoring the signed bytes argument', async () => {
     const { t, sendHold } = setup()
     const fn = createHoldBeforeBroadcast({ sendHold, holdId: 'a', undoSeconds: 5 })

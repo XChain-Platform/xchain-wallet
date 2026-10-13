@@ -25,6 +25,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
@@ -92,6 +93,30 @@ afterEach(() => cleanup());
 beforeEach(() => { composeForConfirm = undefined; });
 
 describe('IssueTokenForm initial mint', () => {
+    it('tabs in field order and opens review from Enter only when valid', async () => {
+        const user = userEvent.setup();
+        mountForm();
+        const ticker = await screen.findByLabelText('Ticker');
+        ticker.focus();
+
+        await user.tab();
+        const supply = screen.getByLabelText('Supply');
+        expect(document.activeElement).toBe(supply);
+        fireEvent.change(ticker, { target: { value: 'KEYS' } });
+        fireEvent.change(supply, { target: { value: 'invalid' } });
+        await user.keyboard('{Enter}');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Supply must be a positive number.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(supply, { target: { value: '1000' } });
+        supply.focus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
     it.each([
         ['Supply', '1,000', 'Supply must be a positive number.'],
         ['Initial mint (optional)', 'Infinity', 'Initial mint must be zero or a positive number.'],

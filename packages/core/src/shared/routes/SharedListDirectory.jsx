@@ -84,6 +84,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [query, setQuery] = useState('');
     const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
+    const [directoryReload, setDirectoryReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -101,7 +102,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 if (!cancelled) setLoadError(error?.message || 'Failed to load shared lists.');
             });
         return () => { cancelled = true; };
-    }, [chainId, messaging, walletId]);
+    }, [chainId, messaging, walletId, directoryReload]);
 
     const visibleLists = useMemo(() => {
         if (!directory) return [];
@@ -148,7 +149,15 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{ label: 'Try again', onAction: () => setDirectoryReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 

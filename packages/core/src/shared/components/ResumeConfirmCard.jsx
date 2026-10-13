@@ -34,6 +34,9 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
         <div role="group" aria-label="Unfinished transactions">
             {offerable.map((session) => {
                 const info = flowsLib.describeResumeSession(session);
+                const actionString = typeof session?.composed?.actionString === 'string'
+                    ? session.composed.actionString
+                    : '';
                 return (
                     <div key={info.id} className={className} data-testid="resume-confirm-card">
                         <button
@@ -43,6 +46,11 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                         >
                             <span>Finish {info.label}</span>
                             <span>Not sent yet. Approve to sign and send it.</span>
+                            {actionString ? (
+                                <span data-testid={`resume-confirm-action-${info.id}`}>
+                                    Action to submit: <code>{actionString}</code>
+                                </span>
+                            ) : null}
                         </button>
                         <button
                             type="button"

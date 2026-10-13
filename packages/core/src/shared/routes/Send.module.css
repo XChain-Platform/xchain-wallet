@@ -1,9 +1,3 @@
-.card {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-}
-
 .pickerLabel {
     display: flex;
     flex-direction: column;
@@ -64,6 +58,20 @@
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+.saveRecipient {
+    margin-top: var(--xc-space-4);
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised);
+}
+
+.saveRecipientActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
 }
 
 .summary {
@@ -211,6 +219,30 @@
     font-weight: 600;
 }
 
+.pastedRecipient {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+}
+
+.pastedRecipientLabel {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.pastedRecipientHint {
+    flex-basis: 100%;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
 .amountFooter {
     display: flex;
     justify-content: space-between;
@@ -218,7 +250,7 @@
     gap: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin-top: 4px;
+    margin-top: var(--xc-space-1);
 }
 
 .amountFooterRight {
@@ -322,23 +354,114 @@
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
+    box-sizing: border-box;
+    min-inline-size: 0;
+    width: 100%;
+}
+
+.coinControlToolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.coinControlActions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.coinControlActions button {
+    min-height: var(--xc-tap-min);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg);
+    color: var(--xc-accent-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.coinControlActions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.coinControlRows {
+    max-height: 18rem;
+    margin-top: var(--xc-space-2);
+    overflow-y: auto;
 }
 
 .coinControlRow {
     display: flex;
+    align-items: flex-start;
     gap: var(--xc-space-2);
     padding: var(--xc-space-2) 0;
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
+    min-width: 0;
 }
 
-.coinControlRow span,
+.coinControlRow > input {
+    flex: 0 0 auto;
+}
+
+.coinControlValue {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.coinControlValue,
 .coinControlRow small {
     display: block;
 }
 
 .coinControlRow small {
     color: var(--xc-text-muted);
+}
+
+.coinControlDust {
+    display: inline-block;
+    margin-inline-start: var(--xc-space-2);
+    padding: 1px var(--xc-space-1);
+    border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 55%, transparent);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-warning, #B07A00);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.coinControlSummary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    margin: var(--xc-space-2) 0 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+}
+
+.coinControlSummary div {
+    min-width: 0;
+}
+
+.coinControlSummary dt {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.coinControlSummary dd {
+    margin: 2px 0 0;
+    color: var(--xc-text);
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
 }
 
 .advancedSelectLabel {
@@ -411,7 +534,7 @@
     height: 3rem;
     border-radius: 999px;
     background: var(--xc-success, #2c7a3d);
-    color: #fff;
+    color: var(--xc-text-inverted);
     font-size: 1.5rem;
     font-weight: 700;
 }

@@ -31,6 +31,7 @@ import {
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { latestEffectiveStakingRow } from '../../flows/stakingDashboard.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -259,6 +260,14 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No source address available.');
+            return;
+        }
+        if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+            fromAddress.address,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) {
+            setFormError('The selected source address is not valid for this network.');
             return;
         }
         const pk = pubkey.trim();
@@ -522,6 +531,20 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         <FormPage
             label={verb}
             onSubmit={handleReview}
+            intro={(
+                <>
+                    {isDelegate
+                        ? 'Delegating lets the selected Ed25519 key sign hub actions for this address without moving its stake.'
+                        : 'Revoking stops the selected Ed25519 key from signing hub actions for this address.'}
+                    {isDelegate
+                        ? ' Use Revoke delegation from the staking details to remove the key later.'
+                        : ''}
+                    {' '}You will review the source address, signing key, and fee before signing.
+                    {isWatcherMode
+                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
+                        : ''}
+                </>
+            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}

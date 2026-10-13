@@ -47,8 +47,8 @@ const NS = 'xc:formdraft:';
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function safeStorage() {
-    if (typeof localStorage === 'undefined') return null;
     try {
+        if (typeof localStorage === 'undefined') return null;
         const probe = '__xc_probe__';
         localStorage.setItem(probe, '1');
         localStorage.removeItem(probe);

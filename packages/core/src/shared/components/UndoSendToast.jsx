@@ -24,7 +24,12 @@ export function UndoSendToast({ status, remaining, onCancel }) {
     const counting = status === 'counting';
     return (
         <div className={styles.toast}>
-            <span className={styles.message} role="status" aria-live="polite">
+            <span
+                className={styles.message}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+            >
                 {counting ? `Sending in ${remaining} s` : 'Send cancelled'}
             </span>
             {counting && (

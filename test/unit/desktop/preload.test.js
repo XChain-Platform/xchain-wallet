@@ -95,7 +95,7 @@ describe('desktop preload API', () => {
             ['xchain:wipe-storage'],
             ['xchain:open-window', { initialView: 'history', initialContext: { walletId: 'w1' } }],
             ['xchain:updater-state'],
-            ['xchain:updater-install'],
+            ['xchain:updater-install', 'download'],
             ['xchain:deep-link-take'],
             ['xchain:chain-registry'],
         ]);

@@ -29,7 +29,7 @@
 
 .scope {
     font-weight: 500;
-    margin-inline-start: 4px;
+    margin-inline-start: var(--xc-space-1);
     color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
     text-transform: none;
     letter-spacing: 0;
@@ -67,6 +67,23 @@
 
 .eyeActive {
     background: color-mix(in srgb, var(--xc-on-accent) 35%, transparent);
+}
+
+.eye:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.refreshing svg {
+    animation: portfolio-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes portfolio-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .refreshing svg { animation: none; }
 }
 
 .amount {

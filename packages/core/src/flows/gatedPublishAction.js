@@ -41,6 +41,12 @@ import { resolveGateMinAmountActive } from './protocolActivations.js';
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const pendingGeneratedKeys = new Map();
 
+export function clearPendingGeneratedKeysForWallet(walletId) {
+    for (const [id, record] of pendingGeneratedKeys) {
+        if (record?.walletId === walletId) pendingGeneratedKeys.delete(id);
+    }
+}
+
 function rememberGeneratedKey(record) {
     if (record) pendingGeneratedKeys.set(record.id, record);
 }
