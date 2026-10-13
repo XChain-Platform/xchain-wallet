@@ -82,6 +82,11 @@
     overflow-wrap: anywhere;
 }
 
+.numericValue {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .resultMeta {
     display: block;
     overflow-wrap: anywhere;

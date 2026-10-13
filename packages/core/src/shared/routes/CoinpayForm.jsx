@@ -602,7 +602,10 @@ export function CoinpayForm({
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                                            Pay {rowAmountLabel} →{' '}
+                                            Pay {rowAmountLabel}{' '}
+                                            <span className={styles.inlineDirectionalIcon}>
+                                                <Icon.ForwardIcon />
+                                            </span>{' '}
                                             <AddressText address={row.obligation.payee_address} />
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>

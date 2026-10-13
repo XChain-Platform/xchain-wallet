@@ -512,11 +512,11 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
             >
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Give per fill</span>
-                    <span className={local.factValue}>{give}</span>
+                    <span className={`${local.factValue} ${local.numericValue}`}>{give}</span>
                 </span>
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Price per fill</span>
-                    <span className={local.factValue}>{price}</span>
+                    <span className={`${local.factValue} ${local.numericValue}`}>{price}</span>
                 </span>
                 <span className={local.factRow} role="listitem">
                     <span className={local.factLabel}>Status</span>

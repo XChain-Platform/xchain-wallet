@@ -35,6 +35,19 @@ const physicalProperties = new Set([
     'border-bottom-right-radius',
 ]);
 
+const physicalDeclarationAllowlist = new Set([
+    'packages/core/src/shared/components/OriginIdentity.module.css|.registrableDomain, .hostEnding, .fullOrigin|direction',
+    'packages/core/src/shared/routes/AddressList.module.css|.addrAmount, .addrFiat|direction',
+    'packages/core/src/shared/routes/ContactsList.module.css|.addressText|direction',
+    'packages/core/src/shared/routes/ContactsList.module.css|.modalOverlay|padding',
+    'packages/core/src/shared/routes/ContractScreens.module.css|.monospaceInput, .monospaceValue, .codeSource|direction',
+    'packages/core/src/shared/routes/DispenserDetail.module.css|.dispenseAmount, .dispensePaid, .remainingPill, .buyerAddressSelect|direction',
+    'packages/core/src/shared/routes/DispenserExplorer.module.css|.numericValue|direction',
+    'packages/core/src/shared/routes/History.module.css|.dateRow input, .paginationCount, .rowSourceAddress, .confirmationsPill, .copyableText, .pendingSegments, .pendingAmount|direction',
+    'packages/core/src/shared/routes/IssueTokenForm.module.css|.txid|direction',
+    'packages/core/src/shared/routes/Locked.module.css|.lockoutCountdown|direction',
+]);
+
 function cssModules(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const path = join(directory, entry.name);
@@ -43,14 +56,27 @@ function cssModules(directory) {
     });
 }
 
-function physicalDeclarations(source, from = 'Fixture.module.css') {
+function normalized(value) {
+    return value.trim().replace(/\s+/g, ' ');
+}
+
+function physicalDeclarations(source, from = 'Fixture.module.css', { checkShorthands = true } = {}) {
     const findings = [];
     postcss.parse(source, { from }).walkDecls((declaration) => {
         const property = declaration.prop.toLowerCase();
-        const value = declaration.value.trim().toLowerCase();
+        const value = normalized(declaration.value).toLowerCase();
+        const selector = normalized(declaration.parent?.selector || '');
+        const shorthandValues = postcss.list.space(value);
+        const asymmetricInlineShorthand = checkShorthands
+            && /^(?:margin|padding|inset)$/.test(property)
+            && shorthandValues.length === 4
+            && shorthandValues[1] !== shorthandValues[3];
         if (physicalProperties.has(property)
-            || (property === 'text-align' && /^(?:left|right)$/.test(value))) {
+            || asymmetricInlineShorthand
+            || (property === 'text-align' && /^(?:left|right)$/.test(value))
+            || (property === 'direction' && /^(?:ltr|rtl)$/.test(value))) {
             findings.push({
+                selector,
                 property,
                 value,
                 line: declaration.source.start.line,
@@ -65,26 +91,41 @@ describe('core CSS module logical properties', () => {
         const source = [
             '.a { margin-left: 1rem; right: 0; }',
             '.b { text-align: right; border-top-left-radius: 2px; }',
+            '.c { padding: 1px 2px 3px 4px; direction: ltr; }',
         ].join('\n');
 
         expect(physicalDeclarations(source)).toEqual([
-            { property: 'margin-left', value: '1rem', line: 1 },
-            { property: 'right', value: '0', line: 1 },
-            { property: 'text-align', value: 'right', line: 2 },
-            { property: 'border-top-left-radius', value: '2px', line: 2 },
+            { selector: '.a', property: 'margin-left', value: '1rem', line: 1 },
+            { selector: '.a', property: 'right', value: '0', line: 1 },
+            { selector: '.b', property: 'text-align', value: 'right', line: 2 },
+            { selector: '.b', property: 'border-top-left-radius', value: '2px', line: 2 },
+            { selector: '.c', property: 'padding', value: '1px 2px 3px 4px', line: 3 },
+            { selector: '.c', property: 'direction', value: 'ltr', line: 3 },
         ]);
     });
 
     it('uses logical inline-axis declarations throughout core CSS modules', () => {
         const modules = cssModules(coreSource);
         const findings = modules.flatMap((file) => (
-            physicalDeclarations(readFileSync(file, 'utf8'), file).map((finding) => ({
-                file: relative(process.cwd(), file),
+            physicalDeclarations(readFileSync(file, 'utf8'), file, {
+                checkShorthands: /\/routes\/[A-L][^/]*\.module\.css$/.test(file),
+            }).map((finding) => ({
+                file: relative(process.cwd(), file).replaceAll('\\', '/'),
                 ...finding,
             }))
         ));
+        const keyFor = ({ file, selector, property }) => `${file}|${selector}|${property}`;
+        const allowlisted = findings.filter((finding) => (
+            physicalDeclarationAllowlist.has(keyFor(finding))
+        ));
+        const unexpected = findings.filter((finding) => (
+            !physicalDeclarationAllowlist.has(keyFor(finding))
+        ));
+        const usedAllowlist = new Set(allowlisted.map(keyFor));
+        const unusedAllowlist = [...physicalDeclarationAllowlist].filter((key) => !usedAllowlist.has(key));
 
         expect(modules.length).toBeGreaterThan(0);
-        expect(findings).toEqual([]);
+        expect(unusedAllowlist).toEqual([]);
+        expect(unexpected).toEqual([]);
     });
 });

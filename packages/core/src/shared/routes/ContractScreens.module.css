@@ -31,6 +31,13 @@
 
 /* Single-line technical values stay intact and scroll within their control.
    This keeps long hex and JSON arguments from widening the screen. */
+.monospaceInput,
+.monospaceValue,
+.codeSource {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .monospaceInput {
     min-width: 0;
     max-width: 100%;
