@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -18,7 +18,6 @@ import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
-import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 
@@ -357,39 +356,22 @@ export function MarketsList({
                                         <Icon.XIcon />
                                     </Button>
                                 ) : null}
-                                <div
-                                    className={receivePickerStyles.kindSegments}
-                                    role="tablist"
-                                    aria-label="Markets view"
-                                    style={{ flexShrink: 0 }}
-                                >
-                                    {[
-                                        { id: 'all',       label: 'All' },
-                                        { id: 'popular',   label: 'Popular' },
+                                <Tabs
+                                    id={tabsId}
+                                    items={[
+                                        { id: 'all', label: 'All' },
+                                        { id: 'popular', label: 'Popular' },
                                         { id: 'watchlist', label: 'Watchlist' },
-                                    ].map((opt) => {
-                                        const active = tab === opt.id;
-                                        return (
-                                            /* Raw buttons preserve the native tab role and roving tab stop behavior. */
-                                            <button
-                                                key={opt.id}
-                                                id={`${tabsId}-tab-${opt.id}`}
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={active}
-                                                aria-controls={`${tabsId}-panel`}
-                                                tabIndex={active ? 0 : -1}
-                                                className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                                                onClick={() => {
-                                                    setTab(opt.id);
-                                                    setVisibleMarketCount(MARKETS_PAGE_SIZE);
-                                                }}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                    ]}
+                                    value={tab}
+                                    onChange={(nextTab) => {
+                                        setTab(nextTab);
+                                        setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                    }}
+                                    panelId={`${tabsId}-panel`}
+                                    aria-label="Markets view"
+                                    style={{ flexShrink: 0, width: 'auto' }}
+                                />
                             </div>
                         ) : null}
                     </div>

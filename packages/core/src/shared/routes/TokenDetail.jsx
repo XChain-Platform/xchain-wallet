@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -636,24 +636,14 @@ function TokenDetailContent({
                     get a single Details tab; tokens add About / Media /
                     Unlock so the per-asset content surfaces in tab form
                     rather than stacking. */}
-                <div className={styles.tabs} role="tablist" aria-label="Token detail view">
-                            {tabs.map((t) => (
-                                // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                                <button
-                                    key={t.id}
-                                    id={`${tabsId}-tab-${t.id}`}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeTab === t.id ? 'true' : 'false'}
-                                    aria-controls={`${tabsId}-panel`}
-                                    tabIndex={activeTab === t.id ? 0 : -1}
-                                    className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
-                                    onClick={() => setActiveTab(t.id)}
-                                >
-                                    {t.label}
-                                </button>
-                            ))}
-                        </div>
+                <Tabs
+                    id={tabsId}
+                    items={tabs}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    panelId={`${tabsId}-panel`}
+                    aria-label="Token detail view"
+                />
 
                         <div
                             id={`${tabsId}-panel`}

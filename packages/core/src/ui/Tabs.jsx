@@ -19,6 +19,7 @@ import styles from './Tabs.module.css';
  * @param {string} [props.id]
  * @param {string | ((item: { id: string }) => string)} [props.panelId]
  * @param {string} [props.className]
+ * @param {boolean} [props.disabled]
  */
 export function Tabs({
     items,
@@ -27,6 +28,7 @@ export function Tabs({
     id: idProp,
     panelId,
     className,
+    disabled = false,
     ...rest
 }) {
     const generatedId = useId();
@@ -43,6 +45,7 @@ export function Tabs({
     };
 
     const handleKeyDown = (event) => {
+        if (disabled) return;
         const focusedIndex = buttonRefs.current.indexOf(event.target);
         if (focusedIndex < 0 || items.length === 0) return;
 
@@ -91,6 +94,7 @@ export function Tabs({
                         ref={(node) => { buttonRefs.current[index] = node; }}
                         id={`${tabsId}-tab-${item.id}`}
                         type="button"
+                        disabled={disabled}
                         role="tab"
                         aria-selected={selected}
                         aria-controls={controls}

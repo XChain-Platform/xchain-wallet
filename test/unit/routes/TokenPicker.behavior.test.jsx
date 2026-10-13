@@ -89,7 +89,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(tokens).toHaveAttribute('aria-selected', 'false');
         expect(tokens).toHaveAttribute('tabindex', '-1');
 
-        fireEvent.click(tokens);
+        all.focus();
+        fireEvent.keyDown(all, { key: 'ArrowLeft' });
+        expect(tokens).toHaveFocus();
         expect(all).toHaveAttribute('aria-selected', 'false');
         expect(all).toHaveAttribute('tabindex', '-1');
         expect(tokens).toHaveAttribute('aria-selected', 'true');

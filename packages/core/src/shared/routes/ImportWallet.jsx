@@ -21,6 +21,7 @@ import {
     ListPage,
     QrScanner,
     StatusMessage,
+    Tabs,
     InfoTip,
     FormErrorSummary,
 } from '@xchain-wallet/core/ui';
@@ -704,43 +705,20 @@ export function ImportWallet({
     }
 
     const laneSwitcher = !isFreeWallet ? (
-        <div className={styles.laneSwitcher} role="tablist" aria-label={t('importWallet.lane')}>
-            {/* Native tab buttons preserve tab semantics and segmented-control styling. */}
-            <button
-                type="button"
-                role="tab"
-                aria-selected={lane === 'mnemonic'}
-                className={`${styles.laneTab} ${lane === 'mnemonic' ? styles.laneTabActive : ''}`}
-                onClick={() => changeLane('mnemonic')}
-                disabled={busy}
-            >
-                {t('importWallet.recoveryPhrase')}
-            </button>
-            {mode === 'fresh' ? (
-                /* Native tab buttons preserve tab semantics and segmented-control styling. */
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={lane === 'wif'}
-                    className={`${styles.laneTab} ${lane === 'wif' ? styles.laneTabActive : ''}`}
-                    onClick={() => changeLane('wif')}
-                    disabled={busy}
-                >
-                    {t('importWallet.wif.tab')}
-                </button>
-            ) : null}
-            {/* Native tab buttons preserve tab semantics and segmented-control styling. */}
-            <button
-                type="button"
-                role="tab"
-                aria-selected={lane === 'backup'}
-                className={`${styles.laneTab} ${lane === 'backup' ? styles.laneTabActive : ''}`}
-                onClick={() => changeLane('backup')}
-                disabled={busy}
-            >
-                {t('importWallet.encryptedBackup')}
-            </button>
-        </div>
+        <Tabs
+            items={[
+                { id: 'mnemonic', label: t('importWallet.recoveryPhrase') },
+                ...(mode === 'fresh'
+                    ? [{ id: 'wif', label: t('importWallet.wif.tab') }]
+                    : []),
+                { id: 'backup', label: t('importWallet.encryptedBackup') },
+            ]}
+            value={lane}
+            onChange={changeLane}
+            disabled={busy}
+            aria-label={t('importWallet.lane')}
+            style={{ marginBottom: 'var(--xc-space-3)' }}
+        />
     ) : null;
 
     const formDisabledReason = lane === 'backup'

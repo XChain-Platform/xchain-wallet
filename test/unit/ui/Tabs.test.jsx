@@ -73,4 +73,18 @@ describe('<Tabs>', () => {
         expect(css).toMatch(/\.tabs\s*\{[^}]*overflow-x:\s*auto/s);
         expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
     });
+
+    it('can disable every tab while an owning flow is busy', () => {
+        render(
+            <Tabs
+                items={items}
+                value="coins"
+                onChange={() => {}}
+                disabled
+                aria-label="Busy tabs"
+            />,
+        );
+
+        expect(screen.getAllByRole('tab').every((tab) => tab.disabled)).toBe(true);
+    });
 });
