@@ -30,6 +30,7 @@ import {
     lockButton,
     lockWallet,
     nav,
+    revealRecoveryPhrase,
     test,
     unlockWallet,
 } from '../../fixtures/wallet.js';
@@ -70,7 +71,7 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Next' }).click();
 
         // Mnemonic display stage
-        await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
+        await revealRecoveryPhrase(page);
         await page.getByLabel(/i have written down/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 

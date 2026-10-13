@@ -864,7 +864,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor
                 <div className={balanceStyles.iconWrap}>
                     <span
                         className={balanceStyles.iconLetter}
-                        style={{ background: tickerColor(tick || 'X'), color: 'var(--xc-on-accent)' }}
+                        style={{ background: tickerColor(tick || 'X') }}
                         aria-hidden="true"
                     >
                         {(tick || '?').slice(0, 1)}
@@ -1091,7 +1091,7 @@ function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry, a
                                 {!isStake ? (
                                     <span
                                         className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action), color: 'var(--xc-on-accent)' }}
+                                        style={{ background: tickerColor(tick || p.action) }}
                                         aria-hidden="true"
                                     >
                                         {(tick || p.action).slice(0, 1).toUpperCase()}

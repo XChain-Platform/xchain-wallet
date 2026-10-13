@@ -33,6 +33,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { MessageConfirmScreen } from '../components/MessageConfirmScreen.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
@@ -355,23 +356,9 @@ export function SignMessageForm({ walletId, onBack }) {
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
             You have an unfinished message draft.
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label="Discard saved draft"
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
+            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
                 Discard
-            </button>
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
 

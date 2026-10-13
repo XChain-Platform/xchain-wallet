@@ -221,6 +221,17 @@
     }
 }
 
+/* A row item beside the QR buttons stretches to their height, but in the
+   narrow column below 400px a bare link shrinks to its one text line (17px),
+   under the 24px pointer-target floor. State the floor instead. */
+.explorerLink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
+}
+
 .generateAddressAction {
     display: flex;
     justify-content: flex-end;

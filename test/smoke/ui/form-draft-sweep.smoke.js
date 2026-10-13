@@ -78,7 +78,7 @@ for (const [label, src, viewName, restoreFields] of [
     // 6. Banner copy + Restore / Discard wiring.
     assert.ok(/recovery=\{\{ label: 'Restore', onAction: restoreDraft \}\}/.test(src),
         `${label} banner exposes a Restore action`);
-    assert.ok(/aria-label="Discard saved draft"/.test(src),
+    assert.ok(/<DraftDiscardButton onClick=\{dismissDraft\} label="Discard saved draft">/.test(src),
         `${label} banner exposes a Discard button`);
     assert.ok(/draft\.hasDraft\(\) && !draftPending/.test(src),
         `${label} only shows the banner when a draft exists and isn't already pending`);

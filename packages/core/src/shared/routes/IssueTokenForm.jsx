@@ -51,6 +51,7 @@ import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import {
     compareDecimalStrings,
     subtractDecimalStrings,
@@ -817,23 +818,9 @@ export function IssueTokenForm({ walletId, onBack }) {
             recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
             {t('issue.draft.unfinished')}
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label={t('send.draft.discardLabel')}
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
+            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
                 {t('send.draft.discard')}
-            </button>
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
 
