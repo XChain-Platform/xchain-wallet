@@ -22,10 +22,10 @@
     appearance: none;
     box-sizing: border-box;
     display: inline-flex;
-    /* Tabs keep their natural width but may shrink and wrap their labels,
-       so a short row of tabs fits a 320px phone without a nested scroller. */
+    /* Tabs keep their natural width but may shrink to their longest word and
+       wrap their labels at spaces, so a short row of tabs fits a 320px phone
+       without a nested scroller; a row that still cannot fit scrolls. */
     flex: 0 1 auto;
-    min-width: 0;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
@@ -40,7 +40,6 @@
     font-weight: 600;
     white-space: normal;
     text-align: center;
-    overflow-wrap: anywhere;
     cursor: pointer;
     transition: color var(--xc-transition), border-color var(--xc-transition);
 }
