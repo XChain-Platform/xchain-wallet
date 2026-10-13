@@ -106,13 +106,12 @@
     --xc-accent-primary: #1A7BAC;
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
-    /* Accent and danger as TEXT or glyph colour on a page surface. In the
-     * light palette they are the fill colours themselves; the dark palette
-     * lifts them, because the fill shades (3.4:1 and 3.6:1 on a dark card)
-     * fail AA as text while white labels still need the darker fills. Use
-     * these for `color:`, the plain tokens for backgrounds and borders. */
-    --xc-accent-text: var(--xc-accent-primary);
-    --xc-danger-fg: var(--xc-danger);
+    /* Accent and danger text stay close to their fill colours while clearing
+     * AA on the muted surface. The dark palette lifts them further because
+     * the fill shades fail AA as text on a dark card. Use these for `color:`,
+     * and use the plain tokens for backgrounds and borders. */
+    --xc-accent-text: #1A77AA;
+    --xc-danger-fg: #DA2525;
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;

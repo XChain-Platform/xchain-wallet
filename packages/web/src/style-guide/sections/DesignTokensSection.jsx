@@ -21,7 +21,7 @@ export const TOKEN_GROUPS = [
             color('--xc-accent-primary', '#1A7BAC', '#1A7BAC', 'Brand fill and primary action'),
             color('--xc-accent-primary-hover', '#156690', '#156690', 'Brand fill hover state'),
             color('--xc-accent-secondary', '#7B2C8F', '#7B2C8F', 'Secondary brand accent'),
-            color('--xc-accent-text', '#1A7BAC', '#4AA8D8', 'Accessible accent text and glyphs'),
+            color('--xc-accent-text', '#1A77AA', '#4AA8D8', 'Accessible accent text and glyphs'),
             color('--xc-bg', '#FFFFFF', '#0B0F17', 'Page background'),
             color('--xc-bg-muted', '#F5F6F8', '#121824', 'Muted page region'),
             color('--xc-surface', '#FFFFFF', '#151B28', 'Default card surface'),
@@ -39,7 +39,7 @@ export const TOKEN_GROUPS = [
         title: 'Status colors',
         tokens: [
             color('--xc-danger', '#DC2626', '#DC2626', 'Danger fill and border'),
-            color('--xc-danger-fg', '#DC2626', '#F87171', 'Danger text and glyphs'),
+            color('--xc-danger-fg', '#DA2525', '#F87171', 'Danger text and glyphs'),
             color('--xc-danger-bg', 'rgba(220, 38, 38, 0.10)', 'rgba(252, 165, 165, 0.14)', 'Danger message background'),
             color('--xc-danger-text', '#7F1D1D', '#FCA5A5', 'Danger message text'),
             color('--xc-on-danger', '#FFFFFF', '#FFFFFF', 'Text on a danger fill'),
