@@ -9,7 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui';
+import {
+    Screen,
+    FormPage,
+    ListPage,
+    Button,
+    Input,
+    ChainBadge,
+    Icon,
+} from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import {
     i18n,
@@ -648,11 +656,12 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 </div>
             }
         >
-            {descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            <ListPage>
+                {descriptor ? (
+                    <div className={styles.chainLine}>
+                        <ChainBadge descriptor={descriptor} size="sm" />
+                    </div>
+                ) : null}
 
             {origin ? (
                 <section className={styles.source} aria-label={t('extension.sign.source')}>
@@ -787,18 +796,19 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-            {watcherMode ? (
-                <p className={styles.refusal} role="status">
-                    {watcherCopy}
-                </p>
-            ) : walletMode === null ? (
-                <p role="status">{t('extension.sign.checkingWalletMode')}</p>
-            ) : (
-                <form
+                {watcherMode ? (
+                    <p className={styles.refusal} role="status">
+                        {watcherCopy}
+                    </p>
+                ) : walletMode === null ? (
+                    <p role="status">{t('extension.sign.checkingWalletMode')}</p>
+                ) : null}
+            </ListPage>
+            {!watcherMode && walletMode !== null ? (
+                <FormPage
                     id="sign-approval-form"
+                    label={title}
                     onSubmit={(event) => event.preventDefault()}
-                    noValidate
-                    className={styles.form}
                 >
                     <Input
                         ref={inputRef}
@@ -825,8 +835,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
                             <span>{t('extension.sign.alwaysAllow')}</span>
                         </label>
                     ) : null}
-                </form>
-            )}
+                </FormPage>
+            ) : null}
         </Screen>
     );
 }

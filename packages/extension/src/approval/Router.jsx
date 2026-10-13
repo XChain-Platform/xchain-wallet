@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { i18n } from '@xchain-wallet/core';
-import { Screen } from '@xchain-wallet/core/ui';
+import { ListPage, Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
@@ -93,14 +93,18 @@ function ApprovalRoute() {
     if (error) {
         return (
             <Screen variant="small">
-                <div role="alert" className={styles.error}>{error}</div>
+                <ListPage>
+                    <div role="alert" className={styles.error}>{error}</div>
+                </ListPage>
             </Screen>
         );
     }
     if (!data) {
         return (
             <Screen variant="small">
-                <p aria-live="polite">{t('extension.approval.loading')}</p>
+                <ListPage>
+                    <p aria-live="polite">{t('extension.approval.loading')}</p>
+                </ListPage>
             </Screen>
         );
     }
@@ -111,9 +115,11 @@ function ApprovalRoute() {
     if (!SIGN_APPROVAL_KINDS.has(data.kind)) {
         return (
             <Screen variant="popup">
-                <div role="alert" className={styles.error}>
-                    {t('extension.approval.unsupported')}
-                </div>
+                <ListPage>
+                    <div role="alert" className={styles.error}>
+                        {t('extension.approval.unsupported')}
+                    </div>
+                </ListPage>
             </Screen>
         );
     }

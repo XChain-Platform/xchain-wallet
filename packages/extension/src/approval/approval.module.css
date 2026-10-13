@@ -29,10 +29,9 @@
 }
 
 .summary {
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3);
+    min-width: 0;
+    border: 0;
+    padding: 0;
     margin-bottom: var(--xc-space-3);
 }
 
