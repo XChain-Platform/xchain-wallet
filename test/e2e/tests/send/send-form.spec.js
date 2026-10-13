@@ -37,6 +37,19 @@ function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
 }
 
+async function serveZeroBalances(page) {
+    await page.route('**/src/devFakeBalances.js*', async (route) => {
+        const response = await route.fetch();
+        const fundedSource = await response.text();
+        const emptySource = fundedSource.replace(
+            '        native,\n        tokens: tokens,',
+            "        native: { ...native, quantity: '0' },\n        tokens: [],",
+        );
+        expect(emptySource, 'the dev balance fixture shape changed').not.toBe(fundedSource);
+        await route.fulfill({ response, body: emptySource });
+    });
+}
+
 /** Memo lives behind the collapsed "Advanced" disclosure. */
 async function openAdvanced(page) {
     await page.locator('summary', { hasText: 'Advanced' }).first().click();
@@ -61,6 +74,17 @@ test.describe('send form', () => {
         await expect(page.getByRole('alert').first()).toContainText(
             /This address has a typo/i,
         );
+        await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    });
+
+    test('an invalid destination is rejected when the field loses focus', async ({ page }) => {
+        const error = page.getByRole('alert').filter({ hasText: /This address has a typo/i });
+        await toField(page).fill('bc1qtestrecipient00000000000000000000000000');
+        await expect(error).toHaveCount(0);
+
+        await page.keyboard.press('Tab');
+
+        await expect(error).toBeVisible();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     });
 
@@ -179,4 +203,17 @@ test.describe('send form', () => {
 
         await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 20_000 });
     });
+});
+
+test('a zero-balance wallet offers Receive instead of the Send form', async ({ page }) => {
+    await serveZeroBalances(page);
+    await createWallet(page, { password: PASSWORD });
+    await gotoSection(page, 'Send');
+
+    await expect(page.getByRole('heading', { name: /wallet has no coins to send yet/i }))
+        .toBeVisible();
+    await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
+
+    await mainButton(page, 'Receive').click();
+    await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
 });
