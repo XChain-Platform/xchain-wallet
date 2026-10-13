@@ -385,6 +385,8 @@
     color: var(--xc-text);
     font-family: inherit;
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     text-align: start;
     margin: var(--xc-space-1) 0;
 }
@@ -1320,4 +1322,80 @@
     font-style: italic;
     color: var(--xc-text-muted);
     overflow-wrap: anywhere;
+}
+
+/* Compact history layouts wrap controls and row metadata, while detail keys
+   stack above their values. This keeps each piece of content in its own track
+   when the available width reaches the 320px phone viewport. */
+@media (max-width: 399px) {
+    .filterCard {
+        min-width: 0;
+    }
+
+    .dateRow {
+        flex-wrap: wrap;
+    }
+
+    .dateInput {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .dateSep {
+        display: none;
+    }
+
+    .filterFooter {
+        align-items: stretch;
+    }
+
+    .filterFooter > .filterDisclosure {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .rowHeader,
+    .rowMeta {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .rowSourceAddress,
+    .rowContractLabel,
+    .rowSummary {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .pendingAmount {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .rowRelativeTime {
+        margin-inline-start: 0;
+    }
+
+    .detailsTable tbody {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsTable th,
+    .detailSectionFlush .detailsTable th {
+        padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-1);
+        white-space: normal;
+    }
+
+    .detailsTable td,
+    .detailSectionFlush .detailsTable td {
+        padding: 0 var(--xc-space-3) var(--xc-space-2);
+    }
+
+    .detailsTable tr + tr > td {
+        border-top: 0;
+    }
 }
