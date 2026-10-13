@@ -60,6 +60,8 @@
     align-items: flex-start;
     gap: 2px;
     padding: var(--xc-space-3);
+    /* A <button>: reset the user agent border before drawing the divider. */
+    border: none;
     border-top: 1px solid var(--xc-border);
     background: transparent;
     color: var(--xc-text);
