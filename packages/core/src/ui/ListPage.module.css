@@ -24,7 +24,8 @@
 }
 
 /* First control (usually search) takes the spare room; the rest keep
-   their natural width and wrap below it when the row runs out. */
+   their natural width and wrap below it when the row runs out. A leading
+   button keeps its own width, so a lone "New" action is not stretched. */
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -38,6 +39,6 @@
     max-width: 100%;
 }
 
-.toolbar > :first-child {
+.toolbar > :first-child:not(button) {
     flex: 1 1 12rem;
 }
