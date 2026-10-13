@@ -153,7 +153,7 @@ describe('Onboarding accessibility', () => {
         await screen.findByRole('heading', { name: 'Import an existing wallet' });
         await scan(mnemonic.container);
 
-        fireEvent.click(screen.getByRole('checkbox', { name: /uses a BIP39 passphrase/i }));
+        fireEvent.click(screen.getByRole('switch', { name: /uses a BIP39 passphrase/i }));
         await screen.findByLabelText('BIP39 passphrase');
         await scan(mnemonic.container);
 

@@ -247,14 +247,19 @@ describe('trade form style guide primitives', () => {
     });
 
     it('uses style-guide controls throughout wallet setup routes', () => {
-        const importSource = readFileSync(
-            resolve(process.cwd(), 'packages/core/src/shared/routes/ImportWallet.jsx'),
+        const readRoute = (name) => readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${name}.jsx`),
             'utf8',
         );
-        const createSource = readFileSync(
-            resolve(process.cwd(), 'packages/core/src/shared/routes/CreateWallet.jsx'),
-            'utf8',
-        );
+        const sources = {
+            addressList: readRoute('AddressList'),
+            create: readRoute('CreateWallet'),
+            import: readRoute('ImportWallet'),
+            migrate: readRoute('MigrateToBip39'),
+            onboarding: readRoute('Onboarding'),
+            signerSelect: readRoute('SignerSelectForm'),
+        };
+        const { create: createSource, import: importSource } = sources;
 
         expect(importSource).toMatch(/\bTextarea\b/);
         expect(importSource).toMatch(
@@ -264,6 +269,18 @@ describe('trade form style guide primitives', () => {
         expect(importSource.match(/<button\b/g)).toHaveLength(3);
         expect(importSource.match(/role="tab"/g)).toHaveLength(3);
         expect(createSource).not.toMatch(/<button\b|<textarea\b|<select\b/);
+        expect(sources.addressList.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(createSource.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(createSource.match(/<RadioGroup\b/g)).toHaveLength(1);
+        expect(createSource.match(/<Switch\b/g)).toHaveLength(1);
+        expect(importSource.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(importSource.match(/<Switch\b/g)).toHaveLength(2);
+        expect(sources.migrate.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(sources.onboarding.match(/<Checkbox\b/g)).toHaveLength(1);
+        expect(sources.signerSelect.match(/<RadioGroup\b/g)).toHaveLength(1);
+        for (const source of Object.values(sources)) {
+            expect(source).not.toMatch(/type="(?:checkbox|radio)"/);
+        }
     });
 
     it('uses style guide controls in the market, contact, preference, and token lists', () => {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -388,19 +388,15 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                                 </p>
                             ))}
                         </div>
-                        <label className={styles.licenseAck}>
-                            <input
-                                type="checkbox"
-                                checked={licenseAck}
-                                disabled={!scrolledToEnd}
-                                onChange={(e) => setLicenseAck(e.target.checked)}
-                            />
-                            <span>
-                                {scrolledToEnd
-                                    ? 'I have read and agree to these terms.'
-                                    : 'Scroll to the end to review all terms.'}
-                            </span>
-                        </label>
+                        <Checkbox
+                            className={styles.licenseAck}
+                            label={scrolledToEnd
+                                ? 'I have read and agree to these terms.'
+                                : 'Scroll to the end to review all terms.'}
+                            checked={licenseAck}
+                            disabled={!scrolledToEnd}
+                            onChange={(e) => setLicenseAck(e.target.checked)}
+                        />
                         <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
                             <Button
                                 variant="primary"
