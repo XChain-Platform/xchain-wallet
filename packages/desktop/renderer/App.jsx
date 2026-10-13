@@ -204,6 +204,20 @@ const pairLedgerSigner = (...args) => import('./signerFactories/ledgerFactory.js
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
+export const SESSION_STATUS_TIMEOUT_MS = 10_000;
+
+function getSessionStatusWithTimeout() {
+    let timer;
+    return Promise.race([
+        Promise.resolve().then(() => getSessionStatus()),
+        new Promise((_, reject) => {
+            timer = setTimeout(
+                () => reject(new Error('The desktop service did not respond.')),
+                SESSION_STATUS_TIMEOUT_MS,
+            );
+        }),
+    ]).finally(() => clearTimeout(timer));
+}
 
 export function App() {
     return (
@@ -234,6 +248,7 @@ function BottomTabBarWithObligations({ badges, ...rest }) {
 
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    const statusRequest = useRef(0);
     // Keyboard-binding overrides for the palette + shortcuts live in
     // settings; null-safe reads below tolerate the pre-load window.
     const { settings } = useSettings();
@@ -532,12 +547,16 @@ function AppInner() {
     const isDetachedWindow = useRef(initialRoute !== null);
 
     const refresh = useCallback(() => {
+        const request = ++statusRequest.current;
         setStatus({ state: 'loading' });
         setOnboardingStep('welcome');
         setUnlockedView('home');
-        getSessionStatus()
-            .then((next) => setStatus(next))
-            .catch((err) =>
+        getSessionStatusWithTimeout()
+            .then((next) => {
+                if (statusRequest.current === request) setStatus(next);
+            })
+            .catch((err) => {
+                if (statusRequest.current !== request) return;
                 setStatus({
                     state: 'error',
                     error: err?.message || String(err),
@@ -546,8 +565,8 @@ function AppInner() {
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
                     errorKind: coreStorageLib.vaultErrorKind(err),
-                }),
-            );
+                });
+            });
     }, []);
 
     function clearTransientActionState() {
@@ -580,7 +599,10 @@ function AppInner() {
         });
     }
 
-    useEffect(() => { refresh(); }, [refresh]);
+    useEffect(() => {
+        refresh();
+        return () => { statusRequest.current += 1; };
+    }, [refresh]);
 
     useEffect(() => {
         const bridge = globalThis.xchainWalletWindow;
@@ -786,8 +808,8 @@ function AppInner() {
             return <Loading />;
         case 'error':
             return status.errorKind
-                ? <VaultUnavailable kind={status.errorKind} detail={status.error} />
-                : <Loading error={status.error} />;
+                ? <VaultUnavailable kind={status.errorKind} detail={status.error} onRetry={refresh} />
+                : <Loading error={status.error} onRetry={refresh} />;
         case 'no-wallet':
             if (onboardingStep === 'create') {
                 return (
