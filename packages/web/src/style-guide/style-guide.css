@@ -182,6 +182,127 @@ body {
     align-items: center;
 }
 
+.sg-component-matrix {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--xc-border);
+}
+
+.sg-component-matrix > h3,
+.sg-matrix-theme > h4 {
+    margin: 0;
+    color: var(--xc-text);
+}
+
+.sg-component-matrix > h3 {
+    font-size: 16px;
+}
+
+.sg-matrix-note {
+    margin: 4px 0 12px;
+    color: var(--xc-text-muted);
+    font-size: 12px;
+}
+
+.sg-matrix-themes {
+    display: grid;
+    gap: 16px;
+}
+
+.sg-matrix-theme {
+    min-width: 0;
+}
+
+.sg-matrix-theme > h4 {
+    margin-bottom: 6px;
+    font-size: 12px;
+    text-transform: capitalize;
+}
+
+.sg-matrix-scroll {
+    overflow-x: auto;
+}
+
+.sg-matrix-grid {
+    display: grid;
+    grid-template-columns: 72px repeat(5, minmax(184px, 1fr));
+    gap: 8px;
+    min-width: 1032px;
+    padding: 4px;
+    background: var(--xc-bg);
+    color: var(--xc-text);
+}
+
+.sg-matrix-row {
+    display: contents;
+}
+
+.sg-matrix-corner,
+.sg-matrix-column-label,
+.sg-matrix-row-label {
+    color: var(--xc-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.sg-matrix-column-label {
+    text-align: center;
+}
+
+.sg-matrix-row-label {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.sg-matrix-row-label small {
+    font-size: 9px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.sg-matrix-cell {
+    min-width: 0;
+    min-height: 76px;
+    padding: 8px;
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+}
+
+.sg-matrix-target {
+    width: 100%;
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sg-matrix-target > * {
+    max-width: 100%;
+}
+
+.sg-matrix-cell[data-state="hover"] :is(button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [role="button"]:not([aria-disabled="true"])) {
+    filter: brightness(0.94);
+}
+
+.sg-matrix-cell[data-state="focus"] :is(button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]):first-of-type {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.sg-matrix-cell[data-state="disabled"] .sg-matrix-target {
+    opacity: 0.55;
+}
+
+.sg-matrix-cell[data-state="error"] {
+    border-color: var(--xc-danger-fg);
+}
+
 /* Preview-width switch, pinned while scrolling so every section can be
    judged per platform. */
 .sg-sticky {

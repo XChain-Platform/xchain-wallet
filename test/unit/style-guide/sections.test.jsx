@@ -31,6 +31,10 @@ vi.mock('../../../packages/web/src/style-guide/frames.jsx', async (importOrigina
     };
 });
 
+vi.mock('../../../packages/web/src/style-guide/ComponentStateMatrix.jsx', () => ({
+    ComponentStateMatrix: ({ name }) => <div data-testid={`matrix-${name}`} />,
+}));
+
 afterEach(() => {
     document.documentElement.removeAttribute('data-xc-theme');
 });
