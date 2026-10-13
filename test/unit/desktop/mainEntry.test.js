@@ -38,10 +38,14 @@ const electron = vi.hoisted(() => {
 
 const protocol = vi.hoisted(() => ({
     attachDeepLinkHandlers: vi.fn(() => ({ gotLock: true })),
-    createDeepLinkSlot: vi.fn(() => ({ offer: vi.fn(), take: vi.fn() })),
+    deepLinkSlot: { offer: vi.fn(), take: vi.fn() },
+    createDeepLinkSlot: vi.fn(),
+    focusDeepLinkTarget: vi.fn(),
     pickDeepLinkTarget: vi.fn(),
     registerProtocolClients: vi.fn(),
 }));
+
+protocol.createDeepLinkSlot.mockReturnValue(protocol.deepLinkSlot);
 
 const permissions = vi.hoisted(() => ({
     attachHidPermissions: vi.fn(),
@@ -141,6 +145,40 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
 
         expect(electron.app.quit).toHaveBeenCalledOnce();
+    });
+
+    it('parks an Electron deep link until a renderer can claim it', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const event = {
+            scheme: 'dogecoin',
+            raw: 'dogecoin:DRecipient?amount=3',
+            parsed: { address: 'DRecipient', amount: '3' },
+        };
+
+        protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(event);
+
+        expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+    });
+
+    it('restores, shows, and focuses the Electron window receiving a link', async () => {
+        const { focusDeepLinkTarget } = await vi.importActual(
+            '../../../packages/desktop/main/protocol.js',
+        );
+        const win = {
+            isMinimized: vi.fn(() => true),
+            restore: vi.fn(),
+            isVisible: vi.fn(() => false),
+            show: vi.fn(),
+            focus: vi.fn(),
+        };
+
+        focusDeepLinkTarget(win);
+
+        expect(win.restore).toHaveBeenCalledOnce();
+        expect(win.show).toHaveBeenCalledOnce();
+        expect(win.focus).toHaveBeenCalledOnce();
+        expect(win.restore.mock.invocationCallOrder[0]).toBeLessThan(win.focus.mock.invocationCallOrder[0]);
+        expect(win.show.mock.invocationCallOrder[0]).toBeLessThan(win.focus.mock.invocationCallOrder[0]);
     });
 
     it('hardens every Electron webContents and opens external links outside the wallet', async () => {

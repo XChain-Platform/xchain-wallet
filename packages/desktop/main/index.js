@@ -66,6 +66,7 @@ import { attachHidPermissions, attachHidDenial, observeHidFrames } from './permi
 import {
     attachDeepLinkHandlers,
     createDeepLinkSlot,
+    focusDeepLinkTarget,
     pickDeepLinkTarget,
     registerProtocolClients,
 } from './protocol.js';
@@ -300,7 +301,7 @@ function forwardDeepLink(event) {
     // Only detached windows are open: a fresh window claims the link on mount
     if (!target) { createWindow(); return; }
     target.webContents.send('xchain:uri', event);
-    if (!target.isFocused()) target.focus();
+    focusDeepLinkTarget(target);
 }
 
 // The real SDK, adapted once at load. The extension and the web shell start
