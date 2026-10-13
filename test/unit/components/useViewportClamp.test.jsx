@@ -67,7 +67,11 @@ describe('HeaderSettingsButton popover follows its trigger', () => {
     function mockLayout({ viewport, trigger, width }) {
         Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: viewport });
         vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
-            if (this.getAttribute('aria-label') === 'Settings') {
+            // The kit gear Button sits in a wrapper span that the popover anchors to,
+            // and both occupy the same box.
+            const isTrigger = this.getAttribute('aria-label') === 'Settings'
+                || (this.children.length === 1 && this.firstElementChild.getAttribute('aria-label') === 'Settings');
+            if (isTrigger) {
                 return {
                     left: trigger.right - 38,
                     top: trigger.bottom - 38,
