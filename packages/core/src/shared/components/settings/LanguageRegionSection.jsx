@@ -22,7 +22,15 @@
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
-import { settingsLoadErrorText } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_HINT,
+    ROW_VALUE,
+    SELECT,
+    SettingsLoadError,
+    STACK,
+    Status,
+} from './_settingsPrimitives.jsx';
 import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/index.js';
 
 // Friendly display names for known locales; we extend this map as
@@ -71,38 +79,12 @@ function currencyLabel(currency) {
     return `${currency.name} (${currency.code}) · ${currencySymbol(currency.code)}`;
 }
 
-const ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-    gap: 'var(--xc-space-3)',
-};
-const STACK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-};
 const CONTROLS = {
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     width: 'min(100%, 280px)',
-};
-const SELECT = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
 };
 const CURRENCY_INPUT = {
     ...SELECT,
@@ -140,7 +122,7 @@ export function LanguageRegionSection() {
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
-    if (error) return <Status text={settingsLoadErrorText(error)} tone="error" />;
+    if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const selectedCurrency = FIAT_CURRENCIES.find((currency) => currency.code === settings.fiatCurrency);
@@ -181,7 +163,10 @@ export function LanguageRegionSection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Language</span>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_VALUE}>Language</span>
+                    <span style={ROW_HINT}>Choose the language used for wallet navigation, settings, and messages.</span>
+                </div>
                 <select
                     value={settings.language}
                     onChange={(e) => onLanguageChange(e.target.value)}
@@ -194,7 +179,10 @@ export function LanguageRegionSection() {
                 </select>
             </div>
             <div style={ROW}>
-                <span style={{ color: 'var(--xc-text-muted)' }}>Fiat currency</span>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={ROW_VALUE}>Fiat currency</span>
+                    <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
+                </div>
                 <div style={CONTROLS}>
                     <input
                         type="search"
@@ -252,23 +240,6 @@ export function LanguageRegionSection() {
                 </div>
             </div>
             {currencyError ? <Status text={currencyError} tone="error" /> : null}
-        </div>
-    );
-}
-
-function Status({ text, tone }) {
-    return (
-        <div style={{
-            padding: 'var(--xc-space-3) var(--xc-space-4)',
-            background: 'var(--xc-surface-raised)',
-            border: tone === 'error'
-                ? '1px solid var(--xc-danger-fg)'
-                : '1px dashed var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
-            fontSize: 'var(--xc-text-sm)',
-        }}>
-            {text}
         </div>
     );
 }

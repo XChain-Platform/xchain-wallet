@@ -49,7 +49,7 @@ assert.doesNotMatch(src, /__custom__|Custom currency code/, 'arbitrary unsupport
 
 // Loading / error guards
 assert.match(src, /loading\)\s*return\s*<Status/, 'loading state renders Status');
-assert.match(src, /error\)\s*return\s*<Status/, 'error state renders Status');
+assert.match(src, /error\)\s*return\s*<SettingsLoadError/, 'error state renders the shared settings error');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');
