@@ -120,13 +120,3 @@
 .platformSection {
     margin-top: var(--xc-space-4);
 }
-
-.platformHeading {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-2);
-    padding: 0 var(--xc-space-1);
-}

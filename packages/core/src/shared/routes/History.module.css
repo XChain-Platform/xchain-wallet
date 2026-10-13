@@ -49,48 +49,6 @@
     outline-offset: 2px;
 }
 
-.filterToggle {
-    appearance: none;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border-strong);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.filterToggle:hover { background: var(--xc-bg-muted); }
-.filterToggle:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.filterToggleActive {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.filterBadge {
-    color: var(--xc-accent-text);
-    font-size: var(--xc-text-md);
-    line-height: 1;
-}
-
-.fieldLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
-}
-
 /* Chain picker: full-width button + popover listbox so each option
    can render its own chain logo (native <select>/<option> can't). */
 .chainPickerWrap {
@@ -269,27 +227,6 @@
     gap: var(--xc-space-1);
 }
 
-.chipWrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
-}
-
-.viewRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-}
-
-.viewRowLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
-}
-
 .segGroup {
     display: inline-flex;
     border-radius: var(--xc-radius-sm);
@@ -383,34 +320,6 @@
     flex: 0 0 auto;
 }
 
-.footerRow {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px solid var(--xc-border);
-}
-
-.clearLink {
-    appearance: none;
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-    font-family: inherit;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.clearLink:hover { text-decoration: underline; }
-
 .chip {
     display: inline-flex;
     align-items: center;
@@ -434,21 +343,11 @@
     border-color: var(--xc-accent-primary);
 }
 
-.chipCrossChain {
-    border-color: var(--xc-accent-secondary, var(--xc-accent-primary));
-}
-
 .divider {
     width: 1px;
     align-self: stretch;
     background: var(--xc-border);
     margin: 0 var(--xc-space-1);
-}
-
-.stalenessRow {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 var(--xc-space-1) var(--xc-space-1);
 }
 
 .timeline {
@@ -896,12 +795,6 @@
 }
 
 /* Branding logo image inside an explorer action button (XChain). */
-.detailActionLogo {
-    width: 22px;
-    height: 22px;
-    object-fit: contain;
-    display: block;
-}
 
 /* Naked favicon used by the explorer buttons: no circular icon-wrap
    background; sits at the same vertical position as the wrapped icons
@@ -1045,14 +938,6 @@
     vertical-align: -3px;
 }
 
-.detailDual {
-    grid-template-columns: 1fr 1fr;
-}
-
-@media (max-width: 700px) {
-    .detailDual { grid-template-columns: 1fr; }
-}
-
 .detailSide {
     display: flex;
     flex-direction: column;
@@ -1062,12 +947,6 @@
     border-radius: var(--xc-radius-sm);
     background: var(--xc-surface-raised);
     min-width: 0;
-}
-
-.detailSideTitle {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
 }
 
 .detailDecoded {
@@ -1154,16 +1033,6 @@
     margin: 0;
 }
 
-.rbfActions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
-    align-items: center;
-}
-
 .rbfError {
     flex-basis: 100%;
     margin: 0;
@@ -1181,12 +1050,6 @@
 }
 
 /* §31.4: Save-as-contact prompt inside the history detail card. */
-.saveContactRow {
-    display: flex;
-    margin-top: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
-}
 
 .saveContactForm {
     margin-top: var(--xc-space-2);

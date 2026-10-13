@@ -664,20 +664,6 @@ button.row:hover:not(:disabled) {
     text-transform: none;
 }
 
-.histConfirms {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-text);
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.7;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-}
-
 /* ───── "Official token" banner - same treatment as TokenDetail's:
    green = on a project registry's owner-attested current roster. ───── */
 

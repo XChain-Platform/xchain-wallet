@@ -60,21 +60,6 @@
     font-weight: 700;
 }
 
-.tabCount {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-}
-
-.tabActive .tabCount {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-}
-
 /* ───── Tab panel ───── */
 
 .panel {
@@ -197,23 +182,8 @@
     color: var(--xc-warning);
 }
 
-.demoRow {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: transparent;
-    border: none;
-    border-top: 1px solid var(--xc-border);
-}
-.demoRow:first-of-type { border-top: none; }
-
-/* Button variant of `.demoRow` for DeFi rows that navigate to ActionDetail
-   on click. Resets default button chrome and lines up with `.demoRow` so
-   the visual stays identical. Divider lives on the button (not the parent
-   `<li>`) so we can anchor on the list's first `<li>` to skip the top
-   border, the same trick the Activity list uses. */
+/* DeFi rows navigate to ActionDetail. The divider lives on the button so
+   the list's first item can skip the top border. */
 .demoRowButton {
     appearance: none;
     background: transparent;
@@ -246,45 +216,6 @@
     gap: 4px;
 }
 
-.demoIconWrap {
-    position: relative;
-    flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.demoIconInner {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.demoIconInner svg {
-    width: 24px;
-    height: 24px;
-}
-
-.demoIconChainOverlay {
-    position: absolute;
-    bottom: -2px;
-    inset-inline-end: -2px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--xc-surface);
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
-    object-fit: cover;
-    display: block;
-}
-
 .demoRowMain {
     display: flex;
     align-items: center;
@@ -302,38 +233,6 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text);
-}
-
-.tag_stake {
-    background: color-mix(in srgb, var(--xc-success) 15%, transparent);
-    color: var(--xc-success);
-}
-
-.tag_dispenser {
-    background: color-mix(in srgb, var(--xc-warning) 15%, transparent);
-    color: var(--xc-warning);
-}
-
-.tag_contract {
-    background: color-mix(in srgb, var(--xc-accent-secondary) 18%, transparent);
-    color: var(--xc-accent-secondary);
-}
-
-.demoRowTitle {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-weight: 600;
-    color: var(--xc-text);
-    overflow-wrap: anywhere;
-}
-
-.demoRowBadge {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 6px;
-    padding: 1px 6px;
 }
 
 .demoRowPrimary {
@@ -375,51 +274,4 @@
     font-weight: 400;
     letter-spacing: 0;
     text-transform: none;
-}
-
-.demoActivityIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.demoActivityIcon svg {
-    width: 16px;
-    height: 16px;
-}
-
-.activity_receive {
-    background: color-mix(in srgb, var(--xc-success) 18%, transparent);
-    color: var(--xc-success);
-}
-
-.activity_send {
-    background: color-mix(in srgb, var(--xc-danger) 18%, transparent);
-    color: var(--xc-danger-fg);
-}
-
-.activity_issue {
-    background: color-mix(in srgb, var(--xc-accent-secondary) 18%, transparent);
-    color: var(--xc-accent-secondary);
-}
-
-.activity_dividend {
-    background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
-    color: var(--xc-warning);
-}
-
-.activity_order {
-    background: color-mix(in srgb, var(--xc-accent-primary) 18%, transparent);
-    color: var(--xc-accent-text);
-}
-
-.activity_execute {
-    background: color-mix(in srgb, var(--xc-accent-secondary) 18%, transparent);
-    color: var(--xc-accent-secondary);
 }

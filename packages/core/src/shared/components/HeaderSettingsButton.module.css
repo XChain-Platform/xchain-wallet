@@ -87,68 +87,9 @@
 
 /* ───── Account section ───── */
 
-.singleAccount {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border-radius: 8px;
-    color: var(--xc-text);
-}
-
 .accountName {
     font-weight: 600;
     font-size: var(--xc-text-sm);
-}
-
-.walletList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--xc-border);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.walletRow {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    cursor: pointer;
-    color: var(--xc-text);
-    text-align: start;
-    font-size: var(--xc-text-sm);
-}
-
-.walletRow + .walletRow {
-    border-top: 1px solid var(--xc-border);
-}
-
-.walletRow:hover {
-    background: var(--xc-bg-muted);
-}
-
-.walletRowActive {
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
-    font-weight: 600;
-}
-
-.walletDot {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-accent-text);
 }
 
 .walletName {

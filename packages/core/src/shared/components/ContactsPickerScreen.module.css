@@ -9,18 +9,6 @@
  * contact legal@dankest.llc.
  */
 
-/* Contacts picker toolbar: search + network filter, each 50% wide. The
-   bottom margin matches the screen body's top padding so the spacing above
-   and below the toolbar is equal. */
-.abToolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-2);
-}
-
 .abSearch {
     flex: 1 1 0;
     min-width: 0;
@@ -99,65 +87,6 @@
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
-}
-
-/* Truly-empty path: no saved addresses at all. A single calm card so the
-   page doesn't show a card-inside-a-card. */
-.emptyCard {
-    padding: var(--xc-space-6);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    text-align: center;
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-    color: var(--xc-text);
-}
-
-/* Inline address-book affordance for an address Input: the caller wraps the
-   field in .fieldWrap and drops .inlineContactsButton inside it. */
-.fieldWrap {
-    position: relative;
-}
-
-/* Pin the label and input metrics so .inlineContactsButton's offsets below
-   are exact instead of guessed from default line-heights. */
-.fieldWrap label {
-    line-height: 20px;
-}
-
-.fieldWrap input {
-    height: 36px;
-}
-
-.inlineContactsButton {
-    position: absolute;
-    inset-inline-end: 4px;
-    /* Anchor the button over the input only, using the label/input metrics
-       pinned on .fieldWrap above (20px label + space-1 gap, 36px input).
-       Never anchor to the field's bottom edge: hint/error lines render
-       inside the field and would drag the icon below the input's midline. */
-    top: calc(20px + var(--xc-space-1));
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    padding: 0;
-    border: none;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-.inlineContactsButton:hover:not(:disabled) {
-    color: var(--xc-text);
-}
-
-.inlineContactsButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

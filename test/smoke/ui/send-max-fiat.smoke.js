@@ -23,11 +23,6 @@ const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'),
     'utf8',
 );
-const sendCss = readFileSync(
-    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.module.css'),
-    'utf8',
-);
-
 // --- imports ----------------------------------------------------------
 
 // Step 4 of §29 imported the single helper; Step 1 of §44 expanded
@@ -115,13 +110,12 @@ assert.match(
 );
 assert.match(sendSrc, /maxDisabled=\{!sourceBalance\}/, 'Max disabled without balance prop forwarded to AmountField');
 
-// --- Available + fee hint --------------------------------------------
+// --- Available balance ------------------------------------------------
 
-assert.match(sendCss, /\.balanceHint\s*\{/, 'balance hint CSS class defined');
 assert.match(
     sendSrc,
-    /available/,
-    'balance hint copy present',
+    /balanceText=\{[\s\S]*available/,
+    'available balance is passed to AmountField',
 );
 
 // --- form-stage balance fetch ----------------------------------------
@@ -131,11 +125,5 @@ assert.match(
     /stage !== 'review' && stage !== 'form'/,
     'balance fetch runs in form stage too (so Max can use it)',
 );
-
-// --- CSS hooks -------------------------------------------------------
-
-for (const cls of ['amountRow', 'amountField', 'amountActions', 'amountButton', 'balanceHint']) {
-    assert.match(sendCss, new RegExp(`\\.${cls}\\s*\\{`), `CSS hook .${cls}`);
-}
 
 console.log('send-max-fiat smoke OK');

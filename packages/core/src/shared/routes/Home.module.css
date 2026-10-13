@@ -1,23 +1,5 @@
-.headerPopup {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-}
 
-.headerFull {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-}
 
-.headerRight {
-    display: flex;
-    gap: var(--xc-space-2);
-}
 
 .menuBtn {
     appearance: none;
@@ -33,7 +15,6 @@
     cursor: pointer;
     flex: 0 0 auto;
 }
-
 .menuBtn:hover {
     background: var(--xc-bg-muted);
 }
@@ -41,27 +22,6 @@
 .menuBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
-}
-
-/* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect ratio.
-   Header-bar comfortable: ~36px tall in popup, ~44px tall in full. */
-.brandLogoFull {
-    width: 72px;   /* → ~44px tall */
-    height: auto;
-    flex: 0 0 auto;
-    display: block;
-}
-
-.brandLogoPopup {
-    width: 58px;   /* → ~36px tall */
-    height: auto;
-    flex: 0 0 auto;
-    display: block;
-}
-
-.bodyPopup {
-    display: flex;
-    flex-direction: column;
 }
 
 /* A list fills the content area on wide screens, the same as every other
@@ -83,20 +43,6 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     margin: 0 0 var(--xc-space-3);
-}
-
-/* The "no addresses yet" state carries its own CTA, so it needs
-   to sit as a block rather than a stray line of muted text. */
-.emptyState {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
-}
-
-.emptyState .hint {
-    margin-bottom: var(--xc-space-1);
 }
 
 .stack {
@@ -275,34 +221,6 @@
 }
 
 .pendingAirdropHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.legacyBanner {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg-muted);
-    margin-bottom: var(--xc-space-2);
-    width: 100%;
-    text-align: start;
-    cursor: pointer;
-}
-
-.legacyBanner:hover { background: var(--xc-bg); }
-
-.legacyBannerTitle {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text);
-}
-
-.legacyBannerHint {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }

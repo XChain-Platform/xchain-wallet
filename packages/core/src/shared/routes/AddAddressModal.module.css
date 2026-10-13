@@ -1,17 +1,6 @@
 /* Copyright © 2025-2026 Dankest, LLC
  * SPDX-License-Identifier: AGPL-3.0-or-later */
 
-.backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--xc-space-4);
-    background: rgba(0, 0, 0, 0.5);
-}
-
 .card {
     width: 100%;
     max-width: 22rem;
