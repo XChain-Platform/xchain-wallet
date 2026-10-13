@@ -139,7 +139,7 @@
 
 .error {
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

@@ -44,6 +44,48 @@
     top: 0;
 }
 
+.readOnly input {
+    color: transparent;
+}
+
+.readOnlyValue {
+    position: absolute;
+    inset-inline-start: var(--xc-space-3);
+    inset-inline-end: 52px;
+    top: calc(20px + var(--xc-space-1));
+    height: 36px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.readOnlyValue > span {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: inherit;
+}
+
+.lg .readOnlyValue {
+    inset-inline-start: var(--xc-space-4);
+    height: 48px;
+    font-size: var(--xc-text-lg);
+}
+
+.noLabel .readOnlyValue {
+    top: 0;
+}
+
+.readOnly input:focus {
+    color: var(--xc-text);
+}
+
+.readOnly > :first-child:focus-within + .readOnlyValue {
+    visibility: hidden;
+}
+
 .iconButton:hover:not(:disabled) {
     color: var(--xc-text);
 }

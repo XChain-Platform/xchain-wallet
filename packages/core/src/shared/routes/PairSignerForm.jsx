@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -56,6 +56,7 @@ const { checkFirmware } = signersLib;
  * @param {() => void} props.onBack
  * @param {() => void} [props.onPaired]
  * @param {(signerId: string, signer: any) => void} [props.onSignerPaired]   called after the SignerRecord is persisted. The shell registers the live Signer instance with its port bridge so background sign requests can reach it
+ * @param {(signerId: string) => void} [props.onSignerUnpaired]
  *
  * @typedef {{ vendor: 'trezor' | 'ledger', model: string, deviceIdentifier: string, firmwareVersion: string | null }} PairingInfo
  */
@@ -66,6 +67,7 @@ export function PairSignerForm({
     onBack,
     onPaired,
     onSignerPaired,
+    onSignerUnpaired,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -79,12 +81,42 @@ export function PairSignerForm({
     const [label, setLabel] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [savedRecord, setSavedRecord] = useState(/** @type {any | null} */ (null));
+    const [pairedSigners, setPairedSigners] = useState(/** @type {any[]} */ ([]));
+    const [unpairingId, setUnpairingId] = useState(/** @type {string | null} */ (null));
+    const [notice, setNotice] = useState(/** @type {string | null} */ (null));
+    const unpairedIds = useRef(new Set());
+    const locallyPairedRecords = useRef(new Map());
     const pairingAttempt = useRef(0);
 
     const webHidSupported = isWebHidSupported();
     const browserFamily = detectBrowserFamilyForWebHidHint();
     const ledgerNeedsWebHid = !webHidSupported;
     const ledgerCanPair = pairLedger && webHidSupported;
+
+    useEffect(() => {
+        let cancelled = false;
+        unpairedIds.current.clear();
+        locallyPairedRecords.current.clear();
+        if (typeof messaging.listSigners !== 'function') return () => { cancelled = true; };
+        messaging.listSigners(walletId)
+            .then((records) => {
+                if (!cancelled) {
+                    const listed = Array.isArray(records)
+                        ? records.filter((record) => !unpairedIds.current.has(record.id))
+                        : [];
+                    const listedIds = new Set(listed.map((record) => record.id));
+                    setPairedSigners([
+                        ...listed,
+                        ...Array.from(locallyPairedRecords.current.values())
+                            .filter((record) => !listedIds.has(record.id)),
+                    ]);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setError('Could not load paired devices. You can still pair a new one.');
+            });
+        return () => { cancelled = true; };
+    }, [messaging, walletId]);
 
     async function handlePickVendor(v) {
         const factory = v === 'trezor' ? pairTrezor : pairLedger;
@@ -103,6 +135,7 @@ export function PairSignerForm({
         setVendor(v);
         setStage('pairing');
         setError(null);
+        setNotice(null);
         const attempt = ++pairingAttempt.current;
         try {
             const { pairingInfo: info, signer } = await factory();
@@ -124,7 +157,7 @@ export function PairSignerForm({
             // Connect hands back library internals verbatim. Filter both
             // before they reach the dialog; copy already written for a
             // reader passes through untouched.
-            setError(userFacingMessage(err, 'Pairing failed.'));
+            setError(pairingErrorMessage(err, v));
             setStage('error');
         }
     }
@@ -154,7 +187,13 @@ export function PairSignerForm({
                 firmwareVersion: pairingInfo.firmwareVersion,
                 label: label.trim() || undefined,
             });
+            unpairedIds.current.delete(record?.id);
+            if (record?.id) locallyPairedRecords.current.set(record.id, record);
             setSavedRecord(record);
+            setPairedSigners((records) => [
+                ...records.filter((item) => item.id !== record?.id),
+                record,
+            ]);
             if (onSignerPaired && record?.id && liveSigner) {
                 try { onSignerPaired(record.id, liveSigner); } catch { /* shell swallow */ }
             }
@@ -162,6 +201,34 @@ export function PairSignerForm({
         } catch (err) {
             setError(userFacingMessage(err, 'Save failed.'));
             setStage('confirm');
+        }
+    }
+
+    async function handleUnpair(record) {
+        if (!record?.id || typeof messaging.unregisterSigner !== 'function') {
+            setError('This device cannot be unpaired in this app.');
+            return;
+        }
+        setUnpairingId(record.id);
+        setError(null);
+        setNotice(null);
+        try {
+            await messaging.unregisterSigner(record.id);
+            unpairedIds.current.add(record.id);
+            locallyPairedRecords.current.delete(record.id);
+            if (onSignerUnpaired) {
+                try { onSignerUnpaired(record.id); } catch { /* shell cleanup is best effort */ }
+            }
+            setPairedSigners((records) => records.filter((item) => item.id !== record.id));
+            if (savedRecord?.id === record.id) {
+                setSavedRecord(null);
+                setStage('vendor');
+            }
+            setNotice(`${record.label || labelFor(record.vendor)} unpaired. You can pair it again at any time.`);
+        } catch (err) {
+            setError(userFacingMessage(err, 'Could not unpair this device. Check the connection and try again.'));
+        } finally {
+            setUnpairingId(null);
         }
     }
 
@@ -194,10 +261,17 @@ export function PairSignerForm({
                     >
                         {error}
                     </StatusMessage>
-                ) : null}
+                ) : notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
             >
                 <StepIndicator current={1} />
                 <p className={styles.stageHint}>Which kind of device are you pairing?</p>
+                {pairedSigners.length > 0 ? (
+                    <PairedDeviceList
+                        records={pairedSigners}
+                        unpairingId={unpairingId}
+                        onUnpair={handleUnpair}
+                    />
+                ) : null}
                 <ul className={styles.vendorGrid}>
                     <li>
                         <button
@@ -261,10 +335,24 @@ export function PairSignerForm({
         return wrap(
             <FormPage
                 label="Paired hardware signer"
-                actions={<Button variant="primary" onClick={onPaired || onBack}>Done</Button>}
+                status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                actions={(
+                    <div className={styles.actions}>
+                        <Button
+                            variant="danger"
+                            loading={unpairingId === savedRecord.id}
+                            onClick={() => handleUnpair(savedRecord)}
+                        >
+                            {unpairingId === savedRecord.id ? 'Unpairing' : 'Unpair'}
+                        </Button>
+                        <Button variant="primary" onClick={onPaired || onBack}>Done</Button>
+                    </div>
+                )}
             >
                 <StepIndicator current={4} />
-                <h2 className={styles.successTitle}>{savedRecord.label} paired</h2>
+                <h2 className={styles.successTitle}>
+                    {savedRecord.label} <span className={styles.pairedBadge}>Paired</span>
+                </h2>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Model</dt>
                     <dd className={styles.detailsValue}>{savedRecord.model}</dd>
@@ -331,7 +419,7 @@ export function PairSignerForm({
                     <code className={styles.code}>{pairingInfo?.deviceIdentifier}</code>
                 </dd>
             </dl>
-            {verdict ? <FirmwareBanner verdict={verdict} /> : null}
+            {verdict ? <FirmwareBanner verdict={verdict} vendor={pairingInfo?.vendor} /> : null}
             <Input
                 label="Label"
                 hint="Shows wherever this signer appears in the UI."
@@ -355,18 +443,22 @@ function StepIndicator({ current }) {
 function isPairingCancellation(err) {
     if (err?.name === 'AbortError') return true;
     const message = String(err?.message || err || '');
-    return /\bcancel(?:led|ed)?\b|\babort(?:ed)?\b|no device selected|popup closed|user rejected/i
+    return /\bcancel(?:led|ed)?\b|\babort(?:ed)?\b|popup closed/i
         .test(message);
 }
 
-function FirmwareBanner({ verdict }) {
+function FirmwareBanner({ verdict, vendor }) {
     if (verdict.status === 'ok') return null;
     const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
         ? styles.errorBanner
         : styles.warningBanner;
     return (
         <StatusMessage variant="error" className={variantClass}>
-            <p className={styles.bannerDetail}>{verdict.detail}</p>
+            <p className={styles.bannerDetail}>
+                {verdict.status === 'unsupported'
+                    ? firmwareUpdateAdvice(vendor, verdict.recommended)
+                    : verdict.detail}
+            </p>
             {verdict.updateUrl ? (
                 <a
                     className={styles.updateLink}
@@ -379,6 +471,58 @@ function FirmwareBanner({ verdict }) {
             ) : null}
         </StatusMessage>
     );
+}
+
+function PairedDeviceList({ records, unpairingId, onUnpair }) {
+    return (
+        <section className={styles.pairedSection} aria-labelledby="paired-devices-heading">
+            <h2 id="paired-devices-heading" className={styles.pairedHeading}>Paired devices</h2>
+            <ul className={styles.pairedList}>
+                {records.map((record) => (
+                    <li key={record.id} className={styles.pairedRow}>
+                        <span className={styles.pairedIdentity}>
+                            <strong>{record.label || `${labelFor(record.vendor)} ${record.model || ''}`.trim()}</strong>
+                            <span className={styles.pairedMeta}>{labelFor(record.vendor)} {record.model || ''}</span>
+                        </span>
+                        <span className={styles.pairedBadge}>Paired</span>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            loading={unpairingId === record.id}
+                            onClick={() => onUnpair(record)}
+                        >
+                            {unpairingId === record.id ? 'Unpairing' : 'Unpair'}
+                        </Button>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+}
+
+function pairingErrorMessage(err, vendor) {
+    const raw = String(
+        err && typeof err === 'object' ? err.message || err.name || '' : err || '',
+    );
+    if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware/i.test(raw)) {
+        return firmwareUpdateAdvice(vendor);
+    }
+    if (/wrong app|app.*(?:not|isn't).*open|app is open|0x6a82|0x6e00|cla_not_supported|(?:bitcoin test|testnet).*app/i.test(raw)) {
+        return 'The Bitcoin app is not open on your Ledger. Open the Bitcoin app on the device, then try again.';
+    }
+    if (/cancel|reject|denied|declined|user.*closed|popup.*closed/i.test(raw)) {
+        return `Pairing was canceled. Approve the connection on your ${labelFor(vendor)} and in any browser prompt, then try again.`;
+    }
+    if (/no (?:compatible )?device|device.*not found|not found.*device|device.*disconnected|not connected|unable to claim|transport.*(?:unavailable|missing)|hid.*not found/i.test(raw)) {
+        return `No ${labelFor(vendor)} was found. Connect and unlock the device, then try again.`;
+    }
+    return userFacingMessage(err, `Could not pair your ${labelFor(vendor)}. Connect and unlock the device, then try again.`);
+}
+
+function firmwareUpdateAdvice(vendor, recommended) {
+    const tool = vendor === 'trezor' ? 'Trezor Suite' : 'Ledger Live';
+    const version = recommended ? ` to version ${recommended} or newer` : '';
+    return `This ${labelFor(vendor)} firmware is too old. Update it${version} with ${tool}, reconnect the device, then try again.`;
 }
 
 function labelFor(vendor) {

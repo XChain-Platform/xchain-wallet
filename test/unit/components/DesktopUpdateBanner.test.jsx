@@ -98,17 +98,48 @@ describe('DesktopUpdateBanner', () => {
         await act(async () => { screen.getByRole('button', { name: /install and restart/i }).click(); });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('could not be verified');
+        expect(text).toContain('could not be downloaded or verified');
         expect(text).toContain('wallet is untouched');
         expect(text).not.toContain('manifest says');
     });
 
-    // row 148. Everything above drives an event that arrives AFTER the
-    // component mounts, and on a real install that never happens: main checks
-    // the feed at launch and this banner is rendered only once the vault is
-    // unlocked, which is a human typing a passphrase later. Measured on a
-    // packaged build - main logged `Found version 0.339.0`, the banner showed
-    // nothing - so the offer was unreachable rather than merely late.
+    it('shows manual check progress and the up-to-date result', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        expect(screen.getByRole('status').textContent).toContain('Checking for updates');
+
+        bridge.emit({ type: 'not-available', userInitiated: true, info: { version: '0.341.2' } });
+        expect(screen.getByRole('status').textContent).toContain('XChain Wallet is up to date');
+    });
+
+    it('describes a check failure without claiming an update failed verification', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        bridge.emit({ type: 'error', userInitiated: true, info: { message: 'feed unavailable' } });
+
+        const text = screen.getByRole('status').textContent;
+        expect(text).toContain('Could not check for updates');
+        expect(text).not.toContain('could not be verified');
+        expect(text).not.toContain('feed unavailable');
+    });
+
+    it('keeps automatic checks quiet unless they find an update', () => {
+        const bridge = installBridge();
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking' });
+        bridge.emit({ type: 'not-available', info: { version: '0.341.2' } });
+        bridge.emit({ type: 'error', info: { message: 'feed unavailable' } });
+
+        expect(container.textContent).toBe('');
+    });
+
+    // Main begins its launch check before it creates the renderer, so an
+    // available offer must also survive an event that arrives before mount.
     it('shows an offer main made before it existed', async () => {
         const bridge = installBridge({ retained: { type: 'available', info: { version: '0.339.0' } } });
         render(React.createElement(DesktopUpdateBanner));

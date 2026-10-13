@@ -102,7 +102,7 @@ assert.ok(
     'DispensersList sorts rows newest-block-first',
 );
 assert.ok(
-    /No addresses on any chain/.test(listSrc) || /No addresses/.test(listSrc),
+    /title="No supported address"/.test(listSrc),
     'DispensersList surfaces the no-addresses case',
 );
 assert.ok(
@@ -281,6 +281,10 @@ for (const [shell, appPath] of [
     assert.ok(
         /setDispenserRef\(\{\s*chainId,\s*actionIndex,\s*origin:/.test(app),
         `${shell} threads chainId + actionIndex + origin through setDispenserRef`,
+    );
+    assert.ok(
+        /onCreateDispenser=\{\(\) => \{[\s\S]{0,160}?setFormReturnView\('dispensers-list'\);[\s\S]{0,160}?setUnlockedView\('dispenser'\);/.test(app),
+        `${shell} returns a dispenser launched from the list back to the list`,
     );
 }
 

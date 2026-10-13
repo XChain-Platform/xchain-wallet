@@ -151,8 +151,9 @@ assert.ok(
     'pay-to address falls back to GET_ADDRESS/source when the row has no address column',
 );
 assert.ok(
-    /navigator\.clipboard/.test(detailSrc),
-    'pay-here panel exposes a copy-to-clipboard button',
+    /copyText\(text\)/.test(detailSrc)
+        && /Copy dispenser payment address/.test(detailSrc),
+    'pay-here panel uses the shared clipboard path and names the copied address',
 );
 assert.ok(
     /Any \$\{getCoin\} wallet can trigger a fill/.test(detailSrc)

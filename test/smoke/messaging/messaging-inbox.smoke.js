@@ -324,8 +324,8 @@ assert.ok(/>\s*Messaging\b/.test(homeSrc),
 
     const lockedSrc = readFileSync(join(sharedRoutes, 'Locked.jsx'), 'utf8');
     assert.ok(
-        (lockedSrc.match(/sweepMsgMemoryForWallet\(demoWalletId\)/g) || []).length >= 2,
-        'Locked.jsx handleExitDemo sweeps messaging memory on both the surgical-remove and full-wipe fallback paths',
+        /await wipeWalletStorage\(\)[\s\S]*sweepMsgMemoryForWallet\(demoWalletId\)/.test(lockedSrc),
+        'Locked.jsx sweeps messaging memory only after the full demo wipe succeeds',
     );
 }
 

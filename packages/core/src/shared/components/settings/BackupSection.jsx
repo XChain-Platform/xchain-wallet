@@ -40,14 +40,22 @@
 //     contact or label the chain copy doesn't know about.
 
 import { useEffect, useRef, useState } from 'react';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import {
+    crypto as cryptoLib,
+    flows as flowsLib,
+    registry as registryLib,
+    uri as uriLib,
+} from '@xchain-wallet/core';
 import { ChainBadge } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
+import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { copyText } from '../../clipboard.js';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
@@ -87,6 +95,7 @@ export function BackupSection({ activeWallet }) {
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
+    const [exportResult, setExportResult] = useState(/** @type {{ fileName: string, walletName: string } | null} */ (null));
 
     // §19.3 reveal-seed state.
     const [revealStage, setRevealStage] = useState(
@@ -153,6 +162,7 @@ export function BackupSection({ activeWallet }) {
     }
 
     const onExport = async (password) => {
+        if (exporting) return;
         if (typeof messaging?.exportBackupFile !== 'function') {
             setExportError('Backup export is not wired in this shell yet.');
             return;
@@ -168,13 +178,14 @@ export function BackupSection({ activeWallet }) {
                 walletId: activeWallet.id,
                 password,
             });
-            triggerDownload(activeWallet.name || activeWallet.id, fileContent);
+            const saved = triggerDownload(activeWallet.name || activeWallet.id, fileContent);
             // §19.7 / G034: successful encrypted-backup export counts as
             // a fresh backup verification for reminder purposes.
             try { flowsLib.markBackupVerified(activeWallet.id); } catch { /* best-effort */ }
+            setExportResult(saved);
             setPendingPassword(null);
         } catch (err) {
-            setExportError(err instanceof Error ? err.message : String(err));
+            setExportError(userFacingMessage(err, 'Could not export the backup. Try again.'));
         } finally {
             setExporting(false);
         }
@@ -397,10 +408,15 @@ export function BackupSection({ activeWallet }) {
 
     return (
         <div style={STACK}>
-            {pendingPassword !== null ? (
+            {exportResult ? (
+                <BackupExportResult
+                    result={exportResult}
+                    onDone={() => setExportResult(null)}
+                />
+            ) : pendingPassword !== null ? (
                 <PasswordPrompt
                     label="Backup password"
-                    hint="Choose a password to encrypt the backup file. This is independent of the wallet-unlock password."
+                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters. It encrypts this backup file and is separate from your wallet password.`}
                     busy={exporting}
                     onCancel={() => { setPendingPassword(null); setExportError(null); }}
                     onSubmit={(pw) => onExport(pw)}
@@ -410,10 +426,10 @@ export function BackupSection({ activeWallet }) {
                 <BackupRow
                     label="Export encrypted backup"
                     /* Spec §19.4 */
-                    hint="Saves a .xchain-wallet file containing this wallet's seed (encrypted), addresses, labels, contacts, and settings."
+                    hint="Saves an encrypted .xchain-wallet file with the wallet, addresses, labels, contacts, settings, and pending transactions. Keep both the file and its separate backup password."
                     actionLabel="Export…"
                     disabled={!activeWallet}
-                    onClick={() => { setPendingPassword(''); setExportError(null); }}
+                    onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
                 />
             )}
 
@@ -806,6 +822,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                 onChange={(e) => setMn(e.target.value)}
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
+                autoComplete="off"
                 aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
@@ -826,6 +843,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     <span>Addresses to check:</span>
                     <input
                         type="number"
+                        inputMode="numeric"
                         min={1}
                         max={100}
                         step={1}
@@ -946,9 +964,9 @@ function DryRunChainReport({ chain }) {
                     <span style={{ color: 'var(--xc-text-muted)' }} title={chain.addressType}>{typeLabel}</span>
                 </span>
                 <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
-                    <span style={{ color: 'var(--xc-accent-primary)' }}>{chain.matchedCount} ✓</span>
+                    <span style={{ color: 'var(--xc-accent-text)' }}>{chain.matchedCount} ✓</span>
                     {chain.divergentCount > 0
-                        ? <span style={{ color: 'var(--xc-danger)' }}> · {chain.divergentCount} ✗</span>
+                        ? <span style={{ color: 'var(--xc-danger-fg)' }}> · {chain.divergentCount} ✗</span>
                         : null}
                     {chain.missingCount > 0
                         ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} new</span>
@@ -975,8 +993,9 @@ function DryRunChainReport({ chain }) {
 function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     const [pw1, setPw1] = useState('');
     const [pw2, setPw2] = useState('');
+    const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
     const mismatch = pw2.length > 0 && pw1 !== pw2;
-    const canSubmit = pw1.length > 0 && pw1 === pw2 && !busy;
+    const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
     return (
         <div style={{
             display: 'flex',
@@ -995,7 +1014,9 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 value={pw1}
                 onChange={(e) => setPw1(e.target.value)}
                 autoFocus
+                autoComplete="new-password"
                 aria-label="Backup password"
+                disabled={busy}
                 style={passwordStyle}
             />
             <input
@@ -1003,11 +1024,19 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 placeholder="Confirm password"
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
+                autoComplete="new-password"
                 aria-label="Confirm backup password"
+                disabled={busy}
                 style={passwordStyle}
             />
+            {pw1.length > 0 && !passwordStrongEnough ? (
+                <Status
+                    text={`Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`}
+                    tone="error"
+                />
+            ) : null}
             {mismatch ? (
-                <Status text="Passwords don't match." tone="error" />
+                <Status text="Backup passwords do not match." tone="error" />
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
@@ -1030,6 +1059,75 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     );
 }
 
+function BackupExportResult({ result, onDone }) {
+    const [location, setLocation] = useState('');
+    const [pointer, setPointer] = useState('');
+    const [pointerError, setPointerError] = useState(/** @type {string | null} */ (null));
+
+    const createPointer = () => {
+        setPointer('');
+        setPointerError(null);
+        let url;
+        try {
+            url = new URL(location.trim());
+        } catch {
+            setPointerError('Enter the full HTTPS address where the encrypted backup file is stored.');
+            return;
+        }
+        // Require an encrypted transport because another device fetches the backup from this exact address.
+        if (url.protocol !== 'https:') {
+            setPointerError('The backup location must use HTTPS.');
+            return;
+        }
+        setPointer(uriLib.buildBackupPointer({
+            location: url.toString(),
+            name: result.walletName,
+        }));
+    };
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--xc-space-2)',
+            padding: 'var(--xc-space-3)',
+            background: 'var(--xc-surface-raised)',
+            border: '1px solid var(--xc-border)',
+            borderRadius: 'var(--xc-radius-md)',
+        }}>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Backup file saved</div>
+            <Status text={result.fileName} />
+            <div style={ROW_HINT}>
+                Store this file somewhere you can recover it. The password is not in the file and cannot be recovered.
+            </div>
+            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Optional backup pointer QR</div>
+            <div style={ROW_HINT}>
+                After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It does not contain the backup file or password.
+            </div>
+            <input
+                type="url"
+                placeholder="https://example.com/my-backup.xchain-wallet"
+                value={location}
+                onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
+                aria-label="Backup file HTTPS address"
+                autoComplete="off"
+                style={passwordStyle}
+            />
+            {pointerError ? <Status text={pointerError} tone="error" /> : null}
+            {pointer ? (
+                <div style={{ display: 'grid', justifyItems: 'center', gap: 'var(--xc-space-2)' }}>
+                    <KeyQR value={pointer} alt="Backup pointer QR" />
+                    <code style={{ overflowWrap: 'anywhere', color: 'var(--xc-text-muted)' }}>{pointer}</code>
+                </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={createPointer} style={ACTION_BTN}>Create pointer QR</button>
+                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
+            </div>
+        </div>
+    );
+}
+
 const passwordStyle = {
     background: 'var(--xc-bg)',
     color: 'var(--xc-text)',
@@ -1040,20 +1138,39 @@ const passwordStyle = {
     fontFamily: 'inherit',
 };
 
-function triggerDownload(walletName, fileContent) {
+function triggerDownload(fallbackWalletName, fileContent) {
+    if (typeof fileContent !== 'string') {
+        throw new Error('Backup export returned no file contents.');
+    }
+    let envelope;
+    try {
+        envelope = cryptoLib.parseBackupEnvelope(fileContent);
+    } catch {
+        throw new Error('Backup export returned an invalid file.');
+    }
+    const walletName = typeof envelope.walletName === 'string' && envelope.walletName.length > 0
+        ? envelope.walletName
+        : fallbackWalletName;
     const safeName = String(walletName || 'wallet')
         .replace(/[^a-zA-Z0-9._-]+/g, '-')
-        .slice(0, 60) || 'wallet';
-    const stamp = new Date().toISOString().slice(0, 10);
+        .replace(/^[._-]+|[._-]+$/g, '')
+        .slice(0, 60)
+        .replace(/[._-]+$/g, '') || 'wallet';
+    const createdAt = new Date(envelope.createdAt);
+    const stamp = Number.isNaN(createdAt.getTime())
+        ? new Date().toISOString().slice(0, 10)
+        : createdAt.toISOString().slice(0, 10);
+    const fileName = `${safeName}-backup-${stamp}.xchain-wallet`;
     const blob = new Blob([fileContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safeName}-${stamp}.xchain-wallet`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { fileName, walletName: String(walletName || 'wallet') };
 }
 
 /**
@@ -1168,20 +1285,19 @@ function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
     const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const haptic = useHapticFeedback();
 
     const copyTxid = async () => {
         setCopyStatus(null);
         setCopyError(null);
-        if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
-            setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        const { ok } = await copyText(txid);
+        if (ok) {
+            setCopyStatus('Transaction ID copied.');
+            haptic.tap();
             return;
         }
-        try {
-            await navigator.clipboard.writeText(txid);
-            setCopyStatus('Transaction ID copied.');
-        } catch {
-            setCopyError('Could not copy the transaction ID. Select it and copy it manually.');
-        }
+        setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        haptic.error();
     };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.

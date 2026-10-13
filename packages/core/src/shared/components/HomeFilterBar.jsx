@@ -82,6 +82,10 @@ export function HomeFilterBar({
                 </span>
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={styles.search}
                     placeholder="Search tokens…"
                     aria-label="Search tokens by name"

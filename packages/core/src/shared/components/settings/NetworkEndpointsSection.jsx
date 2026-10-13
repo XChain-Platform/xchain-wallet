@@ -30,7 +30,7 @@
 // now really does break that chain's traffic: URLs are validated before
 // they are allowed to persist.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -121,24 +121,29 @@ function ChainRegistryRefreshRow() {
         && typeof messaging?.refreshChainRegistry === 'function';
     const [status, setStatus] = useState(/** @type {any} */ (null));
     const [refreshing, setRefreshing] = useState(false);
+    const [manualResult, setManualResult] = useState(false);
+    const manualRefreshRef = useRef(false);
     useEffect(() => {
         if (!wired) return;
         messaging.getChainRegistryStatus()
-            .then((s) => setStatus(s))
-            .catch(() => setStatus(null));
+            .then((s) => { if (!manualRefreshRef.current) setStatus(s); })
+            .catch(() => { if (!manualRefreshRef.current) setStatus(null); });
     }, [wired, messaging]);
     if (!wired) return null;
 
     const onRefresh = async () => {
+        manualRefreshRef.current = true;
         try {
             setRefreshing(true);
             const next = await messaging.refreshChainRegistry();
             setStatus(next);
+            setManualResult(true);
         } catch (err) {
             setStatus({
                 ok: false,
                 error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
             });
+            setManualResult(true);
         } finally {
             setRefreshing(false);
         }
@@ -161,11 +166,7 @@ function ChainRegistryRefreshRow() {
                         mode), so a bare count would name a bigger number than
                         the list under it. */}
                     <span style={ROW_HINT}>
-                        {status?.ok
-                            ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'} in the registry`
-                            : status?.error
-                                ? `Last attempt failed: ${userFacingMessage(status.error, 'Could not refresh the chain registry.')}`
-                                : 'No refresh yet; the networks bundled with this wallet are active.'}
+                        {registryStatusText(status, manualResult)}
                     </span>
                 </div>
                 <button
@@ -179,6 +180,24 @@ function ChainRegistryRefreshRow() {
             </div>
         </div>
     );
+}
+
+function registryStatusText(status, manualResult) {
+    if (status?.ok) {
+        const networks = `${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'}`;
+        return manualResult
+            ? `Refresh complete: ${networks} available from the registry.`
+            : `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${networks} in the registry`;
+    }
+    if (!status?.error) {
+        return 'No refresh yet; the networks bundled with this wallet are active.';
+    }
+    const raw = userFacingMessage(status.error, 'The registry could not be refreshed.');
+    const unreachable = /fetch|network|timed? out|timeout|unreachable|econn|enotfound|connection/i.test(raw);
+    const reason = unreachable
+        ? 'The registry host could not be reached.'
+        : `The registry could not be refreshed: ${raw}`;
+    return `Refresh failed. ${reason} The networks bundled with this wallet remain active.`;
 }
 
 function formatRelative(iso) {
@@ -199,7 +218,9 @@ function formatRelative(iso) {
 // A URL the wallet can actually talk to: absolute, http(s), with a host.
 // Anything else would be handed straight to the SDK now that overrides
 // are live, so it is refused at the edit surface instead.
-function endpointError(value) {
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function endpointError(value, descriptor) {
     let parsed;
     try {
         parsed = new URL(value);
@@ -210,7 +231,23 @@ function endpointError(value) {
         return 'Only http:// and https:// URLs are supported.';
     }
     if (!parsed.hostname) return 'That URL has no host.';
+    const allowsHttp = descriptor?.networkKind === 'regtest' || LOOPBACK_HOSTS.has(parsed.hostname);
+    if (parsed.protocol === 'http:' && !allowsHttp) {
+        return 'Use https:// for remote hosts. http:// is allowed only for regtest and local hosts.';
+    }
     return null;
+}
+
+function canonicalEndpoint(value) {
+    const trimmed = value.trim();
+    try {
+        const parsed = new URL(trimmed);
+        parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+        const path = parsed.pathname === '/' ? '' : parsed.pathname;
+        return `${parsed.origin}${path}${parsed.search}${parsed.hash}`;
+    } catch {
+        return trimmed;
+    }
 }
 
 function ChainEndpointBlock({ descriptor, override, onSave }) {
@@ -262,9 +299,9 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         // An emptied field means "use the default for this one", not
         // "send requests to nowhere".
         const next = {
-            explorerUrl: draft.explorerUrl.trim() || defaults.explorerUrl,
-            encoderUrl: draft.encoderUrl.trim() || defaults.encoderUrl,
-            hubUrl: draft.hubUrl.trim() || defaults.hubUrl,
+            explorerUrl: canonicalEndpoint(draft.explorerUrl) || defaults.explorerUrl,
+            encoderUrl: canonicalEndpoint(draft.encoderUrl) || defaults.encoderUrl,
+            hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
         const bad = [
             ['Explorer URL', next.explorerUrl],
@@ -272,7 +309,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             ['Hub URL', next.hubUrl],
         ]
             .map(([label, value]) => {
-                const err = endpointError(value);
+                const err = endpointError(value, descriptor);
                 return err ? `${label}: ${err}` : null;
             })
             .filter(Boolean);
@@ -345,7 +382,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
             {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger, #c33)' }}>
+                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
                     {saveError}
                 </div>
             ) : null}
@@ -353,6 +390,12 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 <div style={ROW_HINT}>
                     Saving points this chain&apos;s balances, history and broadcasts at these
                     addresses right away.
+                </div>
+            ) : null}
+            {isCustom || dirty ? (
+                <div style={ROW_HINT}>
+                    URL format is checked here, but the host is not contacted until the wallet uses it.
+                    If it is unreachable, this chain&apos;s balances, history and transactions may be unavailable.
                 </div>
             ) : null}
             <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
@@ -375,6 +418,10 @@ function UrlField({ label, value, placeholder, onChange }) {
             <div style={FIELD_LABEL}>{label}</div>
             <input
                 type="url"
+                enterKeyHint="done"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={value}
                 placeholder={placeholder}
                 onChange={(e) => onChange(e.target.value)}

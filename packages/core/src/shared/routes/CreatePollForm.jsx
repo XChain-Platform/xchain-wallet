@@ -40,6 +40,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -144,6 +145,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -156,6 +158,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
                 setFromAddressId(sourceId);
+                setLoadError(null);
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -202,6 +205,27 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         : null;
 
     const cleanOptions = useMemo(() => options.map((o) => o.trim()).filter((o) => o.length > 0), [options]);
+
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (typeof messaging?.getIndexerWatermark !== 'function') { setCurrentHeight(null); return undefined; }
+        let cancelled = false;
+        setCurrentHeight(null);
+        messaging.getIndexerWatermark({ chainId })
+            .then((res) => {
+                if (cancelled) return;
+                if (res?.watermark == null || res.watermark === '') { setCurrentHeight(null); return; }
+                const height = Number(res?.watermark);
+                setCurrentHeight(Number.isFinite(height) ? height : null);
+            })
+            .catch(() => { if (!cancelled) setCurrentHeight(null); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+    const endBlockEstimate = blockDateEstimateText({
+        coin: descriptor?.coin,
+        currentHeight,
+        targetBlock: endBlock,
+    });
 
     // PC-42: a poll is binding the moment it names a callback contract. Every
     // other callback field only means something once it does.
@@ -370,8 +394,30 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         if (!endBlock.trim() || !/^\d+$/.test(endBlock.trim())) { setFormError('End block must be a block height (a future block).'); return; }
+        if (currentHeight != null && Number(endBlock) <= currentHeight) { setFormError(`End block must be above the current indexed block (${currentHeight}).`); return; }
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
+        const selectionCount = Number(maxSelections);
+        if (!Number.isInteger(selectionCount) || selectionCount < 1 || selectionCount > cleanOptions.length) {
+            setFormError(`Max selections must be a whole number from 1 to ${cleanOptions.length}.`);
+            return;
+        }
+        if (weightMode === 'quadratic' && !(Number.isFinite(Number(minVoteBalance)) && Number(minVoteBalance) > 0)) {
+            setFormError('Quadratic weighting requires a minimum vote balance greater than 0.');
+            return;
+        }
+        if (quorum.trim() && (!(Number(quorum) > 0) || Number(quorum) > 1)) {
+            setFormError('Quorum must be a fraction greater than 0 and no more than 1.');
+            return;
+        }
+        if (decideThreshold.trim() && (!(Number(decideThreshold) > 0) || Number(decideThreshold) > 1)) {
+            setFormError('Early-decide threshold must be a fraction greater than 0 and no more than 1.');
+            return;
+        }
+        if (minVoters.trim() && (!Number.isInteger(Number(minVoters)) || Number(minVoters) < 0)) {
+            setFormError('Minimum voters must be a non-negative whole number.');
+            return;
+        }
         if (bindingErrors.length > 0) { setFormError(bindingErrors[0]); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
@@ -668,7 +714,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 <Button type="button" variant="ghost" onClick={addOption}>Add option</Button>
             </div>
 
-            <Input label="Closes at block" hint="A future block height. Voting is accepted up to and including this block."
+            <Input label="Closes at block" hint={endBlockEstimate
+                ? `A future block height. Estimated close: ${endBlockEstimate}.`
+                : 'A future block height. Voting is accepted up to and including this block.'}
                 value={endBlock} onChange={(e) => setEndBlock(e.target.value)} inputMode="numeric" autoComplete="off" />
 
             <Select label="Tally mode" value={tallyMode} onChange={(e) => setTallyMode(e.target.value)}
@@ -690,15 +738,15 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             {showAdvanced ? (
                 <>
                     <Input label="Quorum (optional)" hint="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
-                        value={quorum} onChange={(e) => setQuorum(e.target.value)} autoComplete="off" />
+                        value={quorum} onChange={(e) => setQuorum(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Minimum voters (optional)" hint="Minimum distinct qualifying voters."
                         value={minVoters} onChange={(e) => setMinVoters(e.target.value)} inputMode="numeric" autoComplete="off" />
                     <Input label="Minimum vote balance (optional)" hint="A voter counts toward the participation gate only if they hold at least this much. Required for quadratic weighting."
-                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} autoComplete="off" />
+                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Early-decide threshold (optional)" hint="Fraction of supply an option must reach to close the poll early."
-                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} autoComplete="off" />
+                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Creation deposit (optional)" hint="A GAS deposit held while the poll runs as anti-spam: returned when the poll closes, kept if too few people vote."
-                        value={deposit} onChange={(e) => setDeposit(e.target.value)} autoComplete="off" />
+                        value={deposit} onChange={(e) => setDeposit(e.target.value)} inputMode="decimal" autoComplete="off" />
                 </>
             ) : null}
 
@@ -730,7 +778,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                             <Input label="Extra arguments (optional)" hint='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
                                 value={callbackParams} onChange={(e) => setCallbackParams(e.target.value)} autoComplete="off" />
                             <Input label="Escrow to fund the call (optional)" hint="GAS locked at creation to pay for running the contract; released when the poll finishes."
-                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} autoComplete="off" />
+                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} inputMode="decimal" autoComplete="off" />
                             {timelockActive ? (
                                 <Input label="Delay before the call runs (optional)" hint="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
                                     value={callbackDelayBlocks} onChange={(e) => setCallbackDelayBlocks(e.target.value)} inputMode="numeric" autoComplete="off" />

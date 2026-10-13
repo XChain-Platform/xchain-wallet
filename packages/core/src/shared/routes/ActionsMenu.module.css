@@ -36,7 +36,7 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .entryIcon > svg {
@@ -70,12 +70,16 @@
 .entryLabel {
     font-size: var(--xc-text-md);
     font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .entryDescription {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     line-height: 1.3;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .actions {
@@ -107,7 +111,7 @@
 
 .statusPillError {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .statusPillPending {

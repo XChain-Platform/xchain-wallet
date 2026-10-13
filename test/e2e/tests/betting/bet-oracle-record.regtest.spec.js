@@ -226,7 +226,7 @@ test.describe('BET oracle record against a live explorer', () => {
         await test.step('fees earned render per wager token', async () => {
             const main = page.getByRole('main');
             if (fees.length === 0) {
-                await expect(main.getByText(/never been paid a fee/i)).toBeVisible();
+                await expect(main.getByText(/No settlement fees yet/i)).toBeVisible();
                 return;
             }
             // that identity filter is what makes this number the oracle's OWN

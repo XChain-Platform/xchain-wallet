@@ -25,6 +25,8 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { isEditableTarget, parseBinding, resolveBindings } from './shortcuts.js';
+import { useTablistKeys } from './useTablistKeys.js';
+import { useMenuKeys } from './useMenuKeys.js';
 
 // How long a leader key stays armed waiting for the second key.
 const LEADER_WINDOW_MS = 1200;
@@ -65,6 +67,10 @@ function buildLookups(overrides) {
  * @param {() => void} [opts.handlers.openHelp]
  */
 export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
+    // Every shell installs this hook once, so the arrow keys of tab strips and
+    // popup menus ride along with it rather than needing a call in each shell.
+    useTablistKeys();
+    useMenuKeys();
     const lookups = useMemo(() => buildLookups(overrides), [overrides]);
     // Keep the latest handlers in a ref so the listener effect doesn't need to
     // re-bind (and lose leader state) every time the shell re-renders new
@@ -97,13 +103,18 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
             // combos (none of ours use them) so we don't hijack OS chords.
             if (mod && !e.altKey && !e.shiftKey) {
                 const action = COMBO.get((e.key || '').toLowerCase());
+                clearLeader();
                 if (action) { e.preventDefault(); run(action); }
                 return;
             }
-            if (mod) return; // some other modifier chord; not ours
+            if (mod || e.altKey) { clearLeader(); return; }
 
             // From here down: no modifier. Suppress while typing.
             if (isEditableTarget(e.target)) { clearLeader(); return; }
+
+            // Shift may produce a catalogued printable key such as '?', but
+            // it does not turn leader keys into additional shortcut chords.
+            if (e.shiftKey && !SINGLE.has(e.key)) { clearLeader(); return; }
 
             const key = (e.key || '').toLowerCase();
 

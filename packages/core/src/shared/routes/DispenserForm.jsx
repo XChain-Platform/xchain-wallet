@@ -61,6 +61,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
@@ -80,6 +81,7 @@ import {
     dispenserAddressVerdict,
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
+import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -311,7 +313,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     useEffect(() => {
         setFormError(null);
-    }, [addressMode, existingAddressId]);
+    }, [
+        chainId, fromAddressId, ticker, giveAmount, escrow, payWith, getTick,
+        getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount,
+        expMode, expInput, allowListIdx, blockListIdx, addressMode,
+        existingAddressId, outsideAddress, feePick, payFeeInNativeCoin,
+    ]);
 
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
@@ -480,6 +487,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const priceNotes = useDispenserPriceFloor({
         coin: descriptor?.coin, coinTicker, payWith, triggerPrice, giveAmount, fiatCode, fiatAmount, oracleAddress,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
@@ -665,6 +678,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const tick = ticker.trim().toUpperCase() || 'TOKEN';
         const per = giveAmount.trim() || '?';
         const esc = escrow.trim() || '?';
+        if (payWith === 'token') {
+            const paymentTick = getTick.trim().toUpperCase() || 'TOKEN';
+            const paymentAmount = getTokenAmount.trim() || '?';
+            const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
+            return `You will lock ${esc} ${tick}. Each time someone sends ${paymentAmount} ${paymentTick}, they will receive ${per} ${tick}.${fillsNote}`;
+        }
         if (oracleAddress.trim() && fiatCode) {
             // The oracle's usage fee, if it charges one, is a real payment leaving this
             // transaction, so say so here rather than letting it appear only as
@@ -678,7 +697,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const coin = coinTicker || 'coin';
         const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
         return `You will lock ${esc} ${tick}. Each time someone sends ${trig} ${coin}, they will receive ${per} ${tick}.${fillsNote}`;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
+    }, [ticker, giveAmount, escrow, payWith, getTick, getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -762,7 +781,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleReview(event) {
         event.preventDefault();
-        if (derivingGetAddress) return;
+        if (derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -777,12 +796,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         const ga = giveAmount.trim();
-        if (!ga || Number(ga) <= 0) {
+        if (!isPositiveDecimal(ga)) {
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
         const esc = escrow.trim();
-        if (!esc || Number(esc) <= 0) {
+        if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
             return;
         }
@@ -800,9 +819,39 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
-        } else if (!oracle && !fa && !trig) {
-            setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
-            return;
+        } else {
+            if (!oracle && !fa && !trig) {
+                setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
+                return;
+            }
+            if (oracle) {
+                const oracleFormatError = outsideAddressError(oracle, descriptor);
+                if (oracleFormatError) { setFormError(`Oracle address: ${oracleFormatError}`); return; }
+                if (!fiatCode) {
+                    setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
+                    return;
+                }
+            }
+            if (fa && !fiatCode) {
+                setFormError('Fiat pricing needs a fiat currency. Pick one under Advanced.');
+                return;
+            }
+            if (fiatCode && !oracle && !fa) {
+                setFormError('Enter a fiat amount, add an oracle address, or set Priced in fiat to none.');
+                return;
+            }
+            if (fa && !isValidFiatAmount(fa)) {
+                setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+                return;
+            }
+            if (!oracle && trig && !isPositiveDecimal(trig)) {
+                setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            if (priceNotes.block) {
+                setFormError(PRICE_BELOW_FLOOR_ERROR);
+                return;
+            }
         }
         if (expMode === 'custom') {
             const raw = expInput.trim();
@@ -810,20 +859,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const unix = localInputToUnix(raw);
             if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
         }
-        if (trig && !isPositiveDecimal(trig)) {
-            setFormError('Trigger price must be a positive number.');
-            return;
-        }
-        if (priceNotes.block) {
-            setFormError(PRICE_BELOW_FLOOR_ERROR);
-            return;
-        }
-        if (oracle && !fiatCode) {
-            setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
-            return;
-        }
-        if (fa && !isValidFiatAmount(fa)) {
-            setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+        if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
+            setFormError(listInBothSlotsMessage(allowListIdx));
             return;
         }
         if (addressMode === 'existing' && !existingAddress) {
@@ -1088,21 +1125,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
+        // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
                 label="Review dispenser"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }}
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
                 actions={(
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
                         disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
+                            stage === 'submitting'
+                            || (!isWatcherMode && (hw
+                                ? hwStatus !== 'available'
+                                : (!signerReady && password.length === 0)))
                         }
                     >
                         {isWatcherMode
@@ -1136,14 +1182,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             <AddressText address={fromAddress.address} />
                         )}
                     </dd>
-                    {(decoded?.details || []).map((d) => (
+                    {(decoded?.details || []).filter((d) => d.label !== 'Dispenser address').map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -1183,23 +1230,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            // Cluster P FOLLOWUP 4: encoder /
-                            // network / device errors are recoverable
-                            // by returning to the form stage and
-                            // adjusting an input or re-staging the HW
-                            // device. Wrong-password isn't reachable
-                            // here (no password input in HW / watcher
-                            // modes).
-                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
-                        }
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
             </FormPage>,
         );
     }
@@ -1297,10 +1327,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
-                    : undefined}
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? sourceAddress : null}
@@ -1387,6 +1420,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         <FormPage
             label="Create dispenser"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
@@ -1535,7 +1569,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={getTick}
                         onChange={(e) => setGetTick(e.target.value.toUpperCase())}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
@@ -1616,7 +1650,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
@@ -1661,16 +1695,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 one click away from the warning. */}
             {allowListWarningNode}
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            <FeeSelector
+                label="Network fee"
+                coinTicker={coinTicker}
+                formatFiat={formatNativeFee}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
 
             <div className={styles.feeToggleGap}>
                 <NativeFeeToggle

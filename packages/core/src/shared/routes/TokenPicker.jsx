@@ -19,6 +19,7 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
+import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './TokenPicker.module.css';
@@ -36,6 +37,15 @@ function tokenSelectionLabel(row) {
         ? ` on ${row.chainDisplayName}${networkSuffix}`
         : '';
     return `Select ${row.displayName || row.tick}${chain}`;
+}
+
+function hasSpendableBalance(row) {
+    if (row?.unavailable) return true;
+    try {
+        return BigInt(row?.quantity || 0) > 0n;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -222,7 +232,9 @@ export function TokenPicker({
 
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
-        let next = allRows;
+        let next = isReceive
+            ? allRows
+            : allRows.filter(hasSpendableBalance);
         if (networkFilter !== 'all') {
             next = next.filter((r) => coinFromChainId(r.chainId) === networkFilter);
         }
@@ -251,7 +263,7 @@ export function TokenPicker({
             return { ...r, displayName: `${label} (from ${origin})` };
         });
         return sortByChainThenAsset(next);
-    }, [allRows, networkFilter, kindFilter, tokenQueryTrim]);
+    }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
@@ -286,9 +298,12 @@ export function TokenPicker({
             return undefined;
         }
         let cancelled = false;
+        setPlatformResults([]);
         setPlatformBusy(true);
         const handle = setTimeout(async () => {
-            const chainIds = Object.keys(addressesByChain);
+            const chainIds = Object.keys(addressesByChain).filter((chainId) => (
+                networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+            ));
             const cache = platformCacheRef.current;
             try {
                 const lookups = await Promise.all(chainIds.map(async (chainId) => {
@@ -323,7 +338,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, addressesByChain, messaging, localKeySet]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet]);
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -365,22 +380,21 @@ export function TokenPicker({
     }, [balances]);
 
     const emptyTitle = partialRead
-        ? 'Balances could not be fully loaded'
+        ? 'Incomplete balance data'
         : tokenQueryTrim
             ? 'No matching balances'
             : (networkFilter === 'all'
                 ? (isReceive ? 'No balances to receive against yet' : 'Nothing to send yet')
                 : 'No balances on this network');
     const emptyBody = partialRead
-        ? 'Some of this wallet\'s token balances could not be read just now, so this list may be '
-            + 'incomplete. It is not a statement that you hold nothing. Try again in a moment.'
+        ? 'Some token balances could not be read, so this list may be incomplete.'
         : tokenQueryTrim
-        ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see everything.`
+        ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Pick a chain to display a fresh receive address. Tokens you have not held before can be received on whichever chain they belong to.'
-                : 'Receive coins or tokens first, then come back to send them.')
-            : undefined);
+                ? 'Choose a chain to display a fresh receive address for it.'
+                : 'Sendable coin and token balances appear here after funds are received.')
+            : 'Balances on this network appear here after this wallet receives funds.');
 
     const KIND_OPTIONS = [
         { id: 'all',    label: 'All' },
@@ -393,6 +407,7 @@ export function TokenPicker({
             <input
                 ref={searchRef}
                 type="search"
+                enterKeyHint="search"
                 className={styles.search}
                 placeholder="Search"
                 value={tokenQuery}
@@ -403,6 +418,14 @@ export function TokenPicker({
                 spellCheck={false}
                 aria-label="Search coins or tokens"
             />
+            <div className={styles.networkFilter}>
+                <NetworkFilter
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    value={networkFilter}
+                    onChange={setNetworkFilter}
+                />
+            </div>
             {/* A caller that pins `kindFilter` is stating a
                 protocol constraint, not a default. Rendering the segments
                 anyway would offer a choice the action cannot honour, and

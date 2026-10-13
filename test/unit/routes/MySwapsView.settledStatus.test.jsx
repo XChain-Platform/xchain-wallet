@@ -23,6 +23,7 @@ import { render, cleanup, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MySwapsView, deriveStatus } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -155,7 +156,7 @@ describe('MySwapsView: settled status', () => {
 
         const row = rowFor(section(utils, 'Open swaps'), 702);
         expect(within(row).getByText('Open')).toBeTruthy();
-        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
+        expect(within(row).getByText(`Expires ${formatLocalDateTime(FUTURE)}`)).toBeTruthy();
     });
 
     it('treats a missing swap_status as no information (older explorer compatibility)', async () => {
@@ -200,5 +201,19 @@ describe('deriveStatus with swap_status', () => {
         const row = swapRow(9, { expiration: 1 });
         delete row.swap_status;
         expect(deriveStatus({ ...base, row }, new Set(), 1000)).toBe('expired');
+    });
+});
+
+describe('MySwapsView expiration display', () => {
+    it('does not render a millisecond value as an expiration thousands of years away', async () => {
+        const { messaging } = harness({
+            swaps: [swapRow(730)],
+            details: { 730: swapDetail(730, 'open', String(Date.now())) },
+        });
+        const utils = await open(messaging);
+        const list = section(utils, 'Open swaps');
+        const row = rowFor(list, 730);
+
+        expect(within(row).queryByText(/^Expires /)).toBeNull();
     });
 });
