@@ -17,6 +17,7 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    /* The half-grid addition aligns the toolbar with its neighboring route controls. */
     margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
@@ -30,7 +31,7 @@
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
 }
 
 .search::placeholder {
@@ -110,7 +111,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 700;
     color: var(--xc-accent-text);
-    scroll-margin-top: 56px;
+    scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));
 }
 
 .unreadDivider::before,
@@ -149,17 +150,18 @@
 
 .attachmentLink svg {
     flex: 0 0 auto;
-    width: 1rem;
-    height: 1rem;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 .messageMeta {
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
+    /* The half-grid top inset visually separates metadata from message copy. */
     margin: 2px 0.3rem 0;
     color: var(--xc-text-muted);
-    font-size: 0.65rem;
+    font-size: var(--xc-text-xs);
 }
 
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
@@ -192,7 +194,7 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-inline-end: none;
-    border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
+    border-radius: var(--xc-control-radius) 0 0 var(--xc-control-radius);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -235,6 +237,7 @@
 .convItem {
     display: flex;
     flex-direction: column;
+    /* Half-grid spacing keeps the two conversation lines visually connected. */
     gap: 2px;
     width: 100%;
     text-align: start;
@@ -285,8 +288,8 @@
    iOS-Messages style. Cleared once the thread is opened. */
 .unreadDot {
     flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
     border-radius: 50%;
     background: var(--xc-accent-primary);
     /* Nudge onto the text center so it reads as inline with the name. */

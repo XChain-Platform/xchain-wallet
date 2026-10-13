@@ -6,6 +6,7 @@
 }
 
 .logo {
+    /* The brand mark has no matching size token at its default presentation width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
@@ -23,6 +24,7 @@
     }
 
     .logo {
+        /* The brand mark has no matching size token at its wide presentation width. */
         width: 120px;
     }
 }
@@ -79,13 +81,14 @@
 .passwordToggle {
     --xc-icon-size: var(--xc-icon-md);
     position: absolute;
+    /* This half-grid inset keeps the toggle centered inside the input border. */
     inset-inline-end: 2px;
     top: calc(var(--xc-text-sm) + var(--xc-space-2));
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    min-height: 32px;
+    width: calc(var(--xc-control-h-md) - var(--xc-space-1));
+    min-height: var(--xc-control-h-sm);
     padding: 0;
     color: var(--xc-text-muted);
     background: transparent;
@@ -151,6 +154,7 @@
     color: var(--xc-text-muted);
     cursor: pointer;
     text-decoration: underline;
+    /* The underline needs a text-specific offset below the spacing scale. */
     text-underline-offset: 3px;
     font-family: inherit;
 }
@@ -215,6 +219,7 @@
         }
 
         .logo {
+            /* The compact brand mark has no matching size token. */
             width: 40px;
             margin-bottom: 0;
         }
@@ -256,6 +261,7 @@
 }
 
 :global(html[data-xc-keyboard='open']) .logo {
+    /* The compact brand mark has no matching size token. */
     width: 40px;
     margin-bottom: 0;
 }
