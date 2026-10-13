@@ -14,8 +14,16 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { parse } from '@babel/parser';
+import _traverse from '@babel/traverse';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
+
+const traverse = _traverse.default || _traverse;
+const routeSources = import.meta.glob(
+    '../../../packages/core/src/shared/routes/*.jsx',
+    { query: '?raw', import: 'default', eager: true },
+);
 
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
 const screenCss = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
@@ -24,6 +32,31 @@ const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
+}
+
+function jsxName(node) {
+    if (!node) return '';
+    if (node.type === 'JSXIdentifier') return node.name;
+    if (node.type === 'JSXMemberExpression') return `${jsxName(node.object)}.${jsxName(node.property)}`;
+    return '';
+}
+
+function findNode(node, predicate) {
+    if (!node || typeof node !== 'object') return null;
+    if (predicate(node)) return node;
+    for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) {
+            for (const child of value) {
+                const found = findNode(child, predicate);
+                if (found) return found;
+            }
+        } else {
+            const found = findNode(value, predicate);
+            if (found) return found;
+        }
+    }
+    return null;
 }
 
 afterEach(() => cleanup());
@@ -68,7 +101,7 @@ describe('PageHeader', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
-    it('wraps a long title in a shrinkable lane between fixed actions at 320px', () => {
+    it('truncates a long title between mirrored fixed actions at every width', () => {
         const header = rule(pageHeaderCss, '.header');
         const title = rule(pageHeaderCss, '.title');
         const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
@@ -79,8 +112,75 @@ describe('PageHeader', () => {
         );
         expect(title).toMatch(/overflow-wrap:\s*anywhere/);
         expect(title).toMatch(/white-space:\s*normal/);
-        expect(title).not.toMatch(/text-overflow:\s*ellipsis/);
+        expect(title).toMatch(/-webkit-line-clamp:\s*1/);
+        expect(title).toMatch(/overflow:\s*hidden/);
         expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+        expect(trailingButton).toMatch(/height:\s*var\(--xc-page-header-side\)/);
+        expect(trailingButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+        expect(pageHeaderCss).not.toMatch(/@media/);
+    });
+
+    it('keeps every route on the shared back row and icon-only trailing action contract', () => {
+        let headerCount = 0;
+        const handRolledBackRows = [];
+        const invalidTrailingActions = [];
+
+        for (const [file, source] of Object.entries(routeSources)) {
+            const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
+            traverse(ast, {
+                JSXElement(path) {
+                    const opening = path.node.openingElement;
+                    const name = jsxName(opening.name);
+                    if (['div', 'header'].includes(name)) {
+                        const className = opening.attributes.find(
+                            (attribute) => attribute.type === 'JSXAttribute'
+                                && attribute.name.name === 'className',
+                        );
+                        const usesHeaderClass = findNode(
+                            className?.value,
+                            (node) => node.type === 'MemberExpression'
+                                && node.property?.name === 'header',
+                        );
+                        const containsBackIcon = findNode(
+                            path.node.children,
+                            (node) => node.type === 'JSXOpeningElement'
+                                && jsxName(node.name).endsWith('BackIcon'),
+                        );
+                        if (usesHeaderClass && containsBackIcon) handRolledBackRows.push(file);
+                    }
+                    if (name !== 'PageHeader') return;
+                    headerCount += 1;
+                    const trailing = opening.attributes.find(
+                        (attribute) => attribute.type === 'JSXAttribute'
+                            && attribute.name.name === 'trailing',
+                    );
+                    if (!trailing) return;
+                    const action = findNode(
+                        trailing.value,
+                        (node) => node.type === 'JSXElement'
+                            && jsxName(node.openingElement.name) === 'Button',
+                    );
+                    const attributes = action?.openingElement.attributes || [];
+                    const hasLabel = attributes.some(
+                        (attribute) => attribute.type === 'JSXAttribute'
+                            && attribute.name.name === 'aria-label',
+                    );
+                    const hasIcon = attributes.some(
+                        (attribute) => attribute.type === 'JSXAttribute'
+                            && attribute.name.name === 'icon',
+                    ) || Boolean(findNode(
+                        action?.children,
+                        (node) => node.type === 'JSXOpeningElement'
+                            && jsxName(node.name).startsWith('Icon.'),
+                    ));
+                    if (!action || !hasLabel || !hasIcon) invalidTrailingActions.push(file);
+                },
+            });
+        }
+
+        expect(headerCount).toBeGreaterThan(90);
+        expect(handRolledBackRows).toEqual([]);
+        expect(invalidTrailingActions).toEqual([]);
     });
 });
 

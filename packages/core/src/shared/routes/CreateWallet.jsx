@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
-import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, Screen, Spinner, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, Screen, Spinner, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -22,7 +22,6 @@ import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './CreateWallet.module.css';
-import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -101,13 +100,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         const id = setTimeout(() => {
             if (stage === 'password') passwordRef.current?.focus();
             else if (stage === 'verify') firstQuizInputRef.current?.focus();
-            else {
-                const heading = stageFormRef.current?.querySelector('h1');
-                if (heading instanceof HTMLElement) {
-                    heading.tabIndex = -1;
-                    heading.focus();
-                }
-            }
+            else headingRef.current?.focus();
         }, 0);
         return () => clearTimeout(id);
     }, [stage]);
@@ -268,27 +261,26 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     }
 
     const headClass = isFull ? styles.headFull : styles.headPopup;
-    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
-    // The verify step keeps its in-form step-back beside the submit action.
-    // Omitting the chevron there leaves one Back control and one primary action.
-    const screenHeader = stage === 'verify' ? null : (
-        <div className={pickerStyles.header}>
-            <Button
-                type="button"
-                onClick={handleBack}
-                className={pickerStyles.iconBtn}
-                aria-label={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
-                title={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
-                disabled={stage === 'persisting'}
-            >
-                <Icon.BackIcon />
-            </Button>
-            <span />
-            <span />
-        </div>
+    const headerTitle = stage === 'password'
+        ? (isFull ? 'Create a new wallet' : 'Create wallet')
+        : stage === 'mnemonic'
+            ? (isFull ? 'Write down your recovery phrase' : 'Recovery phrase')
+            : stage === 'verify'
+                ? (isFull ? 'Verify your recovery phrase' : 'Verify phrase')
+                : stage === 'persisting'
+                    ? 'Creating your wallet'
+                    : 'Automatic Donation System';
+    const screenHeader = (
+        <PageHeader
+            onBack={stage === 'verify' ? undefined : handleBack}
+            backLabel={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
+            backDisabled={stage === 'persisting'}
+            title={headerTitle}
+            titleRef={headingRef}
+        />
     );
 
     if (stage === 'ads-notice') {
@@ -297,7 +289,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 onContinue={onCreated}
                 isFull={isFull}
                 headClass={headClass}
-                titleClass={titleClass}
                 subtitleClass={subtitleClass}
                 actionsClass={actionsClass}
             />
@@ -315,7 +306,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         const persistingBody = (
             <div className={styles.persisting} role="status" aria-live="polite">
                 <Spinner size="lg" />
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Creating your wallet</h1>
                 <p className={subtitleClass}>
                     XChain Platform is encrypting your wallet with your password.
                     This can take a minute on some devices. Keep the app open.
@@ -350,6 +340,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 />}
                 actions={(
                     <>
+                        {/* Keep verification's step-back beside submit while the shared header leaves its leading lane empty. */}
                         <Button
                             variant="secondary"
                             type="button"
@@ -369,16 +360,13 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </>
                 )}
             >
-                <header className={headClass}>
-                    <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                        {isFull ? 'Verify your recovery phrase' : 'Verify phrase'}
-                    </h1>
+                <div className={headClass}>
                     <p className={subtitleClass}>
                         {isFull
                             ? 'Enter the requested words from the recovery phrase you wrote down.'
                             : 'Enter the requested words to confirm your recovery phrase.'}
                     </p>
-                </header>
+                </div>
                 {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
                 <ol className={styles.quizList}>
                     {/* Native list items preserve the quiz order within the form. */}
@@ -433,18 +421,13 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </Button>
                 )}
             >
-                <header className={headClass}>
-                    <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                        {isFull
-                            ? 'Write down your recovery phrase'
-                            : 'Recovery phrase'}
-                    </h1>
+                <div className={headClass}>
                     <p className={subtitleClass}>
                         {isFull
                             ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
                             : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
                     </p>
-                </header>
+                </div>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
                 {/* SSC-4 /, decided 2026-08-01: the recovery phrase
                     is NOT copyable, on any shell. A clipboard is readable by
@@ -516,7 +499,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 </Button>
             )}
         >
-            <header className={headClass}>
+            <div className={headClass}>
                 {isFull ? (
                     <img
                         src={branding.logoUrl()}
@@ -525,15 +508,12 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         className={styles.logo}
                     />
                 ) : null}
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                    {isFull ? 'Create a new wallet' : 'Create wallet'}
-                </h1>
                 <p className={subtitleClass}>
                     {isFull
                         ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
                         : 'Your password encrypts this wallet on this device.'}
                 </p>
-            </header>
+            </div>
             <Input
                 label="Wallet name"
                 value={name}

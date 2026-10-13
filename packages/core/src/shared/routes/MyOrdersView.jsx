@@ -27,7 +27,7 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -328,7 +328,16 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            trailing={onCreateOrder ? <Button variant="secondary" size="sm" onClick={onCreateOrder}>New order</Button> : undefined}
+            trailing={onCreateOrder ? (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onCreateOrder}
+                    aria-label="New order"
+                    title="New order"
+                />
+            ) : undefined}
         />
     );
     const wrap = (children) => (
