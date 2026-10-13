@@ -107,6 +107,13 @@ describe('multisig PSBT envelope', () => {
         ['short message hash', () => buildRequestEnvelope({
             kind: 'multisig-request-nonce', sessionRef: { ...SESSION_REF, msgHash: 'ab' },
         })],
+        ['malformed cosigner key', () => buildRequestEnvelope({
+            kind: 'multisig-request-nonce',
+            sessionRef: { ...SESSION_REF, cosignerPubkeys: [ALICE, 'not-a-key'] },
+        })],
+        ['non-hex PSBT', () => buildRequestEnvelope({
+            kind: 'multisig-request-nonce', sessionRef: { ...SESSION_REF, psbtHex: 'not-a-psbt' },
+        })],
         ['missing aggregate nonce', () => buildRequestEnvelope({
             kind: 'multisig-request-partial', sessionRef: SESSION_REF,
         })],
@@ -121,6 +128,7 @@ describe('multisig PSBT envelope', () => {
         ['short partial signature', 'multisig-round-2-reply', { pubkey: ALICE, sig: '11' }],
         ['short public nonce', 'multisig-round-1-reply', { pubkey: ALICE, publicNonce: '11' }],
         ['non-hex classical signature', 'multisig-classical-reply', { pubkey: ALICE, sig: 'not-hex' }],
+        ['odd-length classical signature', 'multisig-classical-reply', { pubkey: ALICE, sig: 'a'.repeat(17) }],
     ])('rejects malformed reply: %s', (_label, kind, contribution, fingerprint = FINGERPRINT) => {
         expect(() => buildReplyEnvelope({ kind, fingerprint, contribution })).toThrow(
             MultisigEnvelopeError,
@@ -145,5 +153,24 @@ describe('multisig PSBT envelope', () => {
         ['valid JSON with invalid envelope', new TextEncoder().encode('{}')],
     ])('rejects malformed encoded input: %s', (_label, bytes) => {
         expect(() => decodeEnvelope(bytes)).toThrow(MultisigEnvelopeError);
+    });
+
+    it('rejects invalid UTF-8 instead of accepting replacement characters', () => {
+        const envelope = buildFinalizedEnvelope({
+            sessionRef: SESSION_REF,
+            txHex: '0200',
+            txid: 'x',
+        });
+        const encoded = encodeEnvelope(envelope);
+        encoded[encoded.lastIndexOf('x'.charCodeAt(0))] = 0xff;
+
+        expect(() => decodeEnvelope(encoded)).toThrow(MultisigEnvelopeError);
+    });
+
+    it('rejects finalized transactions that do not contain whole bytes', () => {
+        expect(() => buildFinalizedEnvelope({
+            sessionRef: SESSION_REF,
+            txHex: 'abc',
+        })).toThrow(MultisigEnvelopeError);
     });
 });

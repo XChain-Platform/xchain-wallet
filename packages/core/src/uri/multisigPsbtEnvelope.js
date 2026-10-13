@@ -67,6 +67,8 @@ export const MULTISIG_ENVELOPE_KINDS = /** @type {const} */ ([
 const HEX_RE = /^[0-9a-f]+$/;
 const isHexLength = (v, byteLen) =>
     typeof v === 'string' && HEX_RE.test(v.toLowerCase()) && v.length === byteLen * 2;
+const isEvenHex = (v) =>
+    typeof v === 'string' && v.length > 0 && v.length % 2 === 0 && HEX_RE.test(v.toLowerCase());
 
 export class MultisigEnvelopeError extends Error {
     constructor(msg) {
@@ -116,14 +118,17 @@ function assertSessionRef(ref) {
     if (!Array.isArray(ref.cosignerPubkeys) || ref.cosignerPubkeys.length < 2) {
         throw new MultisigEnvelopeError('sessionRef.cosignerPubkeys must be ≥ 2 entries');
     }
+    if (!ref.cosignerPubkeys.every((pubkey) => isHexLength(pubkey, 33))) {
+        throw new MultisigEnvelopeError('sessionRef.cosignerPubkeys must be 33-byte hex');
+    }
     if (ref.threshold > ref.cosignerPubkeys.length) {
         throw new MultisigEnvelopeError('sessionRef.threshold must be ≤ cosignerPubkeys.length');
     }
     if (!isHexLength(ref.msgHash, 32)) {
         throw new MultisigEnvelopeError('sessionRef.msgHash must be 32-byte hex');
     }
-    if (typeof ref.psbtHex !== 'string') {
-        throw new MultisigEnvelopeError('sessionRef.psbtHex must be a string');
+    if (!isEvenHex(ref.psbtHex)) {
+        throw new MultisigEnvelopeError('sessionRef.psbtHex must be non-empty, even-length hex');
     }
 }
 
@@ -152,17 +157,16 @@ function assertContribution(kind, contribution) {
             if (!isHexLength(contribution.pubkey, 33)) {
                 throw new MultisigEnvelopeError('contribution.pubkey must be 33-byte hex');
             }
-            if (typeof contribution.sig !== 'string' || !HEX_RE.test(contribution.sig.toLowerCase())) {
-                throw new MultisigEnvelopeError('contribution.sig must be hex');
+            if (!isEvenHex(contribution.sig)) {
+                throw new MultisigEnvelopeError('contribution.sig must be even-length hex');
             }
             if (contribution.sig.length < 16 || contribution.sig.length > 200) {
                 throw new MultisigEnvelopeError('contribution.sig length out of expected range');
             }
             return;
         case 'multisig-finalized':
-            if (typeof contribution.txHex !== 'string'
-                || !HEX_RE.test(contribution.txHex.toLowerCase())) {
-                throw new MultisigEnvelopeError('contribution.txHex must be hex');
+            if (!isEvenHex(contribution.txHex)) {
+                throw new MultisigEnvelopeError('contribution.txHex must be non-empty, even-length hex');
             }
             if (contribution.txid !== undefined
                 && (typeof contribution.txid !== 'string' || contribution.txid.length === 0)) {
@@ -367,7 +371,7 @@ export function decodeEnvelope(bytes) {
         : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let parsed;
     try {
-        parsed = JSON.parse(new TextDecoder().decode(input));
+        parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(input));
     } catch (e) {
         throw new MultisigEnvelopeError(`JSON.parse failed: ${e?.message ?? e}`);
     }
