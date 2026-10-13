@@ -213,7 +213,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const label = m.label || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <button
+                            <Button
                                 key={String(id)}
                                 type="button"
                                 onClick={() => onOpenMarket(chainId, id)}
@@ -228,7 +228,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                 {outcomes.length ? (
                                     <div className={styles.hint}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</div>
                                 ) : null}
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>

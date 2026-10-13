@@ -195,7 +195,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     const screenHeader = (
         <div className={pickerStyles.header}>
-            <button
+            <Button
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
@@ -204,7 +204,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 disabled={stage === 'persisting'}
             >
                 <Icon.BackIcon />
-            </button>
+            </Button>
             <span />
             <span />
         </div>

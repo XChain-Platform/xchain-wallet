@@ -429,7 +429,7 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
     const price = dispenserFillPriceLabel(row, oracleFeeds);
     const status = String(flowsLib.dispenserLiveState(row).status || '-');
     return (
-        <button
+        <Button
             type="button"
             className={styles.entry}
             onClick={onSelect}
@@ -445,7 +445,7 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
                 {row.source ? ` · by ` : ''}
                 {row.source ? <AddressText address={row.source} /> : null}
             </span>
-        </button>
+        </Button>
     );
 }
 

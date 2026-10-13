@@ -774,9 +774,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     ) : null}
                     {recipients.invalid.length > 0 ? (
                         <div className={styles.hint}>
-                            <button type="button" className={styles.back} onClick={() => setShowInvalid((s) => !s)}>
+                            <Button type="button" className={styles.back} onClick={() => setShowInvalid((s) => !s)}>
                                 {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
-                            </button>
+                            </Button>
                             {showInvalid ? (
                                 <ul>{recipients.invalid.map((a, i) => (<li key={i}><code>{a}</code></li>))}</ul>
                             ) : null}

@@ -15,7 +15,7 @@
 // destination (Decentralized Exchange, Marketplace, ...). Reuses
 // AlertsOverlay.module.css for the alert-row styling.
 
-import { EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from '../components/AlertsOverlay.module.css';
 
@@ -44,13 +44,13 @@ export function AlertsRoute({ onBack, alerts = [] }) {
                                 </div>
                                 <div className={styles.alertMessage}>{a.message}</div>
                                 {a.action ? (
-                                    <button
+                                    <Button
                                         type="button"
                                         className={styles.alertAction}
                                         onClick={() => a.action.onSelect()}
                                     >
                                         {a.action.label}
-                                    </button>
+                                    </Button>
                                 ) : null}
                             </li>
                         ))}
