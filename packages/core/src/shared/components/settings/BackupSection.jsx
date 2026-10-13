@@ -843,6 +843,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
                 autoComplete="off"
+                spellCheck={false}
                 aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
