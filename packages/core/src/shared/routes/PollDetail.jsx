@@ -564,7 +564,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         <div style={{ marginTop: '0.75rem' }}>
             <SectionHeader title="Results" />
             {results && results.length ? (
-                <table style={{ width: '100%', fontSize: '0.85rem' }}>
+                <table className={styles.compactTable}>
                     <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
                     <tbody>
                         {results.map((r) => (
@@ -686,7 +686,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
                         {options.map((label, i) => (
                             isSplit ? (
-                                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                                <div key={i} className={styles.choiceRow} style={{ alignItems: 'flex-end' }}>
                                     <div style={{ flex: 1 }}>
                                         <Input label={`${i}: ${label}`} value={splitShares[i] || ''} inputMode="numeric"
                                             onChange={(e) => setSplitShares((prev) => ({ ...prev, [i]: e.target.value }))}
@@ -694,11 +694,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                                     </div>
                                 </div>
                             ) : (
-                                <label key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <label key={i} className={styles.choiceRow}>
                                     <input type="checkbox" checked={approvalChoices.has(i)}
                                         disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
                                         onChange={() => toggleApproval(i)} />
-                                    <span>{i}: {label}</span>
+                                    <span className={styles.choiceText}>{i}: {label}</span>
                                 </label>
                             )
                         ))}

@@ -562,8 +562,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                         const bets = Number(p.bet_count || 0);
                         return (
                             <div key={i} className={styles.listCard} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <span>{i}: {label}</span>
-                                <span>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
+                                <span className={styles.splitValue}>{i}: {label}</span>
+                                <span className={styles.splitValue}>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>
                         );
                     })}
@@ -635,6 +635,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 {outcomes.map((label, i) => (
                                     <Button
                                         key={i}
+                                        style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'center' }}
                                         variant={outcome === i ? 'primary' : 'ghost'}
                                         aria-pressed={outcome === i}
                                         onClick={() => setOutcome(i)}
