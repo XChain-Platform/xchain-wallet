@@ -336,6 +336,34 @@ describe('CreateBetFeedForm: compose and submit', () => {
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
+    it('starts only one unsigned market build when submit is pressed twice', async () => {
+        let resolveBuild;
+        const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
+        const { messaging } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildBetActionPsbtRequest: build,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        const submit = button(utils, /Create unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.click(submit);
+            fireEvent.click(submit);
+            await drain();
+        });
+        expect(build).toHaveBeenCalledTimes(1);
+
+        await domAct(async () => {
+            resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN, fromAddress: OWN });
+            await drain();
+        });
+    });
+
     it('composes through the SDK createMarketParams builder and signs the SAME params', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -626,6 +654,30 @@ describe('BetFeedDetail states what a win would pay', () => {
         await stakeOn(utils, 'Away', '5');
         expect(utils.queryByTestId('bet-projection')).toBeNull();
         expect(button(utils, /Review bet/i)).toBeTruthy();
+    });
+
+    it('starts only one unsigned wager build when submit is pressed twice', async () => {
+        let resolveBuild;
+        const build = vi.fn(() => new Promise((resolve) => { resolveBuild = resolve; }));
+        const { messaging } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildBetActionPsbtRequest: build,
+        });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '5');
+
+        const submit = button(utils, /Create unsigned transaction/i);
+        await domAct(async () => {
+            fireEvent.click(submit);
+            fireEvent.click(submit);
+            await drain();
+        });
+        expect(build).toHaveBeenCalledTimes(1);
+
+        await domAct(async () => {
+            resolveBuild({ psbtHex: '70736274ff00', chainId: CHAIN, fromAddress: OWN });
+            await drain();
+        });
     });
 
     it('does not project or compose a stake below the market minimum', async () => {

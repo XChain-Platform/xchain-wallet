@@ -171,6 +171,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
     const [projected, setProjected] = useState(/** @type {any} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    const [submitting, setSubmitting] = useState(false);
+    const submitLockRef = useRef(false);
     const [settledSplit, setSettledSplit] = useState(/** @type {any[] | null} */ (null));
     const [settledPartial, setSettledPartial] = useState(false);
 
@@ -327,6 +329,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
         if (outcome === null) { setFormError('Choose an outcome.'); return; }
         const amountProblem = betAmountError(amount, feed?.min_amount);
         if (amountProblem) { setFormError(amountProblem); return; }
+        if (submitLockRef.current) return;
+        submitLockRef.current = true;
+        setSubmitting(true);
         setFormError(null);
         const from = sourceDescriptor();
         try {
@@ -376,6 +381,9 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                 // rejection reason is worth showing verbatim when nothing recognises it.
                 fallback: err?.message || 'Bet failed.',
             }));
+        } finally {
+            submitLockRef.current = false;
+            setSubmitting(false);
         }
     }
 
@@ -621,8 +629,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                             actions={(
                                 <Button
                                     variant="primary"
-                                    loading={actionConfirm.composing}
-                                    disabled={actionConfirm.composing}
+                                    loading={submitting || actionConfirm.composing}
+                                    disabled={submitting || actionConfirm.composing}
                                     onClick={placeBet}
                                 >
                                     {actionConfirm.composing

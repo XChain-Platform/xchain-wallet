@@ -183,6 +183,28 @@ describe('BetFeedsList refresh', () => {
             .not.toContain('explorer unreachable');
     });
 
+    it('keeps the newest refresh when an older request resolves last', async () => {
+        let releaseOlder;
+        const older = new Promise((resolve) => { releaseOlder = resolve; });
+        const { messaging } = harness([
+            [market(1248, 'open')],
+            () => older,
+            [market(1300, 'open')],
+        ]);
+        const { container } = await renderList(messaging);
+        expect(container.textContent).toContain('#1248');
+
+        await tick(30_000);
+        await tick(30_000);
+        expect(container.textContent).toContain('#1300');
+
+        releaseOlder({ data: [market(1252, 'open')] });
+        await domAct(async () => { await drain(); });
+
+        expect(container.textContent).toContain('#1300');
+        expect(container.textContent).not.toContain('#1252');
+    });
+
     // Campaign §10.1's negative, which cannot be driven in a browser on this
     // stack: switching to regtest derives an address on ALL THREE chains, so a
     // wallet with none on any BET-capable chain does not exist there. The state
