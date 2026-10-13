@@ -24,7 +24,7 @@
 }
 .back:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 /* Lists and tables (inbox, signing session, settlement) fill the content
@@ -92,7 +92,7 @@
 
 .tickItem:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
     border-radius: var(--xc-radius-sm);
 }
 
@@ -115,6 +115,7 @@
 
 .visuallyHidden {
     position: absolute;
+    /* Preserve the canonical one-pixel clipping box for assistive text. */
     width: 1px;
     height: 1px;
     padding: 0;
@@ -421,7 +422,7 @@
 
 .validationLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .inlineAction {
@@ -449,7 +450,7 @@
 
 .inlineAction:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .validationMessage,
