@@ -117,4 +117,21 @@ describe('extension popup launch state', () => {
         expect(launch.shouldSkipLastViewResume()).toBe(false);
         expect(launch.takeForSession({ state: 'unlocked' })).toBeNull();
     });
+
+    it('does not queue an intent that already applied to an unlocked shell', () => {
+        const launch = createLaunchRouteState();
+        launch.remember('receive', { state: 'unlocked' });
+
+        expect(launch.shouldSkipLastViewResume()).toBe(false);
+        expect(launch.takeForSession({ state: 'unlocked' })).toBeNull();
+    });
+
+    it('clears a queued route when a later intent is invalid', () => {
+        const launch = createLaunchRouteState();
+        launch.remember('send');
+        launch.clear();
+
+        expect(launch.shouldSkipLastViewResume()).toBe(false);
+        expect(launch.takeForSession({ state: 'unlocked' })).toBeNull();
+    });
 });

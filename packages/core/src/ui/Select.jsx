@@ -10,6 +10,7 @@
 
 import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { resolveFieldRequirement } from './fieldRequirement.js';
 
 /**
  * Controlled `<select>` that shares Input's field/label/control styling, so a
@@ -22,6 +23,7 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
+ * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Select = forwardRef(function Select(
@@ -30,18 +32,27 @@ export const Select = forwardRef(function Select(
         hint,
         error,
         id,
+        optional = false,
         size = 'md',
         children,
         className,
         onChange,
+        required = false,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
+        'aria-required': externalRequired,
         ...rest
     },
     ref,
 ) {
     const autoId = useId();
     const selectId = id || autoId;
+    const requirement = resolveFieldRequirement({
+        label,
+        optional,
+        required,
+        ariaRequired: externalRequired,
+    });
     const [dismissedError, setDismissedError] = useState(null);
     const visibleError = error && error !== dismissedError ? error : null;
     const hintId = hint && !visibleError ? `${selectId}-hint` : undefined;
@@ -64,7 +75,7 @@ export const Select = forwardRef(function Select(
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={selectId} className={styles.label}>
-                    {label}
+                    {requirement.label}
                 </label>
             ) : null}
             <select
@@ -73,6 +84,8 @@ export const Select = forwardRef(function Select(
                 className={selectClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                aria-required={requirement.ariaRequired}
+                required={required}
                 onChange={handleChange}
                 {...rest}
             >

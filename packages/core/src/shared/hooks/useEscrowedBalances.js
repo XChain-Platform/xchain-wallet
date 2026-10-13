@@ -20,8 +20,10 @@
 // instead of blanking the rows.
 
 import { useEffect, useMemo, useState } from 'react';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 
 export const ESCROW_REFRESH_MS = 60000;
+export const ESCROW_READ_CACHE_MAX = 32;
 // Upper bound on addresses read per chain when Home shows the whole account
 // rather than one active address per chain.
 export const ESCROW_ADDRESSES_PER_CHAIN = 10;
@@ -30,6 +32,14 @@ export const ESCROW_ADDRESSES_PER_CHAIN = 10;
 // The completed result also lets a later mount hydrate without spending
 // another explorer request inside the refresh window.
 const readsByMessaging = new WeakMap();
+
+function trimEscrowReads(reads) {
+    while (reads.size > ESCROW_READ_CACHE_MAX) {
+        const oldestIdle = [...reads].find(([, read]) => !read.inFlight);
+        if (!oldestIdle) return;
+        reads.delete(oldestIdle[0]);
+    }
+}
 
 function sharedEscrowRead(messaging, targetKey, targets) {
     let reads = readsByMessaging.get(messaging);
@@ -40,6 +50,10 @@ function sharedEscrowRead(messaging, targetKey, targets) {
     let read = reads.get(targetKey);
     if (!read) {
         read = { lastStartedAt: null, inFlight: null, result: null };
+        reads.set(targetKey, read);
+        trimEscrowReads(reads);
+    } else {
+        reads.delete(targetKey);
         reads.set(targetKey, read);
     }
     if (read.inFlight) return read.inFlight;
@@ -64,6 +78,7 @@ function sharedEscrowRead(messaging, targetKey, targets) {
         })
         .finally(() => {
             if (read.inFlight === inFlight) read.inFlight = null;
+            trimEscrowReads(reads);
         });
     read.inFlight = inFlight;
     return inFlight;
@@ -125,9 +140,7 @@ export function useEscrowedBalances({ balances, activeByChain, messaging }) {
     useEffect(() => {
         if (!targetKey || typeof messaging?.getEscrowedTokens !== 'function') return undefined;
         let active = true;
-        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
         const poll = () => {
-            if (hidden()) return;
             sharedEscrowRead(messaging, targetKey, targets).then((pairs) => {
                 if (!active || !pairs) return;
                 setEscrowByKey((prev) => {
@@ -137,14 +150,11 @@ export function useEscrowedBalances({ balances, activeByChain, messaging }) {
                 });
             });
         };
-        poll();
-        const timer = setInterval(poll, ESCROW_REFRESH_MS);
-        const onVisible = () => { if (!hidden()) poll(); };
-        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') poll();
+        const stopPollInterval = startVisibleInterval(poll, ESCROW_REFRESH_MS);
         return () => {
             active = false;
-            clearInterval(timer);
-            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+            stopPollInterval();
         };
     // `targets` is represented by the canonical targetKey, so balance object
     // replacement with the same address set does not restart the poll.

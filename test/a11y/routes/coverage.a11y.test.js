@@ -12,8 +12,11 @@ const routeModules = import.meta.glob(
 const ROUTES_RENDERED_BY_AXE = [
     'ActionDetail',
     'BetFeedDetail',
+    'CreateOrderForm',
     'DispenserDetail',
+    'DispenserForm',
     'ExecuteContractForm',
+    'IssueTokenForm',
     'ListDetail',
     'Onboarding',
     'OnboardingCarousel',
@@ -57,7 +60,6 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'ContractsList',
     'ControllerBindForm',
     'CreateBetFeedForm',
-    'CreateOrderForm',
     'CreatePollForm',
     'CreateWallet',
     'CrossChainOrderForm',
@@ -68,7 +70,6 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'DeployContractForm',
     'DestroyForm',
     'DispenserExplorer',
-    'DispenserForm',
     'DispensersList',
     'DividendForm',
     'GatedPublishForm',
@@ -76,7 +77,6 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'History',
     'Home',
     'ImportWallet',
-    'IssueTokenForm',
     'LinkForm',
     'ListCreateForm',
     'ListForkForm',
@@ -170,6 +170,11 @@ describe('a11y route coverage inventory', () => {
             'Settings',
             'Onboarding',
             'OnboardingCarousel',
+            'IssueTokenForm',
+            'DispenserForm',
+            'CreateOrderForm',
+            'BetFeedDetail',
+            'PollDetail',
         ]));
     });
 });

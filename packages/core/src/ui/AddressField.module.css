@@ -53,7 +53,7 @@
     inset-inline-start: var(--xc-space-3);
     inset-inline-end: 52px;
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
+    min-height: 36px;
     display: flex;
     align-items: center;
     overflow: hidden;
@@ -73,8 +73,7 @@
 .wrappedReadOnly input,
 .wrappedReadOnly .readOnlyValue,
 .wrappedReadOnly .iconButton {
-    min-height: 64px;
-    height: 64px;
+    min-height: 4rem;
 }
 
 .wrappedReadOnly .readOnlyValue {
@@ -91,7 +90,7 @@
 
 .lg .readOnlyValue {
     inset-inline-start: var(--xc-space-4);
-    height: 48px;
+    min-height: 48px;
     font-size: var(--xc-text-lg);
 }
 
