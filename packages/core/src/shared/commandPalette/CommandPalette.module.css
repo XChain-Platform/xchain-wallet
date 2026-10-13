@@ -145,3 +145,42 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
 }
+
+/* Compact containers present the palette as a thumb-reachable bottom sheet.
+   The viewport fallback covers the extension popup, which has no shared
+   layout wrapper to publish data-xc-tier. */
+:global([data-xc-tier='compact']) .overlay {
+    align-items: flex-end;
+    padding: 0;
+}
+
+:global([data-xc-tier='compact']) .panel {
+    max-width: none;
+    max-height: min(85%, var(--xc-viewport-h, 100vh));
+    border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+:global([data-xc-tier='compact']) .escHint {
+    display: none;
+}
+
+@media (max-width: 639px) {
+    .overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .panel {
+        max-width: none;
+        max-height: min(85%, var(--xc-viewport-h, 100vh));
+        border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+        border-bottom: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .escHint {
+        display: none;
+    }
+}
