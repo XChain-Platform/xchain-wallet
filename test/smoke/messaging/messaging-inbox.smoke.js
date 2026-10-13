@@ -161,8 +161,8 @@ assert.ok(/function formatDaySeparator\b/.test(src) && /'Today'/.test(src) && /'
     'day separator labels Today / Yesterday and dates');
 assert.ok(/local\.daySeparator/.test(src),
     'thread renders a day-separator row');
-assert.ok(/function formatTime\b/.test(src),
-    'message bubbles show a per-message time-of-day caption');
+assert.ok(/<RelativeTime timestamp=\{m\.timestamp\}/.test(src),
+    'message bubbles use the shared recent and absolute timestamp display');
 
 // --- 2e. iMessage-style bubbles ---------------------------------------
 

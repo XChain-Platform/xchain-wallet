@@ -15,6 +15,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
@@ -409,10 +410,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const soldTick = row.give_tick || tick;
                                     const payAsset = row.get_tick || row.get_coin || '';
                                     const get = row.get_amount;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
                                             <ListRow
@@ -424,7 +422,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
                                                     </>
                                                 )}
-                                                subtitle={dateLabel || undefined}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );
@@ -460,10 +458,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
                                     const giveQty = row.give_amount ?? row.giveAmount ?? null;
                                     const getQty = row.get_amount ?? row.getAmount ?? null;
-                                    const ts = Number(row.timestamp || row.block_time || 0);
-                                    const dateLabel = ts > 0
-                                        ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                        : '';
+                                    const timestamp = row.timestamp || row.block_time;
                                     const isSell = giveTick.toUpperCase() === tick;
                                     const title = isSell
                                         ? (giveQty != null && getQty != null
@@ -478,7 +473,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                                 className={styles.row}
                                                 leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
                                                 title={title}
-                                                subtitle={dateLabel || undefined}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
                                             />
                                         </li>
                                     );

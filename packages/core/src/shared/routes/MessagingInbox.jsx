@@ -663,7 +663,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     <div className={local.messageMeta}>
                                         {m.timestamp ? (
                                             <span>
-                                                {formatTime(m.timestamp)}
+                                                <RelativeTime timestamp={m.timestamp} />
                                                 {m.method ? ` · ${methodLabel(m.method)}` : ''}
                                             </span>
                                         ) : null}
@@ -1157,19 +1157,6 @@ function methodLabel(method) {
 // addressed to a key we hold.
 function encryptedPlaceholder() {
     return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
-}
-
-// Time-of-day label shown under each message bubble. The date itself lives in
-// the day separator (iMessage-style), so only the time repeats per message.
-function formatTime(unixSeconds) {
-    try {
-        return new Date(unixSeconds * 1000).toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '-';
-    }
 }
 
 // Local calendar-day key (Y-M-D) used to detect when a thread crosses midnight
