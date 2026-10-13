@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let settings;
@@ -108,6 +108,23 @@ describe('shared settings row semantics', () => {
         expect(describedText(motion)).toMatch(/device accessibility setting/i);
         expect(theme.closest('div').style.flexWrap).toBe('wrap');
         expect(motion.closest('div').style.flexWrap).toBe('wrap');
+    });
+
+    it('keeps the saved appearance value and reports a failed update', async () => {
+        update = vi.fn(async () => {
+            throw new Error('appearance.save: E_STORAGE_WRITE');
+        });
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        render(<AppearanceSection />);
+
+        const theme = screen.getByRole('combobox', { name: 'Theme' });
+        fireEvent.change(theme, { target: { value: 'dark' } });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not save appearance settings. Try again.',
+        );
+        await waitFor(() => expect(theme).toHaveValue('system'));
+        consoleError.mockRestore();
     });
 
     it('disambiguates fee controls by chain and connects validation errors', () => {

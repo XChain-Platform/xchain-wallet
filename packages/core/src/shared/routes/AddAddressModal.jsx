@@ -37,6 +37,7 @@ import {
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -184,10 +185,10 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             // A completed iteration is already in the vault, so refresh the
             // parent list even though the modal stays open for the error.
             if (generated > 0) onGenerated?.(generated);
-            setError(
-                err?.message
-                || 'Could not generate addresses. Make sure the wallet is unlocked (or your hardware device is connected).',
-            );
+            setError(userFacingMessage(
+                err,
+                'Could not generate addresses. Make sure the wallet is unlocked or your hardware device is connected.',
+            ));
             setBusy(false);
         }
     }
