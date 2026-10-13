@@ -58,6 +58,7 @@ export const Input = forwardRef(function Input(
         autoCorrect = 'off',
         spellCheck = false,
         inputMode,
+        dir,
         enterKeyHint,
         onKeyDown,
         onKeyUp,
@@ -104,6 +105,9 @@ export const Input = forwardRef(function Input(
         url: 'url',
     }[type]);
     const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
+    const resolvedDir = dir || (resolvedInputMode === 'decimal' || resolvedInputMode === 'numeric'
+        ? 'ltr'
+        : undefined);
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -180,6 +184,7 @@ export const Input = forwardRef(function Input(
                 autoCorrect={autoCorrect}
                 spellCheck={spellCheck}
                 inputMode={resolvedInputMode}
+                dir={resolvedDir}
                 enterKeyHint={resolvedEnterKeyHint}
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}

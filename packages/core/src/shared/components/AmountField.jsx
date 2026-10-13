@@ -139,7 +139,7 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
-                    style={onMax ? { paddingRight: '64px' } : undefined}
+                    style={onMax ? { paddingInlineEnd: '64px' } : undefined}
                 />
                 {onMax ? (
                     <Button
