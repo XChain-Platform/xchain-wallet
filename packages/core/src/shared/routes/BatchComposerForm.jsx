@@ -260,6 +260,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         }
         return constraintError;
     }, [parsedRows, rowErrors, constraintError]);
+    const actionTotalText = `${rows.length} action${rows.length === 1 ? '' : 's'}`;
 
     const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
     const addRow = () => setRows((rs) => (
@@ -509,6 +510,10 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress?.address} /></dd>
+                    <dt className={styles.detailsLabel}>Batch total</dt>
+                    <dd className={styles.detailsValue} data-testid="batch-review-action-total">
+                        {actionTotalText}
+                    </dd>
                 </dl>
 
                 {!composed && !buildError ? <p className={styles.hint}>Composing…</p> : null}
@@ -599,6 +604,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     ))}
                 </select>
             </label>
+            <p className={styles.hint} data-testid="batch-action-total">
+                Batch total: {actionTotalText}
+            </p>
 
             <ul style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-3) 0 0' }}>
                 {rows.map((row, i) => (

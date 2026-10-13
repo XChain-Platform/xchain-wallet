@@ -907,6 +907,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                             ) : null}
                         </>
                     ) : null}
+                    {totalCostText ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Total token cost</dt>
+                            <dd className={styles.detailsValue} data-testid="dividend-review-total-cost">
+                                {totalCostText}
+                            </dd>
+                        </>
+                    ) : null}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate
@@ -966,6 +974,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
+                totalText={totalCostText ? `Total token cost: ${totalCostText}` : undefined}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
