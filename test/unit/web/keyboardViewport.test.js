@@ -18,12 +18,14 @@ import {
     installKeyboardViewport,
     keyboardHeight,
     revealInScroller,
+    resizedForKeyboard,
 } from '../../../packages/web/src/platform/keyboardViewport.js';
 
 /** A window stand-in with a controllable visual viewport. */
 function fakeWindow({ layoutH = 874, vvH = 874, scale = 1 } = {}) {
     const listeners = {};
     const winListeners = {};
+    const docListeners = {};
     const style = new Map();
     const attrs = new Map();
     const vv = {
@@ -44,9 +46,16 @@ function fakeWindow({ layoutH = 874, vvH = 874, scale = 1 } = {}) {
     };
     const win = {
         innerHeight: layoutH,
+        innerWidth: 402,
         scrollY: 0,
         visualViewport: vv,
-        document: { documentElement: root, activeElement: null, body: {} },
+        document: {
+            documentElement: root,
+            activeElement: null,
+            body: {},
+            addEventListener: (t, fn) => { (docListeners[t] ||= []).push(fn); },
+            removeEventListener: (t, fn) => { docListeners[t] = (docListeners[t] || []).filter((f) => f !== fn); },
+        },
         scrollTo: vi.fn(function scrollTo() { win.scrollY = 0; }),
         requestAnimationFrame: (fn) => fn(),
         getComputedStyle: () => ({ overflowY: 'visible' }),
@@ -54,8 +63,65 @@ function fakeWindow({ layoutH = 874, vvH = 874, scale = 1 } = {}) {
         removeEventListener: (t, fn) => { winListeners[t] = (winListeners[t] || []).filter((f) => f !== fn); },
     };
     const fire = (t) => (listeners[t] || []).forEach((fn) => fn());
-    return { win, vv, style, attrs, fire, listeners, winListeners };
+    const fireDoc = (t) => (docListeners[t] || []).forEach((fn) => fn());
+    return { win, vv, style, attrs, fire, fireDoc, listeners, winListeners, docListeners };
 }
+
+/** A focused text input, as the WebView would report it. */
+const textInput = () => ({ tagName: 'INPUT', getAttribute: () => 'text', isContentEditable: false });
+
+describe('Android: the WebView resizes for the keyboard', () => {
+    it('hides the tab bar while a field has focus and the window has shrunk', () => {
+        const { win, vv, attrs, fire, style } = fakeWindow({ layoutH: 760, vvH: 760 });
+        const stop = installKeyboardViewport(win);
+        win.document.activeElement = textInput();
+        win.innerHeight = 420;
+        vv.height = 420;
+        win.document.documentElement.clientHeight = 420;
+        fire('resize');
+        expect(attrs.get('data-xc-keyboard')).toBe('open');
+        // The WebView already fitted the shell; the height override stays off.
+        expect(style.has('--xc-viewport-h')).toBe(false);
+        win.innerHeight = 760;
+        vv.height = 760;
+        win.document.documentElement.clientHeight = 760;
+        fire('resize');
+        expect(attrs.has('data-xc-keyboard')).toBe(false);
+        stop();
+    });
+
+    it('shows the tab bar again when focus leaves the field with the window still short', () => {
+        const { win, vv, attrs, fire, fireDoc } = fakeWindow({ layoutH: 760, vvH: 760 });
+        installKeyboardViewport(win);
+        win.document.activeElement = textInput();
+        win.innerHeight = 420;
+        vv.height = 420;
+        win.document.documentElement.clientHeight = 420;
+        fire('resize');
+        win.document.activeElement = null;
+        fireDoc('focusout');
+        expect(attrs.has('data-xc-keyboard')).toBe(false);
+    });
+
+    it('reads a rotation as a new full height, not a keyboard', () => {
+        const { win, vv, attrs, fire } = fakeWindow({ layoutH: 760, vvH: 760 });
+        installKeyboardViewport(win);
+        win.document.activeElement = textInput();
+        win.innerWidth = 760;
+        win.innerHeight = 360;
+        vv.height = 360;
+        win.document.documentElement.clientHeight = 360;
+        fire('resize');
+        expect(attrs.has('data-xc-keyboard')).toBe(false);
+    });
+
+    it('treats checkboxes and buttons as no keyboard', () => {
+        expect(resizedForKeyboard(420, 760, { tagName: 'INPUT', getAttribute: () => 'checkbox' })).toBe(false);
+        expect(resizedForKeyboard(420, 760, { tagName: 'BUTTON', getAttribute: () => null })).toBe(false);
+        expect(resizedForKeyboard(420, 760, { tagName: 'TEXTAREA', getAttribute: () => null })).toBe(true);
+        expect(resizedForKeyboard(720, 760, textInput())).toBe(false);
+    });
+});
 
 describe('keyboardHeight', () => {
     it('measures the keyboard against the layout viewport', () => {

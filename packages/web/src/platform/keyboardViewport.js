@@ -25,6 +25,12 @@
 // also carries data-xc-keyboard="open", which hides the bottom tab bar: with
 // the app header and a page title bar above it, the bar left the field about
 // 40pt of room on an iPhone 17 Pro.
+//
+// Android's WebView shrinks the window instead, so the shell refits on its
+// own but the tab bar rode up above the keyboard, a strip of tappable tabs
+// between the field and the keys (LG K51, 2026-10-12). There the keyboard is
+// read as "a text field has focus and the window is clearly shorter than its
+// full height at this width", and only the tab bar is hidden.
 
 /**
  * Below this the difference is browser chrome settling, not a keyboard. The
@@ -51,6 +57,36 @@ export function keyboardHeight(win) {
     if (typeof vv.scale === 'number' && Math.abs(vv.scale - 1) > 0.01) return 0;
     const covered = win.document.documentElement.clientHeight - vv.height;
     return covered >= KEYBOARD_MIN_PX ? Math.round(covered) : 0;
+}
+
+/**
+ * True for an element the on-screen keyboard types into.
+ *
+ * @param {Element | null} el
+ * @returns {boolean}
+ */
+export function isTextEntry(el) {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA') return true;
+    if (tag !== 'INPUT') return false;
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    return !['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(type);
+}
+
+/**
+ * Whether a resizing WebView (Android) has given up height to a keyboard:
+ * a text field has focus and the window is at least KEYBOARD_MIN_PX shorter
+ * than the tallest it has been at this width.
+ *
+ * @param {number} innerHeight
+ * @param {number} fullHeight   tallest innerHeight seen at the current width
+ * @param {Element | null} active
+ * @returns {boolean}
+ */
+export function resizedForKeyboard(innerHeight, fullHeight, active) {
+    return isTextEntry(active) && fullHeight - innerHeight >= KEYBOARD_MIN_PX;
 }
 
 /** Gap kept between a revealed field and its scroller's edge. */
@@ -95,10 +131,31 @@ export function installKeyboardViewport(win = window) {
     if (!vv) return () => {};
     const root = win.document.documentElement;
     let fitted = false;
+    let resized = false;
+    // Tallest window seen at the current width: a rotation changes both, a
+    // keyboard only the height.
+    let fullWidth = win.innerWidth;
+    let fullHeight = win.innerHeight;
 
     const update = () => {
+        if (win.innerWidth !== fullWidth) {
+            fullWidth = win.innerWidth;
+            fullHeight = win.innerHeight;
+        } else if (win.innerHeight > fullHeight) {
+            fullHeight = win.innerHeight;
+        }
         const covered = keyboardHeight(win);
+        if (covered === 0 && !fitted) {
+            const open = resizedForKeyboard(win.innerHeight, fullHeight, win.document.activeElement);
+            if (open !== resized) {
+                resized = open;
+                if (open) root.setAttribute('data-xc-keyboard', 'open');
+                else root.removeAttribute('data-xc-keyboard');
+            }
+            return;
+        }
         if (covered > 0) {
+            resized = false;
             root.style.setProperty(
                 '--xc-viewport-h',
                 `calc(${Math.round(vv.height)}px - env(safe-area-inset-top, 0px))`,
@@ -123,10 +180,17 @@ export function installKeyboardViewport(win = window) {
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     win.addEventListener('scroll', update, { passive: true });
+    // Focus moving off a field with the keyboard still up (or onto one after
+    // the resize) changes the answer without a resize event.
+    win.document.addEventListener('focusin', update);
+    win.document.addEventListener('focusout', update);
     return () => {
         vv.removeEventListener('resize', update);
         vv.removeEventListener('scroll', update);
         win.removeEventListener('scroll', update);
+        win.document.removeEventListener('focusin', update);
+        win.document.removeEventListener('focusout', update);
+        if (resized) root.removeAttribute('data-xc-keyboard');
         if (fitted) {
             root.style.removeProperty('--xc-viewport-h');
             root.removeAttribute('data-xc-keyboard');
