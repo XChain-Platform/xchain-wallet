@@ -391,6 +391,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const [toAddress, setToAddress] = useState(prefill?.address || '');
     const [tick, setTick] = useState(prefill?.tick || '');
     const [amount, setAmount] = useState(prefill?.amount || '');
+    const [maxActive, setMaxActive] = useState(false);
+    const [maxBusy, setMaxBusy] = useState(false);
+    const [maxNote, setMaxNote] = useState(/** @type {string | null} */ (null));
+    const maxRequestRef = useRef(0);
+    const maxContextRef = useRef(/** @type {string | null} */ (null));
+    const cancelMax = useCallback(() => {
+        setMaxActive(false);
+        setMaxNote(null);
+        maxRequestRef.current += 1;
+        setMaxBusy(false);
+    }, []);
     const [memo, setMemo] = useState(prefill?.memo || '');
     const [amountInputMode, setAmountInputMode] = useState(
         /** @type {'coin' | 'fiat'} */ ('coin'),
@@ -458,13 +469,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
+        cancelMax();
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
         if (typeof v.tick === 'string') setTick(v.tick);
         if (typeof v.amount === 'string') setAmount(v.amount);
         if (typeof v.memo === 'string') setMemo(v.memo);
         setDraftPending(true);
-    }, [draft]);
+    }, [draft, cancelMax]);
     const dismissDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
@@ -654,7 +666,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (detected.type === 'bip21') {
             e.preventDefault();
             const parts = detected.parts;
-            if (parts.amount) setAmount(parts.amount);
+            if (parts.amount) {
+                cancelMax();
+                setAmount(parts.amount);
+            }
             const tickParam = parts.params?.tick;
             if (typeof tickParam === 'string' && tickParam.length > 0) {
                 // Pasted text is the same untrusted-URI class as
@@ -680,7 +695,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
             if (intent.address) applyRecipient(intent.address, intent.chainId || chainId);
             if (intent.tick) setTick(intent.tick.toUpperCase());
-            if (intent.amount) setAmount(intent.amount);
+            if (intent.amount) {
+                cancelMax();
+                setAmount(intent.amount);
+            }
             if (intent.memo) setMemo(intent.memo);
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
@@ -704,7 +722,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
             .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste; verify the address before sending.'); })
             .catch(() => { /* silent */ });
-    }, [chainId]);
+    }, [chainId, cancelMax]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
@@ -932,8 +950,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }, [amountFiatRate, amountInputMode]);
 
     const onCoinInputChange = useCallback((value) => {
+        cancelMax();
         setAmount(value);
-    }, []);
+    }, [cancelMax]);
 
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -954,6 +973,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // the field from accepting "1.2.3" or random chars while still
         // allowing in-progress entries like "" / "." / "1.".
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        cancelMax();
         if (amountInputMode === 'fiat') {
             setFiatAmount(stripped);
             if (!amountFiatRate) {
@@ -976,7 +996,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 }
             });
         }
-    }, [amountInputMode, amountFiatRate]);
+    }, [amountInputMode, amountFiatRate, cancelMax]);
 
     const toggleAmountInputMode = useCallback(() => {
         if (!amountFiatRate) return;
@@ -1008,9 +1028,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // Never propose a "small test" larger than what the user asked to send.
         const reduced = lifted < amtSats ? lifted : amtSats;
         const display = decimalStringFromSats(reduced);
+        cancelMax();
         setAmount(display);
         setStage('form');
-    }, [amount, chainId]);
+    }, [amount, chainId, cancelMax]);
 
     // Latest-tick ref so the chainId effect below can preserve a
     // non-empty tick without subscribing to every keystroke.
@@ -1468,6 +1489,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         };
     }, [previewBalances.sdkShape, tick]);
 
+    const nativeSourceBalance = useMemo(() => {
+        if (!previewBalances.sdkShape) return null;
+        const nativeTicker = String(previewBalances.sdkShape.native?.tick || '').toUpperCase();
+        if (!nativeTicker) return null;
+        return decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            .find((balance) => String(balance.tick || '').toUpperCase() === nativeTicker) || null;
+    }, [previewBalances.sdkShape]);
+
     const [otherAddressHasTick, setOtherAddressHasTick] = useState(
         /** @type {boolean | null} */ (null),
     );
@@ -1538,10 +1567,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             + 'whole wallet, so pick the address that holds it in the From field above.';
     }, [previewBalances, sourceBalance, tick, otherAddressHasTick]);
 
-    // Max is a round trip now, so the button has to be able to say it is
-    // working. The wait is one encoder call, but it is a real one.
-    const [maxBusy, setMaxBusy] = useState(false);
-
     /**
      * The amount to fill in for "send everything", priced by the encoder that
      * will build the transaction.
@@ -1566,7 +1591,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // one. Before it is filled the static estimate stands, exactly as before.
         const to = toAddress.trim();
         if (!to || destinationAddressError(to, descriptor)) return null;
-        setMaxBusy(true);
         try {
             const quote = await messaging.quoteMaxSendable({
                 walletId,
@@ -1587,51 +1611,109 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             });
             if (!quote || typeof quote.maxSats !== 'string') return null;
             const sats = BigInt(quote.maxSats);
-            return sats > 0n ? sats : null;
+            return sats > 0n ? { ...quote, maxSats: sats } : null;
         } catch {
             // A quote is an optimisation, never a gate: a failed one must not be
             // able to stop the user filling the field.
             return null;
-        } finally {
-            setMaxBusy(false);
         }
     }, [
         isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend,
         changeAddress, coinControlEnabled, selectedUtxos, feePerKb,
     ]);
 
-    const onMax = useCallback(async () => {
-        if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
+    const applyMax = useCallback(async () => {
         if (!sourceBalance || !sourceBalance.amount) return;
+        const requestId = maxRequestRef.current + 1;
+        maxRequestRef.current = requestId;
+        setMaxBusy(true);
         let display;
+        let note;
         if (isNativeSend) {
             // Exact string/BigInt math: this string is what gets signed, and a
             // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
             // by whole sats, leaving dust behind or overshooting the balance.
             const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
-            if (balanceSats == null || balanceSats <= 0n) return;
+            if (balanceSats == null || balanceSats <= 0n) {
+                setMaxBusy(false);
+                return;
+            }
             let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
+            if (requestId !== maxRequestRef.current) return;
             if (quoted != null) {
-                maxSats = quoted;
+                maxSats = quoted.maxSats;
             } else if (feeEstimate) {
                 const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
                 if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
             }
+            const floor = BigInt(dustThresholdForCoin(descriptor?.coin) || 0);
+            const tickerUpper = nativeTickerFor(descriptor) || tick.trim().toUpperCase();
+            if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
+                setMaxNote(floor > 0n
+                    ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor)} `
+                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`
+                    : 'The selected network fee uses the available balance, so Max cannot create a payment.');
+                setMaxBusy(false);
+                return;
+            }
             display = decimalStringFromSats(maxSats);
+            note = 'Max sends the spendable balance after the selected network fee. '
+                + 'An uneconomical dust input may remain at this address.';
         } else {
             // A TOKEN balance is not satoshi-denominated and pays no coin fee out of itself,
             // so it is swept verbatim at the tick's own divisibility. The 8-dp sats path
             // truncated anything finer.
             display = exactTokenMaxAmount(sourceBalance.amount);
-            if (display == null) return;
+            if (display == null) {
+                setMaxBusy(false);
+                return;
+            }
+            const nativeTicker = nativeTickerFor(descriptor) || 'native coin';
+            const feeAmount = feeEstimate?.coinAmount;
+            const nativeAmount = nativeSourceBalance?.amount;
+            const feeSats = feeAmount ? exactSatsBigIntFromDecimalString(feeAmount) : null;
+            const nativeSats = nativeAmount ? exactSatsBigIntFromDecimalString(nativeAmount) : null;
+            if (feeSats != null && nativeSats != null && nativeSats < feeSats) {
+                note = `Max sends the full ${tick.trim().toUpperCase()} balance without spending it on fees. `
+                    + `This address has ${nativeAmount} ${nativeTicker}, below the estimated ${feeAmount} `
+                    + `${nativeTicker} network fee.`;
+            } else {
+                note = `Max sends the full ${tick.trim().toUpperCase()} balance and keeps the native coin `
+                    + `separate for the network fee${feeAmount ? ` (estimated ${feeAmount} ${nativeTicker})` : ''}.`;
+            }
         }
+        if (requestId !== maxRequestRef.current) return;
         setAmount(display);
+        setMaxNote(note);
         if (amountInputMode === 'fiat' && amountFiatRate) {
             const value = coinToFiatExact(display, amountFiatRate);
             setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
         }
-    }, [maxBusy, sourceBalance, isNativeSend, feeEstimate, quoteMaxSats, amountInputMode, amountFiatRate]);
+        if (requestId === maxRequestRef.current) setMaxBusy(false);
+    }, [
+        sourceBalance, isNativeSend, quoteMaxSats, feeEstimate, descriptor, tick,
+        nativeSourceBalance, amountInputMode, amountFiatRate,
+    ]);
+
+    const maxContext = [
+        chainId || '', fromAddress?.address || '', toAddress.trim(), tick.trim().toUpperCase(),
+        feePerKb ?? 'default', rbfForSend ? 'rbf' : 'final', changeAddress?.address || '',
+        coinControlEnabled ? [...selectedUtxoKeys].sort().join(',') : 'all',
+    ].join('|');
+
+    const onMax = useCallback(() => {
+        if (maxBusy) return;
+        setMaxActive(true);
+        maxContextRef.current = maxContext;
+        applyMax();
+    }, [maxBusy, maxContext, applyMax]);
+
+    useEffect(() => {
+        if (!maxActive || maxContextRef.current === maxContext) return;
+        maxContextRef.current = maxContext;
+        applyMax();
+    }, [maxActive, maxContext, applyMax]);
 
     // PC-52: the simulator models ONE leg. For a multi-recipient send of a
     // single token that is still exact (the source-side delta is the sum, and
@@ -2257,6 +2339,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
             : null;
         const sendAnother = () => {
+            cancelMax();
             setStage('form');
             setAmount('');
             setFiatAmount('');
@@ -2903,6 +2986,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 }).replace(/\s+/g, ' ').trim()
                 }
             />
+            {maxNote ? (
+                <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
             {/* PC-52: extra recipients. Each row is another leg of the SAME
                 transaction (SEND v1, or v2 when the rows carry their own
                 token), so the recipients share one network fee instead of
