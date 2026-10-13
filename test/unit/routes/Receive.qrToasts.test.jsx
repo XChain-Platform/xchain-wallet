@@ -105,6 +105,29 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('adds and edits the label of the receive address shown', async () => {
+        const unlabeled = { ...ADDRESS, label: '' };
+        const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [unlabeled] }),
+            getNewestAddress: async () => unlabeled,
+            setAddressLabel,
+        });
+
+        const label = await screen.findByRole('textbox', { name: 'Address label' });
+        expect(label).toHaveValue('');
+        fireEvent.change(label, { target: { value: '  Client invoices  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
+
+        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a1', 'Client invoices'));
+        expect(label).toHaveValue('Client invoices');
+
+        fireEvent.change(label, { target: { value: 'Invoice 204' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
+        await waitFor(() => expect(setAddressLabel).toHaveBeenLastCalledWith('a1', 'Invoice 204'));
+        expect(setAddressLabel).toHaveBeenCalledTimes(2);
+    });
+
     it('renders a four-module quiet zone at the measured device-pixel width', async () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         const originalDevicePixelRatio = window.devicePixelRatio;
@@ -275,9 +298,7 @@ describe('Receive QR copy and share toasts', () => {
         await clickWhenEnabled(/Share QR/);
 
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-        expect(writeText).toHaveBeenCalledWith(
-            'bitcoin:bcrt1qexample?chain=bitcoin-regtest&feePriority=normal&label=Daily%20deposits',
-        );
+        expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample');
         expect(showToast).toHaveBeenCalledWith({
             message: 'Share unavailable. Payment request copied to clipboard.',
         });

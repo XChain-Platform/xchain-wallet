@@ -43,13 +43,13 @@ function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp,
     };
 }
 
-function mountHistory(rowsByChain) {
+function mountHistory(rowsByChain, addressesByChain = {
+    [LTC]: [{ address: LTC_ADDRESS }],
+    [DOGE]: [{ address: DOGE_ADDRESS }],
+}) {
     let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
     const messaging = {
-        getAddressesByChain: vi.fn().mockResolvedValue({
-            [LTC]: [{ address: LTC_ADDRESS }],
-            [DOGE]: [{ address: DOGE_ADDRESS }],
-        }),
+        getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
         getAddressHistory: vi.fn(({ chainId }) => Promise.resolve(rowsByChain[chainId] || [])),
         getLinksForAddress: vi.fn().mockResolvedValue([]),
         getAddressMempool: vi.fn().mockResolvedValue([]),
@@ -97,6 +97,21 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('shows a receive address label only on incoming payments to that address', async () => {
+        const sender = 'mtkxExternalSender1111111111111111111111';
+        mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender }),
+                historyRow({ actionIndex: 31, timestamp: secondsAt(-1), tick: 'BTC', source: LTC_ADDRESS }),
+            ],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS, label: 'Client invoices' }],
+        });
+
+        expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
+        expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
+    });
+
     it('combines every filter dimension and preserves the controls across a refresh poll', async () => {
         const rows = {
             [LTC]: [
