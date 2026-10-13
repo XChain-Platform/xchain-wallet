@@ -45,6 +45,20 @@ describe('clampShift', () => {
         expect(clampShift(-30, 400, 360)).toBe(30 + M);
         expect(clampShift(50, 400, 360)).toBe(M - 50);
     });
+
+    it.each([360, 411, 600, 900, 1280])(
+        'keeps settings and scan surfaces inside a %ipx viewport',
+        (viewport) => {
+            for (const box of [
+                { left: -80, width: Math.min(320, viewport - (2 * M)) },
+                { left: viewport - 80, width: 184 },
+            ]) {
+                const shiftedLeft = box.left + clampShift(box.left, box.width, viewport);
+                expect(shiftedLeft).toBeGreaterThanOrEqual(M);
+                expect(shiftedLeft + box.width).toBeLessThanOrEqual(viewport - M);
+            }
+        },
+    );
 });
 
 describe('HeaderSettingsButton popover stays on screen', () => {

@@ -8,15 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The account/wallet switcher is promoted into the persistent
-// AppHeader. Before this, HeaderSettingsButton was defined but never
-// rendered anywhere, so switching account meant a walk through
-// Settings -> Accounts (advanced). These guards pin both halves: the
-// header mounts the gear when a host wires a switch surface, and the
-// gear itself degrades cleanly when only some sections are wired.
+// The persistent AppHeader exposes account, wallet, network, and global
+// actions without sending the user through an advanced settings route.
+// These guards pin the optional settings sections and the compact header's
+// labels, tooltips, source order, and width budget.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
@@ -28,6 +28,10 @@ afterEach(() => {
 
 const chainRegistry = registryLib.defaultRegistry();
 const COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
+const appHeaderCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/components/AppHeader.module.css'),
+    'utf8',
+);
 
 const gear = () => screen.queryByRole('button', { name: 'Settings' });
 
@@ -119,6 +123,63 @@ describe('AppHeader settings gear', () => {
     });
 });
 
+describe('AppHeader action row', () => {
+    const allActions = {
+        onOpenWalletPicker: () => {},
+        onCommandPalette: () => {},
+        onScan: () => {},
+        onManageAddresses: () => {},
+        onViewAddress: () => {},
+        onLock: () => {},
+        platformCurrent: 'wallet',
+        onMenuOpen: () => {},
+    };
+
+    it('gives every icon action a label and tooltip in a sensible focus order', () => {
+        render(<AppHeader {...allActions} />);
+        const header = screen.getByRole('region', { name: 'App header' });
+        const buttons = within(header).getAllByRole('button');
+
+        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'Settings',
+            'Open command palette',
+            'Scan and addresses',
+            'Lock wallet',
+            'XChain platform sites',
+            'Open menu',
+        ]);
+        expect(buttons.every((button) => Boolean(button.getAttribute('title')))).toBe(true);
+        expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
+    });
+
+    it('keeps the fully populated action row on one line at every audited width', () => {
+        const rightRule = /\.right\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
+        expect(rightRule).toMatch(/gap:\s*var\(--xc-space-1\)/);
+        expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
+
+        // 58px logo + 12px group gap + six 38px controls + five 4px
+        // action gaps + 24px horizontal padding leaves 18px at 360px.
+        const occupiedWidth = 58 + 12 + (6 * 38) + (5 * 4) + 24;
+        for (const width of [360, 411, 600, 900, 1280]) {
+            expect(occupiedWidth, `${width}px header`).toBeLessThanOrEqual(width);
+        }
+    });
+
+    it('returns focus to the scan trigger when Escape closes its menu', () => {
+        render(<AppHeader onScan={() => {}} onManageAddresses={() => {}} />);
+        const trigger = screen.getByRole('button', { name: 'Scan and addresses' });
+        fireEvent.click(trigger);
+        const item = screen.getByRole('menuitem', { name: 'Scan' });
+        expect(item).toHaveAttribute('title', 'Scan');
+        item.focus();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+    });
+});
+
 describe('HeaderSettingsButton section gating', () => {
     it('renders without a network section when the filter props are absent', () => {
         render(
@@ -144,8 +205,12 @@ describe('HeaderSettingsButton section gating', () => {
         );
         fireEvent.click(gear());
         expect(screen.getByText('Chain filter')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { expanded: false, name: /All networks/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
+        expect(networkTrigger).toHaveAttribute('title', 'All networks');
+        fireEvent.click(networkTrigger);
+        const litecoin = screen.getByRole('option', { name: /Litecoin/ });
+        expect(litecoin).toHaveAttribute('title', 'Litecoin');
+        fireEvent.click(litecoin);
         expect(onNetworkFilterChange).toHaveBeenCalledWith('litecoin');
     });
 
@@ -217,6 +282,25 @@ describe('HeaderSettingsButton section gating', () => {
             />,
         );
         expect(gear().className).not.toBe(plain);
+    });
+
+    it('returns focus to the settings trigger when Escape closes its popover', () => {
+        render(
+            <HeaderSettingsButton
+                activeWallet={{ id: 'w1', name: 'Main' }}
+                onOpenWalletPicker={() => {}}
+            />,
+        );
+        const trigger = gear();
+        fireEvent.click(trigger);
+        const wallet = screen.getByRole('button', { name: 'Main' });
+        expect(wallet).toHaveAttribute('title', 'Main');
+        wallet.focus();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
     });
 
     it('does not treat a stale network filter as active when the section is unwired', () => {
