@@ -33,7 +33,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useEffect, useState } from 'react';
-import { Button, EmptyState, Input, Select } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, Select, Switch } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -47,7 +47,7 @@ import {
     SOUND_PREVIEW_EVENT,
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
-import { ROW, ROW_HINT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and
@@ -246,13 +246,15 @@ export function NotificationsSection({ walletId } = {}) {
             <PermissionRow />
             {NOTIFICATION_FLAGS.map((f) => (
                 <div key={f.key} style={STACK}>
-                    <ToggleRow
-                        label={f.label}
-                        hint={f.hint}
-                        checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
-                        disabled={pendingKey !== null}
-                        onChange={(v) => onToggle(f.key, f.label, v)}
-                    />
+                    <div style={ROW}>
+                        <Switch
+                            label={f.label}
+                            description={f.hint}
+                            checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
+                            disabled={pendingKey !== null}
+                            onChange={(event) => onToggle(f.key, f.label, event.target.checked)}
+                        />
+                    </div>
                     <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
                     {f.key === 'priceAlerts' ? (
                         <PriceAlertsManager
@@ -333,12 +335,14 @@ function SoundsBlock({ settings, update }) {
 
     return (
         <div style={STACK}>
-            <ToggleRow
-                label="Notification sounds"
-                hint="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
-                checked={enabled}
-                onChange={onToggle}
-            />
+            <div style={ROW}>
+                <Switch
+                    label="Notification sounds"
+                    description="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
+                    checked={enabled}
+                    onChange={(event) => onToggle(event.target.checked)}
+                />
+            </div>
             <NotificationSaveError
                 message={saveError === 'enabled' ? 'Could not save the notification sound setting. Try again.' : null}
             />
@@ -426,12 +430,14 @@ function QuietHoursRow({ settings, update }) {
 
     return (
         <div style={STACK}>
-            <ToggleRow
-                label="Quiet hours"
-                hint="Pause all notifications, including price alerts, during a daily time window."
-                checked={qh.enabled === true}
-                onChange={onToggle}
-            />
+            <div style={ROW}>
+                <Switch
+                    label="Quiet hours"
+                    description="Pause all notifications, including price alerts, during a daily time window."
+                    checked={qh.enabled === true}
+                    onChange={(event) => onToggle(event.target.checked)}
+                />
+            </div>
             <NotificationSaveError
                 message={saveError === 'enabled' ? 'Could not save quiet hours. Try again.' : null}
             />
