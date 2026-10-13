@@ -59,6 +59,7 @@ import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
@@ -878,11 +879,14 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     <input
                         type="number"
                         inputMode="numeric"
+                        enterKeyHint="go"
+                        autoComplete="off"
                         min={1}
                         max={100}
                         step={1}
                         value={gapLimit}
                         onChange={(e) => setGapLimit(e.target.value)}
+                        onWheel={blurNumberInputOnWheel}
                         aria-label="Addresses to check"
                         style={{ ...passwordStyle, width: 70 }}
                     />

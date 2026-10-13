@@ -40,6 +40,7 @@ import {
     Status,
     STACK,
 } from './_settingsPrimitives.jsx';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
@@ -179,11 +180,15 @@ function ClipboardAutoClearRow({ settings, update }) {
             </div>
             <input
                 type="number"
+                inputMode="numeric"
+                enterKeyHint="done"
+                autoComplete="off"
                 min={CLIPBOARD_AUTO_CLEAR_MIN}
                 max={CLIPBOARD_AUTO_CLEAR_MAX}
                 step="1"
                 value={current}
                 onChange={onChange}
+                onWheel={blurNumberInputOnWheel}
                 aria-label="Clipboard auto-clear seconds"
                 style={{ ...INPUT, width: '6rem' }}
             />
