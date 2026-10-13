@@ -9,9 +9,12 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { useRef, useEffect } from 'react';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
+import { Select } from '../../../packages/core/src/ui/Select.jsx';
+import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
 
 describe('<Input>', () => {
     it('associates label via htmlFor / id', () => {
@@ -19,6 +22,19 @@ describe('<Input>', () => {
         const input = screen.getByLabelText('Email');
         expect(input).toBeInTheDocument();
         expect(input.tagName).toBe('INPUT');
+    });
+
+    it('associates labels with textarea and select controls', () => {
+        render(
+            <>
+                <Textarea label="Notes" />
+                <Select label="Network" defaultValue="mainnet">
+                    <option value="mainnet">Mainnet</option>
+                </Select>
+            </>,
+        );
+        expect(screen.getByLabelText('Notes').tagName).toBe('TEXTAREA');
+        expect(screen.getByLabelText('Network').tagName).toBe('SELECT');
     });
 
     it('renders hint and ties it via aria-describedby', () => {
@@ -37,11 +53,28 @@ describe('<Input>', () => {
         const input = screen.getByLabelText('Email');
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(screen.getByRole('alert')).toHaveTextContent('Required');
-        // Hint hidden when error is present (intentional; avoids dual messages).
         expect(screen.queryByText('Use work email')).toBeNull();
         const describedIds = input.getAttribute('aria-describedby').split(' ');
         expect(describedIds).toHaveLength(1);
         expect(document.getElementById(describedIds[0])).toHaveTextContent('Required');
+    });
+
+    it('keeps caller descriptions alongside generated field descriptions', () => {
+        render(
+            <>
+                <div id="requirements">Must be unique</div>
+                <Textarea
+                    label="Handle"
+                    hint="Publicly visible"
+                    aria-describedby="requirements"
+                />
+            </>,
+        );
+        const textarea = screen.getByLabelText('Handle');
+        const descriptions = textarea.getAttribute('aria-describedby').split(' ');
+        expect(descriptions).toContain('requirements');
+        expect(descriptions.map((id) => document.getElementById(id)?.textContent))
+            .toEqual(['Must be unique', 'Publicly visible']);
     });
 
     it('omits aria-invalid when there is no error', () => {
@@ -88,6 +121,62 @@ describe('<Input>', () => {
         expect(onChange).toHaveBeenCalledOnce();
     });
 
+    it.each([
+        ['input', <Input label="Name" hint="Help" error="Required" defaultValue="" />],
+        ['textarea', <Textarea label="Name" hint="Help" error="Required" defaultValue="" />],
+        ['select', (
+            <Select label="Name" hint="Help" error="Required" defaultValue="">
+                <option value="">Choose</option>
+                <option value="one">One</option>
+            </Select>
+        )],
+    ])('clears %s invalid state and error on edit', (_name, field) => {
+        render(field);
+        const control = screen.getByLabelText('Name');
+        const invalidClass = control.className;
+        expect(control).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('Required');
+        expect(screen.queryByText('Help')).toBeNull();
+        expect(control.getAttribute('aria-describedby').split(' ')
+            .every((id) => document.getElementById(id))).toBe(true);
+        fireEvent.change(control, { target: { value: 'one' } });
+        expect(control).not.toHaveAttribute('aria-invalid');
+        expect(control.className).not.toBe(invalidClass);
+        expect(screen.queryByRole('alert')).toBeNull();
+        const hint = screen.getByText('Help');
+        expect(control.getAttribute('aria-describedby').split(' ')).toContain(hint.id);
+    });
+
+    it('renders and updates an input character counter described by the field', () => {
+        render(<Input label="Alias" defaultValue="abc" maxLength={10} />);
+        const input = screen.getByLabelText('Alias');
+        const counter = screen.getByText('3 / 10');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(counter.id);
+        fireEvent.change(input, { target: { value: 'abcd' } });
+        expect(screen.getByText('4 / 10')).toBe(counter);
+    });
+
+    it('renders a textarea counter from its controlled value', () => {
+        const view = render(<Textarea label="Bio" value="hello" maxLength={20} onChange={() => {}} />);
+        expect(screen.getByText('5 / 20')).toBeInTheDocument();
+        view.rerender(<Textarea label="Bio" value="hello world" maxLength={20} onChange={() => {}} />);
+        expect(screen.getByText('11 / 20')).toBeInTheDocument();
+    });
+
+    it('shows a Caps Lock warning only while a password field is focused', () => {
+        render(<Input label="Password" type="password" />);
+        const input = screen.getByLabelText('Password');
+        fireEvent.focus(input);
+        const keyDown = createEvent.keyDown(input);
+        Object.defineProperty(keyDown, 'getModifierState', { value: () => true });
+        fireEvent(input, keyDown);
+        const warning = screen.getByRole('status');
+        expect(warning).toHaveTextContent('Caps Lock is on');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(warning.id);
+        fireEvent.blur(input);
+        expect(screen.queryByRole('status')).toBeNull();
+    });
+
     it('forwards ref so callers can focus-manage', () => {
         function Harness() {
             const ref = useRef(null);
@@ -115,5 +204,14 @@ describe('<Input>', () => {
     it('other field types get no time zone line', () => {
         render(<Input label="Name" />);
         expect(screen.queryByText(/local time zone/)).toBeNull();
+    });
+
+    it('keeps text controls at 16px in iOS WebKit to prevent focus zoom', () => {
+        const css = readFileSync(
+            'packages/core/src/ui/tokens.css',
+            'utf8',
+        );
+        expect(css).toMatch(/@supports \(-webkit-touch-callout: none\)/);
+        expect(css).toMatch(/input:not\(\[type='checkbox'\]\)[\s\S]*select,[\s\S]*textarea\s*\{\s*font-size: 16px !important;/);
     });
 });

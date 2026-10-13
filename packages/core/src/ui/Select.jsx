@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useId } from 'react';
+import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
 
 /**
@@ -25,15 +25,40 @@ import styles from './Input.module.css';
  * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Select = forwardRef(function Select(
-    { label, hint, error, id, size = 'md', children, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        size = 'md',
+        children,
+        className,
+        onChange,
+        'aria-invalid': externalInvalid,
+        'aria-describedby': externalDescribedBy,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const selectId = id || autoId;
-    const hintId = hint && !error ? `${selectId}-hint` : undefined;
-    const errorId = error ? `${selectId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-    const selectClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
+    const [dismissedError, setDismissedError] = useState(null);
+    const visibleError = error && error !== dismissedError ? error : null;
+    const hintId = hint && !visibleError ? `${selectId}-hint` : undefined;
+    const errorId = visibleError ? `${selectId}-error` : undefined;
+    const describedBy = [externalDescribedBy, hintId, errorId]
+        .filter(Boolean).join(' ') || undefined;
+    const selectClass = [styles.input, visibleError ? styles.invalid : '', className]
+        .filter(Boolean).join(' ');
+
+    useEffect(() => {
+        if (!error) setDismissedError(null);
+    }, [error]);
+
+    const handleChange = (event) => {
+        if (error) setDismissedError(error);
+        onChange?.(event);
+    };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
@@ -46,17 +71,18 @@ export const Select = forwardRef(function Select(
                 ref={ref}
                 id={selectId}
                 className={selectClass}
-                aria-invalid={error ? 'true' : undefined}
+                aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                onChange={handleChange}
                 {...rest}
             >
                 {children}
             </select>
-            {hint && !error ? (
+            {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
-            {error ? (
-                <div id={errorId} className={styles.error} role="alert">{error}</div>
+            {visibleError ? (
+                <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
             ) : null}
         </div>
     );

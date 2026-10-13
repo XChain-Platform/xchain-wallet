@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useId } from 'react';
+import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
 
 /**
@@ -25,15 +25,48 @@ import styles from './Input.module.css';
  * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Textarea = forwardRef(function Textarea(
-    { label, hint, error, id, size = 'md', style, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        size = 'md',
+        style,
+        value,
+        defaultValue,
+        maxLength,
+        className,
+        onChange,
+        'aria-invalid': externalInvalid,
+        'aria-describedby': externalDescribedBy,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const textareaId = id || autoId;
-    const hintId = hint && !error ? `${textareaId}-hint` : undefined;
-    const errorId = error ? `${textareaId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-    const textareaClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
+    const [dismissedError, setDismissedError] = useState(null);
+    const visibleError = error && error !== dismissedError ? error : null;
+    const hintId = hint && !visibleError ? `${textareaId}-hint` : undefined;
+    const errorId = visibleError ? `${textareaId}-error` : undefined;
+    const counterId = maxLength != null ? `${textareaId}-counter` : undefined;
+    const initialValue = value ?? defaultValue ?? '';
+    const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
+    const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
+    const describedBy = [externalDescribedBy, hintId, errorId, counterId]
+        .filter(Boolean).join(' ') || undefined;
+    const textareaClass = [styles.input, visibleError ? styles.invalid : '', className]
+        .filter(Boolean).join(' ');
+
+    useEffect(() => {
+        if (!error) setDismissedError(null);
+    }, [error]);
+
+    const handleChange = (event) => {
+        setUncontrolledLength(event.currentTarget.value.length);
+        if (error) setDismissedError(error);
+        onChange?.(event);
+    };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
@@ -46,16 +79,25 @@ export const Textarea = forwardRef(function Textarea(
                 ref={ref}
                 id={textareaId}
                 className={textareaClass}
-                aria-invalid={error ? 'true' : undefined}
+                aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
                 style={{ resize: 'vertical', ...style }}
+                value={value}
+                defaultValue={defaultValue}
+                maxLength={maxLength}
+                onChange={handleChange}
                 {...rest}
             />
-            {hint && !error ? (
+            {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
-            {error ? (
-                <div id={errorId} className={styles.error} role="alert">{error}</div>
+            {visibleError ? (
+                <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
+            ) : null}
+            {maxLength != null ? (
+                <div id={counterId} className={styles.counter} aria-live="polite">
+                    {characterCount} / {maxLength}
+                </div>
             ) : null}
         </div>
     );

@@ -67,6 +67,12 @@
     color: var(--xc-danger-fg);
 }
 
+.counter {
+    align-self: flex-end;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
 .capsLock {
     font-size: var(--xc-text-xs);
     color: var(--xc-warning, var(--xc-text-muted));
