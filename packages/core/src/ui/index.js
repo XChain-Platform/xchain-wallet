@@ -15,6 +15,12 @@
 
 export { Screen } from './Screen.jsx';
 export { PageHeader } from './PageHeader.jsx';
+// Page templates: every routed screen's body is one of these (STYLE_GUIDE.md).
+export { FormPage } from './FormPage.jsx';
+export { FormSection } from './FormSection.jsx';
+export { ListPage } from './ListPage.jsx';
+export { EmptyState } from './EmptyState.jsx';
+export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
 export { Input } from './Input.jsx';

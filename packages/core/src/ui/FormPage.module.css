@@ -1,0 +1,104 @@
+/* Form template (FormPage + FormSection). Narrow is the base; the wide
+   card rules sit in one min-width block so the 600px breakpoint lives in
+   exactly one place. Viewport media query, not a container query: the
+   Android WebView 102 the app ships to has no container queries. */
+
+/* Narrow: the fields sit bare on the page, inset only by Screen's gutter. */
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.intro {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    line-height: 1.45;
+    color: var(--xc-text-muted);
+}
+
+.body {
+    min-width: 0;
+}
+
+/* Inputs carry their own bottom margin; the form's gap already spaces the
+   last field from the action row. */
+.body > :last-child,
+.sectionBody > :last-child {
+    margin-bottom: 0;
+}
+
+.status > * {
+    margin: 0;
+}
+
+/* The action row closes the form. Buttons share the row and wrap onto a
+   new line rather than overflow; each grows so a lone button is full width. */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.actions > * {
+    flex: 1 1 10rem;
+}
+
+/* Narrow sections: one bare block per section, each after the first
+   divided from the last by a rule above its heading. */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+    margin: 0;
+}
+
+.section + .section {
+    padding-top: var(--xc-space-4);
+    border-top: 1px solid var(--xc-border);
+}
+
+.sectioned > .body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-4);
+}
+
+.sectionBody {
+    min-width: 0;
+}
+
+/* Wide: one centred 560px card around the whole form, or, for a sectioned
+   form, one card per section with the action row below the last card. */
+@media (min-width: 600px) {
+    .form {
+        max-width: 560px;
+        margin: var(--xc-space-6) auto 0;
+    }
+
+    .form:not(.sectioned) {
+        padding: var(--xc-space-6);
+        background: var(--xc-surface-raised);
+        border: 1px solid var(--xc-border);
+        border-radius: var(--xc-radius-lg);
+        box-shadow: var(--xc-shadow-md);
+    }
+
+    .sectioned .section {
+        padding: var(--xc-space-6);
+        background: var(--xc-surface-raised);
+        border: 1px solid var(--xc-border);
+        border-radius: var(--xc-radius-lg);
+        box-shadow: var(--xc-shadow-md);
+    }
+
+    .sectioned .section + .section {
+        padding-top: var(--xc-space-6);
+        border-top: 1px solid var(--xc-border);
+    }
+}
