@@ -19,6 +19,10 @@ const popupAppSource = readFileSync(
     join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
+const bottomBarCss = readFileSync(
+    join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'BottomTabBar.module.css'),
+    'utf8',
+);
 
 function NavigationHarness({ initialView = 'home', onLock = () => {} }) {
     const [view, setView] = useState(initialView);
@@ -70,11 +74,18 @@ describe('extension bottom navigation', () => {
         expect(screen.getByTestId('current-view')).toHaveTextContent(expectedView);
     });
 
-    it('keeps the lock action available in the More sheet', () => {
+    it('labels and pads the More sheet consistently', () => {
         const onLock = vi.fn();
         render(<NavigationHarness onLock={onLock} />);
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
+
+        const sheet = screen.getByRole('dialog', { name: 'More navigation' });
+        expect(sheet).toContainElement(screen.getByRole('heading', { name: 'More', level: 2 }));
+        expect(bottomBarCss).toMatch(
+            /calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
         expect(onLock).toHaveBeenCalledOnce();
     });
 
