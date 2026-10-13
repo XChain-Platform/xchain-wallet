@@ -17,6 +17,7 @@
     align-items: center;
     gap: var(--xc-space-2);
     min-width: 0;
+    overflow: hidden;
 }
 
 .right {
@@ -75,7 +76,7 @@
     inset-inline-end: 0;
     z-index: 20;
     min-width: 184px;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
@@ -90,16 +91,18 @@
     background: transparent;
     border: none;
     width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 8px 10px;
+    padding: var(--xc-space-2) 10px;
     border-radius: var(--xc-radius-sm);
     color: var(--xc-text);
     font-family: inherit;
     font-size: var(--xc-text-sm);
     text-align: start;
     cursor: pointer;
+    overflow-wrap: anywhere;
 }
 
 .scanItem:hover {
@@ -116,4 +119,17 @@
     display: inline-flex;
     align-items: center;
     color: var(--xc-text-muted);
+}
+
+/* Short landscape screens keep the persistent controls reachable while
+   returning vertical space to the active route. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .bar {
+        gap: var(--xc-space-2);
+        padding: var(--xc-space-1) var(--xc-space-2);
+    }
+
+    .logo {
+        width: 44px;
+    }
 }

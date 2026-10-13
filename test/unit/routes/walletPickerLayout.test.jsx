@@ -12,10 +12,11 @@ import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPic
 afterEach(() => cleanup());
 
 describe('WalletPicker row layout', () => {
-    it('groups a long wallet name and its format in a wrapping text column', async () => {
+    it('groups a long demo wallet name and its marked format in a wrapping text column', async () => {
         const wallet = {
             id: 'wallet-1',
             name: 'A wallet name long enough to wrap on a narrow screen',
+            origin: 'demo',
             format: 'bip39',
         };
         let view;
@@ -41,7 +42,31 @@ describe('WalletPicker row layout', () => {
         expect(row).toBeTruthy();
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
-        expect(row.firstElementChild.textContent).toContain('BIP39');
+        expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
+    });
+
+    it('labels imported-key wallets accurately', async () => {
+        const wallet = {
+            id: 'wallet-1',
+            name: 'Imported wallet',
+            origin: 'imported-wif',
+            format: 'wif-only',
+        };
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+            >
+                <WalletPicker
+                    activeWalletId={null}
+                    onSwitch={() => {}}
+                    onAddWallet={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Imported key')).toBeTruthy();
     });
 });
 

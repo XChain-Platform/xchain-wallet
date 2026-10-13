@@ -1,0 +1,49 @@
+.orderBookGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.levelsScroller {
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+.levelsTable {
+    min-width: 18rem;
+}
+
+.sideToggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.priceAmountFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+@media (max-width: 420px) {
+    .orderBookGrid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .priceAmountFields {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+    }
+
+    .sideToggle {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding-block: var(--xc-space-1);
+        background: var(--xc-surface);
+    }
+}

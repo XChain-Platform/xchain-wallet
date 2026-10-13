@@ -5,6 +5,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -16,6 +18,29 @@ const DOGE = 'dogecoin-regtest';
 const LTC_ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
 const DOGE_ADDRESS = 'nZ1TestDogecoinAddress11111111111111';
 const FIXED_NOW = new Date(2026, 9, 13, 12, 0, 0, 0);
+const historyCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/History.module.css'),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function mediaBlock(text, query) {
+    const start = text.indexOf(`@media ${query}`);
+    if (start < 0) return '';
+    const open = text.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < text.length; index += 1) {
+        if (text[index] === '{') depth += 1;
+        if (text[index] === '}') depth -= 1;
+        if (depth === 0) return text.slice(open + 1, index);
+    }
+    return '';
+}
 
 function isoLocal(date) {
     const year = date.getFullYear();
@@ -31,7 +56,7 @@ function secondsAt(dayOffset, hour = 12) {
     return Math.floor(date.getTime() / 1000);
 }
 
-function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp, tick, source }) {
+function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp, tick, source, amount }) {
     return {
         action,
         action_index: String(actionIndex),
@@ -39,23 +64,24 @@ function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp,
         timestamp,
         tx_hash: `deadbeef${actionIndex}`,
         status: 'valid',
-        details: { tick, source, memo: tick === 'ALPHA' ? 'alpha payment' : '' },
+        details: { tick, source, amount, memo: tick === 'ALPHA' ? 'alpha payment' : '' },
     };
 }
 
-function mountHistory(rowsByChain) {
+function mountHistory(rowsByChain, addressesByChain = {
+    [LTC]: [{ address: LTC_ADDRESS }],
+    [DOGE]: [{ address: DOGE_ADDRESS }],
+}) {
     let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
     const messaging = {
-        getAddressesByChain: vi.fn().mockResolvedValue({
-            [LTC]: [{ address: LTC_ADDRESS }],
-            [DOGE]: [{ address: DOGE_ADDRESS }],
-        }),
+        getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
         getAddressHistory: vi.fn(({ chainId }) => Promise.resolve(rowsByChain[chainId] || [])),
         getLinksForAddress: vi.fn().mockResolvedValue([]),
         getAddressMempool: vi.fn().mockResolvedValue([]),
         getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
+        listContacts: vi.fn().mockResolvedValue([]),
         getSettings: vi.fn(() => Promise.resolve(settings)),
         updateSettings: vi.fn((patch) => {
             settings = { ...settings, ...patch };
@@ -97,6 +123,21 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('shows a receive address label only on incoming payments to that address', async () => {
+        const sender = 'mtkxExternalSender1111111111111111111111';
+        mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 30, timestamp: secondsAt(0), tick: 'BTC', source: sender }),
+                historyRow({ actionIndex: 31, timestamp: secondsAt(-1), tick: 'BTC', source: LTC_ADDRESS }),
+            ],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS, label: 'Client invoices' }],
+        });
+
+        expect(await screen.findByText('Received at Client invoices')).toBeInTheDocument();
+        expect(screen.getAllByText(/Client invoices/)).toHaveLength(1);
+    });
+
     it('combines every filter dimension and preserves the controls across a refresh poll', async () => {
         const rows = {
             [LTC]: [
@@ -228,5 +269,47 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
         chooseOption(/^No special filters$/, 'Cross-chain only');
         expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+    });
+
+    it('renders rows, filters, and detail fields with a 320px layout contract', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+
+        try {
+            const { view } = mountHistory({
+                [LTC]: [historyRow({
+                    actionIndex: 30,
+                    timestamp: secondsAt(0),
+                    tick: 'LTC',
+                    source: LTC_ADDRESS,
+                    amount: '123456789.12345678',
+                })],
+            });
+            await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+
+            expect(screen.getByRole('group', { name: 'History filters' })).toBeInTheDocument();
+            expect(screen.getByLabelText('From date')).toBeInTheDocument();
+            expect(screen.getByLabelText('To date')).toBeInTheDocument();
+
+            fireEvent.click(view.container.querySelector('[data-history-key] > button'));
+            expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+            expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
+
+            const narrow = mediaBlock(historyCss, '(max-width: 399px)');
+            expect(ruleBody(narrow, '.dateRow')).toMatch(/flex-wrap:\s*wrap/);
+            expect(ruleBody(narrow, '.dateInput')).toMatch(/box-sizing:\s*border-box/);
+            expect(ruleBody(narrow, '.filterFooter > .filterDisclosure'))
+                .toMatch(/flex:\s*1 1 100%[\s\S]*box-sizing:\s*border-box/);
+            expect(ruleBody(narrow, '.rowMeta')).toMatch(/flex-wrap:\s*wrap/);
+            expect(ruleBody(narrow, '.pendingAmount')).toMatch(/flex:\s*1 1 100%/);
+            expect(ruleBody(narrow, '.detailsTable tbody'))
+                .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+            expect(ruleBody(narrow, '.detailsTable tr + tr > td')).toMatch(/border-top:\s*0/);
+        } finally {
+            if (widthDescriptor) {
+                Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            }
+        }
     });
 });

@@ -85,10 +85,19 @@ describe('decodeAction summary coverage', () => {
             action: 'SWAP',
             params: {
                 VERSION: '0', GIVE_TICK: 'JDOG', GIVE_AMOUNT: '100',
-                GET_TICK: 'PEPE', GET_AMOUNT: '250',
+                GET_TICK: 'PEPE', GET_AMOUNT: '250', GET_ADDRESS: 'bc1qreceive',
+                EXPIRATION: '4070991840', ALLOW_LIST: '12', BLOCK_LIST: '34',
             },
         });
         expect(d.summary).toBe('Create swap: give 100 JDOG for 250 PEPE');
+        expect(d.details).toEqual(expect.arrayContaining([
+            { label: 'Give', value: '100 JDOG' },
+            { label: 'Get', value: '250 PEPE' },
+            { label: 'Receive at', value: 'bc1qreceive' },
+            { label: 'Expiration', value: '4070991840' },
+            { label: 'Allow list', value: '#12' },
+            { label: 'Block list', value: '#34' },
+        ]));
         expect(d.warnings.join('\n')).not.toMatch(GENERIC);
     });
 
