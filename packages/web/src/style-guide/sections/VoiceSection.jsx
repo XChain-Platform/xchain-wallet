@@ -54,8 +54,8 @@ export function VoiceSection() {
                 />
                 <Compare
                     good="Generate a new address"
-                    bad="Click here to make a new address"
-                    note="Button labels are imperatives. Drop 'Click here': the button IS the click."
+                    bad="Use this button to make a new address"
+                    note="Button labels are imperatives. Drop instructions that merely describe the control."
                 />
             </LiveExample>
 

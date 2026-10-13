@@ -1,0 +1,118 @@
+.wrap {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.trigger {
+    appearance: none;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.trigger:hover {
+    background: var(--xc-bg-muted);
+}
+
+.trigger:focus-visible,
+.settings:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--xc-text-muted);
+    box-shadow: var(--xc-shadow-status-halo);
+}
+
+.wrap[data-state='normal'] .trigger {
+    color: var(--xc-success, #238636);
+}
+
+.wrap[data-state='normal'] .dot {
+    background: var(--xc-success, #238636);
+}
+
+.wrap[data-state='degraded'] .trigger {
+    color: var(--xc-warning, #d4a017);
+}
+
+.wrap[data-state='degraded'] .dot {
+    background: var(--xc-warning, #d4a017);
+}
+
+.wrap[data-state='offline'] .trigger {
+    color: var(--xc-danger, #c33);
+}
+
+.wrap[data-state='offline'] .dot {
+    background: var(--xc-danger, #c33);
+}
+
+.popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: var(--xc-z-dropdown);
+    width: min(280px, calc(100vw - 24px));
+    box-sizing: border-box;
+    padding: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    box-shadow: var(--xc-shadow-header-menu);
+    font-size: var(--xc-text-sm);
+}
+
+.wrap:hover .popover,
+.wrap[data-open='true'] .popover {
+    display: block;
+}
+
+.title {
+    font-weight: 700;
+}
+
+.detail {
+    margin-top: var(--xc-space-1);
+    color: var(--xc-text-muted);
+}
+
+.chains {
+    margin: var(--xc-space-2) 0 0;
+    padding-inline-start: 18px;
+    color: var(--xc-text-muted);
+}
+
+.chains li + li {
+    margin-top: var(--xc-space-1);
+}
+
+.settings {
+    margin-top: var(--xc-space-3);
+    min-height: var(--xc-tap-min);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-accent-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.settings:hover {
+    background: var(--xc-bg-muted);
+}

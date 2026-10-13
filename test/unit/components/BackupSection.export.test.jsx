@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -58,6 +58,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     HTMLAnchorElement.prototype.click = originalAnchorClick;
@@ -110,7 +111,7 @@ describe('BackupSection encrypted export', () => {
 
         expect(screen.getByLabelText('Backup password')).toBeDisabled();
         expect(screen.getByLabelText('Confirm backup password')).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Exporting…' })).toBeDisabled();
         expect(exportBackupFile).toHaveBeenCalledTimes(1);
 
@@ -121,6 +122,24 @@ describe('BackupSection encrypted export', () => {
         expect(downloadedBlob).toBeInstanceOf(Blob);
         expect(downloadedBlob.type).toBe('application/json');
         expect(downloadedBlob.size).toBe(new Blob([CONTENT]).size);
+    });
+
+    it('shows elapsed encryption time and safely ignores a cancelled result', async () => {
+        let finish;
+        mount(vi.fn(() => new Promise((resolve) => { finish = resolve; })));
+        fillPasswords('backup-secret');
+        vi.useFakeTimers();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+        act(() => vi.advanceTimersByTime(3_000));
+        expect(screen.getByText('Encrypting for 3 seconds…')).toBeTruthy();
+        act(() => vi.advanceTimersByTime(27_000));
+        expect(screen.getByText(/Cancel and try again/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByRole('button', { name: 'Export…' })).toBeTruthy();
+        await act(async () => { finish({ fileContent: CONTENT }); });
+        expect(clickedDownload).toBe('');
     });
 
     it('creates an HTTPS backup pointer QR without putting the file or password in it', async () => {

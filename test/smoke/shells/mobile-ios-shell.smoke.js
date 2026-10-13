@@ -146,13 +146,31 @@ assert.ok(!infoPlist.includes('NSAllowsArbitraryLoads'), 'arbitrary loads must n
 
 // --- 7. Usage strings, scheme, export compliance ----------------------
 
-for (const key of ['NSCameraUsageDescription', 'NSFaceIDUsageDescription']) {
+const expectedUsageDescriptions = ['NSCameraUsageDescription', 'NSFaceIDUsageDescription'];
+const usageDescriptions = [...infoPlist.matchAll(/<key>(NS\w*UsageDescription)<\/key>/g)]
+    .map((match) => match[1]).sort();
+assert.deepEqual(
+    usageDescriptions,
+    expectedUsageDescriptions,
+    'the app requests only camera access for QR scanning and Face ID for wallet unlock',
+);
+for (const key of expectedUsageDescriptions) {
     const text = plistValue(infoPlist, key);
     assert.equal(typeof text, 'string', `${key} is missing; iOS kills the app on first use without it`);
     assert.ok(text.length > 20, `${key} is shown verbatim in the OS prompt and must say what it is for`);
+    assert.equal(text, text.trim(), `${key} must not contain hidden leading or trailing whitespace`);
+    assert.ok(
+        !/[<$>&]|\$\(/.test(text),
+        `${key} must be plain literal text, not markup, an entity, or a build-setting placeholder`,
+    );
 }
 assert.ok(
-    plistValue(infoPlist, 'NSFaceIDUsageDescription').includes('approval'),
+    /scan QR codes/i.test(plistValue(infoPlist, 'NSCameraUsageDescription')),
+    'the camera string must say that the camera scans QR codes',
+);
+assert.ok(
+    /Face ID.*unlock/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription'))
+        && /does not approve/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription')),
     'the Face ID string must not imply biometrics approve a transaction; it gates unlock only',
 );
 
@@ -205,6 +223,24 @@ const mainVCSrc = readFileSync(join(ios, 'App', 'App', 'MainViewController.swift
 const disabledPluginsSrc = readFileSync(
     join(ios, 'App', 'App', 'DisabledCapacitorPlugins.swift'),
     'utf8',
+);
+
+// The native edge gesture must enter the SPA handler stack. WebKit history
+// bypasses route-local confirmation state and the signing-time back lock.
+assert.match(
+    mainVCSrc,
+    /UIScreenEdgePanGestureRecognizer[\s\S]*?edges = \.left[\s\S]*?addGestureRecognizer/,
+    'iOS Back must start at the left screen edge',
+);
+assert.match(
+    mainVCSrc,
+    /allowsBackForwardNavigationGestures = false/,
+    'WebKit history swipes must not bypass the shared back stack',
+);
+assert.match(
+    mainVCSrc,
+    /dispatchEvent\(new Event\('xchain:native-edge-back'\)\)/,
+    'a completed iOS edge swipe must dispatch to the shared back stack',
 );
 
 // Assert the CALLS, from inside capacitorDidLoad - not merely that functions

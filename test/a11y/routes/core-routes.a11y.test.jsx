@@ -20,9 +20,12 @@ vi.mock('qrcode', () => ({
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
-// Default settings configure no chain, which Send and Receive render as the
-// no-networks empty state; enable bitcoin so the loaded forms are scanned.
-const SETTINGS = { ...createDefaultSettings(), fees: { [CHAIN]: {} } };
+// Send and Receive show the no-networks fallback unless the active network
+// has at least one chain with fee settings, as a configured wallet does.
+const SETTINGS = {
+    ...createDefaultSettings(),
+    fees: { [CHAIN]: { strategy: 'normal', rbfByDefault: true } },
+};
 
 function pending() {
     return new Promise(() => {});
@@ -55,6 +58,9 @@ function messaging(overrides = {}) {
             native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
             tokens: [],
         }),
+        // No per-chain aggregate: Send treats the balance as unknown and
+        // shows the form instead of holding it behind the funding check.
+        getWalletBalances: vi.fn().mockResolvedValue({}),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         getAddressHistory: vi.fn().mockResolvedValue([]),

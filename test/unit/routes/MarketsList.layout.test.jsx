@@ -138,10 +138,20 @@ describe('MarketsList narrow layout', () => {
 
         await screen.findByText('AAA');
         expect(screen.queryByText('FFF')).toBeNull();
+        const popular = screen.getByRole('tab', { name: 'Popular' });
         const all = screen.getByRole('tab', { name: 'All' });
+        const panel = screen.getByRole('tabpanel', { name: 'Popular' });
+        expect(popular).toHaveAttribute('tabindex', '0');
+        expect(popular).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', popular.id);
+        expect(all).toHaveAttribute('tabindex', '-1');
         expect(all).toHaveAttribute('aria-selected', 'false');
         fireEvent.click(all);
         expect(all).toHaveAttribute('aria-selected', 'true');
+        expect(all).toHaveAttribute('tabindex', '0');
+        expect(popular).toHaveAttribute('tabindex', '-1');
+        expect(screen.getByRole('tabpanel', { name: 'All' })).toBe(panel);
+        expect(panel).toHaveAttribute('aria-labelledby', all.id);
         expect(await screen.findByText('FFF')).toBeInTheDocument();
     });
 
@@ -244,5 +254,43 @@ describe('MarketsList narrow layout', () => {
             .toBeGreaterThan(callsBeforeRetry));
         await waitFor(() => expect(screen.queryByText('Some marketplace activity could not be loaded.'))
             .toBeNull());
+    });
+
+    it('bounds a market response with thousands of rows and expands in place', async () => {
+        const rows = Array.from({ length: 5_000 }, (_, index) => ({
+            tick1: 'BTC',
+            tick2: `TOKEN${String(index).padStart(4, '0')}`,
+            depth: index,
+        }));
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue(rows),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('tab', { name: 'All' }));
+        const list = (await screen.findByText('TOKEN0000')).closest('ul');
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(25));
+        expect(screen.getByText('25 of 5,000 markets shown')).toBeInTheDocument();
+
+        const scroller = document.querySelector('main');
+        scroller.scrollTop = 241;
+        const showMore = screen.getByRole('button', { name: 'Load more markets' });
+        showMore.focus();
+        expect(document.activeElement).toBe(showMore);
+        fireEvent.click(showMore);
+
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(50));
+        expect(scroller.scrollTop).toBe(241);
     });
 });
