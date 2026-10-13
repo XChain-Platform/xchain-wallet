@@ -127,7 +127,7 @@ assert.match(
 );
 assert.match(
     popupSrc,
-    /<DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/>[\s\S]+?<Suspense/,
+    /<DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/>[\s\S]+?<ShellRouteOutlet/,
     'the extension mounts the banner outside the active route so forms and details keep the disclosure and expiry watcher',
 );
 

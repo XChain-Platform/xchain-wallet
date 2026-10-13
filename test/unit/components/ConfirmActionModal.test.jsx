@@ -299,7 +299,7 @@ describe('ConfirmActionModal', () => {
             'utf8',
         );
         expect(intentCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
-        expect(intentCss).toMatch(/@container \(max-width: 399px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(intentCss).toMatch(/@container not \(min-width: 400px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
         expect(intentCss).toMatch(/\.summary\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(intentCss).toMatch(/\.row dd\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/s);
         expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
@@ -311,7 +311,7 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
-        expect(modalCss).toMatch(/@container \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
+        expect(modalCss).toMatch(/@container not \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

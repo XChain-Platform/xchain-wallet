@@ -225,7 +225,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Could not load wallet addresses. Try again.');
+                    setLoadError(err?.message || "Couldn't load addresses. Try again.");
                 }
             }
         })();

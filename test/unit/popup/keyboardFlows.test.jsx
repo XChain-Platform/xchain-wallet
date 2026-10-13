@@ -250,7 +250,7 @@ describe('extension popup keyboard flows', () => {
         expect(document.activeElement).toBe(amount);
         fireEvent.change(amount, { target: { value: '1.25' } });
         await user.keyboard('{Enter}');
-        expect(screen.getByRole('form', { name: 'Receive request' })).toBeInTheDocument();
+        expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Paste from clipboard' }));
     });

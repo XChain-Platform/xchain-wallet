@@ -171,7 +171,7 @@ describe('Send: the route refuses in signer mode', () => {
 
     it('refuses, and says why and how to undo it, in signer mode', async () => {
         mount(Send, 'signer');
-        expect(await screen.findByText(/signer mode, so it doesn't send or broadcast/i))
+        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it can't send them to the network/i))
             .toBeInTheDocument();
         // The form must be GONE, not merely covered: the To field is the one
         // input a URI intent would have pre-filled.
@@ -184,12 +184,12 @@ describe('Receive: the route refuses in signer mode', () => {
     it('renders the receive surface in full mode', async () => {
         mount(Receive, 'full');
         await waitFor(() => expect(screen.getByText('Receive')).toBeInTheDocument());
-        expect(screen.queryByText(/receive screen is hidden/i)).toBeNull();
+        expect(screen.queryByText(/does not have an address for receiving funds/i)).toBeNull();
     });
 
     it('refuses in signer mode', async () => {
         mount(Receive, 'signer');
-        expect(await screen.findByText(/signer mode, so its receive screen is hidden/i))
+        expect(await screen.findByText(/signer mode\. It can sign transactions from a watch-only wallet, but it does not have an address for receiving funds/i))
             .toBeInTheDocument();
     });
 });

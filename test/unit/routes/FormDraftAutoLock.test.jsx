@@ -94,6 +94,7 @@ describe('form drafts across auto-lock', () => {
             field: 'toAddress',
             value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
             submit: 'sendToken',
+            notice: /Nothing was sent\./,
         },
         {
             kind: 'issue-token',
@@ -101,6 +102,7 @@ describe('form drafts across auto-lock', () => {
             field: 'ticker',
             value: 'LOCKDRAFT',
             submit: 'issueToken',
+            notice: /Nothing was submitted\./,
         },
         {
             kind: 'dispenser',
@@ -108,9 +110,10 @@ describe('form drafts across auto-lock', () => {
             field: 'giveAmount',
             value: '12.5',
             submit: 'dispenserAction',
+            notice: /Nothing was submitted\./,
         },
     ])('saves and offers to restore $kind without submitting', async ({
-        kind, label, field, value, submit,
+        kind, label, field, value, submit, notice,
     }) => {
         const messaging = createMessaging();
         const first = mountForm(kind, messaging);
@@ -127,7 +130,7 @@ describe('form drafts across auto-lock', () => {
         first.unmount();
         mountForm(kind, messaging);
 
-        expect(await screen.findByText(/Nothing was submitted\./)).toBeInTheDocument();
+        expect(await screen.findByText(notice)).toBeInTheDocument();
         expect(messaging[submit]).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));

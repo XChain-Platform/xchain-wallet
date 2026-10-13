@@ -35,7 +35,8 @@ function modalFiles(dir) {
 function expectPanelWithinViewport(panelRule, maxWidth) {
     expect(panelRule).toMatch(/box-sizing:\s*border-box/);
     expect(panelRule).toMatch(/width:\s*100%/);
-    expect(panelRule).toMatch(new RegExp(`max-width:\\s*${maxWidth}px`));
+    // A panel may cap itself with min(<width>, 100%), which is the same bound inside a 100%-wide box.
+    expect(panelRule).toMatch(new RegExp(`max-width:\\s*(?:${maxWidth}px|min\\(${maxWidth}px,\\s*100%\\))\\s*;`));
 }
 
 beforeAll(() => {

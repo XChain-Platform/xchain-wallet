@@ -128,7 +128,7 @@ describe('create onboarding keyboard flow', () => {
         expect(phraseHeading).toHaveFocus();
         expect(generateBip39Mnemonic).toHaveBeenCalledOnce();
 
-        fireEvent.click(screen.getByRole('checkbox', { name: /written down my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
         const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
         verifyButton.focus();
         fireEvent.keyDown(verifyButton, { key: 'Enter' });
@@ -166,7 +166,7 @@ describe('create onboarding keyboard flow', () => {
         fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'hidden phrase' } });
         pressEnter(screen.getByLabelText('Confirm password'));
 
-        fireEvent.click(await screen.findByRole('checkbox', { name: /written down my recovery phrase/i }));
+        fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
         fireEvent.change(await screen.findByLabelText('Word 1'), { target: { value: 'typed secret' } });
 

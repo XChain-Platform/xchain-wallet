@@ -215,7 +215,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
-        expect(await screen.findByText(/This address has no DOGE to spend/)).toBeInTheDocument();
+        expect(await screen.findByText(/This address needs DOGE for the protocol fee and the network fee/)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/no spendable UTXOs/);
     });
 

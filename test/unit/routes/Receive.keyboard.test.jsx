@@ -199,7 +199,7 @@ describe('Receive keyboard operation', () => {
         await waitFor(() => expect(write).toHaveBeenCalledOnce());
         expect(writeText).not.toHaveBeenCalled();
         await user.tab();
-        const shareButton = screen.getByRole('button', { name: 'Share QR' });
+        const shareButton = screen.getByRole('button', { name: 'Share QR payment link' });
         expect(document.activeElement).toBe(shareButton);
         await user.keyboard('{Enter}');
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({

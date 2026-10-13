@@ -203,7 +203,7 @@ describe('operator publisher owner-action lane', () => {
         await publishValue();
 
         const text = (await screen.findByRole('alert')).textContent || '';
-        expect(text).toContain('has no BTC to spend');
+        expect(text).toContain('needs BTC for the protocol fee and the network fee');
         expect(text).not.toContain('ENCODER_NO_UTXOS');
         expect(text).not.toContain('no spendable UTXOs');
         expect(methods.broadcastAction).not.toHaveBeenCalled();

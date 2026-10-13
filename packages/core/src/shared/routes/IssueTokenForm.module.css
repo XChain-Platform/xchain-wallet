@@ -421,26 +421,6 @@
     cursor: pointer;
 }
 
-.compactTable {
-    width: 100%;
-    table-layout: fixed;
-    font-size: var(--xc-text-sm);
-}
-
-.compactTable th,
-.compactTable td {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.choiceRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.choiceText,
 .splitValue {
     min-width: 0;
     overflow-wrap: anywhere;

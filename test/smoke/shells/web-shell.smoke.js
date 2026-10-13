@@ -144,7 +144,8 @@ assert.ok(
     'ExtensionBanner is wired to the useExtensionWallet hook',
 );
 assert.ok(
-    /Use extension wallet/.test(banner),
+    /t\('extensionBanner\.useExtension'\)/.test(banner)
+        && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')),
     'ExtensionBanner offers the "Use extension wallet" accept action',
 );
 

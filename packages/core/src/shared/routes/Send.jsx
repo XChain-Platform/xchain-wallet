@@ -594,7 +594,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 }));
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Could not load wallet addresses. Try again.');
+                if (!cancelled) setLoadError(err?.message || "Couldn't load addresses. Try again.");
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, prefill?.chainId]);

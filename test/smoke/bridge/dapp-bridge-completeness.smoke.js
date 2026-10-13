@@ -120,7 +120,10 @@ const bannerSrc = readFileSync(banner, 'utf8');
 // xchain#initialized listen now live there / in extensionWallet.js.
 assert.ok(/useExtensionWallet/.test(bannerSrc),
     'ExtensionBanner uses the useExtensionWallet hook');
-assert.ok(/Use extension wallet/.test(bannerSrc),
+// The accept label is localized: the banner names the key and the English
+// dictionary carries the visible text.
+assert.ok(/t\('extensionBanner\.useExtension'\)/.test(bannerSrc)
+    && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')),
     'ExtensionBanner offers the accept action');
 const extHook = readFileSync(join(web, 'src', 'useExtensionWallet.js'), 'utf8');
 assert.ok(/xchain#initialized/.test(extHook),

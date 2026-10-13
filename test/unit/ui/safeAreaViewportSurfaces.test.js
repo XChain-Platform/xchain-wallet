@@ -99,7 +99,7 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         expect(toastRules).toMatch(new RegExp(inset('bottom')));
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        const sheet = screen.getByRole('dialog', { name: 'More navigation' });
+        const sheet = screen.getByRole('dialog', { name: 'More' });
         const sheetRules = computedClassRules(sheet, bottomBarStyles, bottomBarCss);
         expect(sheetRules).toMatch(new RegExp(inset('right')));
         expect(sheetRules).toMatch(/env\(safe-area-inset-bottom,\s*var\(--xc-space-3\)\)/);

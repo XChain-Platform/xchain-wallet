@@ -153,7 +153,7 @@ describe('useActionForm chain default follows the last-used chain', () => {
         expect(document.activeElement).toBe(giveAmount);
 
         await user.keyboard('{Enter}');
-        expect(await screen.findByRole('alert')).toHaveTextContent('Enter the ticker you are offering.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Enter the ticker to give.');
         expect(composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(ticker, { target: { value: 'KEYS' } });

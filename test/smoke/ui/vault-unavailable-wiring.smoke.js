@@ -63,7 +63,7 @@ for (const [name, path] of SHELLS) {
     // error and must not claim to be one.
     assert.match(
         src,
-        /: <Loading error=\{status\.error\} \/>/,
+        /: <Loading error=\{status\.error\}(?: onRetry=\{refresh\})? \/>/,
         `${name}: a non-vault boot error still falls back to the generic screen`,
     );
 }

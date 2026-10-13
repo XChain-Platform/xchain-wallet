@@ -10,7 +10,14 @@
     flex-direction: column;
     min-width: 0;
     padding-bottom: var(--xc-bottom-bar-h, 0px);
-    container-type: inline-size;
+}
+
+/* Chrome 102 WebViews lack container queries; there the viewport media query
+   below still reflows the narrow layout. */
+@supports (container-type: inline-size) {
+    .page {
+        container-type: inline-size;
+    }
 }
 
 /* --- intent header row (under the "Confirm" page header) --- */
@@ -225,13 +232,15 @@
 
 /* A 412px device leaves less than 400px inside Screen after padding and the
    scrollbar gutter. Reflow against that usable width, not only the viewport. */
-@container (max-width: 399px) {
-    .credentials dl {
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--xc-space-1);
-    }
+@supports (container-type: inline-size) {
+    @container not (min-width: 400px) {
+        .credentials dl {
+            grid-template-columns: minmax(0, 1fr);
+            gap: var(--xc-space-1);
+        }
 
-    .footer {
-        flex-direction: column;
+        .footer {
+            flex-direction: column;
+        }
     }
 }

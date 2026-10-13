@@ -45,6 +45,12 @@ assert.match(keyQrSrc, /alt=\{alt\}/, 'KeyQR threads alt through for a11y');
 
 // --- 2. Both shells wire renderQR to KeyQR --------------------------------
 
+assert.match(
+    readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8'),
+    /'shell\.privateKeyQr': 'Private key QR'/,
+    'the localized QR alt text stays "Private key QR"',
+);
+
 for (const [name, file, importPattern] of [
     [
         'extension',
@@ -65,7 +71,7 @@ for (const [name, file, importPattern] of [
     );
     assert.match(
         src,
-        /<ViewPrivateKey[\s\S]+?renderQR=\{\(\{ value \}\) => <KeyQR value=\{value\} alt="Private key QR" \/>\}/,
+        /<ViewPrivateKey[\s\S]+?renderQR=\{\(\{ value \}\) => <KeyQR value=\{value\} alt=\{t\('shell\.privateKeyQr'\)\} \/>\}/,
         `${name} App passes renderQR={KeyQR} to ViewPrivateKey`,
     );
 }

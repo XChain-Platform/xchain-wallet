@@ -115,7 +115,7 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
 
         await enterPubkey();
 
-        expect(await screen.findByText(/No existing stake for this pubkey/)).toBeInTheDocument();
+        expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
         expect(
             screen.getByRole('radio', { name: /New stake/ }),
         ).toBeChecked();
@@ -138,7 +138,7 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
 
         await enterPubkey();
 
-        expect(await screen.findByText(/No existing stake for this pubkey/)).toBeInTheDocument();
+        expect(await screen.findByText(/No existing stake for this public key/)).toBeInTheDocument();
         expect(screen.getByRole('radio', { name: /New stake/ })).toBeChecked();
     });
 
@@ -191,7 +191,7 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
         // "existing + this top-up" copy only renders when the aggregated
         // existing stake is > 0, and it prints the projected total (160).
         expect(
-            await screen.findByText(/total stake of 160 XCHAIN for this pubkey/),
+            await screen.findByText(/total stake of 160 XCHAIN for this public key/),
         ).toBeInTheDocument();
     });
 });

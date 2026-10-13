@@ -72,7 +72,7 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
             .mockResolvedValueOnce({ walletId: 'wallet-1' });
         await submitWith(importMnemonic, { name: 'Travel Wallet' });
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Failed to import wallet.');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not import the wallet.');
         expect(screen.queryByText('backend unavailable')).toBeNull();
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel Wallet');
         expect(importMnemonic.mock.calls[0][0].name).toBe('Travel Wallet');
@@ -106,7 +106,7 @@ describe('onboarding persistence failures', () => {
         const phraseWords = screen.getAllByRole('listitem').map((item) => (
             item.textContent.replace(/^\d+\.\s*/, '').trim()
         ));
-        fireEvent.click(screen.getByRole('checkbox', { name: /written down my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
         for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
             const position = Number(input.labels[0].textContent.replace('Word ', ''));

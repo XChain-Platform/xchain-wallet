@@ -570,7 +570,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ExecuteContractForm,
             props: { contractActionIndex: '9' },
-            actionLabel: 'Execute',
+            actionLabel: 'Call contract',
             fill: (utils) => setValue(utils, 'Method', 'transfer'),
         });
         expectSingleEncode(calls, {
@@ -604,7 +604,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     },
                 },
             },
-            actionLabel: 'Execute',
+            actionLabel: 'Call contract',
             steps: [
                 (utils) => setValue(utils, 'Method', 'fundLoan'),
                 openTokenField('Deposit'),
@@ -641,7 +641,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             (u) => setValue(u, 'Method', 'fundLoan'),
             openTokenField('Deposit'),
             pickToken('XCHAIN'),
-            (u) => fireEvent.click(u.getByRole('button', { name: 'Execute' })),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Call contract' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
             await domAct(async () => { step(utils); await drainMicrotasks(); });
