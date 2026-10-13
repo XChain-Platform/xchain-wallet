@@ -147,8 +147,8 @@ describe('web add-wallet activation flow', () => {
         expect(second).not.toHaveAttribute('aria-current');
 
         fireEvent.click(second);
-        // The stored selection also carries the wallet name, so read it back
-        // through the same accessor the shell uses.
+        // The selection is stored with its name so a locked tab can label it;
+        // readActiveWallet is the reader every shell uses for either shape.
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
 
         await openWalletPicker();
