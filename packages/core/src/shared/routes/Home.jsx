@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -1036,14 +1036,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onExited={onLocked}
                     />
                 ) : null}
-                {activeWalletId ? (
-                    <BackupReminderCard
-                        walletId={activeWalletId}
-                        walletCreatedAt={activeWallet?.createdAt}
-                        onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
-                    />
-                ) : null}
-
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}
@@ -1059,6 +1051,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         multisig={isBtc ? multisig : null}
                         multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
                         onReceive={onReceive}
+                        onBuy={onExchange}
+                        hasAddresses={Object.keys(balances).length > 0}
+                        onAddAddress={() => setAddAddressOpen(true)}
                         onHistory={onHistory}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
@@ -1165,14 +1160,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     />
                 ) : null}
 
-
-                {balances && Object.keys(balances).length === 0 ? (
-                    <EmptyState
-                        title="No addresses yet. Generate one to start receiving."
-                        titleAs="p"
-                        actionLabel="Generate an address"
-                        onAction={() => setAddAddressOpen(true)}
-                        actionIcon={<Icon.PlusIcon />}
+                {activeWalletId ? (
+                    <BackupReminderCard
+                        walletId={activeWalletId}
+                        walletCreatedAt={activeWallet?.createdAt}
+                        onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}
 

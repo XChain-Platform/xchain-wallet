@@ -45,7 +45,7 @@ const chainRegistry = {
     all: () => [],
 };
 
-function mount(walletId) {
+function mount(walletId, overrides = {}) {
     return render(
         <HomeTabs
             chainRegistry={chainRegistry}
@@ -55,6 +55,7 @@ function mount(walletId) {
             coinFamilies={[]}
             onNetworkFilterChange={() => {}}
             onTokenQueryChange={() => {}}
+            {...overrides}
         />,
     );
 }
@@ -62,6 +63,30 @@ function mount(walletId) {
 afterEach(() => cleanup());
 
 describe('HomeTabs empty states', () => {
+    it('shows one actionable first-funding state for an empty wallet', () => {
+        const onReceive = vi.fn();
+        const onBuy = vi.fn();
+        mount('real-wallet', { onReceive, onBuy });
+
+        expect(screen.getByText('Fund your wallet')).toBeTruthy();
+        expect(screen.getByText(/Receive coins from another wallet or buy coins/)).toBeTruthy();
+        expect(screen.queryByText('No coins yet')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        expect(onReceive).toHaveBeenCalledTimes(1);
+        expect(onBuy).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts addressless wallets with address generation instead of a second empty card', () => {
+        const onAddAddress = vi.fn();
+        mount('real-wallet', { hasAddresses: false, onAddAddress });
+
+        expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
+        expect(screen.queryByText('No coins yet')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Generate an address' }));
+        expect(onAddAddress).toHaveBeenCalledTimes(1);
+    });
+
     it('shows only the empty card on an empty NFTs tab', () => {
         mount('real-wallet');
         fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));

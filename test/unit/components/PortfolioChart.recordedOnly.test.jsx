@@ -22,14 +22,14 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 // 0.5 BTC at $80,000: a valued row, so the chart has something to draw.
 const ROWS = [{ kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '50000000', divisibility: 8, fiatRate: 80000 }];
 
-function mount(walletId, prices) {
+function mount(walletId, prices, rows = ROWS) {
     const messaging = {
         getSettings: vi.fn(async () => ({})),
         getNativePricesRequest: vi.fn(async () => prices),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <PortfolioChart rows={ROWS} walletId={walletId} />
+            <PortfolioChart rows={rows} walletId={walletId} />
         </MessagingProvider>,
     );
     return messaging;
@@ -45,6 +45,14 @@ afterEach(() => {
 });
 
 describe('PortfolioChart on a real wallet', () => {
+    it('renders no empty chart shell for a zero balance', () => {
+        mount('real-wallet-1', {}, [{ ...ROWS[0], quantity: '0', fiatRate: null }]);
+
+        expect(screen.queryByRole('region', { name: 'Portfolio performance' })).toBeNull();
+        expect(screen.queryByText(/No price history/)).toBeNull();
+        expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+    });
+
     it('says there is no history instead of drawing a synthesized line', async () => {
         const messaging = mount('real-wallet-1', {});
         await waitFor(() => expect(messaging.getNativePricesRequest).toHaveBeenCalled());

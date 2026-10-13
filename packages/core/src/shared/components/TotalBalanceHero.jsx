@@ -41,7 +41,11 @@ import { compareDecimalStrings } from '../utils/amountFormat.js';
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
-    const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
+    const { total, unpriced } = useMemo(() => {
+        const sum = sumFiatValue(rows);
+        const meaningfulUnpriced = sumFiatValue((rows || []).filter(hasNonZeroQuantity)).unpriced;
+        return { ...sum, unpriced: meaningfulUnpriced };
+    }, [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
@@ -270,6 +274,7 @@ function unpricedLabel(rows) {
     let coins = 0;
     let tokens = 0;
     for (const r of rows || []) {
+        if (!hasNonZeroQuantity(r)) continue;
         if (sumFiatValue([r]).unpriced === 0) continue;
         if (r?.kind === 'native') coins += 1;
         else tokens += 1;
@@ -278,6 +283,15 @@ function unpricedLabel(rows) {
     if (coins > 0) parts.push(`${coins} ${coins === 1 ? 'coin' : 'coins'}`);
     if (tokens > 0) parts.push(`${tokens} ${tokens === 1 ? 'token' : 'tokens'}`);
     return `${parts.join(' and ')} not priced`;
+}
+
+function hasNonZeroQuantity(row) {
+    try {
+        return BigInt(row?.quantity ?? 0) !== 0n;
+    } catch {
+        const quantity = Number(row?.quantity);
+        return Number.isFinite(quantity) && quantity !== 0;
+    }
 }
 
 // Per-row fiat value used by the 24h-change accumulator. Mirrors the
