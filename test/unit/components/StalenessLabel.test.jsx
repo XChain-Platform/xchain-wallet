@@ -32,7 +32,7 @@ describe('StalenessLabel', () => {
         const labels = screen.getAllByRole('status');
         expect(labels).toHaveLength(timestamps.length);
         for (const label of labels) {
-            expect(label.textContent).toMatch(/^Last synced /);
+            expect(label.textContent).toMatch(/^Updated /);
             expect(label.textContent.length).toBeLessThanOrEqual(32);
             expect(label).toHaveAttribute('aria-live', 'off');
         }
