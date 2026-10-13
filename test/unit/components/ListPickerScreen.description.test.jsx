@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ListPickerScreen } from '@xchain-wallet/core/shared/components/ListPickerScreen.jsx';
 
-function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }) {
+function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }, overrides = {}) {
     const messaging = {
         getListsForSource: vi.fn().mockResolvedValue(rows),
         getListByActionIndex: vi.fn().mockResolvedValue(detail),
@@ -26,8 +26,10 @@ function renderPicker(rows, detail = { type: '2', list: ['a', 'b'] }) {
             filterType="2"
             onSelect={() => {}}
             onBack={() => {}}
+            {...overrides}
         />,
     );
+    return messaging;
 }
 
 async function detailText(idx) {
@@ -95,5 +97,63 @@ describe('ListPickerScreen description detail', () => {
         const text = await detailText('10');
         expect(text).toBe('2 members · evil␦txt');
         expect(text).not.toContain('‮');
+    });
+
+    it('searches list names, indices, kinds, statuses, and descriptions', async () => {
+        renderPicker([
+            { action_index: '10', type: '2', name: 'Treasury', description: 'Long-term holders' },
+            { action_index: '11', type: '2', name: 'Payroll', status: 'pending' },
+        ]);
+        await screen.findByText('Treasury (List #10)');
+
+        const search = screen.getByRole('textbox', { name: 'Search lists' });
+        for (const [query, match, miss] of [
+            ['payROLL', 'Payroll (List #11) (pending)', 'Treasury (List #10)'],
+            ['10', 'Treasury (List #10)', 'Payroll (List #11) (pending)'],
+            ['address', 'Treasury (List #10)', null],
+            ['pending', 'Payroll (List #11) (pending)', 'Treasury (List #10)'],
+            ['holders', 'Treasury (List #10)', 'Payroll (List #11) (pending)'],
+        ]) {
+            fireEvent.change(search, { target: { value: query } });
+            expect(screen.getByText(match)).toBeInTheDocument();
+            if (miss) expect(screen.queryByText(miss)).toBeNull();
+        }
+    });
+
+    it('shows a filtered empty state without replacing the list template', async () => {
+        renderPicker([{ action_index: '10', type: '2', name: 'Treasury' }]);
+        await screen.findByText('Treasury (List #10)');
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search lists' }), {
+            target: { value: 'missing' },
+        });
+
+        expect(screen.getByText('No matching lists')).toBeInTheDocument();
+        expect(screen.getByText('Try a different search.')).toBeInTheDocument();
+        expect(screen.queryByRole('listitem')).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Search lists' })).toBeInTheDocument();
+    });
+
+    it('selects a list with its value and cancels without selecting on Back', async () => {
+        const onSelect = vi.fn();
+        const onBack = vi.fn();
+        renderPicker(
+            [{ action_index: '10', type: '2', name: 'Treasury' }],
+            { type: '2', list: ['a', 'b'] },
+            { onSelect, onBack },
+        );
+        await waitFor(() => expect(screen.getByText('2 members')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(onSelect).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByText('Treasury (List #10)').closest('button'));
+        expect(onSelect).toHaveBeenCalledWith({
+            actionIndex: '10',
+            type: '2',
+            memberCount: 2,
+            name: 'Treasury',
+        });
     });
 });
