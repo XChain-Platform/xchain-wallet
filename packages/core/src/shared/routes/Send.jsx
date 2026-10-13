@@ -2413,7 +2413,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                     <form className={styles.saveRecipient} onSubmit={saveRecipient}>
                         <Input
-                            label="Contact name"
+                            label={t('send.saveRecipient.nameLabel')}
                             value={contactName}
                             onChange={(event) => {
                                 setContactName(event.target.value);
@@ -2434,21 +2434,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                     setContactSaveError(null);
                                 }}
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </Button>
                             <Button type="submit" variant="primary" disabled={contactSaveStage === 'saving'}>
-                                {contactSaveStage === 'saving' ? 'Saving…' : 'Save contact'}
+                                {contactSaveStage === 'saving' ? t('send.saveRecipient.saving') : t('send.saveRecipient.save')}
                             </Button>
                         </div>
                     </form>
                 ) : null}
                 {contactSaveStage === 'saved' ? (
-                    <StatusMessage variant="status">Recipient saved to contacts.</StatusMessage>
+                    <StatusMessage variant="status">{t('send.saveRecipient.saved')}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
                     {canSaveRecipient && contactSaveStage === 'idle' ? (
                         <Button variant="secondary" onClick={() => setContactSaveStage('editing')}>
-                            Save recipient
+                            {t('send.saveRecipient.open')}
                         </Button>
                     ) : null}
                     {onViewHistory && txid ? (
@@ -2841,9 +2841,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             />
             {pastedRecipient ? (
                 <div className={styles.pastedRecipient} aria-live="polite">
-                    <span className={styles.pastedRecipientLabel}>Check pasted recipient</span>
+                    <span className={styles.pastedRecipientLabel}>{t('send.paste.checkLabel')}</span>
                     <AddressText address={pastedRecipient} highlight />
-                    <span className={styles.pastedRecipientHint}>Compare the first and last 6 characters.</span>
+                    <span className={styles.pastedRecipientHint}>{t('send.paste.checkHint')}</span>
                 </div>
             ) : null}
             {pasteWarning ? (
@@ -3152,7 +3152,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <fieldset className={styles.coinControlList}>
                         <legend>{t('send.advanced.inputs')}</legend>
                         <div className={styles.coinControlToolbar}>
-                            <span>{availableUtxos.length} available</span>
+                            <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
                             <span className={styles.coinControlActions}>
                                 <button
                                     type="button"
@@ -3162,14 +3162,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                         new Set(availableUtxos.map((utxo) => utxoKey(utxo))),
                                     )}
                                 >
-                                    Select all
+                                    {t('send.advanced.selectAll')}
                                 </button>
                                 <button
                                     type="button"
                                     disabled={selectedUtxos.length === 0}
                                     onClick={() => setSelectedUtxoKeys(new Set())}
                                 >
-                                    Clear
+                                    {t('send.advanced.clearSelection')}
                                 </button>
                             </span>
                         </div>
@@ -3199,9 +3199,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                                     {isDust ? (
                                                         <span
                                                             className={styles.coinControlDust}
-                                                            title={`Below the ${formatWithThousands(String(dustFloor))} sat dust threshold`}
+                                                            title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
                                                         >
-                                                            Dust
+                                                            {t('send.advanced.dust')}
                                                         </span>
                                                     ) : null}
                                                 </span>
@@ -3214,18 +3214,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         ) : <p className={styles.hint}>{t('send.advanced.noInputs')}</p>}
                         <dl
                             className={styles.coinControlSummary}
-                            aria-label="Coin control summary"
+                            aria-label={t('send.advanced.summaryLabel')}
                             aria-live="polite"
                         >
                             <div>
-                                <dt>Selected total</dt>
+                                <dt>{t('send.advanced.selectedTotal')}</dt>
                                 <dd>
                                     {decimalStringFromSats(selectedUtxoTotalSats)}{' '}
                                     {nativeTickerFor(descriptor)}
                                 </dd>
                             </div>
                             <div>
-                                <dt>Approx. change</dt>
+                                <dt>{t('send.advanced.approxChange')}</dt>
                                 <dd>{coinControlChange}</dd>
                             </div>
                         </dl>

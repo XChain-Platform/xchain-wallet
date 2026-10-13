@@ -3345,7 +3345,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     {entry.source || '-'}
                 </span>
                 {receiveLabel ? (
-                    <span className={styles.rowReceiveLabel}>Received at {receiveLabel}</span>
+                    <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
                 ) : null}
                 {contractRowLabel(entry) ? (
                     <span className={styles.rowContractLabel}>
