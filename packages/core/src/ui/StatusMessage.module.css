@@ -12,6 +12,8 @@
 .text {
     flex: 1;
     min-width: 0;
+    max-width: var(--xc-prose-max-width);
+    margin-inline-end: auto;
     overflow-wrap: anywhere;
 }
 

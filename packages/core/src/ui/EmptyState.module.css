@@ -39,7 +39,7 @@
 
 .body {
     margin: 0;
-    max-width: 40ch;
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-type-body-size);
     font-weight: var(--xc-type-body-weight);
     line-height: 1.4;
