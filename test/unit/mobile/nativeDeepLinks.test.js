@@ -125,6 +125,33 @@ describe('subscribeToNativeDeepLinks', () => {
         await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(CLAIMED_LINK));
     });
 
+    it('attaches the live listener before draining the launch queue', async () => {
+        let listener;
+        let pending = null;
+        const warmLink = 'xchain:BTC/send?address=warm';
+        const plugin = {
+            addListener: vi.fn(async (_event, cb) => {
+                listener = cb;
+                return { remove: vi.fn() };
+            }),
+            takePendingLink: vi.fn(async () => {
+                const url = pending;
+                pending = null;
+                if (listener) listener({ url: warmLink });
+                else pending = warmLink;
+                return { url };
+            }),
+        };
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        subscribeToNativeDeepLinks(onLink);
+
+        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(warmLink));
+        expect(plugin.addListener.mock.invocationCallOrder[0])
+            .toBeLessThan(plugin.takePendingLink.mock.invocationCallOrder[0]);
+    });
+
     it('delivers taps that arrive while the app is running', async () => {
         const plugin = fakeLinks();
         __setLinksPluginForTests(plugin);
@@ -198,6 +225,32 @@ describe('subscribeToNativeDeepLinks', () => {
 
         expect(plugin.takePendingLink).toHaveBeenCalledTimes(1);
         expect(plugin.addListener).toHaveBeenCalledTimes(1);
+        expect(onLink).not.toHaveBeenCalled();
+    });
+
+    it('contains a rejected listener registration and still checks the launch queue', async () => {
+        const plugin = fakeLinks({
+            pending: CLAIMED_LINK,
+            overrides: { addListener: vi.fn().mockRejectedValue(new Error('bridge unavailable')) },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        subscribeToNativeDeepLinks(onLink);
+
+        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(CLAIMED_LINK));
+    });
+
+    it('contains a synchronous pending-link bridge failure', async () => {
+        const plugin = fakeLinks({
+            overrides: { takePendingLink: vi.fn(() => { throw new Error('bridge unavailable'); }) },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        expect(() => subscribeToNativeDeepLinks(onLink)).not.toThrow();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(onLink).not.toHaveBeenCalled();
     });
 });
