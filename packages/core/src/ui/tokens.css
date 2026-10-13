@@ -503,6 +503,19 @@ body {
     touch-action: manipulation;
 }
 
+/* Inline links stay identifiable without relying on theme color. Visited
+ * links keep the same semantic color so browser defaults cannot resemble a
+ * wallet status while the underline and shared focus ring remain present. */
+:where(a[href]) {
+    color: var(--xc-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+:where(a[href]:visited) {
+    color: var(--xc-accent-text);
+}
+
 /* A dialog can place its scrollport on the panel, body, list, or viewer.
  * Applying containment through the subtree keeps every such scroll boundary
  * from chaining into the page behind it. */
