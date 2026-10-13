@@ -388,14 +388,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // to empty) don't clobber their in-progress edit. MINT_SUPPLY /
     // TRANSFER_SUPPLY have no current value to prefill: they're a
     // one-shot "mint more now" action bundled into the same edit, not
-    // persisted token state.
+    // persisted token state. A field the owner already typed into before
+    // the token record arrived keeps that text; only empty fields prefill.
     const [mintPrefilled, setMintPrefilled] = useState(false);
     useEffect(() => {
         if (mode !== 'mint-settings' || !assetInfo || mintPrefilled) return;
-        setMaxMint(assetInfo.mintMax || '');
-        setMintAddressMax(assetInfo.mintAddressMax || '');
-        setMintStartBlock(assetInfo.mintStartBlock || '');
-        setMintStopBlock(assetInfo.mintStopBlock || '');
+        setMaxMint((current) => current || assetInfo.mintMax || '');
+        setMintAddressMax((current) => current || assetInfo.mintAddressMax || '');
+        setMintStartBlock((current) => current || assetInfo.mintStartBlock || '');
+        setMintStopBlock((current) => current || assetInfo.mintStopBlock || '');
         setMintPrefilled(true);
     }, [mode, assetInfo, mintPrefilled]);
 
