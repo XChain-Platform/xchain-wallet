@@ -80,6 +80,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
 
     useEffect(() => {
         let disposed = false;
+        let chart = null;
         let stopWatchingSize = () => {};
         let stopWatchingTheme = () => {};
         setChartReady(false);
@@ -90,7 +91,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 if (disposed || !containerRef.current) return;
                 const container = containerRef.current;
                 const colors = readChartColors(container);
-                const chart = lw.createChart(container, {
+                chart = lw.createChart(container, {
                     height: parseInt(String(height), 10) || 240,
                     layout: {
                         background: { color: 'transparent' },
@@ -165,6 +166,11 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 setChartReady(true);
             } catch (err) {
                 console.error('[MarketChart] init failed:', err);
+                stopWatchingSize();
+                stopWatchingTheme();
+                try { chart?.remove?.(); } catch { /* swallow */ }
+                if (chartRef.current === chart) chartRef.current = null;
+                seriesRef.current = null;
                 if (!disposed) setChartUnavailable(true);
             }
         })();
