@@ -10,6 +10,7 @@
 
 import { forwardRef, useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Input } from './Input.jsx';
+import { ClipboardPasteButton } from './ClipboardPasteButton.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import { filterSuggestions } from '../flows/recentDestinations.js';
 import styles from './AddressCombobox.module.css';
@@ -86,6 +87,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     const filtered = useMemo(
         () => filterSuggestions(suggestions, value),
@@ -150,7 +152,11 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     return (
         <div className={wrapClass} ref={containerRef} onBlur={onBlur}>
             <Input
-                ref={ref}
+                ref={(node) => {
+                    inputRef.current = node;
+                    if (typeof ref === 'function') ref(node);
+                    else if (ref) ref.current = node;
+                }}
                 role="combobox"
                 aria-expanded={showDropdown ? 'true' : 'false'}
                 aria-controls={listboxId}
@@ -208,6 +214,26 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     <IconComponent />
                 </button>
             ) : null}
+            {/* After the in-field icon button so focus follows the visual order:
+                field, its trailing icon, then the paste control below it. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                <ClipboardPasteButton
+                    disabled={disabled}
+                    onPaste={(text) => {
+                        const pasteEvent = {
+                            clipboardData: { getData: () => text },
+                            defaultPrevented: false,
+                            currentTarget: inputRef.current,
+                            target: inputRef.current,
+                            preventDefault() { this.defaultPrevented = true; },
+                        };
+                        onPaste?.(pasteEvent);
+                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: text } });
+                        setOpen(true);
+                        setActiveIndex(-1);
+                    }}
+                />
+            </div>
             {showDropdown ? (
                 <ul
                     id={listboxId}

@@ -40,7 +40,7 @@ describe('AddAccountForm navigation', () => {
             <AddAccountForm walletId="wallet-1" onBack={onBack} onCreated={() => {}} />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onBack).toHaveBeenCalledTimes(1);
     });
@@ -106,7 +106,7 @@ describe('AddAccountForm navigation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
 
         await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Add account' }).disabled).toBe(true);
         resolveCreate({ account: { id: 'account-2' } });
     });
@@ -121,6 +121,6 @@ describe('AddAccountForm navigation', () => {
 
         expect(await screen.findByText('Signer unavailable')).toBeTruthy();
         expect(screen.getByLabelText('Account name').disabled).toBe(false);
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(false);
     });
 });

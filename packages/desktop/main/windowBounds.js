@@ -11,13 +11,29 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-export const DEFAULT_WINDOW_BOUNDS = Object.freeze({ width: 420, height: 720 });
-const MIN_WIDTH = 360;
-const MIN_HEIGHT = 600;
+export const DEFAULT_WINDOW_BOUNDS = Object.freeze({ width: 1024, height: 768 });
+export const MIN_WINDOW_BOUNDS = Object.freeze({ width: 640, height: 600 });
+const MIN_WIDTH = MIN_WINDOW_BOUNDS.width;
+const MIN_HEIGHT = MIN_WINDOW_BOUNDS.height;
 const MAX_DIMENSION = 16_384;
 const MIN_VISIBLE_EDGE = 64;
 
 const finiteInt = (value) => Number.isFinite(value) ? Math.round(value) : null;
+
+/**
+ * Fit the first window to the primary display without enlarging the desktop default.
+ *
+ * @param {unknown} workArea
+ * @returns {{ width: number, height: number }}
+ */
+export function firstLaunchWindowBounds(workArea) {
+    const area = normalizeDisplayArea(workArea);
+    if (!area) return { ...DEFAULT_WINDOW_BOUNDS };
+    return {
+        width: Math.min(DEFAULT_WINDOW_BOUNDS.width, area.width),
+        height: Math.min(DEFAULT_WINDOW_BOUNDS.height, area.height),
+    };
+}
 
 /**
  * Return a safe normal-window rectangle, or null for malformed persisted data.

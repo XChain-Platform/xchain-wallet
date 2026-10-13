@@ -197,6 +197,18 @@ export function ActionConfirmScreen({
         ? `${feeLabel}: ${exactCoinAmount} ${ticker}`.trim()
             + (exactFeeFiat ? ` (${exactFeeFiat})` : '')
         : null;
+    const dustChangeLimit = composed?.dustChangeLimitSats;
+    const dustChangeText = Number.isFinite(dustChangeLimit) && dustChangeLimit > 0
+        ? `No change output was created. Any remainder below ${satsToCoinDecimal(dustChangeLimit)} ${ticker}`
+            + ' is included in the network fee shown above.'
+        : null;
+    const displayedFee = dustChangeText ? (
+        <>
+            {exactFeeText}
+            <br />
+            <span data-testid="confirm-dust-change">{dustChangeText}</span>
+        </>
+    ) : (exactFeeText || feeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index
@@ -260,7 +272,7 @@ export function ActionConfirmScreen({
             sourceName={sourceName}
             signingWallet={sourceIdentity.wallet}
             chainLabel={chainLabel}
-            feeText={exactFeeText || feeText}
+            feeText={displayedFee}
             totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}

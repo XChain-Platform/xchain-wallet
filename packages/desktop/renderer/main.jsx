@@ -59,7 +59,7 @@ if (!container) {
 setShellCapabilities({ socksProxy: true });
 
 createRoot(container).render(
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100dvh)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100vh)' }}>
         {/* The application menu is available before unlock, so update check
             results stay mounted above every renderer state. */}
         <DesktopUpdateBanner />
