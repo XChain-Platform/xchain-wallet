@@ -13,11 +13,9 @@
 // (useCommandPalette owns it); this covers the rest of the core set plus the
 // `g`-leader navigation.
 //
-// Focus rules (§34.4 / the "when no input has focus" caveat):
-//   - Modifier combos (Cmd/Ctrl+L, +N, +,, +/) fire regardless of focus.
-//   - Single keys ('?') and leader sequences ('g h') are suppressed while an
-//     editable element (input/textarea/select/contenteditable) has focus, so
-//     typing a memo or a search query never triggers navigation.
+// Focus rules (§34.4 / the "when no input has focus" caveat): all shortcuts
+// are suppressed while an editable element (input/textarea/select/
+// contenteditable) has focus, so typing never triggers a wallet action.
 //
 // `enabled` gates the whole listener: shells pass false while locked, while the
 // command palette is open (its own input owns the keys), and while the shortcut
@@ -97,10 +95,15 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
         };
 
         const onKey = (e) => {
+            if (isEditableTarget(e.target)) {
+                clearLeader();
+                return;
+            }
             const mod = e.metaKey || e.ctrlKey;
 
-            // Modifier combos fire anywhere. Never swallow Alt/Shift-modified
-            // combos (none of ours use them) so we don't hijack OS chords.
+            // Modifier combos fire outside editable fields. Never swallow
+            // Alt/Shift-modified combos (none of ours use them) so we don't
+            // hijack OS chords.
             if (mod && !e.altKey && !e.shiftKey) {
                 const action = COMBO.get((e.key || '').toLowerCase());
                 clearLeader();
@@ -108,9 +111,6 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
                 return;
             }
             if (mod || e.altKey) { clearLeader(); return; }
-
-            // From here down: no modifier. Suppress while typing.
-            if (isEditableTarget(e.target)) { clearLeader(); return; }
 
             // Shift may produce a catalogued printable key such as '?', but
             // it does not turn leader keys into additional shortcut chords.

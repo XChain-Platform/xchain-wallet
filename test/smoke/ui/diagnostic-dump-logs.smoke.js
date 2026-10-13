@@ -63,8 +63,8 @@ assert.ok(/function sanitizeLogs\(arr\)/.test(dumpSrc),
 // that fed in malformed entries doesn't break the dump shape.
 assert.ok(/\['log', 'info', 'warn', 'error'\]\.includes\(e\?\.level\)/.test(dumpSrc),
     'sanitizeLogs validates the level field against the documented union');
-assert.ok(/typeof e\?\.source === 'string' \? e\.source : 'console'/.test(dumpSrc),
-    'sanitizeLogs coerces source to a string with a "console" fallback');
+assert.ok(/source: sanitizeLogSource\(e\?\.source\)/.test(dumpSrc),
+    'sanitizeLogs reduces free-form source values to safe categories');
 
 // 4. The DiagnosticDump typedef exposes the new slot.
 assert.ok(/@property \{DiagnosticLogEntry\[\]\} recent_logs/.test(dumpSrc),

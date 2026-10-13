@@ -34,8 +34,11 @@ const walletPickerCss = readFileSync(
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
         expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*55%;/s);
-        expect(balanceCss.match(/overflow-wrap:\s*anywhere;/g)).toHaveLength(3);
-        expect(walletPickerCss).toMatch(/\.rowText\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        // Long amounts shrink to fit on one line (see longContentLayout.test.jsx)
+        // and long names ellipsize, rather than wrapping anywhere.
+        expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*white-space:\s*nowrap;/s);
+        expect(balanceCss).toMatch(/\.name\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+        expect(walletPickerCss).toMatch(/\.rowText\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*flex-wrap:\s*wrap;/s);
     });
 

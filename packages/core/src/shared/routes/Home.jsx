@@ -344,6 +344,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // a wallet switch.
     const [addAddressOpen, setAddAddressOpen] = useState(false);
     const [homeReloadKey, setHomeReloadKey] = useState(0);
+    const [portfolioRefreshing, setPortfolioRefreshing] = useState(false);
+    const portfolioRefreshIdRef = useRef(0);
+    useEffect(() => {
+        portfolioRefreshIdRef.current += 1;
+        setPortfolioRefreshing(false);
+    }, [activeWalletId, activeAccountId]);
     // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -744,6 +750,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             isCancelled: () => manualRefreshGenerationRef.current !== generation,
         });
     }, [activeWalletId, activeAccountId, browserOnline, loadHomeData]);
+
+    const refreshPortfolio = useCallback(async () => {
+        if (!activeWalletId || portfolioRefreshing || !isNavigatorOnline()) return;
+        const refreshId = portfolioRefreshIdRef.current + 1;
+        portfolioRefreshIdRef.current = refreshId;
+        setPortfolioRefreshing(true);
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        try {
+            await loadHomeData(activeWalletId, activeAccountId || undefined, {
+                reset: false,
+                isCancelled: () => portfolioRefreshIdRef.current !== refreshId,
+            });
+        } finally {
+            if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
+        }
+    }, [activeWalletId, activeAccountId, loadHomeData, portfolioRefreshing]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1176,6 +1199,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
+                        onRefresh={refreshPortfolio}
+                        refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.

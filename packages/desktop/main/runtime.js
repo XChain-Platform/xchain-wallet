@@ -452,6 +452,7 @@ export async function ensureHost(runtime) {
                 sdkRegistry: runtime.sdkRegistry,
                 chainRegistry: runtime.chainRegistry,
                 getSigner: (walletId) => runtime.signerPool.get(walletId),
+                getSettings: () => flowsLib.getSettings(vault),
                 reservationLedger: runtime.host.host.reservationLedger,
                 notify: runtime.notify,
                 shellKind: 'desktop',
