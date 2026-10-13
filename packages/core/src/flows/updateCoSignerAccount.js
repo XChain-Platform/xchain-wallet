@@ -40,6 +40,7 @@ export class CoSignerAccountNotFoundError extends Error {
  * @property {boolean} [patch.enabled]
  * @property {import('../schemas/coSignerAccount.js').CoSignerAccountPolicy} [patch.policy]
  * @property {Array<{ address?: string, script?: string, maxValue?: number }>} [patch.allowedOutputs]
+ * @property {{ name: string, policy: object, allowedOutputs: object[] }} [patch.expectedEditable]
  */
 
 /**
@@ -54,6 +55,17 @@ export async function updateCoSignerAccount(opts = {}) {
 
     const existing = await vault.coSignerAccounts.get(id);
     if (!existing) throw new CoSignerAccountNotFoundError(id);
+
+    if (patch.expectedEditable !== undefined) {
+        const currentEditable = {
+            name: existing.name,
+            policy: existing.policy,
+            allowedOutputs: existing.allowedOutputs,
+        };
+        if (JSON.stringify(currentEditable) !== JSON.stringify(patch.expectedEditable)) {
+            throw new Error('This agent account changed after you opened the editor. Review the latest policy, then save again.');
+        }
+    }
 
     const next = { ...existing, updatedAt: new Date().toISOString() };
 

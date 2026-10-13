@@ -47,7 +47,10 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
 
     useEffect(() => {
         let cancelled = false;
-        messaging.listCoSignerAccounts({ walletId })
+        setAccounts(null);
+        setError(null);
+        Promise.resolve()
+            .then(() => messaging.listCoSignerAccounts({ walletId }))
             .then((list) => { if (!cancelled) setAccounts(Array.isArray(list) ? list : []); })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load agent accounts.'); });
         return () => { cancelled = true; };

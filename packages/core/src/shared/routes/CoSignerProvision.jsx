@@ -23,7 +23,7 @@
 //
 // MuSig2 is BTC-only at launch (§22 + §10.3), matching the multisig routes.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -78,12 +78,28 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const [stage, setStage] = useState(/** @type {'compose' | 'submitting' | 'done'} */ ('compose'));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const requestRef = useRef(0);
+    const submittingRef = useRef(false);
 
     useEffect(() => {
+        const request = requestRef.current + 1;
+        requestRef.current = request;
+        submittingRef.current = false;
         let cancelled = false;
-        messaging.getAddressesByChain(walletId)
+        setAddressesByChain(null);
+        setLoadError(null);
+        setChainId(null);
+        setDaemonAddressId('');
+        setAgentPubkey('');
+        setName('Agent account');
+        setPolicyDraft(emptyPolicyDraft());
+        setStage('compose');
+        setSubmitError(null);
+        setResult(null);
+        Promise.resolve()
+            .then(() => messaging.getAddressesByChain(walletId))
             .then((byChain) => {
-                if (cancelled) return;
+                if (cancelled || requestRef.current !== request) return;
                 setAddressesByChain(byChain || {});
                 const btcWithAddresses = btcChainIds.find(
                     (cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0,
@@ -97,9 +113,17 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 setChainId(btcWithAddresses);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled && requestRef.current === request) {
+                    setLoadError(err?.message || 'Failed to load addresses.');
+                }
             });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            if (requestRef.current === request) {
+                requestRef.current += 1;
+                submittingRef.current = false;
+            }
+        };
     }, [walletId, btcChainIds, messaging]);
 
     // Reset the picked daemon address when the chain changes (the address
@@ -129,10 +153,12 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
 
     async function handleSubmit(event) {
         event?.preventDefault();
-        if (composeError || !chainId || !daemonAddress) return;
+        if (composeError || !chainId || !daemonAddress || submittingRef.current) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setSubmitError(built.error); return; }
 
+        const request = requestRef.current;
+        submittingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -146,11 +172,17 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 allowedOutputs: built.allowedOutputs,
                 name: name.trim() || 'Agent account',
             });
-            setResult(r);
-            setStage('done');
+            if (requestRef.current === request) {
+                setResult(r);
+                setStage('done');
+            }
         } catch (err) {
-            setSubmitError(err?.message || 'Failed to create the agent account.');
-            setStage('compose');
+            if (requestRef.current === request) {
+                setSubmitError(err?.message || 'Failed to create the agent account.');
+                setStage('compose');
+            }
+        } finally {
+            if (requestRef.current === request) submittingRef.current = false;
         }
     }
 
