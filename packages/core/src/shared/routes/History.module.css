@@ -32,7 +32,7 @@
     width: 100%;
     box-sizing: border-box;
     appearance: none;
-    height: 36px;
+    min-height: 36px;
     line-height: 1;
     padding: 0 var(--xc-space-3);
     border-radius: var(--xc-radius-sm);

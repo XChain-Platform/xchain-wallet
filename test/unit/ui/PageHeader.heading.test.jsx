@@ -61,7 +61,7 @@ describe('PageHeader', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
-    it('keeps a long title in a shrinkable lane between fixed actions at 360px', () => {
+    it('wraps a long title in a shrinkable lane between fixed actions at 320px', () => {
         const header = rule(pageHeaderCss, '.header');
         const title = rule(pageHeaderCss, '.title');
         const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
@@ -70,8 +70,9 @@ describe('PageHeader', () => {
         expect(header).toMatch(
             /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
         );
-        expect(title).toMatch(/overflow:\s*hidden/);
-        expect(title).toMatch(/text-overflow:\s*ellipsis/);
+        expect(title).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(title).toMatch(/white-space:\s*normal/);
+        expect(title).not.toMatch(/text-overflow:\s*ellipsis/);
         expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
     });
 });

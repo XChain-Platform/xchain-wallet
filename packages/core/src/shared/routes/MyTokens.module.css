@@ -56,15 +56,14 @@
 
 /* Outlined segmented control - adjacent chips share a stroke so the
    pair reads as "pick one of these" instead of two independent toggles.
-   Height locked to the Input's 36px (via box-sizing) so it baselines
-   with the search box. */
+   The Input's 36px establishes the baseline while allowing text to grow. */
 .chipGroup {
     display: inline-flex;
     flex-direction: row;
     align-items: stretch;
     flex: 0 0 auto;
     box-sizing: border-box;
-    height: 36px;
+    min-height: 36px;
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-pill, 999px);
     overflow: hidden;

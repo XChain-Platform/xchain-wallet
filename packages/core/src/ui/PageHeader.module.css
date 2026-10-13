@@ -87,9 +87,8 @@
     font-size: var(--xc-text-lg);
     color: var(--xc-text);
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
     min-width: 0;
 }
 

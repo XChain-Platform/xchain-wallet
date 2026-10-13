@@ -15,7 +15,7 @@
     inset-inline-start: 0;
     inset-inline-end: 0;
     bottom: 0;
-    height: 56px;
+    min-height: 56px;
     display: flex;
     flex-direction: row;
     background: var(--xc-surface-raised);
