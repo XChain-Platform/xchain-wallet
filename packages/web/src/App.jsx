@@ -696,6 +696,20 @@ function AppInner() {
             );
     }, []);
 
+    const finishFreshWalletCreation = useCallback(() => {
+        const next = { hasWallet: true, hasSession: true, state: 'unlocked' };
+        const launchView = launchRouteState.current.takeForSession(next);
+        setOnboardingStep('welcome');
+        setUnlockedView(launchView || 'home');
+        nativeSuspendedRef.current = false;
+        setStatus(next);
+        if (typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent('xc:session-changed'));
+            } catch { /* CustomEvent unsupported: non-fatal */ }
+        }
+    }, []);
+
     function clearTransientActionState() {
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
@@ -1010,7 +1024,7 @@ function AppInner() {
                     <Suspense fallback={<Loading />}>
                         <CreateWallet
                             onBack={() => setOnboardingStep('welcome')}
-                            onCreated={refresh}
+                            onCreated={finishFreshWalletCreation}
                         />
                     </Suspense>
                 );
