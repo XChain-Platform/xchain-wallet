@@ -92,11 +92,17 @@ export function deepLinkRoute(raw, chainRegistry) {
         return invalidRoute();
     }
     if (intent?.kind === 'send') {
+        let amount = intent.amount;
+        try {
+            amount = coreUri.normalizeBip21Amount(amount);
+        } catch {
+            return invalidRoute();
+        }
         return {
             view: 'send',
             sendPrefill: {
                 address: intent.address,
-                amount: intent.amount,
+                amount,
                 tick: intent.tick,
                 chainId: intent.chainId,
                 memo: intent.memo,

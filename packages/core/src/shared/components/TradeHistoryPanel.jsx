@@ -27,14 +27,7 @@ import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
-
-const HISTORY_GRID_COLUMNS = 'minmax(7rem, 1fr) repeat(2, minmax(5rem, 1fr)) minmax(3rem, 0.6fr) minmax(8rem, 1.5fr)';
-const NUMERIC_CELL_STYLE = {
-    minWidth: 0,
-    textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums',
-    overflowWrap: 'anywhere',
-};
+import tableStyles from './DataTable.module.css';
 
 /**
  * @param {object} props
@@ -87,10 +80,13 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             const results = await Promise.all(addresses.map((addr) =>
                 messaging.getMarketHistory({
                     chainId, tick1, tick2, address: addr.address,
-                }).then((resp) => ({ addr, rows: extractRows(resp) }))
+                }).then((resp) => ({ addr, rows: extractRows(resp), error: null }))
+                  .catch((error) => ({ addr, rows: [], error }))
             ));
+            const successes = results.filter(({ error }) => !error);
+            if (successes.length === 0) throw results[0].error;
             const flat = [];
-            for (const { addr, rows: addrRows } of results) {
+            for (const { addr, rows: addrRows } of successes) {
                 for (const row of addrRows) flat.push({ ...row, __owner: addr });
             }
             flat.sort((a, b) => rowTime(b) - rowTime(a));
@@ -173,85 +169,58 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             ) : null}
             {summaries.length > 0 ? (
                 <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: HISTORY_GRID_COLUMNS,
-                            gap: '0.25rem',
-                            minWidth: '32rem',
-                            fontSize: '0.75rem',
-                            color: 'var(--xc-fg-muted)',
-                            padding: '0 0.25rem 0.25rem',
-                        }}
-                    >
-                        <span style={NUMERIC_CELL_STYLE}>Time</span>
-                        <span style={NUMERIC_CELL_STYLE}>Price</span>
-                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
-                        <span>Side</span>
-                        <span>Address</span>
-                    </div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '32rem' }}>
-                        {summaries.map((summary, idx) => {
-                            const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
-                            const content = (
-                                <div
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: HISTORY_GRID_COLUMNS,
-                                        gap: '0.25rem',
-                                        padding: '0.15rem 0.25rem',
-                                        fontSize: '0.8rem',
-                                    }}
-                                >
-                                    <span style={{ ...NUMERIC_CELL_STYLE, color: 'var(--xc-fg-muted)' }}>
-                                        {summary.timeLabel}
-                                    </span>
-                                    <span
-                                        style={{
-                                            ...NUMERIC_CELL_STYLE,
-                                            color: sideColor,
-                                        }}
-                                    >
-                                        {summary.price}
-                                    </span>
-                                    <span style={NUMERIC_CELL_STYLE}>{summary.size}</span>
-                                    <span style={{ color: sideColor, fontWeight: 600 }}>
-                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
-                                    </span>
-                                    <span style={{ minWidth: 0, overflow: 'hidden' }}>
-                                        {summary.ownerAddress ? (
-                                            <AddressText address={summary.ownerAddress} />
-                                        ) : '--'}
-                                    </span>
-                                </div>
-                            );
-                            const key = summary.key || `row-${idx}`;
-                            if (!onOpenTx || !summary.txHash) {
-                                return <li key={key}>{content}</li>;
-                            }
-                            return (
-                                <li key={key}>
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenTx(summary.txHash)}
-                                        aria-label={`Open transaction ${summary.txHash}`}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            background: 'none',
-                                            border: 'none',
-                                            padding: 0,
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
-                                            color: 'inherit',
-                                        }}
-                                    >
-                                        {content}
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                    <table className={tableStyles.table}>
+                        <caption className={tableStyles.caption}>Trade history</caption>
+                        <thead>
+                            <tr>
+                                <th className={tableStyles.headerCell} scope="col">Time</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                                <th className={tableStyles.headerCell} scope="col">Side</th>
+                                <th className={tableStyles.headerCell} scope="col">Address</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {summaries.map((summary, idx) => {
+                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                                const key = summary.key || `row-${idx}`;
+                                return (
+                                    <tr key={key}>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                            {onOpenTx && summary.txHash ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenTx(summary.txHash)}
+                                                    aria-label={`Open transaction ${summary.txHash}`}
+                                                    className={tableStyles.cellButton}
+                                                >
+                                                    {summary.timeLabel}
+                                                </button>
+                                            ) : summary.timeLabel}
+                                        </td>
+                                        <td
+                                            className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                                            data-label="Price"
+                                            style={{ color: sideColor }}
+                                        >
+                                            {summary.price}
+                                        </td>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                            {summary.size}
+                                        </td>
+                                        <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
+                                            {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                        </td>
+                                        <td className={tableStyles.cell} data-label="Address">
+                                            {summary.ownerAddress ? (
+                                                <AddressText address={summary.ownerAddress} />
+                                            ) : '--'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             ) : null}
         </section>

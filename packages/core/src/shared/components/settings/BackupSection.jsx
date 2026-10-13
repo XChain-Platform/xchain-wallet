@@ -56,7 +56,9 @@ import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { copyText } from '../../clipboard.js';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
+import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
+import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
@@ -97,6 +99,8 @@ export function BackupSection({ activeWallet }) {
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
     const [exportResult, setExportResult] = useState(/** @type {{ fileName: string, walletName: string } | null} */ (null));
+    const exportAttemptRef = useRef(0);
+    const exportTime = useLongOperationStatus(exporting, { timeoutMs: 30_000 });
 
     // §19.3 reveal-seed state.
     const [revealStage, setRevealStage] = useState(
@@ -172,6 +176,7 @@ export function BackupSection({ activeWallet }) {
             setExportError('No active wallet to back up.');
             return;
         }
+        const attempt = ++exportAttemptRef.current;
         setExporting(true);
         setExportError(null);
         try {
@@ -179,6 +184,7 @@ export function BackupSection({ activeWallet }) {
                 walletId: activeWallet.id,
                 password,
             });
+            if (attempt !== exportAttemptRef.current) return;
             const saved = triggerDownload(activeWallet.name || activeWallet.id, fileContent);
             // §19.7 / G034: successful encrypted-backup export counts as
             // a fresh backup verification for reminder purposes.
@@ -186,10 +192,18 @@ export function BackupSection({ activeWallet }) {
             setExportResult(saved);
             setPendingPassword(null);
         } catch (err) {
+            if (attempt !== exportAttemptRef.current) return;
             setExportError(userFacingMessage(err, 'Could not export the backup. Try again.'));
         } finally {
-            setExporting(false);
+            if (attempt === exportAttemptRef.current) setExporting(false);
         }
+    };
+
+    const cancelExport = () => {
+        exportAttemptRef.current += 1;
+        setExporting(false);
+        setPendingPassword(null);
+        setExportError(null);
     };
 
     const onReveal = async (password) => {
@@ -419,7 +433,8 @@ export function BackupSection({ activeWallet }) {
                     label="Backup password"
                     hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters. It encrypts this backup file and is separate from your wallet password. Your browser saves the file to its configured download location, usually the Downloads folder.`}
                     busy={exporting}
-                    onCancel={() => { setPendingPassword(null); setExportError(null); }}
+                    operationTime={exportTime}
+                    onCancel={cancelExport}
                     onSubmit={(pw) => onExport(pw)}
                     error={exportError}
                 />
@@ -437,7 +452,7 @@ export function BackupSection({ activeWallet }) {
             {revealStage === 'password' ? (
                 <UnlockPrompt
                     label="Reveal recovery phrase"
-                    hint="Enter your wallet password. The recovery phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    hint={`Enter your wallet password. ${RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.`}
                     busy={revealing}
                     onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
                     onSubmit={(pw) => onReveal(pw)}
@@ -688,9 +703,8 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
  * §15.6: a wallet with a stored 25th-word passphrase shows it under the
  * words, behind the same tap-to-reveal blur and the same password gate
  * as the seed itself. There is no separate reveal toggle and no copy
- * control for it, matching the seed row above (see the "never paste it
- * into anything else" hint), since a clipboard write here would
- * contradict that same sentence. A wallet without `passphraseEnabled`
+ * control for it, matching the seed row above, because clipboard
+ * contents are available to other apps. A wallet without `passphraseEnabled`
  * renders nothing extra; a legacy wallet that has not captured its
  * passphrase yet (`passphraseEnabled` true, nothing stored) gets one
  * line saying so instead of a blank row.
@@ -720,9 +734,8 @@ function RevealedMnemonic({
             </div>
             <div className={styles.sheetMeta}>Wallet: {walletName}</div>
             <div style={ROW_HINT}>
-                Write it on paper or store it in a password manager. Never type or
-                paste it into anything else. The wallet has nothing else that can
-                recover this. Losing the seed and your password loses the funds.
+                {RECOVERY_PHRASE_WARNING} Write it on paper or store it in a
+                password manager.
             </div>
             <button
                 type="button"
@@ -1011,7 +1024,7 @@ function DryRunChainReport({ chain }) {
     );
 }
 
-function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
+function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onSubmit }) {
     const [pw1, setPw1] = useState('');
     const [pw2, setPw2] = useState('');
     const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
@@ -1060,8 +1073,17 @@ function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 <Status text="Backup passwords do not match." tone="error" />
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
+            {operationTime?.showElapsed ? (
+                <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
+            ) : null}
+            {operationTime?.timedOut ? (
+                <Status
+                    text="Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying."
+                    tone="error"
+                />
+            ) : null}
             <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
+                <button type="button" onClick={onCancel} style={ACTION_BTN}>Cancel</button>
                 <button
                     type="button"
                     onClick={() => onSubmit(pw1)}

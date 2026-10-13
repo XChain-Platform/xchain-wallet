@@ -30,6 +30,8 @@ import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
+import { WalletIdentity } from './WalletIdentity.jsx';
+import { NetworkStatusIndicator } from './NetworkStatusIndicator.jsx';
 import styles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
@@ -47,6 +49,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {{ id: string, name?: string, index?: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                    gear popover: navigate to the wallet picker
  * @param {() => void} [props.onOpenAccountPicker]                   gear popover: navigate to the account picker
+ * @param {() => void} [props.onOpenSettings]                        gear popover: navigate to the full settings page
  * @param {boolean} [props.walletNonDefault]                         drives the gear's status dot
  * @param {boolean} [props.accountNonDefault]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
@@ -58,6 +61,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
+ * @param {() => void} [props.onOpenNetworkSettings]                 opens the per-chain endpoint settings screen
  */
 export function AppHeader({
     onMenuOpen,
@@ -72,6 +76,7 @@ export function AppHeader({
     activeAccount = null,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    onOpenSettings,
     walletNonDefault = false,
     accountNonDefault = false,
     chainRegistry,
@@ -83,6 +88,7 @@ export function AppHeader({
     developerMode = false,
     onActiveNetworkChange,
     platformCurrent,
+    onOpenNetworkSettings,
 }) {
     const networkWired = showNetworkFilter
         && Boolean(chainRegistry)
@@ -91,28 +97,34 @@ export function AppHeader({
         && typeof onNetworkFilterChange === 'function';
     const showSettings = typeof onOpenWalletPicker === 'function'
         || typeof onOpenAccountPicker === 'function'
+        || typeof onOpenSettings === 'function'
         || networkWired
         || typeof onActiveNetworkChange === 'function';
 
     return (
         // A labelled region, not a second banner: each screen's Screen header already
         // is the page banner, and a document may hold only one.
-        <div className={styles.bar} role="region" aria-label="App header">
+        <div className={styles.bar} style={{ flexWrap: 'wrap' }} role="region" aria-label="App header">
             <div className={styles.left}>
                 <img
                     src={branding.logoUrl()}
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
+                <WalletIdentity wallet={activeWallet} namePrefix="Wallet: " />
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
+                {onOpenNetworkSettings ? (
+                    <NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />
+                ) : null}
                 {showSettings ? (
                     <HeaderSettingsButton
                         activeWallet={activeWallet}
                         activeAccount={activeAccount}
                         onOpenWalletPicker={onOpenWalletPicker}
                         onOpenAccountPicker={onOpenAccountPicker}
+                        onOpenSettings={onOpenSettings}
                         walletNonDefault={walletNonDefault}
                         accountNonDefault={accountNonDefault}
                         chainRegistry={networkWired ? chainRegistry : undefined}

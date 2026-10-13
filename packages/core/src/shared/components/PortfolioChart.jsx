@@ -21,6 +21,7 @@ import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { fiatValue } from './BalanceList.jsx';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -155,10 +156,12 @@ export function PortfolioChart({ rows, walletId }) {
         return { delta: d, pct: p };
     }, [hasData, series]);
 
-    const tone = delta == null || delta === 0
-        ? styles.changeNeutral
-        : delta > 0 ? styles.changePositive : styles.changeNegative;
-    const arrow = delta == null || delta === 0 ? '-' : delta > 0 ? '▲' : '▼';
+    const pctDisplay = percentChangeDisplay(pct);
+    const direction = pctDisplay?.direction ?? 'neutral';
+    const tone = direction === 'positive'
+        ? styles.changePositive
+        : direction === 'negative' ? styles.changeNegative : styles.changeNeutral;
+    const arrow = direction === 'positive' ? '▲' : direction === 'negative' ? '▼' : '-';
     const selectedTabId = `${chartPanelId}-tab-${range.id}`;
 
     // Chart-icon toggle in TotalBalanceHero collapses the whole section.
@@ -180,11 +183,12 @@ export function PortfolioChart({ rows, walletId }) {
                 aria-labelledby={selectedTabId}
             >
                 {hasData && delta != null && !hidden ? (
-                    <div className={`${styles.change} ${tone}`}>
+                    <div
+                        className={`${styles.change} ${tone}`}
+                        aria-label={`${pctDisplay?.label ?? 'Change unavailable'}; ${formatFiat(Math.abs(delta), fiatCurrency)}`}
+                    >
                         {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                        {pct != null && Number.isFinite(pct)
-                            ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
-                            : ''}
+                        {pctDisplay ? ` (${pctDisplay.text})` : ''}
                     </div>
                 ) : null}
                 {priceLoading ? (

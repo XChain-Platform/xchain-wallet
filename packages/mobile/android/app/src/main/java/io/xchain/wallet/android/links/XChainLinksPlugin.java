@@ -55,6 +55,7 @@ public class XChainLinksPlugin extends Plugin {
     private static final String SCHEME_DOGECOIN = "dogecoin";
     private static final String SCHEME_WEB = "https";
     private static final String HOST_WEB = "xchain.io";
+    private static final String PATH_PREFIX_WEB = "/wallet/link/";
 
     /**
      * Marks an Intent this plugin has already taken the link out of.
@@ -146,7 +147,11 @@ public class XChainLinksPlugin extends Plugin {
             intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }
-        if (SCHEME_WEB.equalsIgnoreCase(scheme) && HOST_WEB.equalsIgnoreCase(data.getHost())) {
+        String encodedPath = data.getEncodedPath();
+        if (SCHEME_WEB.equalsIgnoreCase(scheme)
+                && HOST_WEB.equalsIgnoreCase(data.getHost())
+                && encodedPath != null
+                && encodedPath.startsWith(PATH_PREFIX_WEB)) {
             intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }

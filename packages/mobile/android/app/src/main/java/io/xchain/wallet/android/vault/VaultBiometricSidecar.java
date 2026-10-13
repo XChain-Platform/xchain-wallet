@@ -65,7 +65,8 @@ import javax.crypto.spec.GCMParameterSpec;
 final class VaultBiometricSidecar {
     /** Shared with the iOS shell and the SPA (BIOMETRIC_CANCELLED_DETAIL). */
     static final String CANCELLED_DETAIL = "the biometric prompt was cancelled";
-
+    /** Stable detail for the shared UI's retry-exhaustion explanation. */
+    static final String RETRY_EXHAUSTED_DETAIL = "biometric authentication failed repeatedly";
 
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
@@ -295,7 +296,7 @@ final class VaultBiometricSidecar {
 
         prompt(activity, executor, cipher,
                 "Unlock XChain Wallet",
-                "Use your fingerprint or face to unlock",
+                "Use your fingerprint or face to unlock XChain Wallet",
                 new PromptCallback() {
                     @Override
                     public void onError(String detail) {
@@ -345,11 +346,10 @@ final class VaultBiometricSidecar {
         BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
                 .setTitle(title)
                 .setSubtitle(subtitle)
-                // No device-credential fallback: the wallet's own password
-                // form is already the fallback, and allowing the device PIN
-                // here would let it stand in for the biometric the key is
-                // bound to.
-                .setNegativeButtonText("Cancel")
+                // This action returns to the wallet password field. Device
+                // credentials stay disabled because a device PIN must not
+                // stand in for the biometric that protects this key.
+                .setNegativeButtonText("Use wallet password")
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
                 .setConfirmationRequired(true)
                 .build();
@@ -366,6 +366,11 @@ final class VaultBiometricSidecar {
                                 || code == BiometricPrompt.ERROR_NEGATIVE_BUTTON
                                 || code == BiometricPrompt.ERROR_CANCELED) {
                             callback.onError(CANCELLED_DETAIL);
+                            return;
+                        }
+                        if (code == BiometricPrompt.ERROR_LOCKOUT
+                                || code == BiometricPrompt.ERROR_LOCKOUT_PERMANENT) {
+                            callback.onError(RETRY_EXHAUSTED_DETAIL);
                             return;
                         }
                         callback.onError(String.valueOf(message));
