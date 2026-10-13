@@ -42,6 +42,12 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { Settings } from './Settings.jsx';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -108,7 +114,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { showToast } = useToast();
-    const { settings } = useSettings();
+    const settingsState = useSettings();
+    const { settings } = settingsState;
     // The Wallet Mode screen promises the receive screen is hidden in
     // signer mode. Refused here as well as in the nav, because the palette and
     // `xchain:` URI intents both reach this route without a nav click.
@@ -149,6 +156,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // when it doesn't.
     const [noAddresses, setNoAddresses] = useState(false);
     const [addAddressOpen, setAddAddressOpen] = useState(false);
+    const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
     // Bumped after a generate so the chain list + newest address reload.
     const [reloadKey, setReloadKey] = useState(0);
 
@@ -754,6 +762,28 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     no address you are meant to fund. Switch the mode under Settings,
                     Wallet Mode to receive on this device.
                 </StatusMessage>
+            </Screen>
+        );
+    }
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain(settingsState, chainRegistry)) {
+        return (
+            <Screen variant={variant} header={header}>
+                <EmptyState
+                    title={NO_CHAINS_TITLE}
+                    body={NO_CHAINS_BODY}
+                    actionLabel="Open Network settings"
+                    onAction={() => setNetworkSettingsOpen(true)}
+                    actionIcon={<Icon.GearIcon />}
+                />
             </Screen>
         );
     }

@@ -40,6 +40,7 @@ export const en = {
     'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
     'common.tryAgain': 'Try again',
+    'common.openNetworkSettings': 'Open Network settings',
     'common.next': 'Next',
     'common.done': 'Done',
     'common.loading': 'Loading…',

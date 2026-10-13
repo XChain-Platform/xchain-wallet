@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -38,6 +38,11 @@ import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerError
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -874,6 +879,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // local `handleLock` that used to sit here had exactly one consumer,
     // the auto-lock hook, and left with it. Do not re-add a
     // `useAutoLock` call to any route.
+    const hasChains = hasAvailableChain(settings, chainRegistry);
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
@@ -988,6 +994,23 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onVerifySignature={onVerifySignature}
                         onOpenSettings={onOpenSettings}
                         onLockWallet={onLockWallet}
+                    />
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    if (!hasChains) {
+        return (
+            <Screen variant={variant}>
+                <ListPage className={isFull ? styles.bodyFull : undefined}>
+                    <h1 className="sr-only">Home</h1>
+                    <EmptyState
+                        title={NO_CHAINS_TITLE}
+                        body={NO_CHAINS_BODY}
+                        actionLabel="Open Network settings"
+                        onAction={() => { setSettingsSubpage('network'); setSettingsOpen(true); }}
+                        actionIcon={<Icon.GearIcon />}
                     />
                 </ListPage>
             </Screen>

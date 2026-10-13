@@ -75,6 +75,12 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { Settings } from './Settings.jsx';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -441,6 +447,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [addressesReload, setAddressesReload] = useState(0);
+    const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
@@ -1415,6 +1422,29 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {children}
         </Screen>
     );
+
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain(proofSettings, chainRegistry)) {
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title={NO_CHAINS_TITLE}
+                    body={NO_CHAINS_BODY}
+                    actionLabel={t('common.openNetworkSettings')}
+                    onAction={() => setNetworkSettingsOpen(true)}
+                    actionIcon={<Icon.GearIcon />}
+                />
+            </ListPage>,
+        );
+    }
 
     if (loadError) {
         return wrap(

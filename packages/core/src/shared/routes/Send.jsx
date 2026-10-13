@@ -21,6 +21,7 @@ import {
     FeeSelector,
     FormPage,
     ChainPicker,
+    EmptyState,
     Icon,
     InfoTip,
     StatusMessage,
@@ -67,6 +68,12 @@ import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { Settings } from './Settings.jsx';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { contactEntryChain } from '../utils/contactChain.js';
 
@@ -367,6 +374,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (
         prefill?.chainId || null
@@ -2247,6 +2255,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             <StatusMessage variant="status">
                 {t('send.signerMode')}
             </StatusMessage>,
+        );
+    }
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain({ settings }, chainRegistry)) {
+        return wrap(
+            <EmptyState
+                title={NO_CHAINS_TITLE}
+                body={NO_CHAINS_BODY}
+                actionLabel={t('common.openNetworkSettings')}
+                onAction={() => setNetworkSettingsOpen(true)}
+                actionIcon={<Icon.GearIcon />}
+            />,
         );
     }
     if (loadError) {
