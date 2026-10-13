@@ -241,6 +241,7 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {{ enabled: boolean }} panicMode                                                                v2: duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2: backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
+ * @property {Record<string, string[]>} [pinnedTokensByWallet]                                               v3-tolerant: wallet-scoped pinned token lists keyed by wallet id
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant: when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings > Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant: when true, balance rows render a per-row hide affordance. Default false; the Settings > Display unhide list still works regardless.
@@ -309,6 +310,26 @@ export const SIGN_THROTTLE_WINDOW_MS_MAX = 24 * 60 * 60 * 1000;
 export const QUIET_HOURS_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const QUIET_HOURS_DEFAULT = Object.freeze({ enabled: false, start: '22:00', end: '08:00' });
 
+export function pinnedTokensForWallet(settings, walletId) {
+    const legacy = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    if (typeof walletId !== 'string' || !walletId) return legacy;
+    const scoped = settings?.pinnedTokensByWallet;
+    if (!scoped || typeof scoped !== 'object' || Array.isArray(scoped)) return legacy;
+    if (Object.prototype.hasOwnProperty.call(scoped, walletId)) {
+        return Array.isArray(scoped[walletId]) ? scoped[walletId] : [];
+    }
+    return Object.keys(scoped).length === 0 ? legacy : [];
+}
+
+export function pinnedTokensPatchForWallet(walletId, pinnedTokens) {
+    const next = Array.isArray(pinnedTokens) ? pinnedTokens : [];
+    if (typeof walletId !== 'string' || !walletId) return { pinnedTokens: next };
+    return {
+        pinnedTokens: next,
+        pinnedTokensByWallet: { [walletId]: next },
+    };
+}
+
 /** @returns {Settings} */
 export function createDefaultSettings() {
     return {
@@ -359,6 +380,7 @@ export function createDefaultSettings() {
         },
         backupReminders: 'off',
         pinnedTokens: [],
+        pinnedTokensByWallet: {},
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
@@ -549,6 +571,14 @@ export function validateSettings(record) {
             'pinnedTokens',
             Array.isArray(r.pinnedTokens) && r.pinnedTokens.every(isString),
             'must be an array of strings (chainId:tick keys)',
+        );
+    }
+    if (r.pinnedTokensByWallet !== undefined) {
+        check(
+            errors,
+            'pinnedTokensByWallet',
+            isRecordOf(r.pinnedTokensByWallet, (pins) => Array.isArray(pins) && pins.every(isString)),
+            'must map wallet ids to arrays of chainId:tick keys',
         );
     }
     if (r.hiddenTokens !== undefined) {
