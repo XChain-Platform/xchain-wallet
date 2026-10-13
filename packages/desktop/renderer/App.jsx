@@ -2792,7 +2792,7 @@ function AppInner() {
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                             </>
-                        ) : null
+                        ) : <NetworkBanner activeNetwork={settings?.activeNetwork} />
                     }
                 >
                     <ScrollRestoration routeKey={unlockedView}>

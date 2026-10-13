@@ -32,7 +32,7 @@ describe('NetworkBanner', () => {
         const expectedWiring = new Map([
             ['packages/web/src/App.jsx', '<NetworkBanner activeNetwork={activeNetwork} />'],
             ['packages/desktop/renderer/App.jsx', '<NetworkBanner activeNetwork={settings?.activeNetwork} />'],
-            ['packages/extension/src/popup/App.jsx', 'header={<NetworkBanner activeNetwork={settings?.activeNetwork} />}'],
+            ['packages/extension/src/popup/App.jsx', '<NetworkBanner activeNetwork={settings?.activeNetwork} />'],
         ]);
 
         for (const [file, wiring] of expectedWiring) {

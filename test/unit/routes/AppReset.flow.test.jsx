@@ -99,11 +99,12 @@ describe('reset app flow', () => {
         render(<ResettableShell />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-        const dialog = screen.getByRole('dialog', { name: 'Wipe wallet data' });
+        fireEvent.click(screen.getByRole('button', { name: 'Use recovery phrase' }));
+        const dialog = screen.getByRole('alertdialog', { name: 'Restore wallet access' });
         expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
         expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
 
-        const wipeButton = screen.getByRole('button', { name: 'Wipe wallet data' });
+        const wipeButton = screen.getByRole('button', { name: 'Erase vault and restore' });
         expect(wipeButton).toBeDisabled();
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), {
             target: { value: 'not wipe' },

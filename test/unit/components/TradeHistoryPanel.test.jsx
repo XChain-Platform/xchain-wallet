@@ -87,7 +87,8 @@ describe('TradeHistoryPanel', () => {
             tick2: 'BTC',
             address: 'addr-one',
         });
-        expect(screen.getAllByRole('listitem').map((item) => item.textContent))
+        // The first row is the column header row of the trades table.
+        expect(screen.getAllByRole('row').slice(1).map((row) => row.textContent))
             .toEqual([
                 expect.stringContaining('Selladdr-two'),
                 expect.stringContaining('Buyaddr-one'),

@@ -41,7 +41,7 @@ const RUNTIME_GLOBALS = new Set([
     'decodeURIComponent', 'document', 'DOMException', 'encodeURIComponent', 'Error', 'Event',
     'fetch', 'File', 'FileReader', 'getComputedStyle', 'globalThis', 'HTMLElement', 'Image',
     'Infinity', 'Intl', 'isFinite', 'JSON', 'localStorage', 'location', 'Map',
-    'Math', 'module', 'MutationObserver', 'NaN', 'navigator', 'Notification',
+    'Math', 'module', 'MutationObserver', 'NaN', 'navigator', 'Node', 'Notification',
     'Number', 'Object', 'parseFloat', 'parseInt', 'process', 'Promise', 'Proxy',
     'queueMicrotask', 'Reflect', 'RegExp', 'Request', 'requestAnimationFrame', 'require',
     'ResizeObserver', 'sessionStorage', 'Set', 'setImmediate', 'setInterval',
