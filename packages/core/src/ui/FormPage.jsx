@@ -22,8 +22,8 @@ import styles from './FormPage.module.css';
  * Screen owns the page gutter and top spacing. The wide card centres within
  * that content box without adding its own top margin.
  *
- * Pass `sectioned` when the children are FormSections: each section then
- * becomes its own card when wide, and a heading-divided block when narrow.
+ * Pass `sectioned` when the children are FormSections. The sections share
+ * the form's wide card and are divided from one another at every width.
  * The action row always closes the form, below the last field or section,
  * and its buttons wrap rather than overflow.
  *
@@ -35,7 +35,7 @@ import styles from './FormPage.module.css';
  * @param {import('react').ReactNode} [props.actions]   the action row: primary last, so it ends up on the right
  * @param {import('react').ReactNode} [props.status]    a StatusMessage shown just above the actions
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
- * @param {boolean} [props.sectioned]                   children are FormSections (card per section when wide)
+ * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form

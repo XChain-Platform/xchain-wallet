@@ -262,7 +262,7 @@ describe('<FormPage>', () => {
         expect(narrow).toBe(wide);
     });
 
-    it('marks a sectioned form so its sections, not the form, become cards', () => {
+    it('marks a sectioned form so its sections receive shared divider spacing', () => {
         const { container } = render(
             <FormPage sectioned>
                 <FormSection title="Recipient"><input aria-label="To" /></FormSection>
@@ -293,14 +293,17 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
         expect(ruleBody(base, '.section')).not.toMatch(/background|box-shadow/);
     });
 
-    it('divides narrow sections with a rule above each heading after the first', () => {
-        expect(ruleBody(baseLayer(text), '.section + .section')).toMatch(/border-top:\s*1px solid var\(--xc-border\)/);
+    it('separates sections with a divider and the shared section gap token', () => {
+        const base = baseLayer(text);
+        expect(ruleBody(base, '.sectioned > .body')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(base, '.section + .section')).toMatch(/padding-top:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(base, '.section + .section')).toMatch(/border-top:\s*1px solid var\(--xc-border\)/);
     });
 
-    it('puts a plain form in one centred 560px card when wide', () => {
-        expect(ruleBody(wide, '.form')).toMatch(/max-width:\s*560px/);
-        expect(ruleBody(wide, '.form')).toMatch(/margin:\s*0 auto/);
-        const card = ruleBody(wide, '.form:not(.sectioned)');
+    it('puts every form in one centred 560px card when wide', () => {
+        const card = ruleBody(wide, '.form');
+        expect(card).toMatch(/max-width:\s*560px/);
+        expect(card).toMatch(/margin:\s*0 auto/);
         expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
         expect(card).toMatch(/padding:\s*var\(--xc-space-6\)/);
@@ -314,17 +317,17 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
         expect(tokens).toMatch(/\*,\s*\*::before,\s*\*::after\s*\{\s*box-sizing:\s*border-box/s);
     });
 
-    it('stacks one card per section for a sectioned form when wide', () => {
-        const card = ruleBody(wide, '.sectioned > .body > .section');
-        expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
-        expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
+    it('keeps sections bare inside the sectioned form card when wide', () => {
+        expect(ruleBody(wide, '.sectioned > .body > .section')).toBeNull();
+        expect(ruleBody(wide, '.sectioned > .body > .section + .section')).toBeNull();
     });
 
     it('flattens a reusable form fragment inside its parent form card', () => {
-        expect(ruleBody(wide, 'form .form')).toMatch(/max-width:\s*none/);
-        const section = ruleBody(wide, 'form .form.sectioned > .body > .section');
-        expect(section).toMatch(/background:\s*transparent/);
-        expect(section).toMatch(/box-shadow:\s*none/);
+        const fragment = ruleBody(wide, 'form .form');
+        expect(fragment).toMatch(/max-width:\s*none/);
+        expect(fragment).toMatch(/padding:\s*0/);
+        expect(fragment).toMatch(/background:\s*transparent/);
+        expect(fragment).toMatch(/box-shadow:\s*none/);
     });
 
     it('lets the action row wrap', () => {
