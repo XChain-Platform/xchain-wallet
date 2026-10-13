@@ -51,7 +51,11 @@ const carouselCss = readFileSync(
 
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
-        expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*55%;/s);
+        // Balances render as ListRow trailing content, so the row's trailing
+        // slot caps the amount column and the amounts block may shrink inside it.
+        expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;/s);
+        const listRowCss = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
+        expect(listRowCss).toMatch(/\.trailing\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*50%;/s);
         // Long amounts shrink to fit on one line (see longContentLayout.test.jsx)
         // and long names ellipsize, rather than wrapping anywhere.
         expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*white-space:\s*nowrap;/s);
