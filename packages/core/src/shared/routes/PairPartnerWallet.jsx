@@ -14,6 +14,7 @@ import {
     ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     encodeXcwChunks,
     createXcwCollector,
@@ -77,6 +78,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             initialMode ? (existingWalletId ? 'exchange' : 'seed') : 'role'
         ),
     );
+    // The seed step accepts the shared recovery phrase. Public pairing-code
+    // stages remain capturable so the partner device can scan them.
+    useProtectedScreen(stage === 'seed');
     const [walletMode, setWalletMode] = useState(
         /** @type {'watcher' | 'signer' | null} */ (initialMode || null),
     );

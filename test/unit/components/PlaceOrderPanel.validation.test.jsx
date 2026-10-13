@@ -6,6 +6,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 
@@ -16,7 +18,7 @@ const ADDRESS = {
 
 afterEach(() => cleanup());
 
-function mount(props = {}, overrides = {}) {
+function mount(props = {}, overrides = {}, viewportWidth = null) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: ADDRESS.id }),
@@ -27,11 +29,12 @@ function mount(props = {}, overrides = {}) {
         composeForConfirm: vi.fn(),
         ...overrides,
     };
-    render(
+    const panel = (
         <MessagingProvider shell="desktop" messaging={messaging}>
             <PlaceOrderPanel walletId="w" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" {...props} />
-        </MessagingProvider>,
+        </MessagingProvider>
     );
+    render(viewportWidth ? <div style={{ width: viewportWidth }}>{panel}</div> : panel);
     return messaging;
 }
 
@@ -57,6 +60,38 @@ describe('PlaceOrderPanel validation', () => {
         expect(buy.style.background).toBe('var(--xc-success)');
         expect(sell.style.background).toBe('var(--xc-danger)');
         expect(buy.style.color).toBe('var(--xc-on-accent)');
+    });
+
+    it('renders the 360px layout hooks for stacked fields and a visible side toggle', async () => {
+        mount({}, {}, 360);
+
+        await screen.findByLabelText('Price (BTC)');
+        expect(screen.getByRole('group', { name: 'Order side' }).className).toMatch(/sideToggle/);
+        expect(screen.getByRole('group', { name: 'Price and amount' }).className).toMatch(/priceAmountFields/);
+
+        const tradingCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/MarketTrading.module.css',
+        ), 'utf8');
+        expect(tradingCss).toMatch(/\.levelsScroller\s*\{[^}]*overflow-x:\s*auto/s);
+        expect(tradingCss).toMatch(
+            /@media \(max-width: 420px\)[\s\S]*?\.orderBookGrid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+        );
+        expect(tradingCss).toMatch(
+            /@media \(max-width: 420px\)[\s\S]*?\.priceAmountFields\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+        );
+        expect(tradingCss).toMatch(
+            /@media \(max-width: 420px\)[\s\S]*?\.sideToggle\s*\{[^}]*position:\s*sticky/,
+        );
+
+        const ordersCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/ObligationsView.module.css',
+        ), 'utf8');
+        expect(ordersCss).toMatch(
+            /@media \(max-width: 420px\)[\s\S]*?\.row\s*\{[^}]*flex-direction:\s*column/,
+        );
+        expect(ordersCss).toMatch(/\.rowActions\s*\{[^}]*flex-wrap:\s*wrap/s);
     });
 
     it('builds an unsigned order from a watch-only address', async () => {
