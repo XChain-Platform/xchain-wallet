@@ -19,7 +19,7 @@
 // Fetch cadence: polled every 5s on-screen, paused on hidden tab.
 // Reuses the AirdropForm / OrderbookPanel visibility-gated pattern.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -69,6 +69,22 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const mountedRef = useRef(false);
+    const autopayRequestRef = useRef(0);
+    const panelVersionRef = useRef(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
+    useEffect(() => {
+        panelVersionRef.current += 1;
+        setConfirmOrder(null);
+        setSubmitting(false);
+        setSubmitError(null);
+        setWatcherResult(null);
+    }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
         let cancelled = false;
@@ -100,6 +116,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         /** @type {Map<string, any>} */ (new Map()),
     );
     const loadAutopay = useCallback(async () => {
+        const requestId = ++autopayRequestRef.current;
+        if (mountedRef.current) setAutopayByIndex(new Map());
         if (typeof messaging.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
@@ -110,17 +128,26 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             for (const r of records || []) {
                 if (r?.orderActionIndex != null) map.set(String(r.orderActionIndex), r);
             }
-            setAutopayByIndex(map);
+            if (mountedRef.current && requestId === autopayRequestRef.current) {
+                setAutopayByIndex(map);
+            }
         } catch { /* toggle simply not shown */ }
     }, [messaging, walletId, chainId]);
-    useEffect(() => { loadAutopay(); }, [loadAutopay]);
+    useEffect(() => {
+        loadAutopay();
+        return () => { autopayRequestRef.current += 1; };
+    }, [loadAutopay]);
 
     async function handleAutopayToggle(record) {
+        const panelVersion = panelVersionRef.current;
         try {
             await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             await loadAutopay();
         } catch (err) {
-            setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            }
         }
     }
 
@@ -132,18 +159,20 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             return undefined;
         }
         let cancelled = false;
+        let requestId = 0;
         setOrdersLoading(true);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden') return;
+            const currentRequest = ++requestId;
             try {
                 const results = await Promise.all(addresses.map((addr) =>
                     messaging.getMarketOrders({
                         chainId, tick1, tick2, address: addr.address,
                     }).then((resp) => ({ addr, rows: extractRows(resp) }))
                 ));
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 const flat = [];
                 for (const { addr, rows } of results) {
                     for (const row of rows) flat.push({ ...row, __owner: addr });
@@ -152,7 +181,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 setLoadError(null);
                 setOrdersLoading(false);
             } catch (err) {
-                if (!cancelled) {
+                if (!cancelled && currentRequest === requestId) {
                     setLoadError(readFailureMessage(err, 'load your open orders'));
                     setOrdersLoading(false);
                 }
@@ -184,6 +213,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         if (!confirmOrder || submitting || cancelLane.composing) return;
         setSubmitting(true);
         setSubmitError(null);
+        const panelVersion = panelVersionRef.current;
         const orderActionIndex = String(confirmOrder.action_index);
         try {
             const result = await cancelLane.run({
@@ -194,6 +224,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: { orderActionIndex },
             });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             if (cancelLane.isWatcherMode) {
                 setWatcherResult(result);
                 return;
@@ -201,7 +232,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
-            if (!isUserRejection(err)) {
+            if (mountedRef.current && panelVersion === panelVersionRef.current
+                && !isUserRejection(err)) {
                 setSubmitError(err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
@@ -211,7 +243,9 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     }));
             }
         } finally {
-            setSubmitting(false);
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setSubmitting(false);
+            }
         }
     }
 
@@ -285,9 +319,9 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         <span style={{ textAlign: 'right' }}>Action</span>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
-                        {rows.map((r) => (
+                        {rows.map((r, index) => (
                             <li
-                                key={r.actionIndex}
+                                key={`${r.actionIndex}-${r.raw.__owner?.id ?? r.raw.__owner?.address ?? 'owner'}-${index}`}
                                 style={{
                                     display: 'grid',
                                     gridTemplateColumns: ORDER_GRID_COLUMNS,

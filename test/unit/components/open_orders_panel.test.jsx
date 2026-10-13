@@ -161,6 +161,106 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
     });
 
+    it('does not let an older poll overwrite newer open orders', async () => {
+        const older = deferred();
+        const newer = deferred();
+        const getMarketOrders = vi.fn()
+            .mockImplementationOnce(() => older.promise)
+            .mockImplementationOnce(() => newer.promise);
+        mountPanel([], { getMarketOrders });
+
+        await waitFor(() => expect(getMarketOrders).toHaveBeenCalledTimes(1));
+        fireEvent(document, new Event('visibilitychange'));
+        expect(getMarketOrders).toHaveBeenCalledTimes(2);
+
+        await act(async () => newer.resolve([orderRow({ price: '3.00000000' })]));
+        expect(await screen.findByText('3.00000000')).toBeInTheDocument();
+
+        await act(async () => older.resolve([orderRow({ price: '1.00000000' })]));
+        expect(screen.getByText('3.00000000')).toBeInTheDocument();
+        expect(screen.queryByText('1.00000000')).toBeNull();
+    });
+
+    it('ignores an autopay response from the previous wallet', async () => {
+        const oldWallet = deferred();
+        const newWallet = deferred();
+        const listAutopayOrders = vi.fn()
+            .mockImplementationOnce(() => oldWallet.promise)
+            .mockImplementationOnce(() => newWallet.promise);
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [OWNER] }),
+            getMarketOrders: vi.fn().mockResolvedValue([orderRow()]),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            listAutopayOrders,
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <OpenOrdersPanel walletId="wallet-old" chainId="bitcoin-mainnet" tick1="XCP" tick2="PEPE" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(listAutopayOrders).toHaveBeenCalledTimes(1));
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <OpenOrdersPanel walletId="wallet-new" chainId="bitcoin-mainnet" tick1="XCP" tick2="PEPE" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(listAutopayOrders).toHaveBeenCalledTimes(2));
+        await act(async () => newWallet.resolve([{
+            id: 'new-consent', orderActionIndex: 17, autopay: true,
+        }]));
+        expect(await screen.findByText('CoinPay auto-pay on')).toBeInTheDocument();
+
+        await act(async () => oldWallet.resolve([]));
+        expect(screen.getByText('CoinPay auto-pay on')).toBeInTheDocument();
+    });
+
+    it('gives duplicate order responses distinct React keys', async () => {
+        const secondOwner = { ...OWNER, id: 'address-2', address: 'bc1qsecondowner' };
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            mountPanel([orderRow()], {
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    'bitcoin-mainnet': [OWNER, secondOwner],
+                }),
+            });
+
+            expect(await screen.findAllByRole('button', { name: 'Cancel' })).toHaveLength(2);
+            expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
+
+    it('does not apply a cancel result after the market changes', async () => {
+        lane.openOnRun = false;
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [OWNER] }),
+            getMarketOrders: vi.fn(({ tick2 }) => Promise.resolve([
+                orderRow({ price: tick2 === 'NEXT' ? '9.00000000' : '2.00000000' }),
+            ])),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <OpenOrdersPanel walletId="wallet-1" chainId="bitcoin-mainnet" tick1="XCP" tick2="PEPE" />
+            </MessagingProvider>,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <OpenOrdersPanel walletId="wallet-1" chainId="bitcoin-mainnet" tick1="XCP" tick2="NEXT" />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText('9.00000000')).toBeInTheDocument();
+        await act(async () => lane.resolve({ txid: 'stale-cancel' }));
+
+        expect(screen.getByText('9.00000000')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
     it('composes through the owner-action lane and replaces the panel while confirming', async () => {
         const messaging = mountPanel();
 

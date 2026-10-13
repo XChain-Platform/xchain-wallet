@@ -56,14 +56,16 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
 
     useEffect(() => {
         let cancelled = false;
+        let requestId = 0;
         setBook({ bids: [], asks: [], maxCumulative: '0' });
         setLoadError(null);
         setLoading(true);
         const tick = async () => {
             if (cancelled) return;
+            const currentRequest = ++requestId;
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 let normalized = normalizeOrderbook(resp);
                 // Demo wallets render a sample book when the explorer has
                 // no live orders yet; real wallets keep the empty book and
@@ -75,7 +77,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 setLoadError(null);
                 setLoading(false);
             } catch (err) {
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 // Demo wallets keep the UI populated through dev/CORS
                 // outages; real wallets surface the error instead of
                 // showing fabricated prices.
@@ -169,9 +171,9 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
                         </tr>
                     </thead>
                     <tbody>
-                    {levels.map((level) => (
+                    {levels.map((level, index) => (
                         <LevelRow
-                            key={`${side}-${level.displayPrice}`}
+                            key={`${side}-${level.displayPrice}-${index}`}
                             level={level}
                             maxCumulative={maxCumulative}
                             side={side}
