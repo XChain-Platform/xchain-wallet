@@ -82,6 +82,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
@@ -2629,6 +2630,7 @@ function AppInner() {
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
+                        demoBannerInHeader
                         onCommandPalette={palette.openPalette}
                         // The popup's only VISIBLE route into Settings.
                         // Web and desktop deliberately pass nothing here: they
@@ -2657,6 +2659,9 @@ function AppInner() {
                         />
                     )}
                 >
+                    {activeWalletId ? (
+                        <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                    ) : null}
                     <WatchOnlyBadge visible={isWatcherMode} />
                     <RouteErrorBoundary
                         resetKey={`${unlockedView}:${palette.navigationKey}`}

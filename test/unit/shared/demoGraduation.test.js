@@ -28,6 +28,13 @@ import {
     isVaultEmpty,
     exitDemoWallet,
 } from '../../../packages/core/src/shared/utils/demoGraduation.js';
+import {
+    getDemoWalletExpiry,
+    getDemoWalletId,
+    getDemoWalletPassword,
+    isDemoWallet,
+    markDemoWallet,
+} from '../../../packages/core/src/flows/demoMode.js';
 
 const DEMO_ID_KEY = 'xc:demoWalletId';
 
@@ -115,7 +122,7 @@ describe('exitDemoWallet', () => {
     }
 
     it('removes the demo record, clears the flags, and wipes when nothing is left', async () => {
-        globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
+        markDemoWallet('demo-1', { password: 'throwaway-password', now: 1000 });
         const h = harness({ wallets: [] });
         const r = await exitDemoWallet({
             messaging: h.messaging,
@@ -126,7 +133,10 @@ describe('exitDemoWallet', () => {
         expect(r).toEqual({ wiped: true, reloaded: true, remaining: 'empty' });
         expect(h.calls.removed).toEqual(['demo-1']);
         expect(h.calls.wiped).toBe(1);
-        expect(globalThis.localStorage.getItem(DEMO_ID_KEY)).toBe(null);
+        expect(getDemoWalletId()).toBe(null);
+        expect(getDemoWalletPassword()).toBe(null);
+        expect(getDemoWalletExpiry()).toBe(null);
+        expect(isDemoWallet('real-wallet-created-next')).toBe(false);
     });
 
     it('records the onboarding lane only on the wiping branch', async () => {

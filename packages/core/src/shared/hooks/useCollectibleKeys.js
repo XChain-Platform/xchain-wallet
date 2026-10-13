@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { fetchTokenInfo } from './useTokenInfo.js';
 
@@ -28,13 +28,19 @@ import { fetchTokenInfo } from './useTokenInfo.js';
  * appear on a guess).
  *
  * @param {Array<{kind?: string, chainId: string, tick: string, divisibility?: number}> | null | undefined} rows
+ * @param {boolean} [demo]
  * @returns {Set<string>} keys (`chainId:tick`) of rows classified as collectibles
  */
-export function useCollectibleKeys(rows) {
+export function useCollectibleKeys(rows, demo = false) {
     const { messaging } = useMessaging();
     // Bumped whenever a new token-info resolves so the memo recomputes
     const [version, setVersion] = useState(0);
     const [infoByKey] = useState(() => new Map());
+    const scopeRef = useRef(demo);
+    if (scopeRef.current !== demo) {
+        infoByKey.clear();
+        scopeRef.current = demo;
+    }
 
     const candidates = useMemo(
         () => (Array.isArray(rows) ? rows : []).filter(
@@ -49,7 +55,10 @@ export function useCollectibleKeys(rows) {
         for (const r of candidates) {
             const key = `${r.chainId}:${r.tick}`;
             if (infoByKey.has(key)) continue;
-            fetchTokenInfo(messaging, r.chainId, r.tick).then((info) => {
+            const request = demo
+                ? fetchTokenInfo(messaging, r.chainId, r.tick, { demo: true })
+                : fetchTokenInfo(messaging, r.chainId, r.tick);
+            request.then((info) => {
                 if (cancelled) return;
                 infoByKey.set(key, info);
                 setVersion((v) => v + 1);
@@ -59,7 +68,7 @@ export function useCollectibleKeys(rows) {
         // candidateKey captures the candidate identity; `candidates` itself is
         // a fresh array each render and would re-run the effect needlessly.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [candidateKey, messaging]);
+    }, [candidateKey, messaging, demo]);
 
     return useMemo(() => {
         const keys = new Set();
@@ -70,5 +79,5 @@ export function useCollectibleKeys(rows) {
         }
         return keys;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [candidateKey, version]);
+    }, [candidateKey, version, demo]);
 }

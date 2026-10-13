@@ -121,8 +121,8 @@ assert.equal(isDemoWalletExpired({ now: Date.now() + 100 * DEMO_DEFAULT_TTL_MS }
 
 assert.match(bannerSrc, /flowsLib\.getDemoWalletExpiry\(\)/,
     'banner reads the expiry record on mount');
-assert.match(bannerSrc, /flowsLib\.isDemoWalletExpired\(\)/,
-    'banner consults isDemoWalletExpired');
+assert.match(bannerSrc, /flowsLib\.isDemoWalletExpired\(\{ now: tickNow \}\)/,
+    'banner checks expiry against the same clock value shown by the countdown');
 assert.match(bannerSrc, /setInterval\(tick, 60_000\)/,
     'banner re-checks expiry on a 60-second interval');
 assert.match(bannerSrc, /Auto-wipes in/,

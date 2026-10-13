@@ -33,6 +33,7 @@ import styles from './CollectiblesView.module.css';
  *
  * @param {object} props
  * @param {Array<{chainId: string, tick: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string, imageUrl?: string | null}>} props.rows
+ * @param {boolean} [props.demo]
  * @param {string} [props.emptyTitle]
  * @param {string} [props.emptyBody]
  * @param {() => void} [props.onReceive]
@@ -44,6 +45,7 @@ import styles from './CollectiblesView.module.css';
  */
 export function CollectiblesView({
     rows,
+    demo = false,
     emptyTitle = 'No collectibles yet',
     emptyBody = 'Collectibles appear here after this wallet receives them.',
     onReceive,
@@ -87,6 +89,7 @@ export function CollectiblesView({
                     <CollectibleCard
                         key={`${r.chainId}:${r.tick}`}
                         row={r}
+                        demo={demo}
                         pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                         hidden={false}
                         onSelect={onSelectToken}
@@ -113,6 +116,7 @@ export function CollectiblesView({
                         <CollectibleCard
                             key={`hidden:${r.chainId}:${r.tick}`}
                             row={r}
+                            demo={demo}
                             pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                             hidden
                             onSelect={onSelectToken}
@@ -126,7 +130,7 @@ export function CollectiblesView({
     );
 }
 
-function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
+function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Fetch tick metadata to surface a real image when the row payload
@@ -137,6 +141,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
         chainId: row.chainId,
         tick: row.tick,
         skip: row.kind === 'native' || hidden,
+        demo,
     });
     const fallbackImageUrl = assetInfo && typeof assetInfo.imageUrl === 'string'
         && assetInfo.imageUrl.length > 0
@@ -235,4 +240,3 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
         </div>
     );
 }
-

@@ -107,12 +107,13 @@ export function TokenDetail({
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
+    const isDemo = isDemoWallet(walletId);
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
-    const assetInfo = useTokenInfo({ chainId, tick, skip: isNative });
+    const assetInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemo });
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -527,7 +528,7 @@ export function TokenDetail({
                             nativePrice={nativePrice}
                             showNativeStats={showNativeStats}
                             showSparkline={showSparkline}
-                            isDemo={isDemoWallet(walletId)}
+                            isDemo={isDemo}
                             assetInfo={assetInfo}
                             tick={tick}
                             chainId={chainId}

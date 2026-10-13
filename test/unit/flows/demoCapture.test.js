@@ -42,6 +42,7 @@ import {
     synthesizeDemoMessages,
     synthesizeDemoNativePrices,
 } from '../../../packages/core/src/flows/demoFixtures.js';
+import { tokenInfoFor } from '../../../packages/core/src/flows/tokenInfo.js';
 
 function arm() {
     globalThis.localStorage.setItem(DEMO_CAPTURE_FLAG_KEY, '1');
@@ -186,6 +187,47 @@ describe('demo fixtures are clock-injectable', () => {
 });
 
 describe('demo balances have the aggregator\'s entry shape', () => {
+    it('gives every indivisible fixture the locked-supply metadata required by the NFTs tab', async () => {
+        const chainIds = [
+            'bitcoin-mainnet',
+            'bitcoin-testnet',
+            'bitcoin-regtest',
+            'litecoin-mainnet',
+            'litecoin-regtest',
+            'dogecoin-mainnet',
+            'dogecoin-regtest',
+        ];
+        const balances = synthesizeDemoBalances(Object.fromEntries(chainIds.map((chainId) => [
+            chainId,
+            [{ address: `${chainId}-address`, label: '', addressType: 'p2pkh', derivationPath: null }],
+        ])));
+        const collectibles = Object.entries(balances).flatMap(([chainId, entries]) => (
+            entries.flatMap((entry) => entry.balances.tokens
+                .filter((token) => token.divisibility === 0)
+                .map((token) => ({ chainId, tick: token.tick })))
+        ));
+        const sdkRegistry = { get: () => ({ getToken: async () => null }) };
+
+        expect(collectibles.length).toBeGreaterThan(0);
+        for (const collectible of collectibles) {
+            const info = await tokenInfoFor({
+                sdkRegistry,
+                ...collectible,
+                demo: true,
+                metadataFetchEnabled: false,
+            });
+            expect(info.locks.max_supply, `${collectible.chainId}:${collectible.tick}`).toBe(true);
+        }
+
+        const liveInfo = await tokenInfoFor({
+            sdkRegistry,
+            chainId: collectibles[0].chainId,
+            tick: collectibles[0].tick,
+            metadataFetchEnabled: false,
+        });
+        expect(liveInfo.locks.max_supply).not.toBe(true);
+    });
+
     it('keeps every demo fixture image URL off remote origins', () => {
         const chainIds = [
             'bitcoin-mainnet',

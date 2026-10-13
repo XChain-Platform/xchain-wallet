@@ -106,6 +106,23 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         expect(screen.getByRole('status').textContent).toMatch(/Auto-wipes in/);
     });
 
+    it('updates the visible countdown while the demo remains open', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        try {
+            markDemoWallet('demo-1', { ttlMs: 2 * 60 * 60 * 1000, now: Date.now() });
+            mount({ activeWalletId: 'demo-1' });
+            expect(screen.getByRole('status')).toHaveTextContent('Auto-wipes in 2h.');
+
+            act(() => { vi.advanceTimersByTime(61 * 60_000); });
+
+            expect(screen.getByRole('status')).toHaveTextContent('Auto-wipes in 59m.');
+            expect(exitDemoWallet).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('starts collapsed on a narrow viewport and expands its details on request', async () => {
         setNarrowViewport(true);
         markDemoWallet('demo-1');
@@ -113,6 +130,7 @@ describe('DemoBanner: the demo disclosure on Home', () => {
 
         const toggle = screen.getByRole('button', { name: 'Details' });
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByText('Demo wallet: read-only; cannot move funds')).toBeVisible();
         expect(screen.queryByRole('button', { name: /exit demo/i })).toBeNull();
 
         await act(async () => { toggle.click(); });

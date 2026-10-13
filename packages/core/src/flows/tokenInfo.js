@@ -1104,6 +1104,7 @@ function parseTisText(text) {
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} params.sdkRegistry
  * @param {string} params.chainId
  * @param {string} params.tick
+ * @param {boolean} [params.demo]
  * @param {boolean} [params.metadataFetchEnabled]
  * @param {typeof fetch} [params.fetch]
  * @returns {Promise<TokenInfo>}
@@ -1112,6 +1113,7 @@ export async function tokenInfoFor({
     sdkRegistry,
     chainId,
     tick,
+    demo = false,
     metadataFetchEnabled = true,
     fetch: fetchImpl,
 }) {
@@ -1119,24 +1121,13 @@ export async function tokenInfoFor({
     if (!chainId) throw new Error('tokenInfoFor: chainId is required');
     if (!tick) throw new Error('tokenInfoFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
-    if (typeof sdk.getToken !== 'function') {
-        return withDemoFallback(chainId, tick, null, null);
-    }
-    let raw = null;
-    try {
-        raw = await sdk.getToken(tick);
-    } catch {
-        raw = null;
-    }
-    // When the SDK returned nothing (typical of the demo wallet whose
-    // stub SDK has no real indexer behind it), fall back to a synthetic
-    // row from the demo set. The fallback row's description is treated
-    // EXACTLY like a real on-chain description for the next step;
-    // demos can therefore point at a real TIS JSON URL and the wallet
-    // will fetch + parse it to exercise the live rendering path.
-    const haveRealRow = raw && (Array.isArray(raw) ? raw.length > 0 : true);
-    if (!haveRealRow) {
-        raw = demoRowFor(tick);
+    let raw = demo ? demoRowFor(tick) : null;
+    if (!demo && typeof sdk?.getToken === 'function') {
+        try {
+            raw = await sdk.getToken(tick);
+        } catch {
+            raw = null;
+        }
     }
     let tisBundle = null;
     if (metadataFetchEnabled) {
@@ -1161,9 +1152,9 @@ export async function tokenInfoFor({
     // When a demo entry ships a pre-built `tis` block (offline-friendly
     // bundle that doesn't need a network round-trip), use it as the
     // fallback if the live fetch came back empty.
-    if (!tisBundle) {
-        const demo = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
-        if (demo?.tis) tisBundle = tisToMediaBundle(demo.tis);
+    if (!tisBundle && demo) {
+        const fixture = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
+        if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
     resolveMediaDataRefs(tisBundle, sdk);
     return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
@@ -1295,6 +1286,18 @@ const DEMO_TIS_BY_TICK = {
             categories: [{ type: 'main', data: 'Collectibles' }],
         },
     },
+    BITCRYSTAL: {
+        description: 'A demo Bitcrystals collectible with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    XCPCARD: {
+        description: 'A demo XCP founders card with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
     XCHAINLOGO: {
         description: 'Full-media showcase token. Pairs an image gallery with sample audio and video to exercise every TIS player on the token detail page.',
         owner: '1XChainDemoOwnerLitecoinAddressDemo',
@@ -1371,5 +1374,23 @@ const DEMO_TIS_BY_TICK = {
             categories: [{ type: 'main', data: 'Collectibles' }],
             website: 'https://dogecoin.com',
         },
+    },
+    LITEORD: {
+        description: 'A demo Litecoin ordinal with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    MIMBLEPUNK: {
+        description: 'A demo MimblePunk collectible with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    MEMECARD: {
+        description: 'A demo Dogecoin meme card with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
     },
 };
