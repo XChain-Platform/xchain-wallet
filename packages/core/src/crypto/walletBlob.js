@@ -45,6 +45,11 @@ export const PASSPHRASE_AAD = new TextEncoder().encode('xchain-wallet:bip39-pass
  * @returns {Promise<{ encryptedSeed: string, kdfParams: import('./kdf.js').KdfParams }>}
  */
 export async function encryptWalletSeed({ password, seed, kdfParams, aad, masterKey }) {
+    // A supplied key belongs to the params it was derived with; minting
+    // fresh params beside it would store a record no password opens.
+    if (masterKey !== undefined && kdfParams === undefined) {
+        throw new Error('encryptWalletSeed: a supplied masterKey needs the kdfParams it was derived with');
+    }
     const params = kdfParams ?? makeFreshKdfParams();
     const workingKey = masterKey === undefined
         ? deriveMasterKey(password, params)

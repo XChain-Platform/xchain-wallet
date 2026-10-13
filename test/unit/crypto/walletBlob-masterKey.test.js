@@ -135,6 +135,14 @@ describe('crypto/walletBlob with a supplied master key', () => {
         expect(deriveMasterKey).not.toHaveBeenCalled();
     });
 
+    it('refuses a supplied key without the kdfParams it was derived with', async () => {
+        const key = callerKey();
+        await expect(encryptWalletSeed({ password: 'unused', seed: SEED, masterKey: key }))
+            .rejects.toThrow(/needs the kdfParams it was derived with/);
+        expect(encrypt).not.toHaveBeenCalled();
+        expect(isElevens(key)).toBe(true);
+    });
+
     it('copyMasterKey returns an independent copy', () => {
         const key = callerKey();
         const copy = copyMasterKey(key);

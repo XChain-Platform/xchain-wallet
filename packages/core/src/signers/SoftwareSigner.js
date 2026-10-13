@@ -115,7 +115,7 @@ export class SoftwareSigner extends Signer {
      * @param {Object} opts
      * @param {string} opts.password
      * @param {string} [opts.bip39Passphrase]   required iff format='bip39', passphraseEnabled, and no passphrase is stored yet; ignored when one is
-     * @param {Uint8Array} [opts.masterKey]     already-derived key for this wallet's kdfParams, used instead of deriving from the password. Copied on receipt; the caller keeps and zeroes its own buffer. A wrong key fails exactly as a wrong password does.
+     * @param {Uint8Array} [opts.masterKey]     already-derived key for this wallet's kdfParams, used instead of deriving from the password. Copied before use (here on the wif-only path, inside decryptWalletSeed on the seed path) and never zeroed here; the caller zeroes its own buffer. A wrong key fails exactly as a wrong password does.
      */
     async unlock({ password, bip39Passphrase = '', masterKey: suppliedMasterKey }) {
         if (typeof password !== 'string' || password.length === 0) {
