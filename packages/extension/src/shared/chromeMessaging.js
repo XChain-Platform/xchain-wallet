@@ -37,9 +37,11 @@ function publishSettingsChange(settings) {
 }
 
 export const RUNTIME_MESSAGE_TIMEOUT_MS = 4_000;
+export const BACKGROUND_INTERRUPTED_MESSAGE =
+    'The wallet background restarted before this request finished. Please review and try again.';
 
-function runtimeTransportError(message, code) {
-    const error = new Error(message);
+function runtimeTransportError(_message, code) {
+    const error = new Error(BACKGROUND_INTERRUPTED_MESSAGE);
     error.name = 'RuntimeConnectionError';
     error.code = code;
     return error;

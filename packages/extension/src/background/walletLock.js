@@ -103,6 +103,19 @@ export async function handleWalletLock(_request, deps) {
 }
 
 /**
+ * Clear an earlier session's idle deadline before the unlocked UI can arm a
+ * new one. Waiting here prevents a slow storage removal from deleting the new
+ * record after the UI receives the successful unlock response.
+ *
+ * @param {{ clearAutoLockState: () => Promise<void>, continueUnlock: () => Promise<unknown> }} deps
+ * @returns {Promise<unknown>}
+ */
+export async function sequenceUnlockedSession(deps) {
+    await deps.clearAutoLockState();
+    return deps.continueUnlock();
+}
+
+/**
  * @typedef {Object} LockBackstopDeps
  * @property {() => { sessionBackend: unknown, signingSecretBackend: unknown }} lockDeps   built per attempt, since an attempt can be retried
  * @property {() => void} tearDownHost                     release host + vault, zero the SignerPool

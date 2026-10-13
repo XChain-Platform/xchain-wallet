@@ -65,7 +65,12 @@ import {
     clearAutoLockState,
     shouldAutoLock,
 } from './background/autoLockState.js';
-import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
+import {
+    createLockBackstop,
+    createHostBuildFlight,
+    createKeepaliveTick,
+    sequenceUnlockedSession,
+} from './background/walletLock.js';
 import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
@@ -688,16 +693,18 @@ attachSessionMetaListener({
     // unlock cycles. (See sessionMeta.js handling of `signerPool`.)
     signerPool: () => signerPool,
     onUnlocked: () => {
-        // Drop any stale cross-session auto-lock state; the popup re-arms the
-        // backstop (with the correct idleMs + demo-skip) once Home mounts.
-        clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        return ensureHost()
-            .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
-            .catch((err) => {
-                console.error('[xchain] ensureHost after unlock failed:', err);
-            });
+        // Drop an earlier session's deadline before publishing unlocked. The
+        // popup re-arms with the current timeout once it receives that state.
+        return sequenceUnlockedSession({
+            clearAutoLockState,
+            continueUnlock: () => ensureHost()
+                .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
+                .catch((err) => {
+                    console.error('[xchain] ensureHost after unlock failed:', err);
+                }),
+        });
     },
     startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
         walletId: opts.walletId,
