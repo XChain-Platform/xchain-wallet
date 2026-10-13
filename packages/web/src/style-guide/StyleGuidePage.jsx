@@ -13,7 +13,7 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { useState } from 'react';
-import { RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
+import { Checkbox, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
@@ -58,6 +58,7 @@ import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { ChipSection } from './sections/ChipSection.jsx';
+import { SwitchSection } from './sections/SwitchSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
 import {
     AddressComboboxSection,
@@ -94,7 +95,9 @@ export const SECTIONS = [
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
+    { id: 'checkbox',              label: 'Checkbox',               Component: CheckboxSection, primitives: ['Checkbox'] },
     { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
+    { id: 'switch',                label: 'Switch',                 Component: SwitchSection, primitives: ['Switch'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
@@ -139,6 +142,45 @@ export const DOCUMENTED_PRIMITIVES = Object.freeze(
 );
 
 export { DOCUMENTED_TOKENS, TOKEN_GROUPS };
+
+function CheckboxSection() {
+    return (
+        <Section
+            id="checkbox"
+            title="Checkbox"
+            tag="CANONICAL · Checkbox"
+            kicker="A native checkbox with a token-styled box, supporting text, validation, and a label-wide 44px touch target."
+        >
+            <Guidance
+                what={<>A semantic <code>input type="checkbox"</code> with <code>label</code>, optional <code>description</code> and <code>error</code>, plus checked, indeterminate, disabled, and error visuals.</>}
+                when={<>Use it for independent yes/no choices and acknowledgements in forms.</>}
+                whenNot={<>Use radio buttons or a select when the user must choose exactly one item from a set.</>}
+                sizing={<>The painted box uses <code>--xc-control-icon-md</code>; the surrounding label remains at least 44px tall on every pointer type.</>}
+                variants={<>Unchecked, checked, indeterminate, disabled, and error states in both light and dark themes.</>}
+                doRule={<>Keep the complete label meaningful and add a description only when it helps the user decide.</>}
+                dontRule={<>Do not replace it with a clickable image or remove the native input from the accessibility tree.</>}
+            />
+            <Markup>
+{`<Checkbox
+    label="Publish permanently"
+    description="On-chain bytes cannot be deleted."
+    checked={accepted}
+    onChange={(event) => setAccepted(event.target.checked)}
+/>
+<Checkbox label="Select all files" indeterminate />
+<Checkbox label="Accept terms" error="Required" />`}
+            </Markup>
+            <LiveExample label="Default, supporting text, indeterminate, disabled, and error states">
+                <div style={{ display: 'grid', gap: 'var(--xc-space-2)' }}>
+                    <Checkbox label="Publish permanently" description="On-chain bytes cannot be deleted." defaultChecked />
+                    <Checkbox label="Select all files" indeterminate />
+                    <Checkbox label="Managed by your organization" disabled checked readOnly />
+                    <Checkbox label="Accept terms" error="Required" />
+                </div>
+            </LiveExample>
+        </Section>
+    );
+}
 
 export function StyleGuidePage() {
     const [view, setView] = useViewState();

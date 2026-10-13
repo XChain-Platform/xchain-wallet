@@ -82,7 +82,7 @@ describe('shared route button usage', () => {
         expect(source).not.toMatch(/<(?:button|select|textarea)\b/);
     });
 
-    it('documents the native checkbox and radio exceptions', () => {
+    it('uses Checkbox and documents the remaining native radio exceptions', () => {
         const source = ['ParallelComposer', 'PublishFileForm']
             .map((routeName) => readFileSync(
                 resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
@@ -91,8 +91,11 @@ describe('shared route button usage', () => {
             .join('\n');
         const inputs = source.match(/<input\b/g) || [];
         const rationales = source.match(/The kit has no (?:checkbox|radio) primitive/g) || [];
+        const checkboxes = source.match(/<Checkbox\b/g) || [];
 
-        expect(inputs).toHaveLength(4);
+        expect(source).toMatch(/import\s+\{[^}]*\bCheckbox\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
+        expect(checkboxes).toHaveLength(2);
+        expect(inputs).toHaveLength(2);
         expect(rationales).toHaveLength(inputs.length);
     });
 

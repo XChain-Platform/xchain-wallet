@@ -27,6 +27,8 @@ const componentSizes = {
     SectionHeader: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
     Button: ALL_SIZES,
+    Checkbox: FIXED_SIZE,
+    Switch: FIXED_SIZE,
     Input: FIELD_SIZES,
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
@@ -118,6 +120,10 @@ function ComponentPreview({ name, size, state }) {
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
     case 'Button':
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
+    case 'Checkbox':
+        return <UI.Checkbox label="Publish permanently" defaultChecked disabled={disabled} error={error} />;
+    case 'Switch':
+        return <UI.Switch label="Price alerts" description="Notify when a target is reached." checked={state !== 'error'} onChange={noop} disabled={disabled} />;
     case 'Input':
         return <UI.Input label="Amount" size={nativeSize} value="1.00" readOnly disabled={disabled} error={error} />;
     case 'Select':

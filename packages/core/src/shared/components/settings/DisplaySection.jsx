@@ -33,6 +33,7 @@ import {
     Input,
     SectionHeader,
     Select,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -49,7 +50,7 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { EMBEDDED_ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { EMBEDDED_ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -311,13 +312,14 @@ export function DisplaySection() {
         <FormPage as="div" sectioned label="Display settings">
             <FormSection title="Display options">
             <SectionHeader as="h3" title="Balance display" />
-            <ToggleRow
-                label="Hide small balances"
-                hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
-                checked={settings.privacy?.hideSmallBalances === true}
-                onChange={(next) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: next } })}
-                embedded
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Hide small balances"
+                    description="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
+                    checked={settings.privacy?.hideSmallBalances === true}
+                    onChange={(event) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: event.target.checked } })}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
             <div style={EMBEDDED_ROW}>
                 <div style={ROW_COPY}>
@@ -360,21 +362,23 @@ export function DisplaySection() {
                 title="Row affordances"
                 description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
             />
-            <ToggleRow
-                label="Show pin button on rows"
-                hint="Display a star on each balance row for pinning or unpinning the token on Home."
-                checked={showPinAffordance}
-                onChange={setPinAffordance}
-                embedded
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Show pin button on rows"
+                    description="Display a star on each balance row for pinning or unpinning the token on Home."
+                    checked={showPinAffordance}
+                    onChange={(event) => setPinAffordance(event.target.checked)}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
-            <ToggleRow
-                label="Show hide button on rows"
-                hint="Display a hide affordance on each balance row to collapse the token into the Hidden section."
-                checked={showHideAffordance}
-                onChange={setHideAffordance}
-                embedded
-            />
+            <div style={EMBEDDED_ROW}>
+                <Switch
+                    label="Show hide button on rows"
+                    description="Display a hide affordance on each balance row to collapse the token into the Hidden section."
+                    checked={showHideAffordance}
+                    onChange={(event) => setHideAffordance(event.target.checked)}
+                />
+            </div>
             <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
 
             <SectionHeader
