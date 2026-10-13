@@ -54,6 +54,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from './useSettings.js';
+import { useOnlineStatus } from './useOnlineStatus.js';
 import { registry as registryLib, flows as flowsLib } from '../../index.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -150,6 +151,7 @@ export function useReachability(opts = {}) {
         : DEFAULT_STARTUP_GRACE_MS;
     const { messaging } = useMessaging();
     const { settings } = useSettings();
+    const browserOnline = useOnlineStatus();
 
     // Keyed on the joined ids, not on the settings object, so an unrelated
     // settings write (a fee-strategy edit, an unlock re-read that returns
@@ -195,6 +197,16 @@ export function useReachability(opts = {}) {
     const mountedAtRef = useRef(Date.now());
 
     const probe = useCallback(async (force = false) => {
+        if (!browserOnline) {
+            failuresRef.current = 0;
+            provisionalRef.current = null;
+            setLoading(false);
+            setOverall('offline');
+            setPerChain([]);
+            setLastChecked(Date.now());
+            setError('The device is offline.');
+            return;
+        }
         if (typeof messaging?.checkReachabilityRequest !== 'function') {
             // No host endpoint. Leave state at "unknown" so the
             // banner can hide rather than fabricate "offline".
@@ -287,7 +299,7 @@ export function useReachability(opts = {}) {
         } finally {
             if (isCurrent()) setLoading(false);
         }
-    }, [messaging, chainIdsKey, chainIds, intervalMs, failureRetryMs, confirmMs, startupGraceMs]);
+    }, [messaging, chainIdsKey, chainIds, intervalMs, failureRetryMs, confirmMs, startupGraceMs, browserOnline]);
 
     probeRef.current = probe;
 
