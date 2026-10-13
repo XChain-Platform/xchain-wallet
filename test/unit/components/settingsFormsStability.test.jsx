@@ -3,8 +3,9 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { userEvent } from '../../helpers/userEvent.js';
 
 let settings;
 let update;
@@ -44,23 +45,27 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('settings form validation', () => {
-    it('opens and saves the custom currency field', () => {
+    it('opens and saves the custom currency field with Enter', async () => {
+        const user = userEvent.setup();
         render(<LanguageRegionSection />);
         fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
 
         const input = screen.getByLabelText('Custom currency code');
         fireEvent.change(input, { target: { value: 'nzd' } });
-        fireEvent.blur(input);
+        input.focus();
+        await user.keyboard('{Enter}');
 
         expect(update).toHaveBeenCalledWith({ fiatCurrency: 'NZD' });
     });
 
-    it('rejects malformed custom currency codes with visible feedback', () => {
+    it('rejects malformed custom currency codes submitted with Enter', async () => {
+        const user = userEvent.setup();
         render(<LanguageRegionSection />);
         fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
         const input = screen.getByLabelText('Custom currency code');
         fireEvent.change(input, { target: { value: 'US' } });
-        fireEvent.blur(input);
+        input.focus();
+        await user.keyboard('{Enter}');
 
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByText(/three-letter ISO currency code/)).toBeTruthy();
@@ -143,7 +148,7 @@ describe('settings form validation', () => {
         fireEvent.click(screen.getByRole('radio', { name: /Watcher/ }));
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alertdialog').textContent).toContain(
+        expect(screen.getByRole('dialog').textContent).toContain(
             'Transaction actions produce unsigned PSBTs',
         );
         expect(container.querySelector('input[type="password"]')).toBeNull();
@@ -159,7 +164,23 @@ describe('settings form validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.queryByRole('alertdialog')).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('radio', { name: /Normal/ }).checked).toBe(true);
+    });
+
+    it('closes wallet-mode confirmation on Escape and returns focus to its radio', async () => {
+        const user = userEvent.setup();
+        render(<WalletModeSection />);
+        const signer = screen.getByRole('radio', { name: /Signer/ });
+        signer.focus();
+        fireEvent.click(signer);
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog')).toBeNull();
+        await waitFor(() => expect(document.activeElement).toBe(signer));
+        expect(screen.getByRole('radio', { name: /Normal/ })).toBeChecked();
     });
 });

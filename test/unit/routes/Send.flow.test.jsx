@@ -14,6 +14,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
@@ -140,6 +141,34 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('tabs through payment fields and reviews only a valid Enter submission', async () => {
+        const user = userEvent.setup();
+        const messaging = mount();
+        await screen.findByLabelText('From');
+        const destination = await screen.findByLabelText(/^To$/);
+        destination.focus();
+
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
+        await user.keyboard('{Enter}');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Destination address is required.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(destination, { target: { value: TO } });
+        const amount = screen.getByLabelText(/^Amount \(/);
+        fireEvent.change(amount, { target: { value: AMOUNT } });
+        amount.focus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
         const messaging = mount();
         const confirm = await openPasswordConfirm(messaging);
@@ -157,7 +186,7 @@ describe('Send flow with mocked messaging', () => {
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Send ${AMOUNT} BTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`TokenBTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Amount${AMOUNT}`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Destination${TO}`);
+        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`To${TO}`);
         expect(within(confirm).getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
         expect(within(confirm).getByLabelText('Password')).toBeInTheDocument();
 
@@ -212,7 +241,7 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction: send' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({

@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const showToast = vi.fn();
 const { qrToDataURL } = vi.hoisted(() => ({
@@ -105,6 +106,25 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('tabs from token to amount and keeps Enter on the live request form', async () => {
+        const user = userEvent.setup();
+        renderReceive();
+        const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
+        const token = await screen.findByRole('button', { name: /^Token:/ });
+        token.focus();
+
+        await user.tab();
+        expect(document.activeElement).toBe(amount);
+        fireEvent.change(amount, { target: { value: '1.25' } });
+        await user.keyboard('{Enter}');
+
+        expect(amount).toHaveValue('1.25');
+        expect(screen.getByRole('form', { name: 'Receive request' })).toBeInTheDocument();
+        expect(showToast).not.toHaveBeenCalled();
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
+    });
+
     it('renders a four-module quiet zone at the measured device-pixel width', async () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         const originalDevicePixelRatio = window.devicePixelRatio;
@@ -276,7 +296,7 @@ describe('Receive QR copy and share toasts', () => {
 
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
         expect(writeText).toHaveBeenCalledWith(
-            'bitcoin:bcrt1qexample?chain=bitcoin-regtest&feePriority=normal&label=Daily%20deposits',
+            'bitcoin:bcrt1qexample',
         );
         expect(showToast).toHaveBeenCalledWith({
             message: 'Share unavailable. Payment request copied to clipboard.',
