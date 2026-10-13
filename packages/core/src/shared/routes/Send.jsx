@@ -25,7 +25,6 @@ import {
     InfoTip,
     StatusMessage,
     FormErrorSummary,
-    EmptyState,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
