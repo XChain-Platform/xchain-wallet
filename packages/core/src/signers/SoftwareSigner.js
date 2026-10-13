@@ -198,6 +198,7 @@ export class SoftwareSigner extends Signer {
         if (format === 'bip39') {
             if (!isValidBip39Mnemonic(mnemonic)) {
                 plaintext.fill(0);
+                if (sessionMasterKey) sessionMasterKey.fill(0);
                 throw new Error('SoftwareSigner.unlock: decrypted blob is not a valid BIP39 mnemonic');
             }
             // The stored passphrase is opened here and nowhere else: this is
@@ -236,6 +237,7 @@ export class SoftwareSigner extends Signer {
         } else if (format === 'counterwallet-legacy') {
             if (!isValidCounterwalletMnemonic(mnemonic)) {
                 plaintext.fill(0);
+                if (sessionMasterKey) sessionMasterKey.fill(0);
                 throw new Error(
                     'SoftwareSigner.unlock: decrypted blob is not a valid Counterwallet mnemonic',
                 );
@@ -243,6 +245,7 @@ export class SoftwareSigner extends Signer {
             seed = counterwalletMnemonicToSeedBytes(mnemonic);
         } else {
             plaintext.fill(0);
+            if (sessionMasterKey) sessionMasterKey.fill(0);
             throw new Error(`SoftwareSigner.unlock: unsupported wallet format "${format}"`);
         }
 
