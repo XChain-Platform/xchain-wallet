@@ -100,7 +100,7 @@ describe('shared settings row semantics', () => {
         render(<FeesSection />);
 
         const strategy = screen.getByRole('combobox', { name: 'Bitcoin fee strategy' });
-        const rate = screen.getByRole('spinbutton', { name: 'Bitcoin custom fee rate' });
+        const rate = screen.getByRole('textbox', { name: 'Bitcoin custom fee rate' });
         const bump = screen.getByRole('switch', {
             name: 'Bitcoin allow fee bump (Replace-by-Fee)',
         });
