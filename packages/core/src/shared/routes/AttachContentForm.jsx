@@ -33,16 +33,26 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MEMO_HINT } from '../utils/memoLimit.js';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 
-// The decoder drops any transaction whose compiled ACTION push exceeds
-// 8192 bytes (MAX_ACTION_DATA_LENGTH), and the action string + script
-// overhead eat into that budget. Cap the raw file below the ceiling so
-// the encoder doesn't reject it after the user has already signed
-// nothing; fail early, in the picker.
-const MAX_FILE_BYTES = 7000;
+const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
+// Moderate oversize drops reach the exact metadata-aware error below, while
+// unexpectedly large drops stop before FileReader allocates their contents.
+const MAX_DROP_BYTES = 32 * 1024;
+
+function artworkFileType(file) {
+    const meta = publishFileType(file);
+    if (meta.error) return meta;
+    const accepted = meta.type.startsWith('image/')
+        || meta.type.startsWith('audio/')
+        || /\.(svg|json|txt)$/i.test(file.name || '');
+    return accepted
+        ? meta
+        : { ...meta, error: 'That file type is not accepted for artwork. Choose an image, audio file, SVG, JSON, or text file.' };
+}
 
 // Protocol coin tickers for the LINK serialization (same map as
 // LinkForm; the descriptor's `coin` is long-form).
@@ -134,6 +144,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [waitElapsed, setWaitElapsed] = useState(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileReadIdRef = useRef(0);
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -391,58 +402,71 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return out;
     }
 
-    // Thumbnail for image files; small enough (≤7 KB) that a data
-    // URL is fine.
-    const previewUrl = useMemo(() => {
-        if (!fileMeta || !/^image\//.test(fileMeta.type)) return null;
-        let binary = '';
-        for (let i = 0; i < fileMeta.bytes.length; i += 1) {
-            binary += String.fromCharCode(fileMeta.bytes[i]);
-        }
-        try {
-            return `data:${fileMeta.type};base64,${btoa(binary)}`;
-        } catch {
-            return null;
-        }
-    }, [fileMeta]);
+    const previewUrl = useMemo(
+        () => imagePreviewDataUrl(fileMeta?.bytes),
+        [fileMeta],
+    );
+
+    const attachmentCapFor = useCallback(
+        (name, type) => flowsLib.maxPublicFileBytes({ name, type, title, memo }),
+        [title, memo],
+    );
 
     const acceptFile = useCallback((file, content) => {
         const bytes = new Uint8Array(content);
         setFileMeta(null);
+        const { type, error: typeError } = artworkFileType(file);
+        if (typeError) {
+            setFormError(typeError);
+            return;
+        }
         if (bytes.length === 0) {
             setFormError('That file is empty.');
             return;
         }
-        if (bytes.length > MAX_FILE_BYTES) {
+        const cap = attachmentCapFor(file.name || 'file', type);
+        if (bytes.length > cap) {
             setFormError(
-                `That file is ${(bytes.length / 1024).toFixed(1)} KB. Files stored on-chain must stay under about ${Math.floor(MAX_FILE_BYTES / 1024)} KB. For larger artwork, put an image URL in the token's description instead.`,
+                `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
             );
             return;
         }
+        if (!imagePreviewDataUrl(bytes)) setSetAsTokenInfo(false);
         setFormError(null);
         setFileMeta({
             name: file.name || 'file',
-            type: file.type || 'application/octet-stream',
+            type,
             bytes,
         });
-    }, []);
+    }, [attachmentCapFor]);
 
     const handleFilePick = useCallback((event) => {
         const file = event.target?.files?.[0];
         if (!file) return;
+        const readId = ++fileReadIdRef.current;
         setFileMeta(null);
         setFormError(null);
+        const { error: typeError } = artworkFileType(file);
+        if (typeError) {
+            setFormError(typeError);
+            return;
+        }
         const reader = new FileReader();
         reader.onload = () => {
+            if (readId !== fileReadIdRef.current) return;
             if (reader.result instanceof ArrayBuffer) acceptFile(file, reader.result);
+            else setFormError('Could not read that file.');
         };
-        reader.onerror = () => setFormError('Could not read that file.');
+        reader.onerror = () => {
+            if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
+        };
         reader.readAsArrayBuffer(file);
     }, [acceptFile]);
 
     const drop = useDropZone({
         readAs: 'arrayBuffer',
-        maxBytes: MAX_FILE_BYTES * 4,
+        accept: ARTWORK_ACCEPT,
+        maxBytes: MAX_DROP_BYTES,
         onError: (msg) => { setFileMeta(null); setFormError(msg); },
         onFile: ({ file, content }) => {
             if (content instanceof ArrayBuffer) acceptFile(file, content);
@@ -467,8 +491,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             );
             return;
         }
-        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo))) {
-            setFormError('Title and memo cannot contain | or ; characters.');
+        if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
+            setFormError('File name, title, and memo cannot contain | or ; characters.');
+            return;
+        }
+        if (setAsTokenInfo && !previewUrl) {
+            setFormError('Choose an image file before making it the token picture.');
+            return;
+        }
+        const cap = attachmentCapFor(fileMeta.name, fileMeta.type);
+        if (fileMeta.bytes.length > cap) {
+            setFormError(
+                `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`,
+            );
             return;
         }
         setFormError(null);
@@ -1132,7 +1167,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,audio/*,.svg,.json,.txt"
+                    accept={ARTWORK_ACCEPT.join(',')}
                     onChange={handleFilePick}
                     style={{ display: 'none' }}
                     aria-label="Choose file to attach"
@@ -1156,8 +1191,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 </dl>
             ) : (
                 <p className={styles.hint}>
-                    Keep it small. On-chain files must stay under about
-                    {' '}{Math.floor(MAX_FILE_BYTES / 1024)} KB. A compact
+                    Keep it small. With the current title and memo, this file
+                    can be up to {attachmentCapFor('file.bin', 'application/octet-stream').toLocaleString()} bytes. A compact
                     image (SVG, small PNG/JPEG/WebP) works best. For larger
                     artwork, put an image URL in the token's description
                     instead.
@@ -1190,11 +1225,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     type="checkbox"
                     checked={setAsTokenInfo}
                     onChange={(e) => setSetAsTokenInfo(e.target.checked)}
+                    disabled={Boolean(fileMeta && !previewUrl)}
                 />
                 <span>
                     Also make this {tick}'s picture everywhere. This stores the
                     token's info on the chain and points its description at
                     it (two more signatures)
+                    {fileMeta && !previewUrl ? '. Choose an image file to enable this option.' : ''}
                 </span>
             </label>
             {ownerMismatch ? (

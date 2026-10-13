@@ -156,22 +156,23 @@ describe('exitDemoWallet', () => {
         expect(takePostDemoIntent()).toBe(null);
     });
 
-    it('fails closed when the wallet list cannot be read', async () => {
+    it('reports an unreadable wallet list as a retryable failure instead of claiming success', async () => {
+        globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
         const messaging = {
             listWallets: async () => { throw new Error('vault locked'); },
             removeWallet: async () => {},
         };
         let wiped = 0;
-        const r = await exitDemoWallet({
+        await expect(exitDemoWallet({
             messaging,
             walletId: 'demo-1',
             intent: 'create',
             wipe: async () => { wiped += 1; },
             reload: () => true,
-        });
-        expect(r).toEqual({ wiped: false, reloaded: false, remaining: 'unknown' });
+        })).rejects.toThrow(/could not verify/i);
         expect(wiped).toBe(0);
         expect(takePostDemoIntent()).toBe(null);
+        expect(globalThis.localStorage.getItem(DEMO_ID_KEY)).toBe('demo-1');
     });
 
     it('falls back to the raw wallet.remove message when removeWallet is absent', async () => {
@@ -204,11 +205,11 @@ describe('exitDemoWallet', () => {
         await expect(exitDemoWallet({ messaging: {}, walletId: '' })).rejects.toThrow(/walletId is required/);
     });
 
-    it('does not wipe when removing the demo record fails', async () => {
+    it('does not wipe when removal fails and the remaining vault cannot be verified empty', async () => {
         let wiped = 0;
         await expect(exitDemoWallet({
             messaging: {
-                listWallets: async () => [],
+                listWallets: async () => { throw new Error('vault locked'); },
                 removeWallet: async () => { throw new Error('remove failed'); },
             },
             walletId: 'demo-1',
@@ -216,5 +217,40 @@ describe('exitDemoWallet', () => {
             reload: () => true,
         })).rejects.toThrow(/remove failed/);
         expect(wiped).toBe(0);
+    });
+
+    it('retries the wipe when an earlier attempt removed the demo before the wipe failed', async () => {
+        globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
+        let removeCalls = 0;
+        let wipeCalls = 0;
+        const messaging = {
+            listWallets: async () => [],
+            removeWallet: async () => {
+                removeCalls += 1;
+                if (removeCalls > 1) throw new Error('wallet not found');
+            },
+        };
+        const wipe = async () => {
+            wipeCalls += 1;
+            if (wipeCalls === 1) throw new Error('host storage is busy');
+        };
+
+        await expect(exitDemoWallet({
+            messaging,
+            walletId: 'demo-1',
+            wipe,
+            reload: () => true,
+        })).rejects.toThrow(/host storage is busy/);
+        expect(globalThis.localStorage.getItem(DEMO_ID_KEY)).toBe('demo-1');
+
+        await expect(exitDemoWallet({
+            messaging,
+            walletId: 'demo-1',
+            wipe,
+            reload: () => true,
+        })).resolves.toEqual({ wiped: true, reloaded: true, remaining: 'empty' });
+        expect(removeCalls).toBe(2);
+        expect(wipeCalls).toBe(2);
+        expect(globalThis.localStorage.getItem(DEMO_ID_KEY)).toBe(null);
     });
 });

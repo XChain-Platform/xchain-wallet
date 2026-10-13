@@ -130,6 +130,16 @@ export function StakeDetail({
         async function load() {
             setLoading(true);
             setLoadError(null);
+            setActiveTab(kind === 'validator' ? 'rewards' : 'positions');
+            setMoreOpen(false);
+            setStakes([]);
+            setDelegations([]);
+            setRewards([]);
+            setRewardClaims([]);
+            setContract(null);
+            setContractStakes([]);
+            setContractUnstakes([]);
+            setSlashEvents([]);
             try {
                 if (isDemoWallet(walletId)) {
                     if (kind === 'validator') {
@@ -201,6 +211,7 @@ export function StakeDetail({
 
     useEffect(() => {
         let cancelled = false;
+        setHeight(null);
         if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
         messaging.getIndexerWatermark({ chainId })
             .then((result) => {
@@ -236,6 +247,7 @@ export function StakeDetail({
     );
     const contractTick = activeContractStakes[0]?.tick || pendingContractUnstakes[0]?.tick || '';
     const inCooldown = pendingContractUnstakes.length > 0;
+    const hasContractPosition = activeContractStakes.length > 0 || inCooldown;
 
     // Quick actions hand the position's token + signing pubkey to the caller
     // so a shell can seed ContractStakeForm from THIS position instead of
@@ -286,7 +298,9 @@ export function StakeDetail({
                         ? (primaryStake
                             ? `${fmt(totalValidatorStaked)} ${primaryStake.asset ?? 'XCHAIN'}`
                             : 'Nothing staked from this address')
-                        : `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '?'} ${contractTick || ''}`.trim()}
+                        : (hasContractPosition
+                            ? `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '0'} ${contractTick || ''}`.trim()
+                            : 'Nothing staked in this contract')}
                 </dd>
                 {kind === 'validator' && (primaryStake?.capability_label || primaryStake?.capability) ? (
                     <>
@@ -342,8 +356,8 @@ export function StakeDetail({
                             {primaryStake ? (primaryStake.status || 'active') : 'inactive'}
                         </span>
                     ) : (
-                        <span className={`${local.statusPill} ${inCooldown ? local.statusCooldown : local.statusActive}`}>
-                            {inCooldown ? 'cooldown' : 'active'}
+                        <span className={`${local.statusPill} ${inCooldown ? local.statusCooldown : hasContractPosition ? local.statusActive : ''}`}>
+                            {inCooldown ? 'cooldown' : hasContractPosition ? 'active' : 'inactive'}
                         </span>
                     )}
                 </dd>

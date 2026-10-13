@@ -195,6 +195,11 @@ export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
 }
 
+/** Hide or unhide an address. @param {string} id @param {boolean} hidden */
+export function setAddressHidden(id, hidden) {
+    return /** @type {any} */ (sendMessage('addresses.setHidden', { id, hidden }));
+}
+
 /** Delete an address record by id. @param {string} id */
 export function deleteAddress(id) {
     return /** @type {any} */ (sendMessage('addresses.delete', { id }));
@@ -1055,6 +1060,10 @@ export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
 }
 
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
+}
+
 // BET reads (no signing): market list / one market with pools + timeline / placed
 // bets / an oracle track record.
 export function betFeeds(req) {
@@ -1880,6 +1889,11 @@ export function verifyMessageRequest(opts) {
  */
 export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
 }
 
 /**

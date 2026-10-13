@@ -84,6 +84,11 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     // retarget across the rest.
     useEffect(() => {
         let cancelled = false;
+        setChainId(null);
+        setNoChain(false);
+        setGovernChains([]);
+        setRows(null);
+        setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -119,6 +124,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         );
     }
     if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
+    if (!chainId) {
+        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{error}</StatusMessage></ListPage>);
+    }
 
     return wrap(
         <ListPage toolbar={(

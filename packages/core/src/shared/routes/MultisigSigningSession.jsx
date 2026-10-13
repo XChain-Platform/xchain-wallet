@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -111,6 +112,7 @@ function replyMismatchMessage(envelope, session) {
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { isWatcherMode } = useWalletMode();
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
@@ -597,7 +599,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
-    if (view === 'sign-locally') {
+    if (view === 'sign-locally' && !isWatcherMode) {
         return wrap(
             <>
                 <p className={styles.successTitle}>Sign with my key</p>
@@ -782,10 +784,15 @@ export function MultisigSigningSession({ walletId, onBack }) {
                             : 'Import cosigner reply'}
                     </Button>
                 ) : null}
-                {canCollect ? (
+                {canCollect && !isWatcherMode ? (
                     <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }}>
                         Sign with my key
                     </Button>
+                ) : null}
+                {!isTerminal && isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode exports signing data but never asks for a password or adds a local signature.
+                    </p>
                 ) : null}
                 {!isTerminal ? (
                     <Button variant="ghost" onClick={handleCancel} disabled={busy}>

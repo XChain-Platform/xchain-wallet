@@ -14,9 +14,8 @@
 // stored in localStorage via `flows/panicMode.js`.
 //
 // States:
-//   inactive   "Activate panic mode" button. Clicking arms the
-//              24-hour signing freeze immediately; no confirmation
-//              modal. The moment of decision IS the moment of risk.
+//   inactive   "Activate panic mode" button. A second explicit action
+//              confirms the 24-hour signing freeze before it starts.
 //   active     Status line with countdown + "Deactivate" button. The
 //              countdown ticks once per minute; the persisted
 //              expiresAt is the source of truth.
@@ -37,6 +36,7 @@ import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
 
 export function PanicModeRow() {
     const [state, setState] = useState(getPanicModeState);
+    const [confirming, setConfirming] = useState(false);
     const [remainingMs, setRemainingMs] = useState(() =>
         getPanicRemainingMs(getPanicModeState()),
     );
@@ -60,6 +60,7 @@ export function PanicModeRow() {
         const next = activatePanicMode();
         setState(next);
         setRemainingMs(getPanicRemainingMs(next));
+        setConfirming(false);
     }
 
     function handleDeactivate() {
@@ -81,7 +82,7 @@ export function PanicModeRow() {
     const dangerButtonStyle = {
         ...buttonStyle,
         border: '1px solid var(--xc-danger)',
-        color: 'var(--xc-danger)',
+        color: 'var(--xc-danger-fg)',
         fontWeight: 600,
     };
 
@@ -105,6 +106,28 @@ export function PanicModeRow() {
         );
     }
 
+    if (confirming) {
+        return (
+            <div style={{ ...ROW, alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                    <span style={labelStyle}>Confirm panic mode</span>
+                    <span style={ROW_HINT}>
+                        Freeze all signing for 24 hours? Balances and history remain readable, and
+                        you can deactivate the freeze from this setting.
+                    </span>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                    <button type="button" onClick={() => setConfirming(false)} style={buttonStyle}>
+                        Cancel
+                    </button>
+                    <button type="button" onClick={handleActivate} style={dangerButtonStyle}>
+                        Confirm 24-hour freeze
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -115,7 +138,7 @@ export function PanicModeRow() {
                     expires or you deactivate.
                 </span>
             </div>
-            <button type="button" onClick={handleActivate} style={dangerButtonStyle}>
+            <button type="button" onClick={() => setConfirming(true)} style={dangerButtonStyle}>
                 Activate
             </button>
         </div>

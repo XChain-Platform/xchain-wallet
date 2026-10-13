@@ -89,6 +89,7 @@ assert.match(form, /prebuiltActionData: composed\.gatedPublish\.actionData/, 'ap
 assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm page');
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
 assert.match(form, /Pack key hash/, 'done screen surfaces KEY_HASH');
+assert.match(form, /QueuedResultPanel/, 'signed but unbroadcast publishes use the queued-result state');
 
 // ---- ManageToken entry + 3-shell wiring ---------------------------------
 const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');

@@ -134,6 +134,22 @@ describe('useAccountList wallet changes', () => {
         await act(() => next.resolve([{ id: 'new', index: 1 }]));
         expect(result.current).toEqual([{ id: 'new', index: 1 }]);
     });
+
+    it('reloads the current wallet when the refresh key changes', async () => {
+        mocked.messaging.listAccounts
+            .mockResolvedValueOnce([{ id: 'old', index: 0 }])
+            .mockResolvedValueOnce([{ id: 'new', index: 1 }]);
+        const { result, rerender } = renderHook(
+            ({ refreshKey }) => useAccountList('wallet-a', refreshKey),
+            { initialProps: { refreshKey: 'old' } },
+        );
+        await waitFor(() => expect(result.current).toEqual([{ id: 'old', index: 0 }]));
+
+        rerender({ refreshKey: 'new' });
+
+        await waitFor(() => expect(result.current).toEqual([{ id: 'new', index: 1 }]));
+        expect(mocked.messaging.listAccounts).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe('useAccountList cancellation', () => {

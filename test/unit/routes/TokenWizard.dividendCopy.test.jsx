@@ -121,7 +121,8 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
         fireEvent.change(screen.getByLabelText('Max mint per transaction (optional)'), {
             target: { value: '100' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
 
         const params = await composedParams();
         expect(params).toMatchObject({

@@ -50,7 +50,7 @@ body {
 }
 
 .sg-toc a {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     text-decoration: none;
 }
 
@@ -108,7 +108,7 @@ body {
 }
 
 .sg-guide dt.do { color: var(--xc-success, #2da44e); }
-.sg-guide dt.dont { color: var(--xc-danger); }
+.sg-guide dt.dont { color: var(--xc-danger-fg); }
 
 .sg-guide dd {
     margin: 0;
