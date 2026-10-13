@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ViewPrivateKey.module.css';
 
@@ -50,7 +50,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const [stage, setStage] = useState(
         /** @type {'warning' | 'submitting' | 'revealed'} */ ('warning'),
     );
@@ -106,7 +105,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 

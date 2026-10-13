@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -562,7 +562,31 @@ export function ContractStakeForm({
     if (stage === 'review' || stage === 'submitting') {
         const verb = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`${verb} review`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : `${verb}`}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     {verb}
                     {mode === 'stake'
@@ -647,28 +671,7 @@ export function ContractStakeForm({
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : `${verb}`}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -733,7 +736,23 @@ export function ContractStakeForm({
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Contract stake"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
+                >
+                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
+                </Button>
+            )}
+        >
             <div className={styles.summary} style={{ marginBottom: '0.5rem' }}>
                 Target: contract #{contractActionIndex},{' '}
                 <strong>{contractMeta.cooldown}-block cooldown</strong>.{' '}
@@ -850,20 +869,6 @@ export function ContractStakeForm({
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
-                >
-                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

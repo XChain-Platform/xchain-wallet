@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, PageHeader, Button, Input, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage , Icon} from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, Button, EmptyState, Input, ListPage, AnimatedQrFrames, MultisigBadge, QrScanner, StatusMessage } from '@xchain-wallet/core/ui';
 import { schemas, uri as uriLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -78,7 +78,6 @@ const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
@@ -416,7 +415,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.listCard}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -437,15 +436,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
     if (!activeId) {
         if (sessions.length === 0) {
             return wrap(
-                <>
-                    <p className={styles.hint}>
-                        No multisig signing sessions for this wallet. A session
-                        starts when you compose a multisig spend, and signers add
-                        their contributions by scanning the transaction QR code.
-                    </p>
-                    <div className={styles.actions}>
-                    </div>
-                </>,
+                <EmptyState
+                    title="No multisig signing sessions for this wallet."
+                    body="A session starts when you compose a multisig spend, and signers add their contributions by scanning the transaction QR code."
+                />,
             );
         }
         return wrap(

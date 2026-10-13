@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -31,7 +31,6 @@ import pickerStyles from './WalletPicker.module.css';
 export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -73,13 +72,13 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
+            <ListPage>
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : accounts === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : accounts.length === 0 ? (
-                    <div className={styles.entryDescription}>No accounts yet.</div>
+                    <EmptyState title="No accounts yet." titleAs="p" />
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
                     const defaultName = `Account ${a.index + 1}`;
@@ -124,7 +123,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                         </div>
                     );
                 })}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
