@@ -725,7 +725,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.restoring') : t('common.restore')}
+            {busy ? t('importWallet.restoring') : t('send.draft.restore')}
         </Button>
     ) : lane === 'wif' ? (
         <Button
@@ -1044,7 +1044,7 @@ export function ImportWallet({
                 </p>
             </div>
             <Input
-                label={t('importWallet.walletName')}
+                label={t('renameWallet.name')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="off"
@@ -1070,7 +1070,7 @@ export function ImportWallet({
             <Input
                 id="import-confirm"
                 type="password"
-                label={isFull ? t('importWallet.confirmPassword') : t('importWallet.confirm')}
+                label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                 value={confirm}
                 onChange={(e) => {
                     setConfirm(e.target.value);
@@ -1146,7 +1146,7 @@ export function ImportWallet({
                         ))}
                     </Select>
                     <Input
-                        label={t('importWallet.walletName')}
+                        label={t('renameWallet.name')}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         autoComplete="off"
@@ -1168,7 +1168,7 @@ export function ImportWallet({
                     />
                     <Input
                         type="password"
-                        label={isFull ? t('importWallet.confirmPassword') : t('importWallet.confirm')}
+                        label={isFull ? t('importWallet.confirmPassword') : t('common.confirm')}
                         value={confirm}
                         onChange={(e) => {
                             setConfirm(e.target.value);

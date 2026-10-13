@@ -1093,7 +1093,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={() => setHomeMoreOpen((o) => !o)}
                         >
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>{t('home.more')}</span>
+                            <span>{t('history.detail.more')}</span>
                         </button>
                         {homeMoreOpen ? (
                             <div className={styles.quickActionMoreMenu} role="menu">
@@ -1422,7 +1422,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         {t('home.messaging')}
                         {messagingUnread > 0 ? (
                             <span
-                                aria-label={t('home.unread', { count: messagingUnread })}
+                                aria-label={t('alerts.unreadCount', { count: messagingUnread })}
                                 style={{
                                     marginInlineStart: '0.4rem',
                                     padding: '0 0.4rem',
@@ -1444,7 +1444,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onHistory}
                         icon={<Icon.HistoryIcon />}
                     >
-                        {t('home.history')}
+                        {t('history.title')}
                     </Button>
                     <Button
                         variant="secondary"
@@ -1482,7 +1482,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onActions}
                         icon={<Icon.MoreIcon />}
                     >
-                        {t('home.moreActions')}
+                        {t('actionsMenu.more')}
                     </Button>
                 </div>
                 ) : null}
@@ -1501,7 +1501,7 @@ function SendQuickAction({ onSend, browserOnline, onOffline }) {
     const content = (
         <>
             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-            <span>{t('home.send')}</span>
+            <span>{t('send.title')}</span>
         </>
     );
     if (!browserOnline && onSend) {

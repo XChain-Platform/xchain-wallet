@@ -25,7 +25,7 @@ describe('Loading error recovery', () => {
         const error = new Error('database password and internal path');
         renderLoading({ error });
 
-        expect(screen.getByRole('heading', { name: /wallet could not start/i })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: /wallet couldn't start/i })).toBeTruthy();
         expect(screen.getByText(/choose try again.*contact support/i)).toBeTruthy();
         expect(screen.queryByText(/database password/i)).toBeNull();
         expect(screen.queryByText(/internal path/i)).toBeNull();

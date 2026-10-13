@@ -374,7 +374,7 @@ const webAuthnProvider = {
  * the defect records.
  */
 export const BIOMETRIC_GENERIC_MECHANISM = 'your device biometric';
-export const BIOMETRIC_GENERIC_UNAVAILABLE = 'Biometric unlock is not available on this device.';
+export const BIOMETRIC_GENERIC_UNAVAILABLE = "Biometric unlock isn't available on this device.";
 export const BIOMETRIC_GENERIC_WRAP_NOTE = 'Your password is encrypted and is never stored in plain text.';
 
 /**

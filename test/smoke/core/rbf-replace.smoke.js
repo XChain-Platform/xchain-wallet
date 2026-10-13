@@ -41,7 +41,7 @@ assert.deepEqual(
 
 assert.match(
     isEntryReplaceable({ blockIndex: 0, action: 'ISSUE', txHash: 'abc' }).reason,
-    /not RBF-replaceable/,
+    /aren't RBF-replaceable/,
 );
 
 const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } }, btc);
@@ -78,7 +78,7 @@ assert.deepEqual(
         { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet', pending: { rbf: true } },
         { descriptor: registry.get('dogecoin-mainnet') },
     ),
-    { ok: false, reason: 'Fee bumping is not supported on Dogecoin.' },
+    { ok: false, reason: "Fee bumping isn't supported on Dogecoin." },
 );
 assert.equal(isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }).ok, false);
 assert.equal(

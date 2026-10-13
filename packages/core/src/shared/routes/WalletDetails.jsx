@@ -158,11 +158,11 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                                 ? 'Stored'
                                 : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                     />
-                    <Row label={t('walletDetails.accounts')} value={accountCount === null ? '…' : String(accountCount)} />
+                    <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
                     <Row label={t('walletDetails.created')} value={createdLabel} />
                     {isDemo ? (
                         <Row
-                            label={t('walletDetails.status')}
+                            label={t('history.filters.statusHeader')}
                             value={
                                 <span>
                                     {t('walletDetails.demoWallet')}
@@ -197,7 +197,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             disabled={exitBusy}
                             icon={<Icon.PencilIcon />}
                         >
-                            {t('walletDetails.rename')}
+                            {t('renameWallet.title')}
                         </Button>
                     </div>
                 ) : null}

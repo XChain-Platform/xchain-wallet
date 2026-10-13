@@ -382,7 +382,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? t('common.networkFeeValue', {
+                    ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
@@ -470,9 +470,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                                 : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
                             {isWatcherMode
-                                ? t('common.createUnsignedTransaction')
+                                ? t('send.review.createUnsigned')
                                 : hw
-                                    ? t('common.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                    ? t('send.review.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
                                     : t('gatedPublish.signAndPublish')}
                         </Button>
                     </>
@@ -494,7 +494,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('common.chain')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
@@ -625,7 +625,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <input
                     type="text"
                     enterKeyHint={thresholdActive ? 'next' : 'go'}
-                    aria-label={t('gatedPublish.memoField')}
+                    aria-label={t('send.memo')}
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     maxLength={120}
@@ -689,7 +689,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
             {feeTiers ? (
                 <FeeSelector
-                    label={t('common.networkFee')}
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}

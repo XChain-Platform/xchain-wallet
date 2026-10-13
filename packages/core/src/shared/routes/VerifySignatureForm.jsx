@@ -168,7 +168,7 @@ export function VerifySignatureForm({ onBack }) {
                         setResult(null);
                         if (error) setError(null);
                     }}
-                    label={t('verifySignature.chain')}
+                    label={t('send.fields.chain')}
                 />
             </div>
             <Input

@@ -62,7 +62,7 @@ for (const [name, src] of [['notice', notice], ['create', create], ['import', im
 // donating is not required, and points at Settings for every preference.
 assert.equal(en['adsNotice.title'], 'Automatic Donation System', 'names the system');
 assert.match(en['adsNotice.defaultBehavior'], /on by default/, 'says ADS is on by default');
-assert.match(en['adsNotice.optional'], /do not need to donate/, 'says donating is not required');
+assert.match(en['adsNotice.optional'], /don't need to donate/, 'says donating is not required');
 assert.match(en['adsNotice.settings'], /Settings → Automatic Donation System/, 'points at the settings section');
 assert.match(en['adsNotice.settings'], /turned off entirely/, 'says where it can be turned off');
 

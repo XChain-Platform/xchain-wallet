@@ -115,8 +115,8 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 <button
                     type="button"
                     onClick={() => handleSubmit()}
-                    aria-label={t('common.save')}
-                    title={t('common.save')}
+                    aria-label={t('history.contact.save')}
+                    title={t('history.contact.save')}
                     disabled={saveDisabled}
                     aria-busy={busy ? 'true' : undefined}
                 >

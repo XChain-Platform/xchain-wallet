@@ -98,13 +98,13 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title={t('renameAccount.title')}
+            title={t('accountPicker.renameTitle')}
             trailing={(
                 <button
                     type="button"
                     onClick={() => handleSubmit()}
-                    aria-label={t('common.save')}
-                    title={t('common.save')}
+                    aria-label={t('history.contact.save')}
+                    title={t('history.contact.save')}
                     disabled={saveDisabled}
                 >
                     <Icon.CheckIcon />
@@ -114,7 +114,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     );
 
     const formBody = (
-        <FormPage ref={formRef} label={t('renameAccount.title')} onSubmit={handleSubmit}>
+        <FormPage ref={formRef} label={t('accountPicker.renameTitle')} onSubmit={handleSubmit}>
             <Input
                 ref={nameRef}
                 label={t('renameAccount.name')}

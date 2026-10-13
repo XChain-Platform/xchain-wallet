@@ -54,7 +54,7 @@ describe('A-L route load failures', () => {
             { listAccounts },
         );
 
-        expect(await screen.findByText('Could not load accounts. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load accounts. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
@@ -153,7 +153,7 @@ describe('A-L route load failures', () => {
             },
         );
 
-        expect(await screen.findByText('Could not load governance polls. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText("Couldn't load governance polls. Try again.")).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 

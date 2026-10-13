@@ -639,7 +639,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 <h2 className={styles.successTitle}>{t('issue.success')}</h2>
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>{t('common.transactionId')}</p>
+                        <p className={styles.successLabel}>{t('send.txid')}</p>
                         <code className={styles.txid}>{txid}</code>
                     </>
                 ) : (
@@ -681,22 +681,22 @@ export function IssueTokenForm({ walletId, onBack }) {
                         }
                     >
                         {isWatcherMode
-                            ? t('common.createUnsignedTransaction')
+                            ? t('send.review.createUnsigned')
                             : isHwSource
-                                ? t('common.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
                                 : (descriptor
-                                    ? t('common.signOn', { device: descriptor.displayName })
-                                    : t('common.sign'))}
+                                    ? t('send.review.signOn', { device: descriptor.displayName })
+                                    : t('send.review.sign'))}
                     </Button>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('common.chain')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>{t('common.from')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
@@ -704,7 +704,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
-                        label={t('common.networkFee')}
+                        label={t('send.networkFee')}
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
                                 + (feeFiat ? ` (${feeFiat})` : '')
@@ -757,7 +757,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? t('common.networkFeeValue', {
+                    ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
@@ -784,7 +784,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title={t('common.fromAddress')}
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => {
@@ -814,13 +814,13 @@ export function IssueTokenForm({ walletId, onBack }) {
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
             variant="status"
-            recovery={{ label: t('common.restore'), onAction: restoreDraft }}
+            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
             {t('issue.draft.unfinished')}
             <button
                 type="button"
                 onClick={dismissDraft}
-                aria-label={t('issue.draft.discardLabel')}
+                aria-label={t('send.draft.discardLabel')}
                 style={{
                     background: 'transparent',
                     border: 'none',
@@ -832,7 +832,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     fontSize: 'var(--xc-text-xs)',
                 }}
             >
-                {t('common.discard')}
+                {t('send.draft.discard')}
             </button>
         </StatusMessage>
     ) : null;
@@ -875,17 +875,17 @@ export function IssueTokenForm({ walletId, onBack }) {
 
             {fromAddress ? (
                 <AddressField
-                    label={t('common.from')}
+                    label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel={t('common.chooseSourceAddress')}
+                    iconLabel={t('send.source.choose')}
                 />
             ) : (
                 <StatusMessage variant="error" className={styles.error}>
-                    {t('common.noAddressOnChain')}
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 
@@ -997,7 +997,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             />
 
             <FeeSelector
-                label={t('common.networkFee')}
+                label={t('send.networkFee')}
                 coinTicker={coinTicker}
                 formatFiat={formatNativeFee}
                 tiers={feeTiers}

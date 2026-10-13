@@ -72,7 +72,7 @@ describe('the BIP39 passphrase InfoTip on import describes storage, not re-entry
         );
         fireEvent.click(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent(
-            'the wallet stores it, protected by your password, and will not ask for it again on this device',
+            "the wallet stores it, protected by your password, and won't ask for it again on this device",
         );
     });
 });

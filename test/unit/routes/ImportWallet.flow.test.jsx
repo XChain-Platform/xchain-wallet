@@ -137,7 +137,7 @@ describe('wallet import flow', () => {
             fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
             fireEvent.change(screen.getByLabelText('WIF private key'), { target: { value: WIF } });
             fireEvent.click(screen.getByLabelText(
-                'I understand this key is not recoverable from a recovery phrase.',
+                "I understand this key isn't recoverable from a recovery phrase.",
             ));
         } else {
             fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });

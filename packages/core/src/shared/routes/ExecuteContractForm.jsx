@@ -645,7 +645,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? t('execute.review.title')
-                    : t('execute.callContractNumber', { contract: contractActionIndex })}
+                    : t('uri.intent.execute', { contract: contractActionIndex })}
         />
     );
     const wrap = (children) => (
@@ -684,7 +684,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             <>
                 <p className={styles.summary}>{t('execute.success')}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('common.transactionId')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.txid')}</dt>
                     <dd className={styles.detailsValue}>{String(txid || '(none)')}</dd>
                 </dl>
                 <div className={styles.actions}>
@@ -715,9 +715,9 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         )}
                     >
                         {isWatcherMode
-                            ? t('common.createUnsignedTransaction')
+                            ? t('send.review.createUnsigned')
                             : isHwSource
-                                ? t('common.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
                                 : (descriptor
                                     ? t('execute.executeOn', { network: descriptor.displayName })
                                     : t('execute.action'))}
@@ -736,11 +736,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     })}
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>{t('common.chain')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>{t('common.from')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
@@ -768,7 +768,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>{t('common.networkFee')}</dt>
+                    <dt className={styles.detailsLabel}>{t('send.networkFee')}</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
@@ -830,7 +830,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? t('common.networkFeeValue', {
+                    ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
@@ -873,7 +873,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title={t('common.fromAddress')}
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
@@ -912,7 +912,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel={t('common.chooseSourceAddress')}
+                    iconLabel={t('send.source.choose')}
                 />
             ) : null}
             {abiActive ? (
@@ -1000,7 +1000,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label={t('execute.depositAmount')}
                         hint={t('execute.depositHint', {
                             contract: contractActionIndex,
-                            chain: descriptor?.displayName || t('execute.thisChain'),
+                            chain: descriptor?.displayName || t('send.rbf.thisChain'),
                         })}
                         amount={depositQuantity}
                         tick={depositTick}
@@ -1033,7 +1033,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
             {feeTiers ? (
                 <FeeSelector
-                    label={t('common.networkFee')}
+                    label={t('send.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
