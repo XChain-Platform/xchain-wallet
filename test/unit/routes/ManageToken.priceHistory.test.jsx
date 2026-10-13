@@ -13,7 +13,7 @@
 // wallet never fabricates a number.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -60,6 +60,18 @@ describe('ManageToken price history', () => {
         renderManage('demo-wallet');
         expect(await screen.findByRole('img', { name: /^Price trend\b/ })).toBeTruthy();
         expect(screen.getByRole('tablist', { name: 'Chart range' })).toBeTruthy();
+        const selected = screen.getByRole('tab', { name: '30d' });
+        const next = screen.getByRole('tab', { name: '24h' });
+        const panel = document.getElementById(selected.getAttribute('aria-controls'));
+        expect(selected).toHaveAttribute('tabindex', '0');
+        expect(next).toHaveAttribute('tabindex', '-1');
+        expect(panel).toHaveAttribute('aria-labelledby', selected.id);
+
+        fireEvent.click(next);
+
+        expect(next).toHaveAttribute('aria-selected', 'true');
+        expect(next).toHaveAttribute('tabindex', '0');
+        expect(panel).toHaveAttribute('aria-labelledby', next.id);
         expect(screen.queryByText('No price history yet')).toBeNull();
     });
 });

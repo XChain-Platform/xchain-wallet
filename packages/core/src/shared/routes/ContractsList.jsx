@@ -16,6 +16,7 @@ import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
 import styles from './ActionsMenu.module.css';
+import contractStyles from './ContractScreens.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -348,7 +349,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
 
     const toolbar = (
         <>
-            <div style={{ flex: '1 1 200px', minWidth: 0, marginBottom: 'calc(var(--xc-space-3) * -1)' }}>
+            <div className={contractStyles.toolbarSearch}>
                 <Input
                     type="search"
                     placeholder="Filter by name or number"
@@ -449,7 +450,7 @@ function Section({ title, children }) {
 
 function ChainFilterBar({ chains, value, onChange }) {
     return (
-        <div role="tablist" aria-label="Chain filter" style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+        <div role="tablist" aria-label="Chain filter" className={contractStyles.chainFilters}>
             <Button
                 type="button"
                 role="tab"
@@ -534,7 +535,7 @@ function ChainGroup({
                             <Button
                                 key={String(rowKey(row)) + ':' + i}
                                 type="button"
-                                className={styles.entry}
+                                className={`${styles.entry} ${contractStyles.contractRow}`}
                                 aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
                                 onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                             >

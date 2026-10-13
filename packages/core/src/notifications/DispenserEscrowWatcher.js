@@ -49,6 +49,7 @@ import {
     decimalQuotientFloor,
 } from '../shared/utils/amountFormat.js';
 import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** Warn at or below this many remaining dispenses. */
@@ -95,6 +96,12 @@ export class DispenserEscrowWatcher {
         this._lowDispenses = Number.isFinite(lowDispenses) && lowDispenses >= 0
             ? lowDispenses : DEFAULT_LOW_DISPENSES;
         this._log = taggedLogger(logger, 'dispenser');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'DispenserEscrowWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
@@ -122,6 +129,7 @@ export class DispenserEscrowWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._addressPoll.reset();
     }
 
     /** One poll cycle. Public so shells/tests can drive it deterministically. */
@@ -133,6 +141,10 @@ export class DispenserEscrowWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('DispenserEscrowWatcher: getSettings failed', e);
                 return;
             }
@@ -140,6 +152,9 @@ export class DispenserEscrowWatcher {
             const featureOn = !settings || !settings.notifications
                 || settings.notifications.dispenserEscrow !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             if (!this._seenLoaded) {
                 this._seenLoaded = true;
@@ -156,15 +171,6 @@ export class DispenserEscrowWatcher {
                     }
                 }
             }
-
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('DispenserEscrowWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
 
             const byChain = new Map();
             for (const a of addresses) {
@@ -282,10 +288,10 @@ export class DispenserEscrowWatcher {
             try {
                 await this._notify({
                     kind: 'dispenser-escrow',
-                    title: empty ? 'Your dispenser is empty' : 'Your dispenser is running low',
+                    title: empty ? `${d.giveTick} dispenser is empty` : `${d.giveTick} dispenser is running low`,
                     body: empty
-                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has run out of ${d.giveTick} and is turning buyers away. Top it up to start serving again.`
-                        : `Dispenser #${d.actionIndex} on ${chainLabel} can serve ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'} before it runs out of ${d.giveTick}.`,
+                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has no ${d.giveTick} left and is turning buyers away. Top it up to resume sales.`
+                        : `Dispenser #${d.actionIndex} on ${chainLabel} has enough ${d.giveTick} for ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'}.`,
                     data: {
                         chainId,
                         actionIndex: d.actionIndex,

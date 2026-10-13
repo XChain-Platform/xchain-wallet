@@ -220,7 +220,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('the SELLER is a second wallet, and opens a token-priced dispenser', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             // navigate:false - the add-wallet flow starts at the onboarding
             // welcome INSIDE the unlocked shell.
             await createWallet(page, { password: PASSWORD, name: 'Seller Wallet', navigate: false });

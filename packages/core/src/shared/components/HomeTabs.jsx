@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useId, useMemo, useState } from 'react';
 import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -26,12 +26,14 @@ import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
 import { PortfolioChart } from './PortfolioChart.jsx';
+import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import {
     isDemoWallet,
     synthesizeDemoHistory,
     synthesizeDemoDefiPositions,
 } from '@xchain-wallet/core/flows';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { classifyEntryAction, classifyEntryStatus } from '../utils/historyFilter.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
@@ -46,7 +48,76 @@ import {
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
 import styles from './HomeTabs.module.css';
+
+const BALANCE_SORT_STORAGE_KEY = 'xc:balances:sort';
+const BALANCE_SORT_OPTIONS = new Set(['value', 'name', 'change']);
+
+function balanceSortStorageKey(walletId) {
+    return `${BALANCE_SORT_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readBalanceSort(walletId) {
+    try {
+        const value = globalThis.localStorage?.getItem(balanceSortStorageKey(walletId));
+        return BALANCE_SORT_OPTIONS.has(value) ? value : 'value';
+    } catch {
+        return 'value';
+    }
+}
+
+function persistBalanceSort(walletId, value) {
+    try {
+        globalThis.localStorage?.setItem(balanceSortStorageKey(walletId), value);
+    } catch {
+        // Storage can be unavailable in privacy-restricted shells.
+    }
+}
+
+function compareBalanceNames(a, b) {
+    const byName = String(a.displayName || a.tick || '').localeCompare(
+        String(b.displayName || b.tick || ''),
+        undefined,
+        { sensitivity: 'base' },
+    );
+    if (byName !== 0) return byName;
+    return `${a.chainId || ''}:${a.tick || ''}`.localeCompare(`${b.chainId || ''}:${b.tick || ''}`);
+}
+
+/**
+ * Sort balance rows without converting exact fiat values to floating point.
+ * Missing values and changes stay at the end, with name order as the stable
+ * fallback so an unavailable price never makes a row jump unpredictably.
+ */
+export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
+    const list = Array.isArray(rows) ? rows.slice() : [];
+    if (sortBy === 'name') return list.sort(compareBalanceNames);
+    return list.sort((a, b) => {
+        const aMetric = sortBy === 'change'
+            ? (Number.isFinite(a.change24hPct)
+                ? a.change24hPct
+                : nativePriceMap[a.chainId]?.change24hPct)
+            : fiatValue(a.quantity, a.divisibility, a.fiatRate);
+        const bMetric = sortBy === 'change'
+            ? (Number.isFinite(b.change24hPct)
+                ? b.change24hPct
+                : nativePriceMap[b.chainId]?.change24hPct)
+            : fiatValue(b.quantity, b.divisibility, b.fiatRate);
+        const aMissing = sortBy === 'change'
+            ? !Number.isFinite(Number(aMetric))
+            : aMetric === null;
+        const bMissing = sortBy === 'change'
+            ? !Number.isFinite(Number(bMetric))
+            : bMetric === null;
+        if (aMissing !== bMissing) return aMissing ? 1 : -1;
+        if (aMissing) return compareBalanceNames(a, b);
+        const compared = sortBy === 'change'
+            ? Math.sign(Number(bMetric) - Number(aMetric))
+            : compareDecimalStrings(String(bMetric), String(aMetric));
+        return compared || compareBalanceNames(a, b);
+    });
+}
 
 /**
  * Top-level tabbed view for Home.
@@ -85,8 +156,10 @@ import styles from './HomeTabs.module.css';
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+    const tabsId = useId();
     const [active, setActive] = useState('coins');
+    const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
     const isDemo = isDemoWallet(walletId);
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
@@ -96,6 +169,11 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // the only control showing why the Tokens list is empty.
     const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
+    const { messaging } = useMessaging();
+
+    useEffect(() => {
+        setSortBy(readBalanceSort(walletId));
+    }, [walletId]);
 
     const builtRows = useMemo(
         () => buildBalanceRows(balances, chainRegistry, activeByChain),
@@ -108,16 +186,25 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // so an opted-out user does not reach the CoinGecko fallback before
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
+    const watchedRows = useMemo(
+        () => buildWatchedTokenRows(settings?.watchedTokens, builtRows, chainRegistry),
+        [settings?.watchedTokens, builtRows, chainRegistry],
+    );
+    const displayRows = useMemo(
+        () => [...builtRows, ...watchedRows],
+        [builtRows, watchedRows],
+    );
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
     const nativeCoins = useMemo(() => {
-        if (settingsLoading || isDemo) return [];
-        return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
-    }, [builtRows, settingsLoading, isDemo]);
+        if (isDemo) return [];
+        return displayRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
+    }, [displayRows, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const spamKeys = useMemo(
@@ -125,8 +212,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         [builtRows],
     );
     const tokenRequests = useMemo(() => {
-        if (settingsLoading || isDemoWallet(walletId)) return [];
-        return builtRows
+        if (isDemoWallet(walletId)) return [];
+        return displayRows
             .filter((r) => r.kind !== 'native'
                 && typeof r.fiatRate !== 'number'
                 && !spamKeys.has(`${r.chainId}:${r.tick}`))
@@ -138,17 +225,44 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [builtRows, chainRegistry, settingsLoading, spamKeys, walletId]);
+    }, [displayRows, chainRegistry, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
-        () => priceTokenRows(priceNativeRows(builtRows, nativeRates), tokenRates),
-        [builtRows, nativeRates, tokenRates],
+        () => priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates),
+        [displayRows, nativeRates, tokenRates],
     );
+    const nativeChainIds = useMemo(
+        () => allRows.filter((row) => row.kind === 'native').map((row) => row.chainId).sort(),
+        [allRows],
+    );
+    const nativeChainKey = nativeChainIds.join(',');
+    const [nativePriceMap, setNativePriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    useEffect(() => {
+        if (isDemo) {
+            setNativePriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            return undefined;
+        }
+        if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
+            setNativePriceMap({});
+            return undefined;
+        }
+        let cancelled = false;
+        messaging.getNativePricesRequest({
+            chainIds: nativeChainIds,
+            fiatCurrency: settings?.fiatCurrency || 'USD',
+        }).then((result) => {
+            if (!cancelled) setNativePriceMap(result?.disabled ? {} : (result?.prices || {}));
+        }).catch(() => {
+            if (!cancelled) setNativePriceMap({});
+        });
+        return () => { cancelled = true; };
+    }, [isDemo, messaging, nativeChainKey, settings?.fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
@@ -161,16 +275,16 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     );
 
     const coins = useMemo(
-        () => sortByChainThenAsset(filteredRows.filter((r) => r.kind === 'native')),
-        [filteredRows],
+        () => sortBalanceRows(filteredRows.filter((r) => r.kind === 'native'), sortBy, nativePriceMap),
+        [filteredRows, sortBy, nativePriceMap],
     );
     // Tokens = every non-native tick, regardless of divisibility or
     // imagery. The single canonical "what do I hold?" surface.
     const tokens = useMemo(
-        () => sortByChainThenAsset(filteredRows.filter(
+        () => sortBalanceRows(filteredRows.filter(
             (r) => r.kind !== 'native',
-        )),
-        [filteredRows],
+        ), sortBy, nativePriceMap),
+        [filteredRows, sortBy, nativePriceMap],
     );
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const ownedTokens = useOwnedTokens(balances, active === 'tokens');
@@ -244,25 +358,35 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             {/* Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
                 their own dollar amounts via separate flows once they
                 wire up; for now they're not in the sum. */}
-            <TotalBalanceHero
-                rows={portfolioRows}
-                walletId={walletId}
-                networkFilter={networkFilter}
-                lastSyncedAt={balancesFetchedAt}
-                pricesFetchedAt={pricesFetchedAt}
-                onRefresh={onRefresh}
-                refreshing={refreshing}
-                filterOpen={filterOpen}
-                onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
-                onCommandPalette={onCommandPalette}
-                onOpenSettings={onOpenSettings}
-                onLockWallet={onLockWallet}
-            />
+            <RouteErrorBoundary
+                variant="compact"
+                resetKey={`${walletId || ''}:${networkFilter}:price`}
+            >
+                <TotalBalanceHero
+                    rows={portfolioRows}
+                    walletId={walletId}
+                    networkFilter={networkFilter}
+                    lastSyncedAt={balancesFetchedAt}
+                    pricesFetchedAt={pricesFetchedAt}
+                    onRefresh={onRefresh}
+                    refreshing={refreshing}
+                    filterOpen={filterOpen}
+                    onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
+                    onCommandPalette={onCommandPalette}
+                    onOpenSettings={onOpenSettings}
+                    onLockWallet={onLockWallet}
+                />
+            </RouteErrorBoundary>
 
-            <PortfolioChart
-                rows={portfolioRows}
-                walletId={walletId}
-            />
+            <RouteErrorBoundary
+                variant="compact"
+                resetKey={`${walletId || ''}:${networkFilter}:chart`}
+            >
+                <PortfolioChart
+                    rows={portfolioRows}
+                    walletId={walletId}
+                />
+            </RouteErrorBoundary>
 
             {actions}
 
@@ -281,9 +405,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 {tabs.map((t) => (
                     <button
                         key={t.id}
+                        id={`${tabsId}-tab-${t.id}`}
                         type="button"
                         role="tab"
                         aria-selected={active === t.id ? 'true' : 'false'}
+                        aria-controls={`${tabsId}-panel`}
+                        tabIndex={active === t.id ? 0 : -1}
                         className={`${styles.tab} ${active === t.id ? styles.tabActive : ''}`}
                         onClick={() => setActive(t.id)}
                     >
@@ -292,7 +419,32 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ))}
             </div>
 
-            <div className={styles.panel} role="tabpanel">
+            {active === 'coins' || active === 'tokens' ? (
+                <label className={styles.sortControl}>
+                    <span>Sort balances</span>
+                    <select
+                        className={styles.sortSelect}
+                        value={sortBy}
+                        onChange={(event) => {
+                            const value = event.target.value;
+                            if (!BALANCE_SORT_OPTIONS.has(value)) return;
+                            setSortBy(value);
+                            persistBalanceSort(walletId, value);
+                        }}
+                    >
+                        <option value="value">Value</option>
+                        <option value="name">Name</option>
+                        <option value="change">24h change</option>
+                    </select>
+                </label>
+            ) : null}
+
+            <div
+                id={`${tabsId}-panel`}
+                className={styles.panel}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${active}`}
+            >
                 {active === 'coins' ? (
                     showFirstFunding ? (
                         <Placeholder
@@ -437,21 +589,26 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             never grow. Everything you hold, collectible or not, is also under Tokens.
                         </p>
                         ) : null}
-                        <CollectiblesView
-                            rows={nfts}
-                            demo={isDemo}
-                            emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
-                            emptyBody={networkFilter === 'all'
-                                ? 'Collectibles appear here after you receive an indivisible token with permanently locked supply.'
-                                : 'Collectibles on this network appear here after you receive them.'}
-                            onReceive={networkFilter === 'all' ? onReceive : undefined}
-                            onSelectToken={onSelectToken}
-                            pinnedKeys={pinnedKeys}
-                            onTogglePin={onTogglePin}
-                            hiddenKeys={hiddenKeys}
-                            onToggleHide={onToggleHide}
-                            allowRemoteImages={allowRemoteImages}
-                        />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${walletId || ''}:${networkFilter}:collectibles`}
+                        >
+                            <CollectiblesView
+                                rows={nfts}
+                                demo={isDemo}
+                                emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
+                                emptyBody={networkFilter === 'all'
+                                    ? 'Collectibles appear here after you receive an indivisible token with permanently locked supply.'
+                                    : 'Collectibles on this network appear here after you receive them.'}
+                                onReceive={networkFilter === 'all' ? onReceive : undefined}
+                                onSelectToken={onSelectToken}
+                                pinnedKeys={pinnedKeys}
+                                onTogglePin={onTogglePin}
+                                hiddenKeys={hiddenKeys}
+                                onToggleHide={onToggleHide}
+                                allowRemoteImages={allowRemoteImages}
+                            />
+                        </RouteErrorBoundary>
                     </>
                 ) : null}
 
@@ -503,6 +660,35 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             </div>
         </div>
     );
+});
+
+/**
+ * Builds zero-balance rows for watched tokens that are absent from the latest
+ * balance read. Keys stay chain-scoped so the same ticker can be watched on
+ * several chains without one row masking another.
+ *
+ * @param {unknown} watchedTokens
+ * @param {Array<any>} balanceRows
+ * @param {import('../../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Array<any>}
+ */
+export function buildWatchedTokenRows(watchedTokens, balanceRows, chainRegistry) {
+    if (!Array.isArray(watchedTokens)) return [];
+    const present = new Set((balanceRows || []).map((row) => `${row.chainId}:${row.tick}`));
+    const added = new Set();
+    const rows = [];
+    for (const key of watchedTokens) {
+        if (typeof key !== 'string' || present.has(key) || added.has(key)) continue;
+        const separator = key.indexOf(':');
+        if (separator <= 0 || separator === key.length - 1) continue;
+        const chainId = key.slice(0, separator);
+        const tick = key.slice(separator + 1);
+        const row = buildPlatformTokenRow(chainId, tick, null, chainRegistry);
+        if (!row) continue;
+        rows.push(row);
+        added.add(key);
+    }
+    return rows;
 }
 
 // Ticks any of the wallet's addresses owns, balance or not: a token whose
