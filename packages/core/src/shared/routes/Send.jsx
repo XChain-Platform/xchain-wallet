@@ -154,6 +154,7 @@ import {
     formatWithThousands,
     countNonCommaBefore,
     indexAfterNonCommaCount,
+    compareDecimalStrings,
 } from '../utils/amountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
@@ -1263,7 +1264,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) return null;
         const tickUpper = tick.trim().toUpperCase();
-        if (!tickUpper || sourceBalance) return null;
+        // A native coin always comes back as a row, holding "0" when empty, so a
+        // zero amount counts as none too (an empty BTC address on a phone showed
+        // "0 BTC available" and no warning until the encoder refused the send).
+        if (!tickUpper) return null;
+        if (sourceBalance) {
+            const held = compareDecimalStrings(String(sourceBalance.amount || '0'), '0');
+            if (held === null || held > 0) return null;
+        }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
     }, [previewBalances, sourceBalance, tick]);

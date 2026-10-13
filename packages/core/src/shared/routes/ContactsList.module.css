@@ -112,6 +112,9 @@
     gap: var(--xc-space-3);
     width: 100%;
     padding: var(--xc-space-3);
+    /* The row is a <button>: without the reset its other three sides keep
+       the user agent's dark outset border. */
+    border: none;
     border-top: 1px solid var(--xc-border);
     background: transparent;
     text-align: start;

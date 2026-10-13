@@ -66,7 +66,7 @@ describe('MessagingInbox self-addressed messages', () => {
         mount([message({ from: OWN_A, to: OWN_B, txid: 'tx-self' })]);
 
         expect(await screen.findByText('note to self')).toBeInTheDocument();
-        expect(screen.queryByText('No messages for this account yet.')).not.toBeInTheDocument();
+        expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
     });
 
     it('labels the self conversation rather than showing a bare own address', async () => {

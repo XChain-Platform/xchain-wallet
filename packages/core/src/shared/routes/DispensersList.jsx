@@ -346,11 +346,16 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : visibleRows.length === 0 ? (
-                <EmptyState
-                    title={allRows.length === 0
-                        ? 'No dispensers opened yet. Use Create dispenser to open your first.'
-                        : 'No dispensers match the current filter.'}
-                />
+                allRows.length === 0 ? (
+                    <EmptyState
+                        title="No dispensers yet"
+                        body="A dispenser sells a token for coin at a fixed price."
+                        actionLabel={onCreateDispenser ? 'Create dispenser' : undefined}
+                        onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
+                    />
+                ) : (
+                    <EmptyState title="No dispensers match the current filter." />
+                )
             ) : (
                 <div className={local.list} role="list">
                     {visibleRows.map((row) => (

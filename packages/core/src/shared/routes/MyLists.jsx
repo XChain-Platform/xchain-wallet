@@ -255,12 +255,16 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : visibleRows.length === 0 ? (
-                <EmptyState
-                    title={allRows.length === 0
-                        ? 'No lists published yet. Use Create list to publish your first (an address list for airdrops, or a token list for a project roster or gate).'
-                        : 'No lists match the current filter.'}
-                    titleAs="p"
-                />
+                allRows.length === 0 ? (
+                    <EmptyState
+                        title="No lists yet"
+                        body="An address list for airdrops, or a token list for a project roster or gate."
+                        actionLabel={onCreateList ? 'Create list' : undefined}
+                        onAction={onCreateList ? () => onCreateList() : undefined}
+                    />
+                ) : (
+                    <EmptyState title="No lists match the current filter." titleAs="p" />
+                )
             ) : (
                 <div className={local.list} role="list">
                     {visibleRows.map((row) => (

@@ -11,6 +11,7 @@
 import { useEffect } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -32,6 +33,8 @@ import styles from './NoticeModal.module.css';
 export function ConfirmModal({
     title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false, onConfirm, onCancel,
 }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onCancel);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
         window.addEventListener('keydown', onKey);

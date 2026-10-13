@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import LINKS from '../platform-links.json';
 import styles from './PlatformSwitcher.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * @param {object} props
@@ -37,6 +38,8 @@ import styles from './PlatformSwitcher.module.css';
  */
 export function PlatformSwitcher({ current }) {
     const [open, setOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
 
     // Same dismissal contract as the header's other dropdowns: outside click

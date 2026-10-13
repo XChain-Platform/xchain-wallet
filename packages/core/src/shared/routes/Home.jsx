@@ -35,6 +35,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -271,6 +272,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(homeMoreOpen ? () => setHomeMoreOpen(false) : undefined);
     const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     useEffect(() => {
         if (!homeMoreOpen) return undefined;

@@ -30,6 +30,7 @@ import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import styles from './AppHeader.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * @param {object} props
@@ -165,6 +166,8 @@ export function AppHeader({
  */
 function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     const [open, setOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
 
     useEffect(() => {

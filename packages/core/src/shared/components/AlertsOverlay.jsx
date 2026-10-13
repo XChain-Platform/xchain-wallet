@@ -11,6 +11,7 @@
 import { useEffect } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './AlertsOverlay.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * Full-overlay alerts panel. Surfaces wallet-level notifications that
@@ -30,6 +31,8 @@ import styles from './AlertsOverlay.module.css';
  * @param {() => void} props.onClose
  */
 export function AlertsOverlay({ alerts, onClose }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onClose);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);

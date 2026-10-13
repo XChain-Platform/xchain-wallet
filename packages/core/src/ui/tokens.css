@@ -395,6 +395,15 @@ fieldset {
     max-width: 100%;
 }
 
+/* A control with no focus style of its own drew the WebView's default ring,
+ * orange on Android, beside the app's blue on every styled field (the Scan
+ * paste box and Contacts' sort, LG K51, 2026-10-12). This base ring has zero
+ * specificity, so a component's own :focus or :focus-visible rule still wins. */
+:where(input, select, textarea, button):focus-visible {
+    outline: 2px solid var(--xc-accent-primary);
+    outline-offset: 2px;
+}
+
 :where(select:not([class])):focus {
     outline: none;
     border-color: var(--xc-accent-primary);

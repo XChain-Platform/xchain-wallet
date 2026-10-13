@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
  * @param {object} props
@@ -45,6 +46,8 @@ import styles from './CommandPalette.module.css';
 export function CommandPalette({ open, onClose, commands, placeholder, parseQuery }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? onClose : undefined);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
 

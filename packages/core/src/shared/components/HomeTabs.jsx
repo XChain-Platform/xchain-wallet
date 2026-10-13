@@ -220,6 +220,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 {active === 'coins' ? (
                     <BalanceList
                         rows={coins}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
                         multisig={multisig}
                         multisigChainId={multisigChainId}
                         emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
@@ -240,6 +241,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     <>
                     <BalanceList
                         rows={filteredTokens}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
                         emptyTitle={tokenQueryTrim
                             ? 'No matching tokens'
                             : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
@@ -264,6 +266,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             <p className={styles.tabNote}>Issued by you</p>
                             <BalanceList
                                 rows={issuedUnheld}
+                                fiatCurrency={settings?.fiatCurrency || 'USD'}
                                 onSelectToken={onSelectToken}
                                 pinnedKeys={pinnedKeys}
                                 onTogglePin={onTogglePin}

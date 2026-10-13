@@ -64,6 +64,7 @@ export function BalanceList({
     verifyMap,
     hideSmallBalances = false,
     showChain = false,
+    fiatCurrency = 'USD',
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
@@ -114,6 +115,7 @@ export function BalanceList({
                     <BalanceRowEl
                         key={key}
                         row={r}
+                        fiatCurrency={fiatCurrency}
                         multisig={r.chainId === multisigChainId ? multisig : null}
                         onSelect={onSelectToken}
                         pinned={pinned}
@@ -143,6 +145,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`hidden:${key}`}
                                 row={r}
+                                fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
                                 pinned={false}
@@ -175,6 +178,7 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`small:${key}`}
                                 row={r}
+                                fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
                                 pinned={false}
@@ -192,7 +196,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain }) {
+function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -336,8 +340,8 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                         : row.unavailable === 'all'
                             ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                             : row.unavailable === 'partial'
-                                ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat)}</span>
-                                : formatFiat(fiat)}
+                                ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
+                                : formatFiat(fiat, fiatCurrency)}
                 </div>
             </div>
             {showPin ? (
@@ -781,18 +785,33 @@ export function sumFiatValue(rows) {
     return { total, priced, unpriced };
 }
 
-export function formatFiat(usd) {
-    if (usd === null || usd === undefined) return '';
-    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
-    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
-        return '<$0.01';
+/**
+ * Format a fiat value in the user's currency. The rows were USD-only, so a
+ * wallet set to euros showed "€0.00 EUR" on the balance card and "$0.00" on
+ * every coin row beneath it.
+ *
+ * @param {string | number | null | undefined} value
+ * @param {string} [currency]   ISO code; defaults to USD
+ */
+export function formatFiat(value, currency = 'USD') {
+    if (value === null || value === undefined) return '';
+    let fmt;
+    try {
+        fmt = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: String(currency || 'USD').toUpperCase(),
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    } catch {
+        // An unknown code (a custom currency) still renders, just without a symbol.
+        return `${value} ${currency}`;
     }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(String(usd));
+    if (compareDecimalStrings(value, '0') === 0) return fmt.format(0);
+    if (compareDecimalStrings(value, '0') === 1 && compareDecimalStrings(value, '0.01') === -1) {
+        return `<${fmt.format(0.01)}`;
+    }
+    return fmt.format(String(value));
 }
 
 const PALETTE = [

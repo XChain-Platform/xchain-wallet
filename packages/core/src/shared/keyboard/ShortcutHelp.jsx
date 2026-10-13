@@ -18,6 +18,7 @@ import { useEffect, useMemo } from 'react';
 import { Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -33,6 +34,8 @@ function isMac() {
  */
 export function ShortcutHelp({ open, onClose, overrides }) {
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? onClose : undefined);
     useEffect(() => {
         if (!open) return undefined;
         const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
