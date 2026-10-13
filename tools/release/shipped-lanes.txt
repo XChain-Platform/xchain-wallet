@@ -107,7 +107,7 @@ android   SHIPPED      store-only  xchain-wallet-android-v*.aab xchain-wallet-v*
 # for the same reason. Flip this to SHIPPED in the commit that records the
 # first release actually carrying the file, and from then on a release that
 # omits it is a lane left behind rather than a smaller release.
-android-full NOT-SHIPPED store-only  xchain-wallet-v*-full.apk
+android-full SHIPPED     store-only  xchain-wallet-v*-full.apk
 
 # iOS. Store-bound only; there is no direct-install lane on that
 # platform, so this row is one glob and always will be.

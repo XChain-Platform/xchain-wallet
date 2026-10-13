@@ -461,7 +461,7 @@ const passing = makeSwapCheck({
     assert.doesNotMatch(coverage.stdout, /✅ win-x64/);
 
     // Every SHIPPED lane swapped and Windows not: NOT-SHIPPED Windows is listed, never demanded.
-    const shippedSwaps = [...LANES.filter((l) => l.os !== 'win32').map((l) => l.id), 'android-direct']
+    const shippedSwaps = [...LANES.filter((l) => l.os !== 'win32').map((l) => l.id), 'android-direct', 'android-full']
         .map((lane) => ({ lane, device: 'bench', at: '2026-09-30T00:00:00Z' }));
     writeFileSync(join(records, 'REHEARSAL-v0.337.2.json'), `${JSON.stringify({
         ...baseRecord, tag: 'v0.337.2', swaps: shippedSwaps,

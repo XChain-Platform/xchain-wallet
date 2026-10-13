@@ -812,7 +812,8 @@ const check = (over) => assertRecord({
     assert.doesNotMatch(coverage.stdout, /never had an observed swap: .*mac-x64/);
     {
         // Every shipped lane swapped but mac-x64 passes; dropping mac-arm64 too must fail again.
-        const shipped = [...LANES.filter((l) => l.os !== 'win32' && l.id !== 'mac-x64').map((l) => l.id), 'android-direct'];
+        const shipped = [...LANES.filter((l) => l.os !== 'win32' && l.id !== 'mac-x64').map((l) => l.id),
+            'android-direct', 'android-full'];
         const coverWith = (lanes) => {
             const records = mkdtempSync(join(work, 'cover-'));
             writeFileSync(join(records, 'REHEARSAL-v0.337.2.json'), JSON.stringify({
