@@ -285,13 +285,15 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
             >
                 <div className={styles.iconWrap}>
                     {isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
+                        <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} loading="lazy" decoding="async" />
                     ) : row.imageUrl ? (
                         <img
                             src={row.imageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                                 // If the published image 404s, fall back to
                                 // the letter chip by hiding the broken img;
@@ -316,6 +318,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             aria-hidden="true"
                             title={row.chainDisplayName}
                             className={styles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
                         />
                     ) : null}
                 </div>

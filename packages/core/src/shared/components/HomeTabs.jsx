@@ -600,13 +600,15 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
             >
                 <div className={balanceStyles.iconWrap}>
                     {isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
+                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} loading="lazy" decoding="async" />
                     ) : tokenInfo?.imageUrl ? (
                         <img
                             src={tokenInfo.imageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.tokenIconSquare}
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
                     ) : (
@@ -619,7 +621,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                         </span>
                     )}
                     {!isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} />
+                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
                     ) : null}
                 </div>
                 <div className={styles.demoRowBody}>
@@ -813,12 +815,14 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     <img
                                         src={branding.faviconUrl()}
                                         alt=""
-                                        aria-hidden="true"
-                                        className={styles.tokenIconSquare}
+                                    aria-hidden="true"
+                                    className={styles.tokenIconSquare}
+                                    loading="lazy"
+                                    decoding="async"
                                     />
                                 ) : isNativeAsset ? (
                                     chainIconUrl ? (
-                                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} />
+                                        <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.iconImg} loading="lazy" decoding="async" />
                                     ) : null
                                 ) : tokenInfo?.imageUrl ? (
                                     <img
@@ -826,6 +830,8 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                         alt=""
                                         aria-hidden="true"
                                         className={styles.tokenIconSquare}
+                                        loading="lazy"
+                                        decoding="async"
                                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                     />
                                 ) : (
@@ -838,7 +844,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     </span>
                                 )}
                                 {!isNativeAsset && chainIconUrl ? (
-                                    <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} />
+                                    <img src={chainIconUrl} alt="" aria-hidden="true" className={balanceStyles.chainOverlay} loading="lazy" decoding="async" />
                                 ) : null}
                             </div>
                             <div className={styles.demoRowBody}>

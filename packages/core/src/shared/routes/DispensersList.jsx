@@ -451,8 +451,10 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     <img
                         src={row.imageUrl}
                         alt=""
-                        aria-hidden="true"
-                        className={local.iconImg}
+                    aria-hidden="true"
+                    className={local.iconImg}
+                    loading="lazy"
+                    decoding="async"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 ) : (
@@ -469,8 +471,10 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                         src={chainIconUrl}
                         alt=""
                         aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
+                    title={chainRegistry.get(row.chainId)?.displayName}
+                    className={local.chainOverlay}
+                    loading="lazy"
+                    decoding="async"
                     />
                 ) : null}
             </div>
