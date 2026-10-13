@@ -40,35 +40,45 @@ export function usePriceAlerts(walletId) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const aliveRef = useRef(true);
+    const requestRef = useRef(0);
 
     const supported = typeof messaging?.listPriceAlertsForWallet === 'function'
         && typeof messaging?.savePriceAlert === 'function'
         && typeof messaging?.clearPriceAlert === 'function';
 
     const reload = useCallback(async () => {
+        if (!aliveRef.current) return;
+        const request = requestRef.current + 1;
+        requestRef.current = request;
+        const isCurrent = () => aliveRef.current && requestRef.current === request;
         if (!walletId || !supported) {
             setAlerts([]);
+            setLoading(false);
+            setError(null);
             return;
         }
         setLoading(true);
         try {
             const rows = await messaging.listPriceAlertsForWallet({ walletId });
-            if (!aliveRef.current) return;
+            if (!isCurrent()) return;
             setAlerts(Array.isArray(rows) ? rows : []);
             setError(null);
         } catch (err) {
-            if (!aliveRef.current) return;
+            if (!isCurrent()) return;
             setError(err?.message || 'Could not load price alerts');
             setAlerts([]);
         } finally {
-            if (aliveRef.current) setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, [walletId, supported, messaging]);
 
     useEffect(() => {
         aliveRef.current = true;
         reload();
-        return () => { aliveRef.current = false; };
+        return () => {
+            aliveRef.current = false;
+            requestRef.current += 1;
+        };
     }, [reload]);
 
     const addAlert = useCallback(async ({ chainId, direction, targetFiat, fiatCurrency }) => {

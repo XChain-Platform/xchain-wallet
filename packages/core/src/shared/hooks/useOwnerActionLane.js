@@ -15,7 +15,7 @@
 // those exact bytes on Approve (software or device). Watcher mode never signs,
 // so the form stays its review and it builds an unsigned transaction instead.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { useActionConfirmFlow, useConfirmSubmit } from './useActionConfirmFlow.js';
 import { useWalletMode } from './useWalletMode.js';
@@ -35,6 +35,11 @@ export function useOwnerActionLane({ messaging, walletId, chainId, owner, softwa
     const hw = isHwSource(owner);
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     // Approve reads the ref, so it signs with the latest keystrokes.
     const passwordRef = useRef('');
@@ -80,7 +85,7 @@ export function useOwnerActionLane({ messaging, walletId, chainId, owner, softwa
             });
         } finally {
             // The typed password never outlives the confirm page, on any exit.
-            setPassword('');
+            if (mountedRef.current) setPassword('');
         }
     }, [isWatcherMode, messaging, chainId, from, actionConfirm, submitConfirmed, walletId]);
 
