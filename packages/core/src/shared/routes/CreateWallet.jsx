@@ -20,6 +20,7 @@ import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -85,6 +86,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [persistError, setPersistError] = useState(
         /** @type {string | null} */ (null),
     );
+    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
@@ -107,6 +109,37 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         }, 0);
         return () => clearTimeout(id);
     }, [stage]);
+
+    useBackHandler(handleBack, stage === 'persisting');
+
+    function clearEntrySecrets() {
+        setPassword('');
+        setConfirm('');
+        setBip39Passphrase('');
+        setBip39PassphraseConfirm('');
+        setPasswordError(null);
+    }
+
+    function handleBack() {
+        if (stage === 'verify') {
+            setQuizAnswers({});
+            setQuizError(null);
+            setStage('mnemonic');
+            return;
+        }
+        if (stage === 'mnemonic') {
+            clearEntrySecrets();
+            setMnemonic(null);
+            setSaved(false);
+            setQuizPositions([]);
+            setQuizAnswers({});
+            setPersistError(null);
+            setStage('password');
+            return;
+        }
+        clearEntrySecrets();
+        onBack();
+    }
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
@@ -217,10 +250,10 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         <div className={pickerStyles.header}>
             <Button
                 type="button"
-                onClick={onBack}
+                onClick={handleBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back to wallet setup"
-                title="Back to wallet setup"
+                aria-label={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
+                title={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
                 disabled={stage === 'persisting'}
             >
                 <Icon.BackIcon />
@@ -254,7 +287,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         const persistingBody = (
             <div className={styles.persisting} role="status" aria-live="polite">
                 <span className={styles.persistingSpinner} aria-hidden="true" />
-                <h1 className={titleClass}>Creating your wallet</h1>
+                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Creating your wallet</h1>
                 <p className={subtitleClass}>
                     XChain Platform is encrypting your wallet with your password.
                     This can take a minute on some devices. Keep the app open.
@@ -309,7 +342,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 )}
             >
                 <header className={headClass}>
-                    <h1 className={titleClass}>
+                    <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
                         {isFull ? 'Verify your recovery phrase' : 'Verify phrase'}
                     </h1>
                     <p className={subtitleClass}>
@@ -371,7 +404,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 )}
             >
                 <header className={headClass}>
-                    <h1 className={titleClass}>
+                    <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
                         {isFull
                             ? 'Write down your recovery phrase'
                             : 'Recovery phrase'}
@@ -461,7 +494,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         className={styles.logo}
                     />
                 ) : null}
-                <h1 className={titleClass}>
+                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
                     {isFull ? 'Create a new wallet' : 'Create wallet'}
                 </h1>
                 <p className={subtitleClass}>
