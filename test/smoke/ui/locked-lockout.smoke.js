@@ -61,7 +61,7 @@ assert.match(lockedSrc, /if \(remainingMs <= 0\) return undefined/, 'ticker no-o
 
 assert.match(
     lockedSrc,
-    /if \(busy \|\| password\.length === 0 \|\| isLockedOut\) return/,
+    /if \(unlockInFlightRef\.current \|\| busy \|\| password\.length === 0 \|\| isLockedOut\) return/,
     'submit aborted while locked out',
 );
 

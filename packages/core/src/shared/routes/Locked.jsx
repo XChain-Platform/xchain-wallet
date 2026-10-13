@@ -86,6 +86,8 @@ export function Locked({ onUnlocked }) {
     const [capturePassword, setCapturePassword] = useState('');
     const captureRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [showUnlockingNote, setShowUnlockingNote] = useState(false);
+    const unlockInFlightRef = useRef(false);
     const [lockout, setLockout] = useState(getLockoutState);
     const [remainingMs, setRemainingMs] = useState(() =>
         getRemainingMs(getLockoutState()),
@@ -230,6 +232,15 @@ export function Locked({ onUnlocked }) {
     const inCaptureStep = captureWallet !== null;
     const activeWalletName = readActiveWalletName();
 
+    useEffect(() => {
+        if (!busy || inCaptureStep) {
+            setShowUnlockingNote(false);
+            return undefined;
+        }
+        const handle = window.setTimeout(() => setShowUnlockingNote(true), 2000);
+        return () => window.clearTimeout(handle);
+    }, [busy, inCaptureStep]);
+
     // The one place `onUnlocked` is called from the password paths. It
     // unmounts this screen in every shell, so the password is dropped here
     // and nowhere earlier: step 2 needs it to encrypt the passphrase.
@@ -275,7 +286,8 @@ export function Locked({ onUnlocked }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy || password.length === 0 || isLockedOut) return;
+        if (unlockInFlightRef.current || busy || password.length === 0 || isLockedOut) return;
+        unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
         try {
@@ -309,11 +321,14 @@ export function Locked({ onUnlocked }) {
             setBusy(false);
             inputRef.current?.focus();
             inputRef.current?.select();
+        } finally {
+            unlockInFlightRef.current = false;
         }
     }
 
     async function handleBiometric() {
-        if (busy || isLockedOut) return;
+        if (unlockInFlightRef.current || busy || isLockedOut) return;
+        unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
         try {
@@ -352,6 +367,8 @@ export function Locked({ onUnlocked }) {
             setError(err?.message || 'Biometric unlock failed.');
             haptic.error();
             setBusy(false);
+        } finally {
+            unlockInFlightRef.current = false;
         }
     }
 
@@ -453,9 +470,9 @@ export function Locked({ onUnlocked }) {
         <FormPage
             label="Unlock wallet"
             onSubmit={handleSubmit}
-            status={busy && !inCaptureStep ? (
+            status={busy && !inCaptureStep && showUnlockingNote ? (
                 <p className={styles.unlockingNote} aria-live="polite">
-                    Unlocking. On some phones this takes up to a minute.
+                    Unlocking your wallet securely. This may take a moment.
                 </p>
             ) : null}
             actions={(
