@@ -14,6 +14,7 @@ import { NoticeModal } from '../../../packages/core/src/shared/components/Notice
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
+const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
 const UI_DIR = join(process.cwd(), 'packages/core/src/ui');
 const VIEWPORT = { width: 320, height: 568 };
 
@@ -59,17 +60,36 @@ afterEach(() => {
 });
 
 describe('320x568 modal inventory', () => {
-    it('covers every modal dialog in shared components and ui', () => {
+    it('keeps modal semantics in the shared overlay kit and specialized viewers', () => {
         expect([
             ...modalFiles(COMPONENT_DIR),
             ...modalFiles(UI_DIR),
         ].sort()).toEqual([
             'AlertsOverlay.jsx',
+            'GatedFileViewer.jsx',
+            'OverlaySurface.jsx',
+        ]);
+    });
+
+    it('routes overlays through the shared surface and page-sized flows through page templates', () => {
+        for (const name of [
             'BottomTabBar.jsx',
             'ConfirmModal.jsx',
-            'GatedFileViewer.jsx',
+            'HeaderSettingsButton.jsx',
+            'NetworkStatusIndicator.jsx',
             'NoticeModal.jsx',
-        ]);
+        ]) {
+            expect(readFileSync(join(COMPONENT_DIR, name), 'utf8')).toContain('<OverlaySurface');
+        }
+
+        const confirmAction = readFileSync(join(COMPONENT_DIR, 'ConfirmActionModal.jsx'), 'utf8');
+        expect(confirmAction).toContain('<Screen ');
+        expect(confirmAction).toContain('<PageHeader');
+
+        const addAddress = readFileSync(join(ROUTE_DIR, 'AddAddressModal.jsx'), 'utf8');
+        expect(addAddress).toContain('<Screen ');
+        expect(addAddress).toContain('<PageHeader');
+        expect(addAddress).toContain('<FormPage');
     });
 });
 
@@ -85,6 +105,7 @@ describe('320x568 modal renders', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Notice' });
         const close = screen.getByRole('button', { name: 'OK' });
+        expect(dialog.firstElementChild).toHaveAttribute('data-overlay-surface', 'dialog');
         expect(close.parentElement).toBe(dialog.firstElementChild.lastElementChild);
         expect(close.parentElement.previousElementSibling).toHaveTextContent('Long content');
     });
@@ -101,6 +122,7 @@ describe('320x568 modal renders', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Confirm deletion' });
         const actions = screen.getByRole('button', { name: 'Cancel' }).parentElement;
+        expect(dialog.firstElementChild).toHaveAttribute('data-overlay-surface', 'dialog');
         expect(actions).toBe(dialog.firstElementChild.lastElementChild);
         expect(actions).toContainElement(screen.getByRole('button', { name: 'Confirm' }));
         expect(actions.previousElementSibling).toHaveTextContent('Long warning');
@@ -153,6 +175,7 @@ describe('320x568 modal renders', () => {
 
         const sheet = screen.getByRole('dialog', { name: 'More' });
         const close = screen.getByRole('button', { name: 'Close more navigation' });
+        expect(sheet.firstElementChild).toHaveAttribute('data-overlay-surface', 'sheet');
         expect(sheet.firstElementChild).toContainElement(close);
         expect(close).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
         expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
@@ -163,17 +186,20 @@ describe('320x568 modal renders', () => {
 
 describe('320x568 modal layout contracts', () => {
     it('bounds centered dialogs and isolates their scrolling content', () => {
-        const notice = css('NoticeModal.module.css');
-        const noticePanel = rule(notice, '.panel');
-        expectPanelWithinViewport(noticePanel, 320);
-        expect(noticePanel).toMatch(/max-height:\s*calc\(/);
-        expect(noticePanel).toMatch(/display:\s*flex/);
-        expect(noticePanel).toMatch(/flex-direction:\s*column/);
-        expect(noticePanel).toMatch(/overflow:\s*hidden/);
-        expect(rule(notice, '.content')).toMatch(/min-height:\s*0/);
-        expect(rule(notice, '.content')).toMatch(/flex:\s*1 1 auto/);
-        expect(rule(notice, '.content')).toMatch(/overflow-y:\s*auto/);
-        expect(rule(notice, '.actions')).toMatch(/flex:\s*0 0 auto/);
+        const overlay = css('OverlaySurface.module.css');
+        const surface = rule(overlay, '.surface');
+        const dialog = rule(overlay, '.dialog');
+        expect(surface).toMatch(/box-sizing:\s*border-box/);
+        expect(surface).toMatch(/display:\s*flex/);
+        expect(surface).toMatch(/flex-direction:\s*column/);
+        expect(surface).toMatch(/overflow:\s*hidden/);
+        expect(dialog).toMatch(/width:\s*100%/);
+        expect(dialog).toMatch(/max-width:\s*20rem/);
+        expect(dialog).toMatch(/max-height:\s*calc\(/);
+        expect(rule(overlay, '.body')).toMatch(/min-height:\s*0/);
+        expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
+        expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
+        expect(rule(overlay, '.footer')).toMatch(/flex:\s*0 0 auto/);
 
         const alerts = css('AlertsOverlay.module.css');
         expectPanelWithinViewport(rule(alerts, '.panel'), 380);
@@ -189,19 +215,13 @@ describe('320x568 modal layout contracts', () => {
     });
 
     it('bounds the bottom sheet and scrolls only the body below its close control', () => {
-        const bottomBar = css('BottomTabBar.module.css');
-        const sheet = rule(bottomBar, '.sheet');
-        expect(sheet).toMatch(/box-sizing:\s*border-box/);
-        expect(sheet).toMatch(/inset-inline-start:\s*0/);
-        expect(sheet).toMatch(/inset-inline-end:\s*0/);
-        expect(sheet).toMatch(/max-height:\s*70vh/);
-        expect(sheet).toMatch(/overflow:\s*hidden/);
-        expect(sheet).toMatch(/flex-direction:\s*column/);
-        const sheetHeader = rule(bottomBar, '.sheetHeader');
-        expect(sheetHeader).toMatch(/display:\s*grid/);
-        expect(sheetHeader).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
-        expect(sheetHeader).toMatch(/flex:\s*0 0 auto/);
-        const sheetClose = rule(bottomBar, '.sheetClose');
+        const overlay = css('OverlaySurface.module.css');
+        const sheet = rule(overlay, '.sheet');
+        expect(sheet).toMatch(/width:\s*100%/);
+        expect(sheet).toMatch(/max-width:\s*35rem/);
+        expect(sheet).toMatch(/max-height:\s*min\(70vh/);
+        expect(rule(overlay, '.header')).toMatch(/flex:\s*0 0 auto/);
+        const sheetClose = rule(overlay, '.close');
         expect(sheetClose).toMatch(/width:\s*var\(--xc-control-h-md\)/);
         expect(sheetClose).toMatch(/height:\s*var\(--xc-control-h-md\)/);
         expect(sheetClose).not.toMatch(/position:\s*absolute/);
@@ -210,8 +230,8 @@ describe('320x568 modal layout contracts', () => {
         expect(button).toMatch(
             /@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/,
         );
-        expect(rule(bottomBar, '.sheetBody')).toMatch(/min-height:\s*0/);
-        expect(rule(bottomBar, '.sheetBody')).toMatch(/flex:\s*1 1 auto/);
-        expect(rule(bottomBar, '.sheetBody')).toMatch(/overflow-y:\s*auto/);
+        expect(rule(overlay, '.body')).toMatch(/min-height:\s*0/);
+        expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
+        expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
     });
 });

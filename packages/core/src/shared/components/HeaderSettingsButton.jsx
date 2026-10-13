@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import {
     activeNetworkLabel,
@@ -179,15 +180,14 @@ export function HeaderSettingsButton({
                 />
             </span>
             {open ? (
-                <div
-                    ref={popoverPlacement.ref}
+                <OverlaySurface
+                    variant="popover"
+                    surfaceRef={popoverPlacement.ref}
                     style={popoverPlacement.style}
-                    className={styles.popover}
-                    role="dialog"
-                    aria-modal="false"
+                    title="Wallet settings"
+                    titleId="xc-wallet-settings-title"
                     aria-labelledby="xc-wallet-settings-title"
                 >
-                    <div id="xc-wallet-settings-title" className={styles.sectionLabel}>Wallet settings</div>
                     {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
@@ -261,7 +261,7 @@ export function HeaderSettingsButton({
                             </button>
                         </div>
                     ) : null}
-                </div>
+                </OverlaySurface>
             ) : null}
         </div>
     );

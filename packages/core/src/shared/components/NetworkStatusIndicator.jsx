@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './NetworkStatusIndicator.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -120,11 +121,11 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
             >
                 <span className={styles.dot} aria-hidden="true" />
             </button>
-            <div
-                ref={popoverPlacement.ref}
+            <OverlaySurface
+                variant="popover"
+                surfaceRef={popoverPlacement.ref}
                 style={popoverPlacement.style}
                 className={styles.popover}
-                role="dialog"
                 aria-label="Network status"
             >
                 <div className={styles.title}>{label}</div>
@@ -154,7 +155,7 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
                 >
                     Network settings
                 </button>
-            </div>
+            </OverlaySurface>
         </div>
     );
 }

@@ -9,8 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Icon } from '@xchain-wallet/core/ui';
 import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
+import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -226,36 +227,17 @@ export function BottomTabBar({
             </nav>
 
             {sheetOpen ? (
-                <>
-                    <div
-                        className={styles.scrim}
-                        onClick={() => setSheetOpen(false)}
-                        aria-hidden="true"
-                        role="presentation"
-                        tabIndex={-1}
-                    />
-                    <div
-                        ref={sheetRef}
-                        id="xc-bottom-sheet"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="xc-bottom-sheet-title"
-                        className={styles.sheet}
-                    >
-                        <div className={styles.sheetHeader}>
-                            <div className={styles.handle} aria-hidden="true" />
-                            <h2 className={styles.sheetTitle}>More</h2>
-                            <span className={styles.sheetClose}>
-                                <Button
-                                    variant="secondary"
-                                    size="md"
-                                    icon={<Icon.XIcon />}
-                                    onClick={() => setSheetOpen(false)}
-                                    aria-label="Close more navigation"
-                                />
-                            </span>
-                        </div>
-                        <div className={styles.sheetBody}>
+                <OverlaySurface
+                    variant="sheet"
+                    surfaceRef={sheetRef}
+                    id="xc-bottom-sheet"
+                    title={<h2 className={styles.sheetTitle}>More</h2>}
+                    titleId="xc-bottom-sheet-dialog-title"
+                    aria-labelledby="xc-bottom-sheet-dialog-title"
+                    closeLabel="Close more navigation"
+                    onClose={() => setSheetOpen(false)}
+                    onBackdrop={() => setSheetOpen(false)}
+                >
                             {/* Navigation rows stay native buttons to preserve full-row menu semantics. */}
                             {/* Safari needs an explicit list role because this class removes list styling. */}
                             <ul className={styles.sheetList} role="list">
@@ -377,9 +359,7 @@ export function BottomTabBar({
                                         </li>
                                     )) : null}
                             </ul>
-                        </div>
-                    </div>
-                </>
+                </OverlaySurface>
             ) : null}
         </>
     );
