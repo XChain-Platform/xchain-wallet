@@ -235,7 +235,11 @@ export async function submitAction({
         } else if (phase === 'signing' && typeof data?.encoding === 'string') {
             await writePending({ status: 'awaiting-signature' });
         } else if (phase === 'broadcasting' && typeof data?.txid === 'string') {
-            await writePending({ status: 'broadcasting', txid: data.txid });
+            await writePending({
+                status: 'broadcasting',
+                txid: data.txid,
+                ...(typeof data?.txHex === 'string' && data.txHex ? { txHex: data.txHex } : {}),
+            });
         } else if (phase === 'envelope_revealed' && typeof data?.txid === 'string') {
             // The reveal is the action's identity; the row moves off the commit txid.
             await writePending({ txid: data.txid });

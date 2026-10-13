@@ -12,10 +12,14 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { maxForks } from './poolSize.js';
+import { workspaceAlias } from './workspaceAlias.js';
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 export default defineConfig({
-    root: fileURLToPath(new URL('../..', import.meta.url)),
+    root: repoRoot,
     plugins: [react()],
+    resolve: { alias: workspaceAlias(repoRoot) },
     test: {
         // Bounded fork pool. Vitest defaults to one worker per core (32 on the
         // dev box), so a single run claimed the whole machine while many agent
