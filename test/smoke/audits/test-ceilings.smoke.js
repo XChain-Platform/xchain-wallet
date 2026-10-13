@@ -137,6 +137,9 @@ assert.deepEqual(
     excluded,
     [
         'test/unit/crypto/backup.test.js',
+        // Runs every golden vector (four at 64 MiB) through the JS derivation
+        // and the native-provider fallback, so it pays real Argon2id time.
+        'test/unit/crypto/kdf-native.test.js',
         'test/unit/crypto/kdf.test.js',
         'test/unit/crypto/walletBlob.test.js',
     ],
