@@ -89,7 +89,6 @@ export const en = {
     'accountPicker.renameTitle': 'Rename account',
     'accountPicker.empty.title': 'No accounts yet',
     'accountPicker.empty.body': 'Accounts added to this wallet appear here.',
-    'accountPicker.error.unavailable': 'Could not load accounts. Try again.',
     'accountPicker.error.load': 'Could not load accounts. Try again.',
     'accountPicker.loading': 'Loading accounts…',
     'accountPicker.loadingLabel': 'Loading accounts',
@@ -104,7 +103,6 @@ export const en = {
     'actionsMenu.unavailable': 'Unavailable: {reason}',
 
     // --- alerts --------------------------------------------------
-    'alerts.title': 'Alerts',
     'alerts.empty.title': 'No alerts',
     'alerts.empty.body': "You're all caught up.",
 

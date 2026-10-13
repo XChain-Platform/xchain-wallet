@@ -44,7 +44,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         setAccounts(null);
         setError(null);
         if (typeof messaging.listAccounts !== 'function') {
-            setError(t('accountPicker.error.unavailable'));
+            setError(t('accountPicker.error.load'));
             return undefined;
         }
         messaging.listAccounts(walletId)
