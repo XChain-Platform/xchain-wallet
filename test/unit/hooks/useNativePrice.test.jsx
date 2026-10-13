@@ -122,6 +122,7 @@ describe('useNativePrice successful responses', () => {
         expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
             chainIds: [CHAIN_ID],
             includeSparkline: false,
+            fiatCurrency: 'USD',
         });
     });
 
@@ -134,6 +135,7 @@ describe('useNativePrice successful responses', () => {
         expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
             chainIds: [CHAIN_ID],
             includeSparkline: true,
+            fiatCurrency: 'USD',
         });
     });
 
