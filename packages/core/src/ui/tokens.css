@@ -521,10 +521,11 @@ fieldset {
 }
 
 /* iOS WebKit zooms the page when a focused form control renders below 16px.
- * Keep narrow layouts at that floor without disabling pinch zoom or changing
- * the compact control sizes on desktop. !important also covers module and
- * inline font declarations on shared form controls. */
-@media (max-width: 599px) {
+ * Keep touch layouts at that floor at every viewport width without disabling
+ * pinch zoom or changing compact control sizes on pointer-based desktops.
+ * !important also covers module and inline font declarations on shared form
+ * controls. */
+@media (pointer: coarse), (hover: none) {
     input:not([type='checkbox']):not([type='radio']):not([type='range']),
     select,
     textarea {
