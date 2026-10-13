@@ -95,7 +95,7 @@ export const SECTIONS = [
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
-    { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection },
+    { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection, primitives: ['Tabs'] },
     { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
     { id: 'gray-card',             label: 'Gray surface card',      Component: GrayCardSection },
     { id: 'solid-accent-card',     label: 'Solid accent card',      Component: AccentBorderedCardSection },

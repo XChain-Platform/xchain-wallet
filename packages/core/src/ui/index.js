@@ -26,6 +26,7 @@ export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
 export { Chip } from './Chip.jsx';
+export { Tabs } from './Tabs.jsx';
 export { Input } from './Input.jsx';
 export { Select } from './Select.jsx';
 export { Textarea } from './Textarea.jsx';
