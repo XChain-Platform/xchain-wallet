@@ -263,10 +263,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             guessing "the ones with pictures" is wrong: artwork
                             plays no part in it. Wording tracks
                             protocol/NFT_Standard.md. */}
+                        {nfts.length > 0 ? (
                         <p className={styles.tabNote}>
                             A tick appears here when it can never be split and its supply can
                             never grow. Everything you hold, collectible or not, is also under Tokens.
                         </p>
+                        ) : null}
                         <CollectiblesView
                             rows={nfts}
                             emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
@@ -514,7 +516,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                     ) : (
                         <span
                             className={balanceStyles.iconLetter}
-                            style={{ background: tickerColor(tick || 'X'), color: '#FFFFFF' }}
+                            style={{ background: tickerColor(tick || 'X'), color: 'var(--xc-on-accent)' }}
                             aria-hidden="true"
                         >
                             {(tick || '?').slice(0, 1)}
@@ -733,7 +735,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                 ) : (
                                     <span
                                         className={balanceStyles.iconLetter}
-                                        style={{ background: tickerColor(tick || p.action), color: '#FFFFFF' }}
+                                        style={{ background: tickerColor(tick || p.action), color: 'var(--xc-on-accent)' }}
                                         aria-hidden="true"
                                     >
                                         {(tick || p.action).slice(0, 1).toUpperCase()}

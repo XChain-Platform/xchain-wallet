@@ -78,7 +78,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--xc-surface);
     box-shadow: 0 0 0 1.5px var(--xc-surface);
     object-fit: cover;
     display: block;
@@ -117,7 +117,9 @@
 }
 
 .amounts {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 55%;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -130,6 +132,9 @@
     font-weight: 700;
     color: var(--xc-text);
     line-height: 1.1;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: end;
 }
 
 .fiat {
@@ -137,6 +142,9 @@
     color: var(--xc-text-muted);
     font-weight: 600;
     font-family: var(--xc-font-mono);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: end;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
@@ -177,7 +185,7 @@
 }
 
 .pinBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+    color: var(--xc-accent-primary);
 }
 
 .rowPinned {

@@ -1104,7 +1104,19 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                     list is empty: a "More" that opens onto
                                     nothing is a dead control on the primary
                                     surface. */}
-                                {homeMoreActions.length > 0 ? (
+                                {/* A menu holding one entry costs a tap for
+                                    nothing, so a lone action is the button. */}
+                                {homeMoreActions.length === 1 ? (
+                                    <button
+                                        type="button"
+                                        className={styles.quickAction}
+                                        onClick={homeMoreActions[0].onSelect}
+                                    >
+                                        <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
+                                        <span>{homeMoreActions[0].label}</span>
+                                    </button>
+                                ) : null}
+                                {homeMoreActions.length > 1 ? (
                                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
                                         <button
                                             type="button"
@@ -1219,8 +1231,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                     marginInlineStart: '0.4rem',
                                     padding: '0 0.4rem',
                                     borderRadius: '999px',
-                                    background: 'var(--xc-accent-primary, #0b84ff)',
-                                    color: '#fff',
+                                    background: 'var(--xc-accent-primary)',
+                                    color: 'var(--xc-on-accent)',
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
                                 }}

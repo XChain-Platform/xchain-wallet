@@ -100,6 +100,16 @@
     width: 100%;
 }
 
+.rowText {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.rowText > span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
 .rowMenuBtn {
     appearance: none;
     background: var(--xc-surface);
@@ -141,7 +151,7 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
     padding: var(--xc-space-1);
     display: flex;
     flex-direction: column;
