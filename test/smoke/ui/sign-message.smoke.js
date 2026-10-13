@@ -126,8 +126,8 @@ for (const [src, name] of [
 ]) {
     assert.match(
         src,
-        /import \{ SignMessageForm \}/,
-        `${name} App imports SignMessageForm`,
+        /(?:import \{ SignMessageForm \}|const SignMessageForm = lazyRoute\(\(\) => import\()/,
+        `${name} App loads SignMessageForm`,
     );
     assert.match(
         src,
