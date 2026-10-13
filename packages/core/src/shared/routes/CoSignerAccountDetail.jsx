@@ -27,7 +27,9 @@ import {
     ChainBadge,
     AddressText,
     CopyButton,
+    FormPage,
     StatusMessage,
+    ListPage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -50,7 +52,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function CoSignerAccountDetail({ accountId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [account, setAccount] = useState(/** @type {any | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -97,7 +98,8 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
         setEditing(true);
     }
 
-    async function saveEdit() {
+    async function saveEdit(event) {
+        event?.preventDefault();
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setEditError(built.error); return; }
         setBusy(true);
@@ -128,28 +130,30 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const header = <PageHeader onBack={onBack} title="Agent account" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
-    if (error && !account) return wrap(<StatusMessage variant="error">{error}</StatusMessage>);
-    if (!account) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (error && !account) return wrap(<ListPage><StatusMessage variant="error">{error}</StatusMessage></ListPage>);
+    if (!account) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
 
     if (editing) {
         return wrap(
-            <>
-                <p className={styles.hint} style={{ textAlign: 'left' }}>
-                    Editing the policy changes only the rules; the account's address
-                    and keys stay the same.
-                </p>
+            <FormPage
+                label="Edit agent account"
+                onSubmit={saveEdit}
+                intro="Editing the policy changes only the rules; the account's address and keys stay the same."
+                status={editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>Save changes</Button>
+                    </>
+                )}
+            >
                 <Input label="Account name" value={name} onChange={(e) => setName(e.target.value)} />
                 <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
-                {editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={saveEdit} loading={busy} disabled={busy}>Save changes</Button>
-                    <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
@@ -157,7 +161,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const p = account.policy || {};
 
     return wrap(
-        <>
+        <ListPage>
             <p className={styles.successTitle}>{account.name}</p>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
                 {account.enabled
@@ -206,6 +210,6 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                     {account.enabled ? 'Disable' : 'Enable'}
                 </Button>
             </div>
-        </>,
+        </ListPage>,
     );
 }
