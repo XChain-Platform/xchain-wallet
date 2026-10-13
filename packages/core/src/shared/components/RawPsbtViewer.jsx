@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useToast } from './ToastHost.jsx';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.
@@ -41,6 +42,7 @@ import { useHapticFeedback } from '../hooks/useHaptic.js';
 export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
     const haptic = useHapticFeedback();
+    const { announce } = useToast();
 
     if (!developerMode) return null;
 
@@ -54,6 +56,7 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     async function handleCopy() {
         const { ok } = await copyText(copyTarget);
         setCopyState(ok ? 'copied' : 'failed');
+        announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
         setTimeout(() => setCopyState('idle'), 1500);
@@ -98,7 +101,6 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     type="button"
                     className={styles.copyBtn}
                     onClick={handleCopy}
-                    aria-live="polite"
                 >
                     {copyState === 'copied'
                         ? 'Copied'
