@@ -71,7 +71,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 // variables; resolve them off the container's computed
                 // style so the chart follows the theme.
                 const cs = getComputedStyle(containerRef.current);
-                const textColor = (cs.getPropertyValue('--xc-text') || cs.color || '#ccc').trim() || '#ccc';
+                const textColor = (cs.getPropertyValue('--xc-text') || cs.color).trim();
                 const chart = lw.createChart(containerRef.current, {
                     height: parseInt(String(height), 10) || 240,
                     layout: {
@@ -84,7 +84,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                     },
                     timeScale: { timeVisible: true, secondsVisible: false },
                 });
-                const accent = (cs.getPropertyValue('--xc-accent-primary') || '#26a69a').trim() || '#26a69a';
+                const accent = (cs.getPropertyValue('--xc-accent-primary') || textColor).trim();
                 const series = chart.addLineSeries({
                     color: accent,
                     lineWidth: 2,
@@ -155,9 +155,8 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 }}
             >
                 <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>Chart</p>
-                <p style={{ margin: 0, color: 'var(--xc-fg-muted)', fontSize: '0.875rem' }}>
-                    Chart library unavailable. Run <code>pnpm install</code> to
-                    restore the chart.
+                <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: '0.875rem' }}>
+                    The price chart is unavailable right now.
                 </p>
             </div>
         );
@@ -211,12 +210,12 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             </div>
             <div ref={containerRef} style={{ width: '100%', height }} aria-label="Price chart" />
             {loadError ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     {loadError}
                 </p>
             ) : null}
             {!loadError && rawRows.length === 0 ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     No trades yet in this market.
                 </p>
             ) : null}

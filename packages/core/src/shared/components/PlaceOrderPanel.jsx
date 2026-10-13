@@ -37,6 +37,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isHwSource, SignCredentials } from './SignCredentials.jsx';
 import { buildBalanceRows, formatAmount } from './BalanceList.jsx';
 import { NativeFeeToggle } from './NativeFeeToggle.jsx';
+import { WatcherResultPanel } from './WatcherResultPanel.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage, SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
 import { preferredSourceId } from '../addressSelection.js';
@@ -131,7 +132,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 // Fund the order from the chain's active address (fall back to
                 // the newest HD external), matching Send so the balance shown
                 // below and the address that signs are the same one.
-                const sourceId = preferredSourceId(byChain[chainId] || [], active?.[chainId]);
+                const chainAddresses = byChain[chainId] || [];
+                const sourceId = preferredSourceId(chainAddresses, active?.[chainId])
+                    || chainAddresses[0]?.id;
                 if (sourceId) setFromAddressId(sourceId);
                 // Pull balances alongside addresses so we can show the
                 // user how much of tick1 / tick2 they have available
@@ -348,10 +351,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             setFormError('Price and size are required.');
             return;
         }
-        const p = Number(price);
-        const s = Number(size);
-        // Zero or negative would encode an order nothing can ever match.
-        if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(s) || s <= 0) {
+        // The exact decimal multiplication is also the wire representation.
+        // Reject syntax such as scientific notation that Number accepts but
+        // the protocol amount encoder cannot serialize.
+        if (!total) {
             setFormError('Price and size must be positive numbers.');
             return;
         }
@@ -408,13 +411,23 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 payFeeInNativeCoin: payFeeInNativeCoin || undefined,
                 autopay: autopayArm ? { enabled: true } : undefined,
             };
-            const res = hw
-                ? await messaging.orderActionHw({ ...base, signerId: fromAddress.signerId })
-                : await messaging.orderAction({ ...base, password });
+            let res;
+            if (isWatcherMode) {
+                res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from: base.from,
+                    actionData: { action: 'ORDER', params: base.params },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                });
+            } else if (hw) {
+                res = await messaging.orderActionHw({ ...base, signerId: fromAddress.signerId });
+            } else {
+                res = await messaging.orderAction({ ...base, password });
+            }
             setResult(res);
             setPassword('');
             setStage('done');
-            onOrderPlaced?.();
+            if (!isWatcherMode) onOrderPlaced?.();
         } catch (err) {
             let errorMessage;
             if (err?.name === 'InvalidPasswordError') {
@@ -446,6 +459,15 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return (
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => { setResult(null); setStage('form'); }}
+                    onDone={() => { setResult(null); setStage('form'); }}
+                />
+            );
+        }
         // A queued result is SIGNED and not broadcast. This panel is
         // inline rather than a screen, so it keeps its own frame and only
         // swaps the copy; "Place another" is deliberately not offered, since
@@ -490,7 +512,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         CoinPay auto-pay is armed for this order. You can turn it off any time from the open-orders list.
                     </p>
                 ) : result?.autopayArmed === false ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#ef5350' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger)' }}>
                         The order was placed, but auto-pay could not be armed
                         {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}. Matches will need manual payment from Payments due.
                     </p>
@@ -587,22 +609,28 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     </p>
                 ) : null}
                 <form onSubmit={handleSubmit} noValidate>
-                    <SignCredentials
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                    {submitError && hw ? (
-                        <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                    {isWatcherMode ? (
+                        <p style={{ margin: '0 0 var(--xc-space-2)', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                            Watcher mode builds an unsigned transaction for your Signer-mode wallet.
+                        </p>
+                    ) : (
+                        <SignCredentials
+                            fromAddress={fromAddress}
+                            chainId={chainId}
+                            password={password}
+                            onPasswordChange={(v) => {
+                                setPassword(v);
+                                if (submitError) setSubmitError(null);
+                            }}
+                            onStatusChange={onHwStatusChange}
+                            passwordRef={passwordRef}
+                            submitError={submitError}
+                            disabled={stage === 'submitting'}
+                            getSignerStatus={messaging.getSignerStatus}
+                        />
+                    )}
+                    {submitError && (isWatcherMode || hw) ? (
+                        <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
                             {submitError}
                         </p>
                     ) : null}
@@ -621,9 +649,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             variant="primary"
                             block
                             loading={stage === 'submitting'}
-                            disabled={hw && hwStatus !== 'available'}
+                            disabled={!isWatcherMode && hw && hwStatus !== 'available'}
                         >
-                            {hw
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
                                 ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
                                 : `Place ${side} order`}
                         </Button>
@@ -703,9 +733,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         cursor: 'pointer',
                         padding: 'var(--xc-space-2) var(--xc-space-3)',
                         borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid #16a34a',
-                        background: '#16a34a',
-                        color: '#FFFFFF',
+                        border: '1px solid var(--xc-success)',
+                        background: 'var(--xc-success)',
+                        color: 'var(--xc-on-accent)',
                         opacity: side === 'buy' ? 1 : 0.45,
                     }}
                 >
@@ -723,9 +753,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         cursor: 'pointer',
                         padding: 'var(--xc-space-2) var(--xc-space-3)',
                         borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid #dc2626',
-                        background: '#dc2626',
-                        color: '#FFFFFF',
+                        border: '1px solid var(--xc-danger)',
+                        background: 'var(--xc-danger)',
+                        color: 'var(--xc-on-accent)',
                         opacity: side === 'sell' ? 1 : 0.45,
                     }}
                 >
@@ -735,14 +765,14 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             <Input
                 label={`Price (${tick2})`}
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
                 inputMode="decimal"
                 autoComplete="off"
             />
             <Input
                 label={`Size (${tick1})`}
                 value={size}
-                onChange={(e) => setSize(e.target.value)}
+                onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
                 inputMode="decimal"
                 autoComplete="off"
             />
@@ -901,7 +931,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 </div>
             ) : null}
             {formError ? (
-                <p role="alert" style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}>
+                <p role="alert" style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.8rem' }}>
                     {formError}
                 </p>
             ) : null}
@@ -920,6 +950,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             </div>
         </form>
     );
+}
+
+function normalizeDecimalEntry(value, previous) {
+    const stripped = String(value).replace(/,/g, '');
+    return stripped === '' || /^\d*\.?\d*$/.test(stripped) ? stripped : previous;
 }
 
 // Render a balance value with thousand separators. `quantity` comes from

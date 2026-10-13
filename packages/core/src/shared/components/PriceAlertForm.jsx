@@ -32,8 +32,8 @@ const FIELD = {
     fontFamily: 'inherit',
 };
 const PRIMARY_BTN = {
-    background: 'var(--xc-accent, #3a7afe)',
-    color: '#fff',
+    background: 'var(--xc-accent-primary)',
+    color: 'var(--xc-on-accent)',
     border: 'none',
     borderRadius: 'var(--xc-radius-sm)',
     padding: 'var(--xc-space-1) var(--xc-space-3)',
@@ -127,14 +127,12 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                 </select>
                 <span aria-hidden="true">{symbol}</span>
                 <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    min="0"
-                    step="any"
                     aria-label="Target price"
                     placeholder="Price"
                     value={targetStr}
-                    onChange={(e) => setTargetStr(e.target.value)}
+                    onChange={(e) => setTargetStr(normalizeDecimalEntry(e.target.value, targetStr))}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                     style={{ ...FIELD, width: 110 }}
                 />
@@ -158,9 +156,14 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                     This alert will fire on the next check.
                 </span>
             ) : null}
-            {err ? <span style={{ ...HINT, color: 'var(--xc-error, #c33)' }}>{err}</span> : null}
+            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger)' }}>{err}</span> : null}
         </div>
     );
+}
+
+function normalizeDecimalEntry(value, previous) {
+    const stripped = String(value).replace(/,/g, '');
+    return stripped === '' || /^\d*\.?\d*$/.test(stripped) ? stripped : previous;
 }
 
 /** Keep prefilled targets readable: whole dollars for big prices, 2dp for small. */
