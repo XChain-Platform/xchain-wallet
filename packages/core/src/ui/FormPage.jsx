@@ -36,6 +36,7 @@ import styles from './FormPage.module.css';
  * @param {import('react').ReactNode} [props.status]    a StatusMessage shown just above the actions
  * @param {import('react').ReactNode} [props.intro]     one muted paragraph above the first field
  * @param {boolean} [props.sectioned]                   children are FormSections (card per section when wide)
+ * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
@@ -49,6 +50,7 @@ export const FormPage = forwardRef(function FormPage(
         status,
         intro,
         sectioned = false,
+        fill = false,
         label,
         noValidate = true,
         as: Root = 'form',
@@ -61,6 +63,7 @@ export const FormPage = forwardRef(function FormPage(
     const classNames = [
         styles.form,
         sectioned ? styles.sectioned : null,
+        fill ? styles.fill : null,
         className,
     ].filter(Boolean).join(' ');
     const semanticProps = Root === 'form'

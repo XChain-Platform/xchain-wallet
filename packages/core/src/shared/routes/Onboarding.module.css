@@ -182,7 +182,7 @@
 .licenseGate {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1 1 auto;
     min-height: 0;
     gap: var(--xc-space-2);
     width: 100%;
@@ -190,12 +190,11 @@
 }
 
 .licenseScroll {
+    /* The terms take every pixel the screen has left (FormPage fill), so
+       Accept and continue sits at the bottom of the phone, and the panel
+       keeps its own scroll: reaching its end unlocks the acknowledgement. */
     flex: 1 1 auto;
     min-height: 160px;
-    /* Inside FormPage the gate no longer has a fixed height to fill, so the
-       terms panel caps itself and keeps its own scroll: reaching its end is
-       what unlocks the acknowledgement. */
-    max-height: max(160px, 50vh);
     overflow-y: auto;
     padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-bg-muted);
@@ -216,7 +215,9 @@
 
 .licenseParagraph {
     margin: 0 0 var(--xc-space-2);
-    text-align: justify;
+    /* Start-aligned: justified text opens wide gaps between words on a
+       narrow phone. */
+    text-align: start;
     hyphens: manual;
 }
 
@@ -275,7 +276,6 @@
 
     .licenseScroll {
         min-height: 96px;
-        max-height: max(96px, 40vh);
         padding: var(--xc-space-2) var(--xc-space-3);
     }
 }
