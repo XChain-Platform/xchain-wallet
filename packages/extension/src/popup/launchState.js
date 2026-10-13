@@ -40,9 +40,9 @@ export function isToolbarPopupView(
 }
 
 /**
- * Select the shared route layout for an extension page. The side panel and
- * toolbar popup stay compact, while popup.html opened in a browser tab uses
- * the full layout. Width is a fallback for browsers without getViews().
+ * Select the shared route layout for an extension page. Only the toolbar
+ * popup stays compact; the side panel and popup.html opened in a browser tab
+ * use the full layout. Width is a fallback for browsers without getViews().
  *
  * @param {Window | undefined} view
  * @param {{ getViews?: (filter: { type: string }) => Window[] }} [extensionApi]
@@ -53,7 +53,7 @@ export function shellForExtensionView(
     extensionApi = globalThis.chrome?.extension,
 ) {
     if (!view) return COMPACT_LAYOUT_SHELL;
-    if (view.location?.pathname?.endsWith('/sidepanel.html')) return COMPACT_LAYOUT_SHELL;
+    if (view.location?.pathname?.endsWith('/sidepanel.html')) return FULL_LAYOUT_SHELL;
 
     try {
         if (typeof extensionApi?.getViews === 'function') {
