@@ -77,6 +77,103 @@ afterEach(() => {
 });
 
 describe('SignApproval signPsbt intent', () => {
+    it('matches every decoded input, output, and total exactly', async () => {
+        const recipientA = 'bcrt1qrecipientaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        const recipientB = 'bcrt1qrecipientbbbbbbbbbbbbbbbbbbbbbbbbbb';
+        messaging.parsePsbt.mockResolvedValue({
+            decomposed: {
+                inputs: [
+                    { address: 'bcrt1qownaddressownaddress', value: 150000 },
+                    { address: null, value: 50000 },
+                ],
+                outputs: [
+                    { address: recipientA, value: 120000 },
+                    { address: recipientB, value: 20000 },
+                    { address: 'bcrt1qownaddressownaddress', value: 55000 },
+                ],
+            },
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+
+        render(
+            <SignApproval
+                id="exact-transaction"
+                kind="signPsbt"
+                payload={{
+                    chainId: 'bitcoin-regtest',
+                    payload: { psbtHex: '70736274ff01020304' },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        await screen.findByText('Change (back to you)');
+        const inputs = screen.getAllByTestId('psbt-input');
+        const outputs = screen.getAllByTestId('psbt-output');
+        expect(inputs.map((row) => row.textContent)).toEqual([
+            'Your addressbcrt1qownaddressownaddress150,000 sats',
+            'Unknown input(unknown source script)50,000 sats',
+        ]);
+        expect(outputs.map((row) => row.textContent)).toEqual([
+            `Recipient${recipientA}120,000 sats`,
+            `Recipient${recipientB}20,000 sats`,
+            'Change (back to you)bcrt1qownaddressownaddress55,000 sats',
+        ]);
+
+        const panel = screen.getByTestId('psbt-intent-panel');
+        const totals = Object.fromEntries(
+            [...panel.querySelectorAll('dt')].map((label) => [
+                label.textContent,
+                label.nextElementSibling.textContent,
+            ]),
+        );
+        expect(totals).toEqual({
+            'Leaving this wallet': '140,000 sats',
+            'Total in': '200,000 sats',
+            'Total out': '195,000 sats',
+            'Network fee': '5,000 sats',
+        });
+    });
+
+    it('never displays a missing decoded amount as zero', async () => {
+        messaging.parsePsbt.mockResolvedValue({
+            decomposed: {
+                inputs: [{ address: 'bcrt1qownaddressownaddress', value: 1000 }],
+                outputs: [{ address: 'bcrt1qincompleteoutput' }],
+            },
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+
+        render(
+            <SignApproval
+                id="incomplete-transaction"
+                kind="signPsbt"
+                payload={{
+                    chainId: 'bitcoin-regtest',
+                    payload: { psbtHex: '70736274ff05060708' },
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        const output = (await screen.findAllByTestId('psbt-output'))[0];
+        expect(output.textContent).toBe('Recipientbcrt1qincompleteoutputamount unknown');
+        const panel = screen.getByTestId('psbt-intent-panel');
+        const totals = Object.fromEntries(
+            [...panel.querySelectorAll('dt')].map((label) => [
+                label.textContent,
+                label.nextElementSibling.textContent,
+            ]),
+        );
+        expect(totals).toMatchObject({
+            'Leaving this wallet': 'unavailable',
+            'Total out': 'unavailable',
+            'Network fee': 'unavailable',
+        });
+    });
+
     it('renders the intent decoded from the requested PSBT', async () => {
         render(
             <SignApproval
