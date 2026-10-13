@@ -276,7 +276,7 @@ export function QrScanner({
                 // universally which is what we care about.
                 detector = new window.BarcodeDetector({ formats: ['qr_code'] });
             } catch (e) {
-                if (!cancelled) setError(e?.message || 'BarcodeDetector construction failed.');
+                if (!cancelled) setError(cameraErrorText(e));
                 return;
             }
 
@@ -298,7 +298,10 @@ export function QrScanner({
             try {
                 await video.play();
             } catch (e) {
-                if (!cancelled) setError(e?.message || 'Video playback failed.');
+                stream.getTracks().forEach((t) => t.stop());
+                stream = null;
+                video.srcObject = null;
+                if (!cancelled) setError(cameraErrorText(e));
                 return;
             }
             if (cancelled) return;
@@ -449,9 +452,9 @@ export function QrScanner({
                 gap: '0.5rem',
             }}
         >
-            {/* With no camera, the empty video was a large dark box over a
-                one-line error (seen on an LG K51 with the permission
-                denied, 2026-10-12). Hide it and let the message stand. */}
+            {/* A camera surface appears only after playback starts. Permission
+                prompts and failed starts keep the actionable text visible
+                without leaving an empty dark rectangle on any shell. */}
             <video
                 ref={videoRef}
                 width={width}
@@ -460,7 +463,7 @@ export function QrScanner({
                 muted
                 poster={BLANK_POSTER}
                 style={{
-                    display: error ? 'none' : 'block',
+                    display: running && !error ? 'block' : 'none',
                     maxWidth: '100%',
                     height: 'auto',
                     aspectRatio: '4 / 3',
