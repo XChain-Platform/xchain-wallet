@@ -24,6 +24,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -70,17 +71,17 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const [data, setData] = useState(/** @type {any | null} */ (null));
+    const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        setData(null);
+        setData(undefined);
         setLoadError(null);
         messaging.getListByActionIndex({ chainId, actionIndex })
             .then((row) => { if (!cancelled) setData(row || null); })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
+            .catch((err) => { if (!cancelled) setLoadError(readFailureMessage(err, 'load this list')); });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging]);
 
@@ -132,12 +133,16 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
-    if (!data) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+    if (data === undefined) {
+        return wrap(<StatusMessage variant="status">Loading list…</StatusMessage>);
+    }
+    if (data === null) {
+        return wrap(<EmptyState title="List not found." />);
     }
 
     return wrap(
         <>
+            <SectionHeader title="List details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
@@ -209,7 +214,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {rejected.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>{` (${e.status})`}
                             </li>
                         ))}
@@ -222,7 +227,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     <SectionHeader title="This fork's edit" />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {edits.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>
                                 {e.status && e.status !== 'valid' ? ` (${e.status})` : ''}
                             </li>
@@ -236,6 +241,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 description="The explorer has no reverse lookup from a list index to the airdrops, dispensers, gates, or orders that reference it today, so the wallet can't show what uses this list. If you know a specific airdrop, dispenser, gate, or order references it, check that item directly."
             />
 
+            <SectionHeader title="Actions" />
             <div className={styles.actions}>
                 <Button
                     variant="primary"

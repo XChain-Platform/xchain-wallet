@@ -174,15 +174,14 @@
 
 .dispenseAmount {
     font-weight: 600;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .dispensePaid {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
 }
 

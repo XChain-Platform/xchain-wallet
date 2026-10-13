@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -103,6 +103,9 @@ export function StakeDetail({
     const [height, setHeight] = useState(/** @type {number | null} */ (null));
 
     const [activeTab, setActiveTab] = useState(kind === 'validator' ? 'rewards' : 'positions');
+    useEffect(() => {
+        setActiveTab(kind === 'validator' ? 'rewards' : 'positions');
+    }, [kind, chainId, address, contractActionIndex]);
 
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
@@ -257,7 +260,7 @@ export function StakeDetail({
         </Screen>
     );
 
-    if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loading) return wrap(<StatusMessage variant="status">Loading staking position…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
     const tabs = kind === 'validator'
@@ -274,6 +277,7 @@ export function StakeDetail({
 
     return wrap(
         <>
+            <SectionHeader title="Position details" />
             {/* Hero: what's staked, where, how it's doing. */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Staked</dt>
@@ -301,9 +305,9 @@ export function StakeDetail({
                 {kind === 'validator' ? (
                     <>
                         <dt className={styles.detailsLabel}>Delegated key</dt>
-                        <dd className={styles.detailsValue}>
+                        <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
                             {primaryDelegation
-                                ? `${shortPubkey(primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY)}${primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}`
+                                ? <><code>{primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY}</code>{primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}</>
                                 : 'None'}
                         </dd>
                         <dt className={styles.detailsLabel}>Pending rewards</dt>
@@ -345,6 +349,7 @@ export function StakeDetail({
                 </dd>
             </dl>
 
+            <SectionHeader title="Actions" />
             {/* Quick actions: squared 4-up grid, disabled without handlers. */}
             {kind === 'validator' ? (
                 <div className={local.quickActions} role="group" aria-label="Stake actions">
@@ -476,6 +481,7 @@ export function StakeDetail({
                 </div>
             )}
 
+            <SectionHeader title="Position activity" />
             <div className={local.tabBar} role="tablist" aria-label="Stake detail view">
                 {tabs.map((t) => (
                     <button
@@ -493,7 +499,7 @@ export function StakeDetail({
 
             {activeTab === 'rewards' ? (
                 rewards.length === 0 ? (
-                    <EmptyState title="No reward events yet." />
+                    <EmptyState title="No reward events yet." titleAs="h3" />
                 ) : (
                     <ul className={local.eventList}>
                         {rewards.slice(0, 25).map((r, i) => (
@@ -515,14 +521,14 @@ export function StakeDetail({
 
             {activeTab === 'delegation' ? (
                 delegations.length === 0 ? (
-                    <EmptyState title="No signing key delegated." body="Use Delegate to add one." />
+                    <EmptyState title="No signing key delegated." body="Use Delegate to add one." titleAs="h3" />
                 ) : (
                     <ul className={local.eventList}>
                         {delegations.slice(0, 25).map((d, i) => (
                         <li key={`${String(d.delegation_id ?? i)}:${i}`}>
                             <div className={local.eventRow}>
                                 <span className={local.eventAmount}>
-                                    {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)}
+                                    <code>{d.signing_pubkey || d.SIGNING_PUBKEY || '(none)'}</code>
                                 </span>
                                 <span className={local.eventMeta}>{stakingRowState(d, height)}</span>
                                 <span className={local.eventWhen}>
@@ -537,7 +543,7 @@ export function StakeDetail({
 
             {activeTab === 'positions' ? (
                 activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
-                    <EmptyState title="No positions found for this contract." />
+                    <EmptyState title="No positions found for this contract." titleAs="h3" />
                 ) : (
                     <ul className={local.eventList}>
                             {activeContractStakes.map((s, i) => (
@@ -545,7 +551,7 @@ export function StakeDetail({
                                     <div className={local.eventRow}>
                                         <span className={local.eventAmount}>{fmt(s.amount)} {s.tick}</span>
                                         <span className={local.eventMeta}>
-                                            key {shortPubkey(s.signing_pubkey)}
+                                            key <code>{s.signing_pubkey || '(none)'}</code>
                                         </span>
                                         <span className={local.eventWhen}>staked</span>
                                     </div>
@@ -568,7 +574,7 @@ export function StakeDetail({
 
             {activeTab === 'slashes' ? (
                 slashEvents.length === 0 ? (
-                    <EmptyState title="No slash events against this position." />
+                    <EmptyState title="No slash events against this position." titleAs="h3" />
                 ) : (
                     <ul className={local.eventList}>
                         {slashEvents.slice(0, 25).map((ev, i) => (
@@ -576,7 +582,7 @@ export function StakeDetail({
                             <div className={local.eventRow}>
                                 <span className={local.slashAmount}>-{fmt(ev.amount)} {ev.tick}</span>
                                 <span className={local.eventMeta}>
-                                    to {String(ev.destination_address || ev.destination || '?')}
+                                    to <AddressText address={String(ev.destination_address || ev.destination || '?')} truncate={false} />
                                 </span>
                                 <span className={local.eventWhen}>
                                     {ev.block_index ? `block ${fmt(ev.block_index)}` : ''}
