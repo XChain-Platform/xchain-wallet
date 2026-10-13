@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -133,6 +133,8 @@ export function ManageToken({
     onOpenDispenser,
     onIssuerResolved,
 }) {
+    const tabsId = useId();
+    const chartTabsId = useId();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
@@ -688,16 +690,24 @@ export function ManageToken({
                                         : ''}
                                 </div>
                             ) : null}
-                            <div className={portfolioChartStyles.chart} aria-label={`${chartRange.label} price chart`}>
+                            <div
+                                id={`${chartTabsId}-panel`}
+                                className={portfolioChartStyles.chart}
+                                role="tabpanel"
+                                aria-labelledby={`${chartTabsId}-tab-${chartRangeId}`}
+                            >
                                 <Sparkline series={chartSeries} height={40} />
                             </div>
                             <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                                 {CHART_RANGES.map((r) => (
                                     <button
                                         key={r.id}
+                                        id={`${chartTabsId}-tab-${r.id}`}
                                         type="button"
                                         role="tab"
                                         aria-selected={r.id === chartRangeId ? 'true' : 'false'}
+                                        aria-controls={`${chartTabsId}-panel`}
+                                        tabIndex={r.id === chartRangeId ? 0 : -1}
                                         className={`${portfolioChartStyles.range} ${r.id === chartRangeId ? portfolioChartStyles.rangeActive : ''}`}
                                         onClick={() => setChartRangeId(r.id)}
                                     >
@@ -787,13 +797,16 @@ export function ManageToken({
                 </div>
 
                 {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
-                <div className={styles.tabs} role="tablist">
+                <div className={styles.tabs} role="tablist" aria-label="Token management panels">
                     {tabs.map((t) => (
                         <button
                             key={t.id}
+                            id={`${tabsId}-tab-${t.id}`}
                             type="button"
                             role="tab"
                             aria-selected={activeTab === t.id}
+                            aria-controls={`${tabsId}-panel`}
+                            tabIndex={activeTab === t.id ? 0 : -1}
                             className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
                             onClick={() => setActiveTab(t.id)}
                         >
@@ -802,7 +815,12 @@ export function ManageToken({
                     ))}
                 </div>
 
-                <div className={styles.tabPanel}>
+                <div
+                    id={`${tabsId}-panel`}
+                    className={styles.tabPanel}
+                    role="tabpanel"
+                    aria-labelledby={`${tabsId}-tab-${activeTab}`}
+                >
                     {activeTab === 'dispensers' ? (
                         <DispensersPanel
                             listings={listings}

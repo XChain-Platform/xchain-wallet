@@ -96,6 +96,29 @@ afterEach(() => {
 });
 
 describe('MarketView market state', () => {
+    it('wires the selected market tab to the only visible panel', () => {
+        renderMarket();
+
+        const book = screen.getByRole('tab', { name: 'Book' });
+        const trades = screen.getByRole('tab', { name: 'Trades' });
+        const panel = screen.getByRole('tabpanel', { name: 'Book' });
+        expect(book).toHaveAttribute('aria-selected', 'true');
+        expect(book).toHaveAttribute('tabindex', '0');
+        expect(book).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', book.id);
+        expect(trades).toHaveAttribute('tabindex', '-1');
+        expect(screen.getByRole('button', { name: 'Pick exact price' })).toBeInTheDocument();
+
+        fireEvent.click(trades);
+
+        expect(screen.getByRole('tabpanel', { name: 'Trades' })).toBe(panel);
+        expect(panel).toHaveAttribute('aria-labelledby', trades.id);
+        expect(trades).toHaveAttribute('tabindex', '0');
+        expect(book).toHaveAttribute('tabindex', '-1');
+        expect(screen.queryByRole('button', { name: 'Pick exact price' })).toBeNull();
+        expect(screen.getByText('Recent trades panel')).toBeInTheDocument();
+    });
+
     it('announces the initial market load and replaces it with a load error', async () => {
         const request = deferred();
         messaging.getMarket = vi.fn(() => request.promise);

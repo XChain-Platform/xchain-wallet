@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -86,6 +86,7 @@ import styles from './HomeTabs.module.css';
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  */
 export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+    const tabsId = useId();
     const [active, setActive] = useState('coins');
     const isDemo = isDemoWallet(walletId);
     // Inline filter row (search + network dropdown) is collapsed by
@@ -281,9 +282,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 {tabs.map((t) => (
                     <button
                         key={t.id}
+                        id={`${tabsId}-tab-${t.id}`}
                         type="button"
                         role="tab"
                         aria-selected={active === t.id ? 'true' : 'false'}
+                        aria-controls={`${tabsId}-panel`}
+                        tabIndex={active === t.id ? 0 : -1}
                         className={`${styles.tab} ${active === t.id ? styles.tabActive : ''}`}
                         onClick={() => setActive(t.id)}
                     >
@@ -292,7 +296,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ))}
             </div>
 
-            <div className={styles.panel} role="tabpanel">
+            <div
+                id={`${tabsId}-panel`}
+                className={styles.panel}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${active}`}
+            >
                 {active === 'coins' ? (
                     showFirstFunding ? (
                         <Placeholder
