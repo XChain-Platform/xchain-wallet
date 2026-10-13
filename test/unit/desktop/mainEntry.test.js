@@ -22,6 +22,7 @@ const electron = vi.hoisted(() => {
         userDataDir: '/tmp/xchain-main-entry-test',
         displays: [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
         normalBounds: { x: 0, y: 0, width: 1024, height: 768 },
+        loadFileError: null,
     };
     const ownerWindow = {};
     const popup = vi.fn();
@@ -34,11 +35,14 @@ const electron = vi.hoisted(() => {
             browserWindowOptions.push(options);
             this.options = options;
             this.webContents = { send: vi.fn() };
-            this.loadFile = vi.fn();
+            this.loadFile = vi.fn(() => state.loadFileError
+                ? Promise.reject(state.loadFileError)
+                : undefined);
             this.once = vi.fn();
             this.on = vi.fn();
             this.isDestroyed = vi.fn(() => false);
             this.isVisible = vi.fn(() => true);
+            this.show = vi.fn();
             this.hide = vi.fn();
             this.getNormalBounds = vi.fn(() => state.normalBounds);
             BrowserWindow.instances.push(this);
@@ -203,6 +207,7 @@ beforeEach(() => {
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
     electron.state.normalBounds = { x: 0, y: 0, width: 1024, height: 768 };
+    electron.state.loadFileError = null;
     fsControl.failSyncWrite = false;
     electron.BrowserWindow.instances.length = 0;
     electron.app.isPackaged = true;
@@ -288,6 +293,20 @@ describe('desktop main entry point', () => {
             'xchain:state-changed',
             { kind: 'session' },
         );
+    });
+
+    it('contains startup rejection and opens a window for retry', async () => {
+        const secret = 'private startup path';
+        electron.app.whenReady.mockRejectedValueOnce(new Error(secret));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] desktop startup failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        expect(electron.webRequest.onHeadersReceived).toHaveBeenCalledOnce();
+        error.mockRestore();
     });
 
     it('parks an Electron deep link until a renderer can claim it', async () => {
@@ -521,6 +540,20 @@ describe('desktop main entry point', () => {
         });
     });
 
+    it('contains a renderer load rejection and reveals a recoverable window', async () => {
+        const secret = 'xchain:send?memo=private';
+        electron.state.loadFileError = new Error(secret);
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+        await vi.waitFor(() => expect(win.show).toHaveBeenCalledOnce());
+
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] renderer load failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        error.mockRestore();
+    });
+
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;
@@ -549,6 +582,30 @@ describe('desktop main entry point', () => {
         expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
+    });
+
+    it('turns an IPC rejection into a logged generic response', async () => {
+        const secret = 'private wallet request';
+        electron.app.whenReady.mockResolvedValueOnce();
+        runtime.handleIpcMessage.mockRejectedValueOnce(new Error(secret));
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcMain.handle).toHaveBeenCalled());
+        const handler = electron.ipcMain.handle.mock.calls
+            .find(([channel]) => channel === 'xchain-wallet:message')[1];
+        const result = await handler({
+            senderFrame: { url: appIndex },
+            sender: { getURL: () => appIndex },
+        }, { type: 'wallet.test' });
+
+        expect(result).toEqual({
+            ok: false,
+            error: { name: 'Error', message: 'desktop: message handling failed' },
+        });
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] wallet IPC message failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(secret);
+        error.mockRestore();
     });
 });
 
@@ -618,10 +675,8 @@ describe('desktop window bounds on close and quit', () => {
         expect(() => handler('close')({ preventDefault: vi.fn() })).not.toThrow();
         expect(() => electron.appListeners.get('before-quit')()).not.toThrow();
         expect(syncWrite).toHaveBeenCalled();
-        expect(error).toHaveBeenCalledWith(
-            '[xchain] could not save desktop window bounds:',
-            expect.objectContaining({ message: 'disk full' }),
-        );
+        expect(error).toHaveBeenCalledWith('[xchain] desktop window bounds save failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain('disk full');
         error.mockRestore();
     });
 });
@@ -688,5 +743,104 @@ describe('desktop application menu', () => {
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
         expect(accelerators).toEqual(['cmdorctrl+n']);
+    });
+});
+
+describe('desktop main-process failure boundaries', () => {
+    it('logs one context-only record for a repeated error and resolves the task', async () => {
+        const {
+            reportMainFailure,
+            runMainCallback,
+            runMainTask,
+        } = await import('../../../packages/desktop/main/errorBoundary.js');
+        const secret = 'bitcoin:bc1qsecret?amount=4';
+        const failure = new Error(secret);
+        const log = vi.fn();
+
+        expect(runMainCallback(() => { throw failure; }, 'protocol callback', log)).toBeUndefined();
+        await expect(runMainTask(() => Promise.reject(failure), 'protocol callback', { log }))
+            .resolves.toBeUndefined();
+        expect(reportMainFailure('protocol callback', failure, log)).toBe(false);
+
+        expect(log).toHaveBeenCalledExactlyOnceWith('[xchain] protocol callback failed');
+        expect(log.mock.calls.flat().join(' ')).not.toContain(secret);
+    });
+
+    it('installs idempotent process-level rejection and exception handlers', async () => {
+        const { installProcessErrorHandlers } = await import(
+            '../../../packages/desktop/main/errorBoundary.js'
+        );
+        const listeners = new Map();
+        const proc = {
+            on: vi.fn((name, handler) => { listeners.set(name, handler); }),
+            off: vi.fn((name) => { listeners.delete(name); }),
+        };
+        const log = vi.fn();
+
+        const dispose = installProcessErrorHandlers(proc, log);
+        expect(installProcessErrorHandlers(proc, log)).toBe(dispose);
+        listeners.get('unhandledRejection')(new Error('private rejection text'));
+        listeners.get('uncaughtException')(new Error('private exception text'));
+
+        expect(log.mock.calls).toEqual([
+            ['[xchain] unhandled main-process rejection failed'],
+            ['[xchain] uncaught main-process exception failed'],
+        ]);
+        expect(proc.on).toHaveBeenCalledTimes(2);
+        dispose();
+        expect(proc.off).toHaveBeenCalledTimes(2);
+    });
+
+    it('contains deep-link callback exceptions and reports them once', async () => {
+        const { attachDeepLinkHandlers } = await vi.importActual(
+            '../../../packages/desktop/main/protocol.js',
+        );
+        const app = (() => {
+            const listeners = new Map();
+            return {
+                listeners,
+                requestSingleInstanceLock: () => true,
+                on: (name, handler) => { listeners.set(name, handler); },
+            };
+        })();
+        const failure = new Error('xchain:private?memo=secret');
+        const onError = vi.fn();
+        attachDeepLinkHandlers(app, {
+            onDeepLink: () => { throw failure; },
+            onError,
+        });
+
+        expect(() => app.listeners.get('open-url')(
+            { preventDefault: vi.fn() },
+            'xchain:BTC/send?to=address',
+        )).not.toThrow();
+        expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    });
+
+    it('contains updater event consumer exceptions without disabling updater events', async () => {
+        const { attachUpdater } = await vi.importActual(
+            '../../../packages/desktop/main/updater.js',
+        );
+        const listeners = new Map();
+        const autoUpdater = {
+            isUpdaterActive: () => true,
+            on: (name, handler) => { listeners.set(name, handler); },
+            checkForUpdates: vi.fn(async () => {}),
+            downloadUpdate: vi.fn(async () => []),
+            quitAndInstall: vi.fn(),
+        };
+        const failure = new Error('private updater listener text');
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        await attachUpdater({
+            loader: async () => ({ autoUpdater }),
+            onEvent: () => { throw failure; },
+            feedBaseUrl: 'https://feed.invalid/wallet/',
+        });
+
+        expect(() => listeners.get('checking-for-update')()).not.toThrow();
+        expect(() => listeners.get('update-available')({ version: '2.0.0' })).not.toThrow();
+        expect(error).toHaveBeenCalledExactlyOnceWith('[xchain] updater event delivery failed');
+        expect(error.mock.calls.flat().join(' ')).not.toContain(failure.message);
+        error.mockRestore();
     });
 });

@@ -86,6 +86,7 @@ import {
     sha512File,
     verifyDownloadedUpdate,
 } from './updateVerify.js';
+import { reportMainFailure } from './errorBoundary.js';
 
 /** Where the signed release manifests live. Matches the publish block. */
 export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
@@ -573,14 +574,22 @@ export async function attachUpdater({
     let prepared = false;
     let downloadInFlight = null;
 
-    autoUpdater.on('checking-for-update', () => onEvent({ type: 'checking' }));
-    autoUpdater.on('update-available', (info) => onEvent({ type: 'available', info }));
-    autoUpdater.on('update-not-available', (info) => onEvent({ type: 'not-available', info }));
-    autoUpdater.on('error', (err) => onEvent({ type: 'error', info: { message: String(err?.message || err) } }));
-    autoUpdater.on('download-progress', (info) => onEvent({ type: 'progress', info }));
+    const emit = (event) => {
+        try {
+            onEvent(event);
+        } catch (error) {
+            reportMainFailure('updater event delivery', error);
+        }
+    };
+
+    autoUpdater.on('checking-for-update', () => emit({ type: 'checking' }));
+    autoUpdater.on('update-available', (info) => emit({ type: 'available', info }));
+    autoUpdater.on('update-not-available', (info) => emit({ type: 'not-available', info }));
+    autoUpdater.on('error', (err) => emit({ type: 'error', info: { message: String(err?.message || err) } }));
+    autoUpdater.on('download-progress', (info) => emit({ type: 'progress', info }));
     autoUpdater.on('update-downloaded', (info) => {
         downloaded = info || null;
-        onEvent({ type: 'downloaded', info });
+        emit({ type: 'downloaded', info });
     });
 
     /**
@@ -615,7 +624,7 @@ export async function attachUpdater({
             try {
                 await autoUpdater.checkForUpdates();
             } catch (err) {
-                onEvent({ type: 'error', info: { message: String(err?.message || err) } });
+                emit({ type: 'error', info: { message: String(err?.message || err) } });
             }
         },
 
@@ -659,7 +668,7 @@ export async function attachUpdater({
                 return reject('update downloaded but its version was not reported');
             }
 
-            onEvent({ type: 'verifying', info: { version } });
+            emit({ type: 'verifying', info: { version } });
 
             const tag = version.startsWith('v') ? version : `v${version}`;
             const fetched = await fetchReleaseManifest({
@@ -695,7 +704,7 @@ export async function attachUpdater({
             if (!verdict.ok) return reject(verdict.reason);
 
             prepared = true;
-            onEvent({ type: 'ready', info: { version } });
+            emit({ type: 'ready', info: { version } });
             return { ok: true };
         } catch (err) {
             return reject(String(err?.message || err));
@@ -708,7 +717,7 @@ export async function attachUpdater({
             if (artifactPath) {
                 await rm(artifactPath, { force: true }).catch(() => { /* best effort */ });
             }
-            onEvent({ type: 'rejected', info: { reason } });
+            emit({ type: 'rejected', info: { reason } });
             return { ok: false, reason };
         }
     }
