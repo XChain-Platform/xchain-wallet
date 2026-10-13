@@ -1658,6 +1658,10 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
+export function activeNetworkControl(page) {
+    return page.getByRole('combobox', { name: 'Active network', exact: true });
+}
+
 /**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
@@ -1698,7 +1702,7 @@ export async function switchToRegtest(page, password) {
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await page.getByLabel('Active network').selectOption('regtest');
+    await activeNetworkControl(page).selectOption('regtest');
 
     await unlockAfterReload(page, password);
 }
