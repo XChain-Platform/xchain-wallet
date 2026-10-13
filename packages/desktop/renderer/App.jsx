@@ -733,6 +733,7 @@ function AppInner() {
     // the user's primary window.
     useLastView({
         walletId: activeWalletId,
+        sessionActive: status.state === 'unlocked',
         currentView: unlockedView,
         currentParams: unlockedView === 'token-detail' ? tokenDetailRef
             : unlockedView === 'list-detail' ? listRef

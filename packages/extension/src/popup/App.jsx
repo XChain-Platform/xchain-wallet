@@ -731,6 +731,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // params so reload, Back, and Forward can prime the selected item first.
     useLastView({
         walletId: activeWalletId,
+        sessionActive: status.state === 'unlocked',
         currentView: unlockedView,
         currentParams: unlockedView === 'token-detail' ? tokenDetailRef
             : unlockedView === 'list-detail' ? listRef
