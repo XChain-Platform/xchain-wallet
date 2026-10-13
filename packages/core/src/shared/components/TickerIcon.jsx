@@ -39,6 +39,9 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
     const tickUpper = String(tick || '').toUpperCase();
     const nativeTicker = nativeTickerFor(descriptor);
     const isNative = !!nativeTicker && tickUpper === nativeTicker;
+    const accessibleName = descriptor?.displayName
+        ? `${tickUpper || 'Unknown token'} on ${descriptor.displayName}`
+        : `${tickUpper || 'Unknown'} token`;
     const pipSize = Math.max(10, Math.round(size * 0.5));
     const wrapStyle = {
         position: 'relative',
@@ -62,7 +65,7 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
         justifyContent: 'center',
         borderRadius: '50%',
         background: tickerColor(tickUpper),
-        color: '#FFFFFF',
+        color: 'var(--xc-text-inverted)',
         fontWeight: 700,
         fontSize: Math.max(10, Math.round(size * 0.43)),
     };
@@ -73,7 +76,7 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
         width: pipSize,
         height: pipSize,
         borderRadius: '50%',
-        background: '#FFFFFF',
+        background: 'var(--xc-surface-raised)',
         boxShadow: '0 0 0 1.5px var(--xc-bg-muted)',
         objectFit: 'cover',
         display: 'block',
@@ -81,7 +84,7 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
     const nativeIconUrl = descriptor ? brandingLib.chainIconLargeUrl(descriptor.id) : null;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
     return (
-        <span style={wrapStyle}>
+        <span role="img" aria-label={accessibleName} style={wrapStyle}>
             {isNative && nativeIconUrl ? (
                 <img
                     src={nativeIconUrl}

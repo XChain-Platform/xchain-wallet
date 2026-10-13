@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CrossChainTemplates } from '../../../packages/core/src/shared/routes/CrossChainTemplates.jsx';
@@ -49,6 +49,7 @@ describe('CrossChainTemplates states', () => {
 
         await screen.findByText('Two chains required');
         expect(screen.queryByRole('button', { name: 'Use template' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
         expect(onLaunch).not.toHaveBeenCalled();
     });
 
@@ -63,9 +64,20 @@ describe('CrossChainTemplates states', () => {
     });
 
     it('shows wallet load failures as errors', async () => {
-        mount(() => Promise.reject(new Error('Wallet unavailable')));
+        const getAddressesByChain = vi.fn()
+            .mockRejectedValueOnce(new Error('Wallet unavailable'))
+            .mockResolvedValueOnce({
+                [DOGE]: [{ address: 'DExampleAddress' }],
+                [BTC]: [{ address: 'bc1qexample' }],
+            });
+        mount(getAddressesByChain);
 
         await screen.findByText('Wallet unavailable');
         expect(screen.queryByText('Two chains required')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect((await screen.findAllByRole('button', { name: 'Use template' })).length)
+            .toBeGreaterThan(0);
+        expect(getAddressesByChain).toHaveBeenCalledTimes(2);
     });
 });

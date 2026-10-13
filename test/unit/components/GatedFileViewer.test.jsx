@@ -16,9 +16,10 @@
 // and a mismatch warning.
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
+import { MarketLifecycleTimeline } from '../../../packages/core/src/shared/components/MarketLifecycleTimeline.jsx';
 
 const b64 = (input) => Buffer.from(input).toString('base64');
 const PNG_BYTES = Buffer.concat([
@@ -108,5 +109,82 @@ describe('GatedFileViewer render decisions', () => {
         const { getByText } = show({ declaredType: 'text/plain', plaintextBase64: b64('hello') });
         expect(getByText('Download')).toBeTruthy();
         expect(getByText(/detected: plain text/)).toBeTruthy();
+    });
+
+    it('announces invalid unlocked data as a failure and disables Download', () => {
+        const { getByRole } = show({ declaredType: null, plaintextBase64: '%%%' });
+
+        expect(getByRole('alert')).toHaveTextContent('Could not decode the unlocked file');
+        expect(getByRole('button', { name: 'Download' })).toBeDisabled();
+    });
+
+    it('announces image loading and replaces a failed preview with download guidance', () => {
+        const { getByRole, getByAltText, queryByAltText } = show({
+            name: 'broken.png',
+            declaredType: 'image/png',
+            plaintextBase64: b64(PNG_BYTES),
+        });
+
+        expect(getByRole('status')).toHaveTextContent('Loading image preview');
+        fireEvent.error(getByAltText('broken.png'));
+
+        expect(getByRole('alert')).toHaveTextContent('Image preview failed to load');
+        expect(queryByAltText('broken.png')).toBeNull();
+        expect(getByRole('button', { name: 'Download' })).toBeEnabled();
+    });
+
+    it('does not inline-preview files larger than 5 MB and keeps Download available', () => {
+        const largePng = Buffer.concat([PNG_BYTES, Buffer.alloc((5 * 1024 * 1024) + 1)]);
+        const { container, getByText, getByRole } = show({
+            name: 'large.png',
+            declaredType: 'image/png',
+            plaintextBase64: b64(largePng),
+        });
+
+        expect(container.querySelector('img')).toBeNull();
+        expect(getByText(/larger than 5 MB/)).toBeTruthy();
+        expect(getByRole('button', { name: 'Download' })).toBeEnabled();
+    });
+});
+
+describe('MarketLifecycleTimeline states', () => {
+    const baseProps = {
+        kind: 'order',
+        chainId: 'chain-a',
+        address: 'owner-a',
+        actionIndex: 7,
+        createdBlock: 10,
+    };
+
+    it('announces the loading state', () => {
+        const messaging = { getOrderLifecycle: vi.fn(() => new Promise(() => {})) };
+        render(<MarketLifecycleTimeline {...baseProps} messaging={messaging} />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Loading timeline');
+    });
+
+    it('shows request failures instead of silently presenting an incomplete timeline', async () => {
+        const messaging = { getOrderLifecycle: vi.fn(() => Promise.reject(new Error('Lifecycle request failed.'))) };
+        render(<MarketLifecycleTimeline {...baseProps} messaging={messaging} />);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Lifecycle request failed.');
+    });
+
+    it('labels every lifecycle stage in text', async () => {
+        const rows = {
+            edits: [{ order_action_index: 7, action_index: 11, block_index: 11 }],
+            matches: [{ give_action_index: 7, action_index: 12, block_index: 12, give_amount: '2', give_tick: 'XCH' }],
+            expires: [{ order_action_index: 7, action_index: 13, block_index: 13 }],
+            cancels: [{ order_action_index: 7, action_index: 14, block_index: 14 }],
+        };
+        const messaging = {
+            getOrderLifecycle: vi.fn(({ kind }) => Promise.resolve({ data: rows[kind] })),
+        };
+        render(<MarketLifecycleTimeline {...baseProps} messaging={messaging} />);
+
+        await waitFor(() => expect(screen.getByRole('list', { name: 'Trade lifecycle' })).toBeTruthy());
+        for (const label of ['Created', 'Edited', 'Filled / matched', 'Expired', 'Cancelled']) {
+            expect(screen.getByText(label)).toBeTruthy();
+        }
     });
 });

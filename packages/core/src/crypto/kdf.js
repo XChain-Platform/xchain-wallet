@@ -187,6 +187,9 @@ export function setNativeArgon2id(fn) {
         throw new TypeError('setNativeArgon2id: expected a function or null');
     }
     nativeArgon2id = fn;
+    // Unregistering ends the provider lifecycle, so a later registration
+    // proves its own known answer even when it reuses a wrapper function.
+    if (fn === null) nativeCheck = null;
 }
 
 /** @returns {boolean} true when a native Argon2id is registered. */

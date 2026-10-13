@@ -614,7 +614,9 @@ assert.ok(
     'Send.jsx polls signer status via messaging.getSignerStatus',
 );
 assert.ok(
-    /Sign on \$\{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\}/.test(sendSrc),
+    /t\('send\.review\.signOn'/.test(sendSrc)
+        && /t\('send\.device\.trezor'\)/.test(sendSrc)
+        && /t\('send\.device\.ledger'\)/.test(sendSrc),
     'Send.jsx shows "Sign on Trezor" / "Sign on Ledger" button copy',
 );
 assert.ok(

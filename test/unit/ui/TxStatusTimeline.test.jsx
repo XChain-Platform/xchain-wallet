@@ -11,9 +11,21 @@
 // stage's done/pending state from the entry fields plus the optional
 // chainTip / indexerWatermark props.
 
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
+import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
+
+const timelineCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/components/TxStatusTimeline.module.css',
+), 'utf8');
+const queuedCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/components/QueuedResultPanel.module.css',
+), 'utf8');
 
 // The component uses ● for done stages and ○ for pending. Helper: map each
 // stage row (by its label text's containing <li>) to its done marker.
@@ -101,5 +113,46 @@ describe('<TxStatusTimeline>', () => {
             />,
         );
         expect(screen.getByText(/5 confirmations/)).toBeInTheDocument();
+    });
+
+    it('labels every step state in words and marks the current step semantically', () => {
+        render(<TxStatusTimeline entry={{ txHash: 'abc', blockIndex: 0, timestamp: 0 }} />);
+        const timeline = screen.getByRole('list', { name: 'Transaction status' });
+        expect(within(timeline).getAllByText('Complete')).toHaveLength(2);
+        expect(within(timeline).getByText('Current stage')).toBeInTheDocument();
+        expect(within(timeline).getAllByText('Not started')).toHaveLength(2);
+        expect(timeline.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+        expect(timeline.querySelector('[aria-current="step"]')).toHaveTextContent('Broadcast, awaiting network');
+    });
+
+    it('makes a failed step current and gives a direct next step', () => {
+        render(<TxStatusTimeline entry={{
+            txHash: '',
+            blockIndex: 0,
+            timestamp: 0,
+            pending: { failed: true },
+        }} />);
+        const current = screen.getByText('Current stage: Failed').closest('li');
+        expect(current).toHaveAttribute('aria-current', 'step');
+        expect(current).toHaveTextContent('Failed');
+        expect(current).toHaveTextContent(
+            "Review the failure reason in this transaction's details, correct the problem, and try again",
+        );
+    });
+
+    it('states the queued current step and its required next action', () => {
+        render(<QueuedResultPanel onDone={vi.fn()} />);
+        expect(screen.getByText('Current stage: Waiting to broadcast')).toBeInTheDocument();
+        expect(screen.getByText(/only goes out when you broadcast it from there/i)).toBeInTheDocument();
+    });
+
+    it('keeps both status surfaces shrinkable at a 320px viewport', () => {
+        expect(timelineCss).toMatch(/grid-template-columns:\s*20px minmax\(0, 1fr\)/);
+        expect(timelineCss).toMatch(/@media \(max-width: 360px\)/);
+        expect(timelineCss).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(queuedCss).toMatch(/box-sizing:\s*border-box/);
+        expect(queuedCss).toMatch(/width:\s*100%/);
+        expect(queuedCss).toMatch(/@media \(max-width: 360px\)/);
+        expect(queuedCss).toMatch(/overflow-wrap:\s*anywhere/);
     });
 });
