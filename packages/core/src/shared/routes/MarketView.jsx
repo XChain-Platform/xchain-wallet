@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
@@ -167,8 +168,8 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             setPrefillPrice(null);
                             onSwap();
                         }}
-                        aria-label={`Reverse pair to ${tick2}/${tick1}`}
-                        title={`Reverse to ${tick2}/${tick1}`}
+                        aria-label={t('market.reversePair', { pair: `${tick2}/${tick1}` })}
+                        title={t('market.reverseTitle', { pair: `${tick2}/${tick1}` })}
                         style={{
                             appearance: 'none',
                             background: 'var(--xc-surface-raised)',
@@ -205,23 +206,30 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             </div>
             <div style={{ height: 1, background: 'var(--xc-border)' }} />
             <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 'var(--xc-space-3)', rowGap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>24h high</dt>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.high24h')}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatPrice(stats.high)} {tick2}</dd>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>24h low</dt>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.low24h')}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatPrice(stats.low)} {tick2}</dd>
-                <dt style={{ color: 'var(--xc-text-muted)' }}>24h vol</dt>
+                <dt style={{ color: 'var(--xc-text-muted)' }}>{t('market.stats.volume24h')}</dt>
                 <dd style={{ margin: 0, color: 'var(--xc-text)' }}>{formatVolume(stats.volume)} {tick1}</dd>
             </dl>
         </div>
     );
 
-    if (marketMissing) return wrap(<EmptyState title="Market not found" body="It may have been closed or not indexed yet." />);
+    if (marketMissing) {
+        return wrap(
+            <EmptyState
+                title={t('market.notFound.title')}
+                body={t('market.notFound.body')}
+            />,
+        );
+    }
 
     return wrap(
         <>
-            <div role="region" aria-label="Market summary" aria-busy={summaryLoading || undefined}>
+            <div role="region" aria-label={t('market.summary')} aria-busy={summaryLoading || undefined}>
                 {summaryLoading ? (
-                    <div role="status" aria-label="Loading market">
+                    <div role="status" aria-label={t('market.loading')}>
                         <Skeleton height={159} />
                     </div>
                 ) : (
@@ -241,7 +249,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             <div
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
-                aria-label="Market panels"
+                aria-label={t('market.panels')}
                 style={{ width: '100%', marginTop: 'var(--xc-space-3)', marginBottom: 'var(--xc-space-3)', flexShrink: 1 }}
             >
                 {[

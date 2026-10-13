@@ -37,6 +37,10 @@ const localizedRoutes = [
     'ActionsMenu.jsx',
     'AlertsRoute.jsx',
     'BridgeOriginBadge.jsx',
+    'Loading.jsx',
+    'MarketView.jsx',
+    'MultisigCosignerShare.jsx',
+    'OnboardingCarousel.jsx',
 ];
 
 describe('shared route localization', () => {

@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { CopyButton, StatusMessage } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { KeyQR } from '../components/KeyQR.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -72,26 +73,21 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
 
     return (
         <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Share this wallet as a cosigner</summary>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
-                Give these values to the person creating the multisig. In their
-                wallet they add a cosigner with origin "External xpub" and paste
-                each one into the field of the same name. They are public keys:
-                they show the shared address but cannot spend from it.
+                {t('multisig.share.instructions')}
             </p>
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
-                Only software-seed addresses can be shared here. A watch-only
-                address has no signing key, and a hardware address must be
-                exported using the hardware device or its companion wallet.
+                {t('multisig.share.availability')}
             </p>
             <label className={styles.pickerLabel}>
-                <span>Address to share</span>
+                <span>{t('multisig.share.address')}</span>
                 <select
                     className={styles.picker}
                     value={addressId}
                     onChange={(e) => setAddressId(e.target.value)}
                 >
-                    <option value="">Select address</option>
+                    <option value="">{t('multisig.share.selectAddress')}</option>
                     {addresses.map((a) => (
                         <option key={a.id} value={a.id} disabled={!canShareAddress(a)}>
                             {a.address} {a.label ? `· ${a.label}` : ''}{unavailableAddressLabel(a)}
@@ -103,38 +99,35 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
             {selectedInfo ? (
                 <>
                     <div style={payloadStyle}>
-                        <strong>Share payload</strong>
+                        <strong>{t('multisig.share.payload')}</strong>
                         <p className={styles.hint} style={{ textAlign: 'left', margin: 0 }}>
-                            The QR code and text contain the same public cosigner fields.
+                            {t('multisig.share.payloadHint')}
                         </p>
                         <KeyQR
                             value={sharePayload}
                             size={200}
-                            alt="QR code for multisig cosigner share payload"
+                            alt={t('multisig.share.qrAlt')}
                         />
                         <textarea
                             readOnly
-                            aria-label="Cosigner share payload"
+                            aria-label={t('multisig.share.payloadAriaLabel')}
                             value={sharePayload}
                             rows={8}
                             style={payloadTextStyle}
                         />
                         <CopyButton
                             value={sharePayload}
-                            label="Copy cosigner share payload"
+                            label={t('multisig.share.copyPayload')}
                         />
                     </div>
                     <dl className={styles.detailsList}>
-                        <ShareRow label="xpub" value={xpubForNetwork(selectedInfo.xpub, networkKind)} hint={selectedInfo.accountPath ? `Account ${selectedInfo.accountPath}` : null} />
-                        <ShareRow label="Public key" value={selectedInfo.pubkey} />
-                        <ShareRow label="Master fingerprint" value={selectedInfo.fingerprint} />
-                        <ShareRow label="Derivation path" value={selectedInfo.derivationPath} />
+                        <ShareRow label={t('multisig.share.xpub')} value={xpubForNetwork(selectedInfo.xpub, networkKind)} hint={selectedInfo.accountPath ? t('multisig.share.account', { path: selectedInfo.accountPath }) : null} />
+                        <ShareRow label={t('multisig.share.publicKey')} value={selectedInfo.pubkey} />
+                        <ShareRow label={t('multisig.share.masterFingerprint')} value={selectedInfo.fingerprint} />
+                        <ShareRow label={t('multisig.share.derivationPath')} value={selectedInfo.derivationPath} />
                     </dl>
                     <p role="note" className={styles.hint} style={{ textAlign: 'left' }}>
-                        Identity check: before funding the multisig, compare the master
-                        fingerprint and derivation path with the cosigner over a separate
-                        trusted channel. For a hardware signer, confirm its fingerprint on
-                        the device itself.
+                        {t('multisig.share.identityCheck')}
                     </p>
                 </>
             ) : null}
@@ -177,9 +170,9 @@ function ShareRow({ label, value, hint = null }) {
                     <>
                         <code style={monoStyle} data-testid={`cosigner-share-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</code>
                         {hint ? <span style={{ display: 'block', color: 'var(--xc-text-muted)' }}>{hint}</span> : null}
-                        <CopyButton value={value} ariaLabel={`Copy ${label}`} />
+                        <CopyButton value={value} ariaLabel={t('multisig.share.copyField', { label })} />
                     </>
-                ) : 'Not available from this signer'}
+                ) : t('multisig.share.unavailable')}
             </dd>
         </>
     );
