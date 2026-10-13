@@ -27,10 +27,12 @@ import { useCallback, useEffect, useState } from 'react';
  * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
  *        toggles the palette; only 'mod+<key>' shapes are honored.
  * @param {(view: string) => void} [opts.navigate]  shell route setter
+ * @param {string} [opts.currentView]  the view the shell shows now; when it
+ *        changes the palette closes
  * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number }}
  */
 export function useCommandPalette(opts = {}) {
-    const { enabled = true, binding = 'mod+k', navigate: setRoute } = opts;
+    const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
     const comboKey = binding.startsWith('mod+') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
     const [navigationKey, setNavigationKey] = useState(0);
@@ -51,6 +53,14 @@ export function useCommandPalette(opts = {}) {
     useEffect(() => {
         if (!enabled) setOpen(false);
     }, [enabled]);
+
+    // The palette covers the content but not the navigation, so the bottom
+    // bar and the More sheet stay live under it. Any navigation closes it;
+    // otherwise it stayed open over the screen the user moved to, with the
+    // More sheet stacked on top (iPhone, 2026-10-12).
+    useEffect(() => {
+        setOpen(false);
+    }, [currentView]);
 
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
