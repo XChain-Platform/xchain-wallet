@@ -80,12 +80,44 @@ describe('WebMetaBackend', () => {
         expect(storage.values.get('unrelated')).toBe('keep me');
     });
 
-    it('reports the key and parse failure for malformed metadata', async () => {
+    it('returns null for malformed metadata', async () => {
         const storage = memoryStorage({ broken: '{not json' });
         const backend = new WebMetaBackend({ key: 'broken', storage });
 
-        await expect(backend.load()).rejects.toThrow(
-            /WebMetaBackend\.load: invalid JSON at key "broken":/,
+        await expect(backend.load()).resolves.toBeNull();
+    });
+
+    it('handles storage read, quota, and clear failures', async () => {
+        const storage = {
+            getItem: vi.fn(() => { throw new Error('storage disabled'); }),
+            setItem: vi.fn(() => { throw new Error('quota exceeded'); }),
+            removeItem: vi.fn(() => { throw new Error('storage disabled'); }),
+        };
+        const backend = new WebMetaBackend({ storage });
+
+        await expect(backend.load()).resolves.toBeNull();
+        await expect(backend.save({ kdfParams: {} })).rejects.toThrow(
+            /metadata could not be persisted: quota exceeded/,
         );
+        await expect(backend.clear()).resolves.toBeUndefined();
+    });
+
+    it('handles a throwing localStorage accessor', async () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            get: () => { throw new Error('storage disabled'); },
+        });
+
+        try {
+            const backend = new WebMetaBackend();
+            await expect(backend.load()).resolves.toBeNull();
+            await expect(backend.save({ kdfParams: {} })).rejects.toThrow(
+                /localStorage is not available/,
+            );
+            await expect(backend.clear()).resolves.toBeUndefined();
+        } finally {
+            Object.defineProperty(globalThis, 'localStorage', descriptor);
+        }
     });
 });

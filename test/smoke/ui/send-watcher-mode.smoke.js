@@ -153,12 +153,12 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /Create unsigned transaction/,
+    /t\('send\.review\.createUnsigned'\)/,
     'submit button label changes to "Create unsigned transaction" in watcher mode',
 );
 assert.match(
     sendSrc,
-    /Watcher mode: this wallet will build an unsigned transaction/,
+    /t\('send\.watcherMode'\)/,
     'review-stage hint copy explains watcher mode',
 );
 // §20 Cluster W FOLLOWUP 3 (closed at v0.239.0): when the source address is
@@ -167,12 +167,12 @@ assert.match(
 // Signer-mode wallet to actually sign the PSBT.
 assert.match(
     sendSrc,
-    /Source address is paired to \{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\} on/,
+    /t\('send\.watcherHardware'/,
     'watcher-mode HW-source hint pins vendor name',
 );
 assert.match(
     sendSrc,
-    /Pair the same \{fromAddress\.source === 'trezor' \? 'Trezor' : 'Ledger'\} on your\s+Signer-mode wallet to sign/,
+    /device: fromAddress\.source === 'trezor'[\s\S]{0,160}t\('send\.device\.ledger'\)/,
     'hint redirects user to pair on Signer wallet',
 );
 assert.match(

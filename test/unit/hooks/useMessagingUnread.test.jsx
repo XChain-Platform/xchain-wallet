@@ -1,15 +1,18 @@
 // Copyright © 2025–2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useMessagingUnread } from '../../../packages/core/src/shared/hooks/useMessagingUnread.js';
-import { writeMsgUnread } from '../../../packages/core/src/shared/utils/msgReadMemory.js';
+import {
+    MSG_UNREAD_EVENT, writeMsgUnread,
+} from '../../../packages/core/src/shared/utils/msgReadMemory.js';
 
 beforeEach(() => { localStorage.clear(); });
 
 afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     localStorage.clear();
 });
 
@@ -37,5 +40,27 @@ describe('useMessagingUnread', () => {
 
         act(() => writeMsgUnread('wallet-1', 'account-1', 9));
         expect(result.current).toBe(4);
+    });
+
+    it('removes its window and document listeners on unmount', () => {
+        const addWindow = vi.spyOn(window, 'addEventListener');
+        const removeWindow = vi.spyOn(window, 'removeEventListener');
+        const addDocument = vi.spyOn(document, 'addEventListener');
+        const removeDocument = vi.spyOn(document, 'removeEventListener');
+        const { unmount } = renderHook(() => useMessagingUnread('wallet-1', 'account-1'));
+        const unreadListener = addWindow.mock.calls
+            .find(([type]) => type === MSG_UNREAD_EVENT)?.[1];
+        const storageListener = addWindow.mock.calls.find(([type]) => type === 'storage')?.[1];
+        const visibilityListener = addDocument.mock.calls
+            .find(([type]) => type === 'visibilitychange')?.[1];
+
+        expect(unreadListener).toEqual(expect.any(Function));
+        expect(storageListener).toEqual(expect.any(Function));
+        expect(visibilityListener).toEqual(expect.any(Function));
+        unmount();
+
+        expect(removeWindow).toHaveBeenCalledWith(MSG_UNREAD_EVENT, unreadListener);
+        expect(removeWindow).toHaveBeenCalledWith('storage', storageListener);
+        expect(removeDocument).toHaveBeenCalledWith('visibilitychange', visibilityListener);
     });
 });
