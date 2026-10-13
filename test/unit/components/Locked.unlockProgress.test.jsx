@@ -142,7 +142,8 @@ describe('Locked unlock progress', () => {
             await Promise.resolve();
             await Promise.resolve();
         });
-        expect(screen.getByText('Temporary unlock failure')).toBeTruthy();
+        // An unexpected failure shows the plain unlock copy, not the raw error.
+        expect(screen.getByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeTruthy();
 
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
@@ -151,7 +152,7 @@ describe('Locked unlock progress', () => {
         });
 
         expect(onUnlocked).toHaveBeenCalledOnce();
-        expect(screen.queryByText('Temporary unlock failure')).toBeNull();
+        expect(screen.queryByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeNull();
     });
 
     it('disarms the delayed explanation as soon as unlock succeeds', async () => {
