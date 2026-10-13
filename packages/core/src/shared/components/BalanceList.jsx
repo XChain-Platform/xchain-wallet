@@ -21,7 +21,10 @@ import {
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
-import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+import {
+    formatFiatAmount,
+    formatFiatAmountForSpeech,
+} from '../utils/fiatAmountFormat.js';
 
 export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
     if (typeof src !== 'string' || src.length === 0) return false;
@@ -292,6 +295,19 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
     const fiatLabel = row.unavailable === 'partial'
         ? `At least ${formatRowFiat(row, fiat, fiatCurrency)}`
         : formatRowFiat(row, fiat, fiatCurrency);
+    const quantitySpeech = row.unavailable === 'all'
+        ? 'Balance unavailable'
+        : `${row.unavailable === 'partial' ? 'At least ' : ''}${quantityLabel} ${row.tick}${hasPending ? ' confirmed' : ''}`;
+    const pendingSpeech = hasPending
+        ? `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} ${row.tick} pending`
+        : '';
+    const fiatSpeechValue = formatFiatAmountForSpeech(fiat, fiatCurrency);
+    const fiatSpeech = fiatSpeechValue
+        ? `${row.unavailable === 'partial' ? 'At least ' : ''}${fiatSpeechValue}${!isNative && row.fiatRateSource === 'market' ? ', DEX price' : ''}`
+        : '';
+    const rowAccessibleLabel = balancesHidden
+        ? `${actionLabel}, balance hidden`
+        : [actionLabel, quantitySpeech, pendingSpeech, fiatSpeech].filter(Boolean).join(', ');
     return (
         <div
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
@@ -302,7 +318,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
                 type={clickable ? 'button' : undefined}
                 onClick={handleClick}
-                aria-label={clickable ? actionLabel : undefined}
+                aria-label={clickable ? rowAccessibleLabel : undefined}
             >
                 <div className={styles.iconWrap}>
                     <span
@@ -367,7 +383,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                     <div className={styles.subtitle} title={subtitle}>{subtitle}</div>
                 </div>
                 <div className={styles.amounts}>
-                    <div className={styles.qty}>
+                    <div className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
                         {/* Q-1 residual: an unread balance is not a zero, and a
                             fiat figure derived from one is not a value. When
                             nothing answered, say so instead of printing 0; when
@@ -386,7 +402,11 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                                 )}
                     </div>
                     {hasPending ? (
-                        <div className={styles.fiat} data-testid="balance-pending">
+                        <div
+                            className={styles.fiat}
+                            data-testid="balance-pending"
+                            aria-label={balancesHidden ? 'Pending balance hidden' : pendingSpeech}
+                        >
                             {balancesHidden
                                 ? '••• pending'
                                 : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
@@ -397,7 +417,14 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
                         </div>
                     ) : null}
-                    <div className={styles.fiat}>
+                    <div
+                        className={styles.fiat}
+                        aria-label={balancesHidden
+                            ? 'Fiat value hidden'
+                            : row.unavailable === 'all'
+                                ? 'Fiat value unavailable'
+                                : (fiatSpeech || undefined)}
+                    >
                         {balancesHidden
                             ? '•••'
                             : row.unavailable === 'all'

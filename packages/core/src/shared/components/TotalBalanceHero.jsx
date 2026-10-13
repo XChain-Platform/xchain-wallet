@@ -20,7 +20,10 @@ import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
-import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
+import {
+    formatFiatAmount as formatFiatValue,
+    formatFiatAmountForSpeech,
+} from '../utils/fiatAmountFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -245,7 +248,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                     ) : null}
                 </div>
             </div>
-            <div className={styles.amount}>
+            <div
+                className={styles.amount}
+                aria-label={hidden
+                    ? 'Balance hidden'
+                    : priceUnavailable
+                        ? 'Price unavailable'
+                        : formatFiatAmountForSpeech(total, fiatCurrency, fiatLocale)}
+            >
                 {hidden ? (
                     <span className={styles.hidden}>•••••</span>
                 ) : (
@@ -269,6 +279,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                         : change24h.delta < 0 ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
+                                aria-label={`${change24h.delta > 0 ? 'Gained' : change24h.delta < 0 ? 'Lost' : 'No change'}, ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}, ${Math.abs(change24h.pct).toFixed(2)} percent`}
                             >
                                 {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}

@@ -181,6 +181,16 @@ export function formatHistoryAmount(value, direction, locale) {
     return formatted;
 }
 
+/** Speak a History amount as one directional amount-and-unit phrase. */
+export function formatHistoryAmountForSpeech(value, unit, direction, locale) {
+    const raw = String(value ?? '').trim().replace(/^[+-]/, '');
+    const amountWithUnit = `${formatDisplayAmount(raw, locale)} ${String(unit || '').trim()}`.trim();
+    if (!amountWithUnit) return '';
+    if (direction === 'in') return `Received ${amountWithUnit}`;
+    if (direction === 'out') return `Sent ${amountWithUnit}`;
+    return amountWithUnit;
+}
+
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
 export function formatAtomicAmount(quantity, divisibility = 0, locale) {
     const raw = String(quantity ?? '0').trim();
