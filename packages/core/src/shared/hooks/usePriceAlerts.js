@@ -84,16 +84,16 @@ export function usePriceAlerts(walletId) {
     }, [walletId, supported, messaging, reload]);
 
     const removeAlert = useCallback(async (id) => {
-        if (!supported) return;
-        await messaging.clearPriceAlert({ id });
+        if (!walletId || !supported) return;
+        await messaging.clearPriceAlert({ id, walletId });
         await reload();
-    }, [supported, messaging, reload]);
+    }, [walletId, supported, messaging, reload]);
 
     const rearm = useCallback(async (id) => {
-        if (!supported || typeof messaging?.rearmPriceAlert !== 'function') return;
-        await messaging.rearmPriceAlert({ id });
+        if (!walletId || !supported || typeof messaging?.rearmPriceAlert !== 'function') return;
+        await messaging.rearmPriceAlert({ id, walletId });
         await reload();
-    }, [supported, messaging, reload]);
+    }, [walletId, supported, messaging, reload]);
 
     return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, reload };
 }

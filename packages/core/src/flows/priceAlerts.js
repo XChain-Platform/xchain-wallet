@@ -85,11 +85,13 @@ export async function saveAlert({ vault, id, walletId, chainId, direction, targe
 
 /**
  * Remove an alert by id.
- * @param {{ vault: import('../storage/Vault.js').Vault, id: string }} params
+ * @param {{ vault: import('../storage/Vault.js').Vault, id: string, walletId?: string }} params
  */
-export async function clearAlert({ vault, id }) {
+export async function clearAlert({ vault, id, walletId }) {
     if (!vault) throw new Error('clearAlert: vault is required');
     if (!id) throw new Error('clearAlert: id is required');
+    const alert = await vault.priceAlerts.get(id);
+    if (!alert || (walletId && alert.walletId !== walletId)) return false;
     return vault.priceAlerts.delete(id);
 }
 
@@ -111,13 +113,13 @@ export async function markAlertTriggered({ vault, id, at }) {
 
 /**
  * Re-arm a previously-triggered alert so the watcher fires it again.
- * @param {{ vault: import('../storage/Vault.js').Vault, id: string }} params
+ * @param {{ vault: import('../storage/Vault.js').Vault, id: string, walletId?: string }} params
  */
-export async function rearmAlert({ vault, id }) {
+export async function rearmAlert({ vault, id, walletId }) {
     if (!vault) throw new Error('rearmAlert: vault is required');
     if (!id) throw new Error('rearmAlert: id is required');
     const alert = await vault.priceAlerts.get(id);
-    if (!alert) return null;
+    if (!alert || (walletId && alert.walletId !== walletId)) return null;
     const updated = { ...alert, status: 'armed', triggeredAt: null };
     await vault.priceAlerts.put(updated);
     return updated;
