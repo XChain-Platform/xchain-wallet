@@ -32,6 +32,8 @@ export const EXPORT_COLUMNS = /** @type {const} */ ([
     'timestamp',
     'iso',
     'source',
+    'memo',
+    'fiatCurrency',
 ]);
 
 const COLUMN_SET = new Set(EXPORT_COLUMNS);
@@ -55,26 +57,34 @@ function timestampToSeconds(timestamp) {
     return value >= 1e12 ? value / 1000 : value;
 }
 
-function valueFor(entry, column) {
+function valueFor(entry, column, { fiatCurrency }) {
     if (column === 'iso') {
         const timestamp = timestampToSeconds(entry?.timestamp);
         return timestamp !== null
             ? new Date(timestamp * 1000).toISOString()
             : '';
     }
+    if (column === 'memo') {
+        return entry?.raw?.memo ?? entry?.raw?.MEMO ?? '';
+    }
+    if (column === 'fiatCurrency') return fiatCurrency;
     return entry?.[column];
 }
 
 /**
  * @param {Array<{ chainId: string, address: string, action: string, actionIndex: string, txHash: string, blockIndex: number, timestamp: number, source: string, raw?: object, link?: object | null }>} entries
- * @param {{ columns?: string[] }} [opts]       optional column filter; defaults to every EXPORT_COLUMNS field
+ * @param {{ columns?: string[], fiatCurrency?: string }} [opts] optional column filter and selected fiat code
  * @returns {string}                            RFC-4180 CSV text
  */
 export function entriesToCsv(entries, opts = {}) {
     const cols = pickColumns(opts.columns);
+    const fiatCurrency = normalizeFiatCurrency(opts.fiatCurrency);
     const lines = [cols.join(',')];
     for (const e of entries || []) {
-        const row = cols.map((c) => valueFor(e, c)).map(csvField).join(',');
+        const row = cols
+            .map((c) => valueFor(e, c, { fiatCurrency }))
+            .map(csvField)
+            .join(',');
         lines.push(row);
     }
     return lines.join('\n') + '\n';
@@ -88,22 +98,18 @@ export function entriesToCsv(entries, opts = {}) {
 export function entriesToJson(entries, meta) {
     const { columns: requestedColumns, ...metaRest } = meta || {};
     const cols = pickColumns(requestedColumns);
+    const fiatCurrency = normalizeFiatCurrency(metaRest.fiatCurrency);
     const payload = {
         format: 'xchain-wallet-history-export@1',
         exportedAt: new Date().toISOString(),
         ...metaRest,
+        fiatCurrency,
         columns: cols,
         entries: (entries || []).map((e) => {
             const row = {};
             for (const c of cols) {
-                if (c === 'iso') {
-                    const timestamp = timestampToSeconds(e?.timestamp);
-                    row.iso = timestamp !== null
-                        ? new Date(timestamp * 1000).toISOString()
-                        : null;
-                } else {
-                    row[c] = e?.[c];
-                }
+                const value = valueFor(e, c, { fiatCurrency });
+                row[c] = c === 'iso' && value === '' ? null : value;
             }
             // Preserve link + raw outside the column-set so JSON exports
             // stay decodable end-to-end (CSV intentionally drops them).
@@ -113,6 +119,11 @@ export function entriesToJson(entries, meta) {
         }),
     };
     return JSON.stringify(payload, null, 2);
+}
+
+function normalizeFiatCurrency(value) {
+    const code = String(value || 'USD').trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(code) ? code : 'USD';
 }
 
 /**

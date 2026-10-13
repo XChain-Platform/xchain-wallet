@@ -19,6 +19,7 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
+import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './TokenPicker.module.css';
@@ -27,6 +28,15 @@ const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
+
+function hasSpendableBalance(row) {
+    if (row?.unavailable) return true;
+    try {
+        return BigInt(row?.quantity || 0) > 0n;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * TokenPicker: the single "pick a coin or token" screen shared by the
@@ -212,7 +222,9 @@ export function TokenPicker({
 
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
-        let next = allRows;
+        let next = isReceive
+            ? allRows
+            : allRows.filter(hasSpendableBalance);
         if (networkFilter !== 'all') {
             next = next.filter((r) => coinFromChainId(r.chainId) === networkFilter);
         }
@@ -241,7 +253,7 @@ export function TokenPicker({
             return { ...r, displayName: `${label} (from ${origin})` };
         });
         return sortByChainThenAsset(next);
-    }, [allRows, networkFilter, kindFilter, tokenQueryTrim]);
+    }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
@@ -276,9 +288,12 @@ export function TokenPicker({
             return undefined;
         }
         let cancelled = false;
+        setPlatformResults([]);
         setPlatformBusy(true);
         const handle = setTimeout(async () => {
-            const chainIds = Object.keys(addressesByChain);
+            const chainIds = Object.keys(addressesByChain).filter((chainId) => (
+                networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+            ));
             const cache = platformCacheRef.current;
             try {
                 const lookups = await Promise.all(chainIds.map(async (chainId) => {
@@ -313,7 +328,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, addressesByChain, messaging, localKeySet]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet]);
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -393,6 +408,14 @@ export function TokenPicker({
                 spellCheck={false}
                 aria-label="Search coins or tokens"
             />
+            <div className={styles.networkFilter}>
+                <NetworkFilter
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    value={networkFilter}
+                    onChange={setNetworkFilter}
+                />
+            </div>
             {/* A caller that pins `kindFilter` is stating a
                 protocol constraint, not a default. Rendering the segments
                 anyway would offer a choice the action cannot honour, and

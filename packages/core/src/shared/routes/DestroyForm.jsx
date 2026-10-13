@@ -25,7 +25,9 @@ import {
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -125,6 +127,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         address: fromAddress?.address,
         tick: ticker,
     });
+    const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -300,6 +303,24 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         const amt = String(amount).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Amount must be a positive number.');
+            return;
+        }
+        // Keep the burn within the token's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: tokenInfo?.divisibility,
+            tick: ticker,
+        });
+        if (precisionError) {
+            setFormError(precisionError);
+            return;
+        }
+        // Refuse a burn the selected source address cannot fund.
+        if (exceedsBalance(amt, tickAmtBalance)) {
+            const TICK = ticker.trim().toUpperCase();
+            setFormError(
+                `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
+                + 'Enter an amount at or below that balance.',
+            );
             return;
         }
         setFormError(null);

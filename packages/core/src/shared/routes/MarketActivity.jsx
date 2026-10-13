@@ -262,7 +262,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 {offers !== null ? (
                     <section className={styles.section} aria-label="Open dispensers">
                         <SectionHeader
-                            as="h3"
+                            as="h2"
                             title={(
                                 <>
                                     Open dispensers <span className={styles.count}>{offers.length}</span>
@@ -323,7 +323,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 {dexOrders !== null ? (
                     <section className={styles.section} aria-label="Open DEX orders">
                         <SectionHeader
-                            as="h3"
+                            as="h2"
                             title={(
                                 <>
                                     Open DEX orders <span className={styles.count}>{dexOrders.length}</span>
@@ -371,7 +371,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 {sales !== null ? (
                     <section className={styles.section} aria-label="Recent dispenses">
                         <SectionHeader
-                            as="h3"
+                            as="h2"
                             title={(
                                 <>
                                     Recent dispenses <span className={styles.count}>{sales.length}</span>
@@ -424,7 +424,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 {dexSwaps !== null ? (
                     <section className={styles.section} aria-label="Recent DEX swaps">
                         <SectionHeader
-                            as="h3"
+                            as="h2"
                             title={(
                                 <>
                                     Recent DEX swaps <span className={styles.count}>{dexSwaps.length}</span>

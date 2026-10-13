@@ -99,5 +99,5 @@
 .wipeError {
     margin: 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }

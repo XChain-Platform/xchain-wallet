@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { useState } from 'react';
 import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/ShortcutHelp.jsx';
 
 afterEach(() => cleanup());
@@ -38,5 +39,38 @@ describe('ShortcutHelp', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
         expect(onClose).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('ShortcutHelp focus handling', () => {
+    const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+
+    it('takes focus when opened and keeps Tab inside', async () => {
+        render(<ShortcutHelp open onClose={() => {}} />);
+        await flush();
+        const close = screen.getByRole('button', { name: 'Close' });
+        expect(document.activeElement).toBe(close);
+        fireEvent.keyDown(close, { key: 'Tab' });
+        expect(document.activeElement).toBe(close);
+    });
+
+    it('returns focus to the control that opened it', async () => {
+        function Host() {
+            const [open, setOpen] = useState(false);
+            return (
+                <div>
+                    <button data-testid="opener" onClick={() => setOpen(true)}>help</button>
+                    <ShortcutHelp open={open} onClose={() => setOpen(false)} />
+                </div>
+            );
+        }
+        render(<Host />);
+        const opener = screen.getByTestId('opener');
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await flush();
+        expect(document.activeElement).toBe(opener);
     });
 });

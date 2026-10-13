@@ -16,6 +16,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
@@ -226,6 +227,16 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         setFormError(null);
         setResult(null);
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId: feed.chainId,
+                    from,
+                    builder,
+                    params,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId: feed.chainId,
                 from,
@@ -298,6 +309,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 // which side the oracle is about to pay.
                 outcomeLabels={outcomesOf(active)}
             />
+        );
+    }
+
+    if (result?.psbtHex && !result?.txid) {
+        return wrap(
+            <ListPage>
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => { setResult(null); setActive(null); }}
+                    onDone={onBack}
+                />
+            </ListPage>,
         );
     }
 
@@ -378,7 +401,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 ) : null}
                             </div>
 
-                            {!isWatcherMode && (canResolve || canCancel || canEdit) ? (
+                            {(canResolve || canCancel || canEdit) ? (
                                 <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
                                     {canEdit ? (
                                         <Button
@@ -402,18 +425,6 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 </div>
                             ) : null}
 
-                            {/* Say why the buttons are gone. Removing them silently leaves an
-                                oracle staring at a market it opened with no way to finish it and
-                                no reason given, and the cost of not knowing is real: an
-                                unresolved market refunds every bet at expiry and earns no fee.
-                                CreateBetFeedForm already says this plainly for its own case. */}
-                            {isWatcherMode && (canResolve || canCancel || canEdit) ? (
-                                <div className={styles.hint}>
-                                    This wallet is in watcher mode, so it cannot edit, resolve, or cancel this market.
-                                    It cannot resolve or cancel, or edit its lists, without the key that opened it.
-                                </div>
-                            ) : null}
-
                             {isActive && active.mode === 'edit' ? (
                                 <div className={consoleStyles.inlineForm}>
                                     <p className={styles.hint}>
@@ -432,7 +443,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         placeholder={f.block_list ? `Current: ${f.block_list}` : 'No current block list'}
                                         onChange={(e) => setBlockList(e.target.value)}
                                     />
-                                    {!isHw && !signerReady ? (
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <Button
@@ -444,7 +455,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             blockList: blockList.trim(),
                                         })}
                                     >
-                                        Review list edit
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review list edit'}
                                     </Button>
                                 </div>
                             ) : null}
@@ -460,7 +471,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
                                         ))}
                                     </div>
-                                    {!isHw && !signerReady ? (
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <p className={styles.hint}>
@@ -474,14 +485,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index, outcome,
                                         })}
                                     >
-                                        Review resolve
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review resolve'}
                                     </Button>
                                 </div>
                             ) : null}
 
                             {isActive && active.mode === 'cancel' ? (
                                 <div className={consoleStyles.inlineForm}>
-                                    {!isHw && !signerReady ? (
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <p className={styles.hint}>
@@ -494,7 +505,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index,
                                         })}
                                     >
-                                        Review cancel
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review cancel'}
                                     </Button>
                                 </div>
                             ) : null}
