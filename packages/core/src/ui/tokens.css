@@ -53,6 +53,13 @@
     --xc-card-pad: var(--xc-space-4);
     --xc-card-radius: var(--xc-radius-md);
 
+    /* Data and key-value tables share cell rhythm and column geometry. */
+    --xc-table-cell-padding-block: var(--xc-space-2);
+    --xc-table-cell-padding-inline: var(--xc-space-2);
+    --xc-table-label-width: 40%;
+    --xc-table-label-column: minmax(6.5rem, var(--xc-table-label-width));
+    --xc-table-row-divider: 1px solid var(--xc-border);
+
     /* Typography - platform fonts remain available when the web font fails. */
     --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
