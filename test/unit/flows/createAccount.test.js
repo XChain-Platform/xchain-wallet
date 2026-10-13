@@ -124,6 +124,24 @@ describe('createAccount', () => {
         expect(unlockWalletRecord).not.toHaveBeenCalled();
     });
 
+    it('serializes simultaneous calls for the same wallet', async () => {
+        const accounts = [];
+        const vault = makeVault();
+        vault.accounts.findBy.mockImplementation(async () => [...accounts]);
+        vault.accounts.put.mockImplementation(async (account) => {
+            accounts.push(account);
+        });
+        const signer = makeSigner();
+
+        const results = await Promise.all([
+            createAccount(opts(vault, signer)),
+            createAccount(opts(vault, signer)),
+        ]);
+
+        expect(results.map(({ account }) => account.index)).toEqual([0, 1]);
+        expect(accounts.map(({ index }) => index)).toEqual([0, 1]);
+    });
+
     it('persists hardware ownership and applies explicit labels', async () => {
         const vault = makeVault();
         const signer = makeSigner('trezor');

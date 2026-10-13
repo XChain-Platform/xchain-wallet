@@ -23,6 +23,37 @@ import { unlockWalletRecord } from './unlockWallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 
+/** @type {WeakMap<object, Map<string, Promise<void>>>} */
+const CREATE_ACCOUNT_QUEUES = new WeakMap();
+
+/**
+ * Serializes account index selection and persistence for each wallet.
+ *
+ * @template T
+ * @param {object} vault
+ * @param {string} walletId
+ * @param {() => Promise<T>} operation
+ * @returns {Promise<T>}
+ */
+function enqueueCreateAccount(vault, walletId, operation) {
+    let walletQueues = CREATE_ACCOUNT_QUEUES.get(vault);
+    if (!walletQueues) {
+        walletQueues = new Map();
+        CREATE_ACCOUNT_QUEUES.set(vault, walletQueues);
+    }
+
+    const previous = walletQueues.get(walletId) ?? Promise.resolve();
+    const run = previous.then(operation, operation);
+    const tail = run.then(() => {}, () => {});
+    walletQueues.set(walletId, tail);
+    void tail.then(() => {
+        if (walletQueues.get(walletId) !== tail) return;
+        walletQueues.delete(walletId);
+        if (walletQueues.size === 0) CREATE_ACCOUNT_QUEUES.delete(vault);
+    });
+    return run;
+}
+
 /**
  * @typedef {Object} CreateAccountOpts
  * @property {string} walletId
@@ -77,93 +108,95 @@ export async function createAccount({
         }
     }
 
-    const wallet = await vault.wallets.get(walletId);
-    if (!wallet) throw new WalletNotFoundError(walletId);
+    return enqueueCreateAccount(vault, walletId, async () => {
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) throw new WalletNotFoundError(walletId);
 
-    // Pick next free index. Indices are dense (0, 1, 2, ...) when
-    // accounts are added one at a time, but a future feature could
-    // skip indices (e.g., import-account-at-N), so use max+1 rather
-    // than count.
-    const existing = await vault.accounts.findBy('walletId', walletId);
-    const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
-    const nextIndex = maxIndex + 1;
-    const requestedName = typeof name === 'string' ? name.trim() : '';
-    if (name !== undefined && requestedName.length === 0) {
-        throw new Error('createAccount: name must be a non-empty string');
-    }
-    const accountName = requestedName || `Account ${nextIndex + 1}`;
-    if (existing.some((candidate) => String(candidate.name ?? '').trim().toLocaleLowerCase()
-        === accountName.toLocaleLowerCase())) {
-        throw new Error(`An account named "${accountName}" already exists.`);
-    }
-
-    const account = createAccountRecord({
-        walletId,
-        name: accountName,
-        index: nextIndex,
-    });
-
-    // When the host gives us a pre-unlocked signer (from SignerPool),
-    // reuse it and DO NOT lock it (the pool owns its lifecycle). When
-    // we have to fall back to a password, build a one-shot signer and
-    // lock it before returning.
-    const signer = providedSigner
-        ? providedSigner
-        : await unlockWalletRecord({
-            wallet,
-            password,
-            bip39Passphrase,
-            chainRegistry,
-            sdkRegistry,
-        });
-    const ownsSigner = !providedSigner;
-
-    // Pick the right `Address.source` from the signer kind. Software
-    // signers produce HD addresses; HW signers produce trezor / ledger
-    // addresses tied to the SignerRecord by signerId (§17.6).
-    const signerKind = signer.kind;
-    const addressSource = signerKind === 'software' ? 'hd' : signerKind;
-
-    try {
-        const addresses = [];
-        for (const chainId of activeChainIds) {
-            const descriptor = chainRegistry.get(chainId);
-            const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
-            const [derived] = await signer.getAddresses({
-                chainId,
-                accountIndex: nextIndex,
-                change: 0,
-                startIndex: 0,
-                count: 1,
-                addressType,
-            });
-            const record = createAddress({
-                accountId: account.id,
-                chain: descriptor.coin,
-                network: descriptor.networkKind,
-                source: addressSource,
-                addressType,
-                derivationPath: derived.path,
-                address: derived.address,
-                publicKey: derived.publicKey,
-                label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
-                signerId: signer.id,
-            });
-            addresses.push({ chainId, address: record });
+        // Pick next free index. Indices are dense (0, 1, 2, ...) when
+        // accounts are added one at a time, but a future feature could
+        // skip indices (e.g., import-account-at-N), so use max+1 rather
+        // than count.
+        const existing = await vault.accounts.findBy('walletId', walletId);
+        const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
+        const nextIndex = maxIndex + 1;
+        const requestedName = typeof name === 'string' ? name.trim() : '';
+        if (name !== undefined && requestedName.length === 0) {
+            throw new Error('createAccount: name must be a non-empty string');
         }
+        const accountName = requestedName || `Account ${nextIndex + 1}`;
+        if (existing.some((candidate) => String(candidate.name ?? '').trim().toLocaleLowerCase()
+            === accountName.toLocaleLowerCase())) {
+            throw new Error(`An account named "${accountName}" already exists.`);
+        }
+
+        const account = createAccountRecord({
+            walletId,
+            name: accountName,
+            index: nextIndex,
+        });
+
+        // When the host gives us a pre-unlocked signer (from SignerPool),
+        // reuse it and DO NOT lock it (the pool owns its lifecycle). When
+        // we have to fall back to a password, build a one-shot signer and
+        // lock it before returning.
+        const signer = providedSigner
+            ? providedSigner
+            : await unlockWalletRecord({
+                wallet,
+                password,
+                bip39Passphrase,
+                chainRegistry,
+                sdkRegistry,
+            });
+        const ownsSigner = !providedSigner;
+
+        // Pick the right `Address.source` from the signer kind. Software
+        // signers produce HD addresses; HW signers produce trezor / ledger
+        // addresses tied to the SignerRecord by signerId (§17.6).
+        const signerKind = signer.kind;
+        const addressSource = signerKind === 'software' ? 'hd' : signerKind;
 
         try {
-            await vault.accounts.put(account);
-            for (const { address } of addresses) await vault.addresses.put(address);
-        } catch (error) {
-            for (const { address } of addresses) {
-                try { await vault.addresses.delete(address.id); } catch { /* Preserve the write error. */ }
+            const addresses = [];
+            for (const chainId of activeChainIds) {
+                const descriptor = chainRegistry.get(chainId);
+                const addressType = defaultAddressTypeForFormat(descriptor, wallet?.format);
+                const [derived] = await signer.getAddresses({
+                    chainId,
+                    accountIndex: nextIndex,
+                    change: 0,
+                    startIndex: 0,
+                    count: 1,
+                    addressType,
+                });
+                const record = createAddress({
+                    accountId: account.id,
+                    chain: descriptor.coin,
+                    network: descriptor.networkKind,
+                    source: addressSource,
+                    addressType,
+                    derivationPath: derived.path,
+                    address: derived.address,
+                    publicKey: derived.publicKey,
+                    label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
+                    signerId: signer.id,
+                });
+                addresses.push({ chainId, address: record });
             }
-            try { await vault.accounts.delete(account.id); } catch { /* Preserve the write error. */ }
-            throw error;
+
+            try {
+                await vault.accounts.put(account);
+                for (const { address } of addresses) await vault.addresses.put(address);
+            } catch (error) {
+                for (const { address } of addresses) {
+                    try { await vault.addresses.delete(address.id); } catch { /* Preserve the write error. */ }
+                }
+                try { await vault.accounts.delete(account.id); } catch { /* Preserve the write error. */ }
+                throw error;
+            }
+            return { account, addresses };
+        } finally {
+            if (ownsSigner && typeof signer.lock === 'function') signer.lock();
         }
-        return { account, addresses };
-    } finally {
-        if (ownsSigner && typeof signer.lock === 'function') signer.lock();
-    }
+    });
 }
