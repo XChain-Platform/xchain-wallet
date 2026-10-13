@@ -31,7 +31,7 @@
 //     sniffed type, so a saved-then-reopened file never round-trips
 //     through a wallet-origin document either.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
@@ -39,6 +39,7 @@ import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 
 const MAX_TEXT_CHARS = 200_000;
+const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
 
 function decodeBase64(plaintextBase64) {
     try {
@@ -102,18 +103,21 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     useFocusTrap(dialogRef, { active: true });
     const bytes = useMemo(() => decodeBase64(plaintextBase64), [plaintextBase64]);
     const sniffed = useMemo(() => sniffContent(bytes), [bytes]);
+    const previewTooLarge = Boolean(bytes && bytes.length > MAX_PREVIEW_BYTES);
+    const [loadedImageUrl, setLoadedImageUrl] = useState(null);
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
 
     // Inline-render blob URL, typed with the SNIFFED mime only. Created
     // solely for <img> consumption; never opened as a document.
     const imageUrl = useMemo(() => {
-        if (!bytes) return null;
+        if (!bytes || previewTooLarge) return null;
         if (sniffed.kind !== 'image' && sniffed.kind !== 'svg') return null;
         try {
             return URL.createObjectURL(new Blob([bytes], { type: sniffed.mime }));
         } catch (_e) {
             return null;
         }
-    }, [bytes, sniffed]);
+    }, [bytes, previewTooLarge, sniffed]);
 
     useEffect(() => {
         if (!imageUrl) return undefined;
@@ -127,7 +131,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     }, [onClose]);
 
     const text = useMemo(() => {
-        if (!bytes || sniffed.kind !== 'text') return null;
+        if (!bytes || previewTooLarge || sniffed.kind !== 'text') return null;
         try {
             const decoded = typeof TextDecoder === 'function'
                 ? new TextDecoder('utf-8').decode(bytes)
@@ -138,7 +142,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
         } catch (_e) {
             return null;
         }
-    }, [bytes, sniffed]);
+    }, [bytes, previewTooLarge, sniffed]);
 
     function handleDownload() {
         if (!bytes) return;
@@ -171,9 +175,47 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
 
     let body;
     if (!bytes) {
-        body = <p className={styles.notice}>Could not decode the unlocked bytes.</p>;
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Could not decode the unlocked file. Try unlocking it again.
+            </StatusMessage>
+        );
+    } else if (previewTooLarge) {
+        body = (
+            <p className={styles.notice}>
+                This file is larger than 5 MB and can&apos;t be previewed safely.
+                Download it to view the full file.
+            </p>
+        );
+    } else if (imageUrl && failedImageUrl === imageUrl) {
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Image preview failed to load. Download the file to view it.
+            </StatusMessage>
+        );
     } else if (imageUrl) {
-        body = <img className={styles.image} src={imageUrl} alt={name || 'Unlocked gated image'} />;
+        const imageLoading = loadedImageUrl !== imageUrl;
+        body = (
+            <>
+                {imageLoading ? (
+                    <StatusMessage variant="status" className={styles.notice}>
+                        Loading image preview…
+                    </StatusMessage>
+                ) : null}
+                <img className={styles.image} src={imageUrl}
+                    alt={name || 'Unlocked gated image'}
+                    aria-busy={imageLoading}
+                    onLoad={() => setLoadedImageUrl(imageUrl)}
+                    onError={() => setFailedImageUrl(imageUrl)}
+                />
+            </>
+        );
+    } else if (sniffed.kind === 'image' || sniffed.kind === 'svg') {
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Image preview is unavailable. Download the file to view it.
+            </StatusMessage>
+        );
     } else if (text !== null) {
         body = <pre className={styles.text}>{text}</pre>;
     } else if (sniffed.kind === 'pdf') {

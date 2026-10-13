@@ -9,13 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
-import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
+import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
+import { useSettings } from '../hooks/useSettings.js';
 import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
@@ -53,6 +54,9 @@ const chainRegistry = registryLib.defaultRegistry();
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -80,14 +84,15 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
         setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                setAddressesByChain(byChain || {});
             })
-            .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setAddressesError('Could not load wallet addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -107,12 +112,20 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         return map;
     }, [addressesByChain]);
 
+    const chainsWithAddresses = useMemo(() => {
+        if (!addressesByChain) return [];
+        return Object.entries(addressesByChain)
+            .filter(([, rows]) => Array.isArray(rows)
+                && rows.some((row) => typeof row?.address === 'string' && row.address.length > 0))
+            .map(([chainId]) => chainId);
+    }, [addressesByChain]);
+
     // Phase 2: for each chain with addresses, fan out one explorer
     // query per address and merge the results. A per-chain error
     // surfaces inline; other chains keep loading.
     useEffect(() => {
         if (!addressesByChain) return;
-        const chains = Object.keys(addressesByChain);
+        const chains = chainsWithAddresses;
         if (chains.length === 0) return;
 
         const initial = {};
@@ -126,7 +139,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         if (flowsLib.isDemoWallet(walletId)) {
             const demo = {};
             for (const cid of chains) {
-                const first = (addressesByChain[cid] || [])[0]?.address;
+                const first = (addressesByChain[cid] || [])
+                    .find((row) => typeof row?.address === 'string' && row.address.length > 0)
+                    ?.address;
                 demo[cid] = {
                     loading: false,
                     rows: first ? flowsLib.synthesizeDemoDispensers(cid, first) : [],
@@ -137,7 +152,9 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             return undefined;
         }
         for (const cid of chains) {
-            const addrs = (addressesByChain[cid] || []).map((a) => a.address);
+            const addrs = (addressesByChain[cid] || [])
+                .map((a) => a.address)
+                .filter((address) => typeof address === 'string' && address.length > 0);
             if (addrs.length === 0) {
                 if (!cancelled) {
                     setDispensersByChain((prev) => ({
@@ -203,7 +220,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, dispensersReload]);
+    }, [addressesByChain, chainsWithAddresses, messaging, walletId, dispensersReload]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -262,7 +279,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const loadErrors = useMemo(() => (
         Object.entries(dispensersByChain)
             .filter(([, s]) => s.error)
-            .map(([cid, s]) => `${chainRegistry.get(cid)?.displayName || cid}: ${s.error}`)
+            .map(([cid]) => chainRegistry.get(cid)?.displayName || cid)
     ), [dispensersByChain]);
 
     const visibleRows = useMemo(() => {
@@ -333,7 +350,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             </ListPage>,
         );
     }
-    if (Object.keys(addressesByChain).length === 0) {
+    if (chainsWithAddresses.length === 0) {
         return wrap(
             <ListPage>
                 <EmptyState
@@ -377,7 +394,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         },
                     }}
                 >
-                    Couldn't load some dispensers. {loadErrors.join('; ')}
+                    Couldn't load some dispensers. Failed networks: {loadErrors.join(', ')}. Try again.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
@@ -409,6 +426,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             nowMs={nowMs}
                             chainClock={chainClocks[row.chainId] || null}
                             onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ))}
                 </div>
@@ -417,8 +435,12 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
 }
 
-function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect }) {
+function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect, allowRemoteImages }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
+        ? row.imageUrl
+        : null;
+    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -447,23 +469,23 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
             aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
         >
             <div className={local.iconWrap}>
-                {row.imageUrl ? (
+                <span
+                    className={local.iconLetter}
+                    style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
+                    aria-hidden="true"
+                >
+                    {(row.give_tick || '?').slice(0, 1)}
+                </span>
+                {tokenImageUrl ? (
                     <img
-                        src={row.imageUrl}
+                        src={tokenImageUrl}
                         alt=""
                         aria-hidden="true"
                         className={local.iconImg}
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
-                ) : (
-                    <span
-                        className={local.iconLetter}
-                        style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
-                        aria-hidden="true"
-                    >
-                        {(row.give_tick || '?').slice(0, 1)}
-                    </span>
-                )}
+                ) : null}
                 {chainIconUrl ? (
                     <img
                         src={chainIconUrl}
@@ -477,6 +499,9 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
             <div className={local.body}>
                 <div className={local.name}>
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
+                </div>
+                <div className={local.subtitle}>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
                 </div>
                 <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
                 {/* Escrow is only stated when it is known. The explorer's

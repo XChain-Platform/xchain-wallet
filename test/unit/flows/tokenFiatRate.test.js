@@ -88,6 +88,28 @@ describe('flows/priceLookup token rates', () => {
         expect(fetchImpl.mock.calls.some(([url]) => url.includes('/api/market/'))).toBe(false);
     });
 
+    it('shares an in-flight token request across mounted consumers', async () => {
+        let release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        const fetchImpl = vi.fn(async () => {
+            await gate;
+            return ok({ data: [snapshotRow('XCHAIN/USD', '0.42')] });
+        });
+        configureFiatRateSource({ now: () => NOW, fetch: fetchImpl, explorerUrlByCoin: EXPLORER });
+
+        const args = { chainCoin: 'bitcoin', tick: 'XCHAIN', nativeTicker: 'BTC' };
+        const first = refreshTokenFiatRate(args);
+        const second = refreshTokenFiatRate(args);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+        release();
+        await expect(Promise.all([first, second])).resolves.toEqual([
+            { updated: true },
+            { updated: true },
+        ]);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
     it('falls back to the DEX market, converted through the coin rate', async () => {
         const fetchImpl = venue({
             snapshots: [snapshotRow('BTC/USD', '100000')],

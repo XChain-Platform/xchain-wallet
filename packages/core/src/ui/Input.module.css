@@ -24,6 +24,7 @@
     min-width: 0;
     max-width: 100%;
     width: 100%;
+    scroll-margin-block: var(--xc-space-3);
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 

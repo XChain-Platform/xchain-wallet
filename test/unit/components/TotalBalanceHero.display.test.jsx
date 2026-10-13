@@ -35,7 +35,7 @@ function mount({ rows = [row()], settings = {}, nativePrices = {}, ...props } = 
         getSettings: vi.fn(async () => settings),
         getNativePricesRequest: vi.fn(async () => ({ prices: nativePrices })),
     };
-    return render(
+    const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <TotalBalanceHero
                 rows={rows}
@@ -45,6 +45,7 @@ function mount({ rows = [row()], settings = {}, nativePrices = {}, ...props } = 
             />
         </MessagingProvider>,
     );
+    return { ...view, messaging };
 }
 
 function cssRule(selector) {
@@ -80,6 +81,19 @@ describe('TotalBalanceHero fiat formatting', () => {
         expect(await screen.findByText('< $0.01')).toBeInTheDocument();
     });
 
+    it('sums every priced row exactly and excludes an unpriced holding', () => {
+        mount({
+            rows: [
+                row(),
+                row({ tick: 'SECOND', quantity: '44', divisibility: 0, fiatRate: 0.5 }),
+                row({ tick: 'UNPRICED', quantity: '999', divisibility: 0, fiatRate: null }),
+            ],
+        });
+
+        expect(screen.getByText('$1,256.56')).toBeInTheDocument();
+        expect(screen.getByText('1 token not priced')).toBeInTheDocument();
+    });
+
     it('uses locale currency placement and keeps the ISO code as the suffix', async () => {
         mount({ settings: { fiatCurrency: 'EUR', language: 'de-DE' } });
 
@@ -112,6 +126,46 @@ describe('TotalBalanceHero fiat formatting', () => {
 
         expect(screen.getByText('$123,456,789,012,345,678,901,234,567,890.12'))
             .toBeInTheDocument();
+    });
+
+    it('requests change data in the selected fiat currency', async () => {
+        const { messaging } = mount({
+            rows: [row({ kind: 'native' })],
+            settings: { fiatCurrency: 'EUR' },
+        });
+
+        await screen.findByText('EUR');
+        expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: ['bitcoin-mainnet'],
+            fiatCurrency: 'EUR',
+        });
+    });
+});
+
+describe('TotalBalanceHero refresh status', () => {
+    it('shows stale price time and exposes manual refresh progress', () => {
+        const onRefresh = vi.fn();
+        const pricesFetchedAt = Date.now() - 10 * 60_000;
+        const { rerender } = mount({ pricesFetchedAt, onRefresh });
+
+        const priceStatus = screen.getByText(/Prices updated 10 min ago/);
+        expect(priceStatus.className).toMatch(/stale/);
+        screen.getByRole('button', { name: 'Refresh portfolio' }).click();
+        expect(onRefresh).toHaveBeenCalledOnce();
+
+        rerender(
+            <MessagingProvider shell="web" messaging={{ getSettings: vi.fn(async () => ({})) }}>
+                <TotalBalanceHero
+                    rows={[row()]}
+                    walletId="w1"
+                    networkFilter="all"
+                    pricesFetchedAt={pricesFetchedAt}
+                    onRefresh={onRefresh}
+                    refreshing
+                />
+            </MessagingProvider>,
+        );
+        expect(screen.getByRole('button', { name: 'Refreshing portfolio' })).toBeDisabled();
     });
 });
 

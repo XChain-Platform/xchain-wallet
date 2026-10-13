@@ -13,7 +13,12 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ header, children }) => <div>{header}<main>{children}</main></div>,
-    PageHeader: ({ title }) => <header><h1>{title}</h1></header>,
+    PageHeader: ({ title, onBack }) => (
+        <header>
+            <button type="button" onClick={onBack} aria-label="Back">Back</button>
+            <h1>{title}</h1>
+        </header>
+    ),
     ListPage: ({ toolbar, children }) => <section data-testid="list-page">{toolbar}{children}</section>,
     EmptyState: ({ title, body, role, titleAs: Title = 'h2' }) => (
         <div data-testid="empty-state" role={role}><Title>{title}</Title>{body ? <p>{body}</p> : null}</div>
@@ -147,6 +152,15 @@ describe('ContactsPickerScreen selection and header', () => {
         expect(props.onPick).toHaveBeenCalledOnce();
         expect(props.onPick.mock.calls[0]).toHaveLength(1);
         expect(props.onPick.mock.calls[0][0]).toBe(bitcoinEntry);
+    });
+
+    it('cancels without selecting an entry when Back is pressed', () => {
+        const { props } = mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(props.onBack).toHaveBeenCalledOnce();
+        expect(props.onPick).not.toHaveBeenCalled();
     });
 
     it('shows the Contacts header title', () => {

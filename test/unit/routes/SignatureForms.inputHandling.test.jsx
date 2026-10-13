@@ -17,7 +17,10 @@ import {
 const BTC = 'bitcoin-mainnet';
 const LTC = 'litecoin-mainnet';
 const ADDRESSES = Object.freeze({
-    [BTC]: [{ id: 'btc', address: 'bc1qexample', source: 'hd' }],
+    [BTC]: [
+        { id: 'btc', address: 'bc1qexample', source: 'hd', label: 'Savings' },
+        { id: 'btc-spending', address: 'bc1qspending', source: 'hd', label: 'Spending' },
+    ],
     [LTC]: [{ id: 'ltc', address: 'ltc1qexample', source: 'hd' }],
 });
 
@@ -59,8 +62,10 @@ afterEach(() => {
 });
 
 describe('message signing inputs', () => {
-    it('lets the user change the signing chain and updates the address input', async () => {
+    it('labels the address choices and updates the selection with the signing chain', async () => {
         renderForm(SignMessageForm, messagingFor());
+        await screen.findByRole('option', { name: 'Savings: bc1qexample' });
+        expect(screen.getByRole('option', { name: 'Spending: bc1qspending' })).toBeTruthy();
         const picker = await screen.findByRole('button', { name: /Chain: Bitcoin/ });
         fireEvent.click(picker);
         pickLitecoinMainnet();
@@ -78,18 +83,18 @@ describe('signature verification inputs and results', () => {
         fireEvent.click(picker);
         pickLitecoinMainnet();
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'ltc1qcounterparty' } });
-        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'exact message' } });
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'exact message\nsecond line' } });
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2ln\nbmF0dXJl' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
         await waitFor(() => expect(verifyMessageRequest).toHaveBeenCalledWith({
             chainId: LTC,
             address: 'ltc1qcounterparty',
-            message: 'exact message',
+            message: 'exact message\nsecond line',
             signature: 'c2lnbmF0dXJl',
         }));
         expect(screen.getByRole('status').textContent)
-            .toBe('Signature matches this message and address.');
+            .toBe('Valid signature. Signature matches this message and address.');
     });
 
     it('rejects malformed base64 before calling the verifier', async () => {
@@ -101,7 +106,8 @@ describe('signature verification inputs and results', () => {
         fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'not base64!' } });
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
-        expect(screen.getByRole('alert').textContent).toContain('Enter a valid base64 signature.');
+        expect(screen.getByRole('status').textContent)
+            .toBe('Malformed signature. Enter a base64-encoded signature.');
         expect(verifyMessageRequest).not.toHaveBeenCalled();
     });
 
@@ -116,7 +122,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
         await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe('Signature does not match this message and address.'));
+            .toBe('Invalid signature. Signature does not match this message and address.'));
     });
 
     it('normalizes valid base64 without accepting arbitrary text', () => {
