@@ -134,4 +134,21 @@ describe('BalanceList ordering and visibility', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open PRIVATE token details' }));
         expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }));
     });
+
+    it('names each chain when rows from more than one chain share the list', () => {
+        render(
+            <BalanceList rows={[
+                row('XCHAIN', { chainDisplayName: 'Bitcoin', networkKind: 'mainnet' }),
+                row('XCHAIN', {
+                    chainId: 'litecoin-regtest',
+                    coin: 'litecoin',
+                    chainDisplayName: 'Litecoin',
+                    networkKind: 'regtest',
+                }),
+            ]} />,
+        );
+
+        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+    });
 });

@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    ChainBadge,
     EmptyState,
     Icon,
     ListPage,
@@ -2509,21 +2510,15 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network: coin icon + full chain name (e.g. "Dogecoin Mainnet").
+    // Network uses the same badge as list rows so custom chain names and
+    // non-mainnet kinds come from the descriptor rather than id parsing.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        const label = `${capitalize(coin)} ${capitalize(network)}`.trim();
+        const descriptor = chainRegistry.get(entry.chainId);
         rows.push(['Network', (
             <span className={styles.copyableValue}>
-                <img
-                    src={branding.chainIconSmallUrl(entry.chainId)}
-                    alt=""
-                    aria-hidden="true"
-                    className={styles.rowChainIcon}
-                    width={16}
-                    height={16}
-                />
-                <span>{label}</span>
+                {descriptor
+                    ? <ChainBadge descriptor={descriptor} size="sm" />
+                    : <span>{entry.chainId}</span>}
             </span>
         )]);
     }
@@ -3284,16 +3279,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     <span className={styles.connector} aria-hidden="true" />
                 ) : null}
                 <span className={styles.rowHeader}>
-                    {d ? (
-                        <img
-                            src={branding.chainIconSmallUrl(d.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.rowChainIcon}
-                            width={16}
-                            height={16}
-                        />
-                    ) : null}
+                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
                     <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
                     {entry.link ? (
                         <span
@@ -3398,27 +3384,11 @@ function GroupCard({ item, expanded, onToggle }) {
             aria-expanded={expanded}
         >
             <span className={styles.rowHeader}>
-                {d ? (
-                    <img
-                        src={branding.chainIconSmallUrl(d.id)}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.rowChainIcon}
-                        width={16}
-                        height={16}
-                    />
-                ) : null}
+                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
                 {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
                     <>
                         <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                        <img
-                            src={branding.chainIconSmallUrl(peerDescriptor.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.rowChainIcon}
-                            width={16}
-                            height={16}
-                        />
+                        <ChainBadge descriptor={peerDescriptor} size="sm" />
                     </>
                 ) : null}
                 <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
