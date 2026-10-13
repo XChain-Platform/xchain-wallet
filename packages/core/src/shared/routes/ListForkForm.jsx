@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -108,7 +108,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isTick = String(listType) === '1';
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -618,9 +617,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
@@ -766,7 +763,24 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
 
     if (stage === 'review-2' && fromAddress) {
         return wrap(
-            <form onSubmit={handleSignSecond} noValidate>
+            <FormPage
+                label="Review list removal"
+                onSubmit={handleSignSecond}
+                noValidate
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={submitting}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish remove'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{secondDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -799,18 +813,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish remove'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -838,7 +841,27 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             );
         }
         return wrap(
-            <form onSubmit={handleSignFirst} noValidate>
+            <FormPage
+                label="Review list edit"
+                onSubmit={handleSignFirst}
+                noValidate
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={submitting}>Back</Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (memoOnly ? 'Publish memo' : needsAdd ? 'Publish add' : 'Publish remove')}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>{firstDecoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -903,25 +926,23 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={submitting}>Back</Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : (memoOnly ? 'Publish memo' : needsAdd ? 'Publish add' : 'Publish remove')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose'
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Edit list"
+            onSubmit={handleReview}
+            noValidate
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button type="submit" variant="primary">
+                    Review
+                </Button>
+            )}
+        >
             <p className={styles.summary}>
                 Forking {isTick ? 'token' : 'address'} list #{oldIndex}
                 {' '}({currentItems.length} current member{currentItems.length === 1 ? '' : 's'}).
@@ -998,12 +1019,6 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
 
-            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
-            <div className={styles.actions}>
-                <Button type="submit" variant="primary" block>
-                    Review
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
