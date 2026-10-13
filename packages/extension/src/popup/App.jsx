@@ -286,6 +286,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
+    const formDone = () => {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setUnlockedView('home');
+    };
     // ManageToken and the Developer Mode faucet lock their chain and ticker
     // into the form so the user cannot redirect the requested token action.
     const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
@@ -955,6 +960,11 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onDone={() => {
+                            setSendPrefill(null);
+                            setSendBackTo('home');
+                            setUnlockedView('home');
+                        }}
                         onChangeAsset={(carry) => {
                             // Carry the typed To address + amount so picking a
                             // new asset doesn't wipe those fields.
@@ -1185,6 +1195,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                        onDone={formDone}
                     />
                 );
             }

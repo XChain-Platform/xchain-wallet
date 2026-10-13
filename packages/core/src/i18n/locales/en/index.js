@@ -66,7 +66,7 @@ export const en = {
         "Your transaction is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and won't go out until you broadcast it from there; the wallet reminds you when the network is back. Don't send this payment again.",
     'send.success.broadcastPending': 'Broadcast pending',
     'send.success.broadcastPendingBody':
-        'Your transaction is on its way. It will confirm in the next few blocks; you can leave this screen at any time.',
+        'Your transaction was broadcast but is not confirmed yet. Confirmation time depends on the selected network and fee.',
     'send.success.copyTransactionId': 'Copy transaction id',
     'send.success.copy': 'Copy',
     'send.success.viewOnExplorer': 'View on explorer',

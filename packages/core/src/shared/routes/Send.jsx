@@ -333,8 +333,11 @@ function normalizePastedRecipient(value) {
  *        The merged entry exists immediately (built from this wallet's own
  *        pending record) even though the network has not sighted it yet;
  *        the card's copy says as much. Omit to hide the action.
+ * @param {() => void} [props.onDone]
+ *        Leaves a completed send for Home. Falls back to onBack for callers
+ *        that do not distinguish completion from ordinary back navigation.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -2458,7 +2461,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveGuard.guardedOnBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onDone || leaveGuard.guardedOnBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -2484,7 +2487,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         </p>
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                        <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );
@@ -2492,12 +2495,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
 
         return wrap(
             <>
-                <div className={styles.successCard} role="status" aria-live="polite">
+                <div className={styles.successCard}>
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
-                    <p className={styles.successHint}>
-                        {t('send.success.broadcastPendingBody')}
-                    </p>
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
+                        <p className={styles.successHint}>
+                            {t('send.success.broadcastPendingBody')}
+                        </p>
+                    </div>
                     {sentAmount || recipient ? (
                         <dl className={styles.successSummary}>
                             {sentAmount ? (
@@ -2515,7 +2520,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             {desc ? (
                                 <div className={styles.successRow}>
                                     <dt>{t('send.fields.chain')}</dt>
-                                    <dd>{desc.displayName}</dd>
+                                    <dd><ChainBadge descriptor={desc} /></dd>
                                 </div>
                             ) : null}
                         </dl>
@@ -2610,7 +2615,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <Button variant="secondary" onClick={sendAnother}>
                         {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                    <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
