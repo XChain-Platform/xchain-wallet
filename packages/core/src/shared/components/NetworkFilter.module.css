@@ -2,7 +2,7 @@
     position: relative;
     box-sizing: border-box;
     width: 100%;
-    min-width: 0;
+    min-width: min(10rem, 100%);
 }
 
 .sm {
