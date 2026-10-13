@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -358,7 +358,11 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     }
 
     const header = <PageHeader onBack={onBack} title="Market" />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
 
     // The confirm page, rendered in place of the market while the single-encode
     // pipeline is live. Without this branch `actionConfirm.run` opens a confirm
@@ -415,12 +419,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
 
     return wrap(
         <>
-            <h3 style={{ marginBottom: '0.25rem' }}>{feed.label || '(untitled market)'}</h3>
-            <p className={styles.hint}>
-                #{String(feed.action_index)} · {feed.tick || 'n/a'} · {statusLabel(feed.feed_status)}
-            </p>
+            <SectionHeader
+                title={feed.label || '(untitled market)'}
+                description={`#${String(feed.action_index)} · ${feed.tick || 'n/a'} · ${statusLabel(feed.feed_status)}`}
+            />
 
-            <div className={styles.card}>
+            <div className={styles.listCard}>
                 <div><strong>Betting closes</strong>: {fmtTime(feed.deadline)}</div>
                 <div><strong>Refunds if unresolved by</strong>: {fmtTime(feed.expire_at)}</div>
                 <div><strong>Oracle fee</strong>: {feed.fee ?? '0'}% of the pot</div>
@@ -441,8 +445,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 ) : null}
             </div>
 
-            <h4>{live ? 'Current split' : 'Final split'}</h4>
-            {outcomes.length === 0 ? <p className={styles.hint}>No outcomes recorded.</p> : (
+            <SectionHeader as="h3" title={live ? 'Current split' : 'Final split'} />
+            {outcomes.length === 0 ? <EmptyState title="No outcomes recorded." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {outcomes.map((label, i) => {
                         const p = byOutcome[i] || { pool: 0, bet_count: 0 };
@@ -464,7 +468,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                         const pool = trimAmountTail(p.pool ?? 0) || '0';
                         const bets = Number(p.bet_count || 0);
                         return (
-                            <div key={i} className={styles.card} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div key={i} className={styles.listCard} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <span>{i}: {label}</span>
                                 <span>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>
@@ -523,8 +527,21 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                     </p>
                 ) : (
                     <>
-                        <h4>Place a bet</h4>
-                        <div className={styles.card}>
+                        <SectionHeader as="h3" title="Place a bet" />
+                        <FormPage
+                            label="Place a bet"
+                            onSubmit={(event) => event.preventDefault()}
+                            actions={(
+                                <Button
+                                    variant="primary"
+                                    loading={actionConfirm.composing}
+                                    disabled={actionConfirm.composing}
+                                    onClick={placeBet}
+                                >
+                                    {actionConfirm.composing ? 'Preparing review…' : 'Review bet'}
+                                </Button>
+                            )}
+                        >
                             {/* aria-pressed, because which outcome is selected decides which
                                 side of the bet the money lands on and the only other signal
                                 is the button's background colour. A screen reader announced
@@ -593,20 +610,10 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
                             ) : null}
-                            <div className={styles.actions}>
-                                <Button
-                                    variant="primary"
-                                    loading={actionConfirm.composing}
-                                    disabled={actionConfirm.composing}
-                                    onClick={placeBet}
-                                >
-                                    {actionConfirm.composing ? 'Preparing review…' : 'Review bet'}
-                                </Button>
-                            </div>
                             <p className={styles.hint}>
                                 Once confirmed, a bet cannot be cancelled or moved to another outcome.
                             </p>
-                        </div>
+                        </FormPage>
                     </>
                 )
             ) : null}
@@ -622,7 +629,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 way, so the txid is owed whatever the market's status has become. */}
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
-                <div className={styles.card} data-testid="bet-result">
+                <div className={styles.listCard} data-testid="bet-result">
                     <p className={styles.summary}>
                         {/* leg (a): a queued result is SIGNED and not broadcast, so
                             "Bet placed" would claim the one thing that has not happened. */}
@@ -645,8 +652,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 </div>
             ) : null}
 
-            <h4>History</h4>
-            {timeline.length === 0 ? <p className={styles.hint}>No history yet.</p> : (
+            <SectionHeader as="h3" title="History" />
+            {timeline.length === 0 ? <EmptyState title="No history yet." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     {timeline.map((t, i) => (
                         <div key={i} className={styles.hint}>

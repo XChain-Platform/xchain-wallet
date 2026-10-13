@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -163,7 +163,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -932,7 +931,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -979,7 +978,35 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`Review ${MODE_LABEL_LOWER[mode]}`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
+                        loading={stage === 'submitting'}
+                        disabled={
+                            (mode === 'lock' && !typedConfirmOk) || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : (!signerReady && password.length === 0)
+                            )
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -1031,9 +1058,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
@@ -1045,29 +1069,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         spellCheck={false}
                     />
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            (mode === 'lock' && !typedConfirmOk) || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1199,7 +1201,36 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={MODE_LABEL[mode]}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={mode === 'lock' ? 'danger' : 'primary'}
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !ticker
+                        || (mode === 'description' && !description)
+                        || (mode === 'transfer' && !transferTo)
+                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
+                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
+                        || (mode === 'access-lists' && !listsChanged)
+                        || (mode === 'bridge-settings' && (
+                            bridgeFrozen
+                            || !bridgeChanged
+                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
+                        ))
+                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
+                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
+                        || actionConfirm.composing}
+                >
+                    {singleEncode ? 'Update token' : 'Preview'}
+                </Button>
+            )}
+        >
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
@@ -1652,34 +1683,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant={mode === 'lock' ? 'danger' : 'primary'}
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker
-                        || (mode === 'description' && !description)
-                        || (mode === 'transfer' && !transferTo)
-                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
-                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
-                        || (mode === 'access-lists' && !listsChanged)
-                        || (mode === 'bridge-settings' && (
-                            bridgeFrozen
-                            || !bridgeChanged
-                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
-                        ))
-                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
-                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
-                        || actionConfirm.composing}
-                >
-                    {singleEncode ? 'Update token' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

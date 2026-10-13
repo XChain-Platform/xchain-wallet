@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
@@ -104,7 +104,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { isWatcherMode } = useWalletMode();
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -470,7 +469,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -583,7 +582,49 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const sourceChainIds = chainsWithAddresses(addressesByChain);
 
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Move across chains"
+            onSubmit={handleSubmit}
+            status={(feeWarning || blockingError || formError || submitError) ? (
+                <>
+                    {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
+                        consensus, so a below-fee move is legal and the user may have a
+                        reason. `status` rather than `error` is deliberate - an alert role
+                        on a legal choice trains people to ignore the real refusals below
+                        it. */}
+                    {feeWarning ? (
+                        <StatusMessage variant="status">{feeWarning}</StatusMessage>
+                    ) : null}
+                    {blockingError ? (
+                        <StatusMessage variant="error" className={styles.error}>{blockingError}</StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                    {submitError ? (
+                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing || stage === 'submitting'}
+                    disabled={
+                        !!blockingError
+                        || noDestinationAccount
+                        || !fromAddress
+                        || !destAddress
+                        || !String(amount).trim()
+                        || !leg.version
+                        || actionConfirm.composing
+                    }
+                >
+                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
+                </Button>
+            )}
+        >
             <ChainPicker
                 label="Move from"
                 value={sourceChainId || ''}
@@ -678,24 +719,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
 
-            {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
-                consensus, so a below-fee move is legal and the user may have a
-                reason. `status` rather than `error` is deliberate - an alert role
-                on a legal choice trains people to ignore the real refusals below
-                it. */}
-            {feeWarning ? (
-                <StatusMessage variant="status">{feeWarning}</StatusMessage>
-            ) : null}
-            {blockingError ? (
-                <StatusMessage variant="error" className={styles.error}>{blockingError}</StatusMessage>
-            ) : null}
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            {submitError ? (
-                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-            ) : null}
-
             {!blockingError && destChainId && leg.version ? (
                 <p className={styles.hint}>
                     {leg.leg === 'lock'
@@ -719,25 +742,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 />
             ) : null}
 
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing || stage === 'submitting'}
-                    disabled={
-                        !!blockingError
-                        || noDestinationAccount
-                        || !fromAddress
-                        || !destAddress
-                        || !String(amount).trim()
-                        || !leg.version
-                        || actionConfirm.composing
-                    }
-                >
-                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
