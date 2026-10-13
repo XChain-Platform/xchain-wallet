@@ -41,8 +41,10 @@
 
     .sideToggle {
         position: sticky;
+        /* safe-area-in-container: sticks to the top of the route's scroll
+           container, which already sits below the shell's safe-area padding. */
         top: 0;
-        z-index: 1;
+        z-index: var(--xc-z-base);
         padding-block: var(--xc-space-1);
         background: var(--xc-surface);
     }

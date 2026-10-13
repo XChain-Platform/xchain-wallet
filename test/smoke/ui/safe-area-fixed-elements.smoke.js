@@ -10,7 +10,9 @@
 
 // Viewport-positioned content does not inherit the body's safe-area padding.
 // Keep each fixed or sticky source block responsible for an inset, with one
-// explicit exception for a backdrop that contains no content of its own.
+// explicit exception for a backdrop that contains no content of its own, and
+// one for a sticky block marked safe-area-in-container: it sticks inside a
+// route scroll container that already sits within the body's safe-area padding.
 
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -34,7 +36,8 @@ function sourceFiles(dir) {
 function stripComments(source) {
     return source
         .replace(/\/\*[\s\S]*?\*\//g, (comment) => (
-            comment.includes('safe-area-backdrop') ? '/* safe-area-backdrop */' : ''
+            comment.includes('safe-area-backdrop') ? '/* safe-area-backdrop */'
+                : comment.includes('safe-area-in-container') ? '/* safe-area-in-container */' : ''
         ))
         .replace(/\/\/.*$/gm, '');
 }
@@ -49,6 +52,7 @@ for (const path of sourceFiles(sourceRoot)) {
         const block = match[2];
         if (/env\(safe-area-inset-(?:top|right|bottom|left)/.test(block)) continue;
         if (block.includes('safe-area-backdrop')) continue;
+        if (/\bposition\s*:\s*sticky\b/.test(block) && block.includes('safe-area-in-container')) continue;
 
         const owner = match[1].trim().split('\n').at(-1).trim();
         failures.push(`${relative(wsRoot, path)}: ${owner}`);
