@@ -10,13 +10,17 @@
     /* 200px keeps search usable before the toolbar lets it shrink. */
     flex: 1 1 200px;
     min-width: 0;
-    margin-bottom: calc(var(--xc-space-3) * -1);
+}
+
+.toolbarSearch > * {
+    margin-bottom: 0;
 }
 
 .chainFilters {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--xc-space-1);
+    align-items: center;
+    gap: var(--xc-space-2);
     min-width: 0;
     max-width: 100%;
 }

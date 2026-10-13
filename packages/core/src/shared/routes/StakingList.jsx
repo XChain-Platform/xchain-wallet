@@ -429,13 +429,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     }
 
     const toolbar = (
-        <>
+        <div className={local.toolbar}>
             <div className={local.searchField}>
                 <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
-                    className={local.search}
                     placeholder="Search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -445,8 +445,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                     aria-label="Search staking positions"
                 />
             </div>
-            <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
+            <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
+        </div>
     );
 
     return wrap(

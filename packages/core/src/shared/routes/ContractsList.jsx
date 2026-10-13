@@ -369,6 +369,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             <div className={contractStyles.toolbarSearch}>
                 <Input
                     type="search"
+                    size="md"
                     placeholder="Filter by name or number"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -381,7 +382,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 onChange={setChainFilter}
             />
             {onDeploy ? (
-                <Button variant="primary" onClick={onDeploy}>
+                <Button variant="primary" size="md" onClick={onDeploy}>
                     + Publish contract
                 </Button>
             ) : null}
@@ -470,11 +471,11 @@ function ChainFilterBar({ chains, value, onChange }) {
         <div role="tablist" aria-label="Chain filter" className={contractStyles.chainFilters}>
             <Button
                 type="button"
+                variant={value === 'all' ? 'primary' : 'secondary'}
+                size="md"
                 role="tab"
                 aria-selected={value === 'all'}
                 onClick={() => onChange('all')}
-                className={styles.entry}
-                style={{ padding: '0.25rem 0.5rem' }}
             >
                 All
             </Button>
@@ -483,13 +484,13 @@ function ChainFilterBar({ chains, value, onChange }) {
                 return (
                     <Button
                         type="button"
+                        variant={value === cid ? 'primary' : 'secondary'}
+                        size="md"
                         role="tab"
                         key={cid}
                         aria-selected={value === cid}
                         aria-label={d?.displayName || cid}
                         onClick={() => onChange(cid)}
-                        className={styles.entry}
-                        style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                     >
                         {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
                     </Button>
