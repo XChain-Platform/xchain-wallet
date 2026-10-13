@@ -12,7 +12,8 @@
 // shell.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 import { useState } from 'react';
 import { nextMenuIndex, useMenuKeys } from '../../../packages/core/src/shared/keyboard/useMenuKeys.js';
 
@@ -69,6 +70,26 @@ describe('nextMenuIndex', () => {
 });
 
 describe('useMenuKeys', () => {
+    it('keeps one option in the tab order while arrow and jump keys move it', async () => {
+        const user = userEvent.setup();
+        render(<Popup />);
+        const trigger = screen.getByTestId('trigger');
+        trigger.focus();
+        fireEvent.click(trigger);
+        const options = screen.getAllByRole('option');
+
+        await waitFor(() => expect(options.map((option) => option.tabIndex)).toEqual([-1, 0, -1]));
+        await user.tab();
+        expect(options[1]).toHaveFocus();
+        fireEvent.keyDown(options[1], { key: 'ArrowDown' });
+        expect(options[2]).toHaveFocus();
+        expect(options.map((option) => option.tabIndex)).toEqual([-1, -1, 0]);
+        fireEvent.keyDown(options[2], { key: 'Home' });
+        expect(options[0]).toHaveFocus();
+        fireEvent.keyDown(options[0], { key: 'End' });
+        expect(options[2]).toHaveFocus();
+    });
+
     it('moves from the opener to the selected item, then between items', () => {
         render(<Popup />);
         const trigger = screen.getByTestId('trigger');

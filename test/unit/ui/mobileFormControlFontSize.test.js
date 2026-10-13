@@ -17,22 +17,29 @@ const selector = [
     'textarea',
 ].join(',\n    ');
 
-function hasMobileFontFloor(source) {
+function hasTouchFontFloor(source) {
     const rules = parseRules(source).filter((rule) => rule.selector === selector);
     return rules.length === 1
         && /font-size:\s*1rem\s*!important\s*;/.test(rules[0].body)
         && rules[0].at.length === 1
-        && rules[0].at[0] === '@media (max-width: 599px)';
+        && rules[0].at[0] === '@media (pointer: coarse), (hover: none)';
 }
 
 describe('mobile form control font size', () => {
-    it('sets the 1rem floor only below 600px', () => {
-        expect(hasMobileFontFloor(css)).toBe(true);
+    it('sets the 1rem floor for touch devices at every viewport width', () => {
+        expect(hasTouchFontFloor(css)).toBe(true);
     });
 
-    it('rejects desktop scope, missing controls, and overridable floors', () => {
-        expect(hasMobileFontFloor(css.replace('max-width: 599px', 'min-width: 600px'))).toBe(false);
-        expect(hasMobileFontFloor(css.replace('    select,\n', ''))).toBe(false);
-        expect(hasMobileFontFloor(css.replace('1rem !important', '1rem'))).toBe(false);
+    it('rejects viewport gates, desktop scope, missing controls, and overridable floors', () => {
+        expect(hasTouchFontFloor(css.replace(
+            '(pointer: coarse), (hover: none)',
+            '(max-width: 599px) and (pointer: coarse), (hover: none)',
+        ))).toBe(false);
+        expect(hasTouchFontFloor(css.replace(
+            '(pointer: coarse), (hover: none)',
+            '(pointer: fine) and (hover: hover)',
+        ))).toBe(false);
+        expect(hasTouchFontFloor(css.replace('    select,\n', ''))).toBe(false);
+        expect(hasTouchFontFloor(css.replace('1rem !important', '1rem'))).toBe(false);
     });
 });

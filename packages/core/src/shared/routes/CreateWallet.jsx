@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -18,6 +18,7 @@ import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -64,6 +65,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
+    const [quizErrorPosition, setQuizErrorPosition] = useState(/** @type {number | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -82,19 +85,31 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         /** @type {string | null} */ (null),
     );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
     // be copied, so there is nothing to clear.
 
     useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+        const id = setTimeout(() => {
+            if (stage === 'password') passwordRef.current?.focus();
+            else if (stage === 'verify') firstQuizInputRef.current?.focus();
+            else {
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            }
+        }, 0);
+        return () => clearTimeout(id);
     }, [stage]);
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
                 `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -134,20 +149,24 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handleSubmitVerify(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (!mnemonic) return;
         const words = mnemonic.trim().split(/\s+/);
         for (const p of quizPositions) {
             const expected = (words[p - 1] || '').trim().toLowerCase();
             const got = (quizAnswers[p] || '').trim().toLowerCase();
             if (got.length === 0) {
+                setQuizErrorPosition(p);
                 setQuizError('Fill in every word.');
                 return;
             }
             if (got !== expected) {
+                setQuizErrorPosition(p);
                 setQuizError(`Word #${p} doesn't match. Double-check your written copy.`);
                 return;
             }
         }
+        setQuizErrorPosition(null);
         setQuizError(null);
         handlePersist();
     }
@@ -223,7 +242,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Automatic Donation System">
+                <FormPage ref={stageFormRef} label="Automatic Donation System">
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -243,7 +262,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Wallet creation status">
+                <FormPage ref={stageFormRef} label="Wallet creation status">
                     {persistingBody}
                 </FormPage>
             </Screen>
@@ -253,18 +272,20 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'verify') {
         const verifyBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
-                status={(
-                    <>
-                        {quizError ? (
-                            <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
-                        ) : null}
-                        {persistError ? (
-                            <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                        ) : null}
-                    </>
-                )}
+                status={<FormErrorSummary
+                    errors={[
+                        ...(quizError ? [{
+                            id: quizErrorPosition ? `create-quiz-word-${quizErrorPosition}` : undefined,
+                            label: quizErrorPosition ? `Word ${quizErrorPosition}` : undefined,
+                            message: quizError,
+                        }] : []),
+                        ...(persistError ? [{ message: persistError }] : []),
+                    ]}
+                    focusKey={validationAttempt}
+                />}
                 actions={(
                     <>
                         <Button
@@ -300,11 +321,16 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     {quizPositions.map((p) => (
                         <li key={p} className={styles.quizRow}>
                             <Input
+                                id={`create-quiz-word-${p}`}
+                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
                                 label={`Word ${p}`}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
                                     setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
-                                    if (quizError) setQuizError(null);
+                                    if (quizError) {
+                                        setQuizError(null);
+                                        setQuizErrorPosition(null);
+                                    }
                                 }}
                                 autoComplete="off"
                                 autoCapitalize="off"
@@ -327,6 +353,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'mnemonic') {
         const mnemonicBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Recovery phrase"
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
@@ -350,8 +377,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
-                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
+                            ? `Write these ${wordCount === 24 ? 'twenty-four' : 'twelve'} words down on paper and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`
+                            : `Write these ${wordCount} words down and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`}
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
@@ -395,11 +422,22 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         : confirm.length === 0
             ? 'Confirm your password to continue.'
             : null;
+    let passwordErrorTarget;
+    if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
+    else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
+    else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
+    const passwordErrors = passwordError
+        ? [{ ...passwordErrorTarget, message: passwordError }]
+        : [];
     const formBody = (
         <FormPage
+            ref={stageFormRef}
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
-            status={passwordStepDisabledReason ? (
+            status={passwordError ? (
+                <FormErrorSummary errors={passwordErrors} focusKey={validationAttempt} />
+            ) : passwordStepDisabledReason ? (
                 <StatusMessage id="create-wallet-disabled-reason">
                     {passwordStepDisabledReason}
                 </StatusMessage>
@@ -441,6 +479,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="off"
             />
             <Input
+                id="create-password"
                 ref={passwordRef}
                 type="password"
                 label="Password"
@@ -453,6 +492,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="new-password"
             />
             <Input
+                id="create-confirm"
                 type="password"
                 label={isFull ? 'Confirm password' : 'Confirm'}
                 value={confirm}
@@ -461,7 +501,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     if (passwordError) setPasswordError(null);
                 }}
                 autoComplete="new-password"
-                error={passwordError || undefined}
             />
             <fieldset className={styles.wordCountRow}>
                 <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
@@ -517,6 +556,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             matter.
                         </p>
                         <Input
+                            id="create-bip39-passphrase"
                             type="password"
                             label="BIP39 passphrase"
                             hint="Required when enabled. Capitalization and spaces matter."
@@ -528,6 +568,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             autoComplete="off"
                         />
                         <Input
+                            id="create-bip39-confirm"
                             type="password"
                             label="Confirm passphrase"
                             value={bip39PassphraseConfirm}

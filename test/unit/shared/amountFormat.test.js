@@ -13,11 +13,15 @@
 import { describe, it, expect } from 'vitest';
 import {
     formatWithThousands,
+    normalizeAmountFieldInput,
+    formatTokenQuantity,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
+    decimalFromBaseUnits,
     formatDisplayAmount,
     formatHistoryAmount,
     indexAfterNonCommaCount,
+    roundDecimalString,
     trimAmountTail,
     tokenAmountPrecisionError,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
@@ -44,6 +48,20 @@ describe('shared/amountFormat display policy', () => {
         ['zero', '0.00000000', 'out', '0'],
     ])('applies the %s History sign once', (_label, value, direction, expected) => {
         expect(formatHistoryAmount(value, direction, 'en-US')).toBe(expected);
+    });
+});
+
+describe('shared/amountFormat formatTokenQuantity', () => {
+    it.each([
+        ['divisible value', '1234567.123456789', 8, '1,234,567.12345679'],
+        ['binary float noise', '0.30000000000000004', 8, '0.3'],
+        ['divisible whole value', '1000000', 8, '1,000,000'],
+        ['indivisible value', '9007199254740993', 0, '9,007,199,254,740,993'],
+        ['indivisible decimal noise', '41.00000000000001', 0, '41'],
+        ['unknown divisibility', '1000000.12500000', null, '1,000,000.125'],
+        ['very large supply', '123456789012345678901234567890.5', 8, '123,456,789,012,345,678,901,234,567,890.5'],
+    ])('formats a %s exactly', (_label, value, divisibility, expected) => {
+        expect(formatTokenQuantity(value, divisibility, 'en-US')).toBe(expected);
     });
 });
 
@@ -120,6 +138,9 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['de-DE', '1.234,56', '1234.56'],
         ['de-DE', '1,234.56', '1234.56'],
         ['fr-FR', '1\u202f234,56', '1234.56'],
+        ['en-US', '1 234,56', '1234.56'],
+        ['en-US', '1 234 567', '1234567'],
+        ['en-US', '1 234,567.89', '1234567.89'],
         ['fr-FR', '1,234.56', '1234.56'],
         ['de-DE', '1.234', '1234'],
         ['de-DE', '1,25', '1.25'],
@@ -133,9 +154,38 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['de-DE', '12.34,56'],
         ['fr-FR', '1,234,56'],
         ['en-US', '1.2.3'],
+        ['en-US', '1 23'],
+        ['en-US', '12 34.56'],
+        ['en-US', '1\n234'],
         ['de-DE', '12 EUR'],
     ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
+    });
+});
+
+describe('shared/amountFormat normalizeAmountFieldInput', () => {
+    it.each([
+        ['coin ticker', '0.5 BTC', { unit: 'BTC' }, '0.5'],
+        ['lowercase ticker', '0,5 btc', { unit: 'BTC' }, '0.5'],
+        ['fiat sign', '$ 1,234.56', { unit: 'USD', fiatCurrency: 'USD' }, '1234.56'],
+        ['trailing fiat sign', '1.234,56 €', { unit: 'EUR', fiatCurrency: 'EUR' }, '1234.56'],
+        ['leading fiat code', 'USD 25.00', { unit: 'USD', fiatCurrency: 'USD' }, '25.00'],
+    ])('normalizes a pasted %s without changing its decimal value', (
+        _label,
+        input,
+        options,
+        expected,
+    ) => {
+        expect(normalizeAmountFieldInput(input, options)).toBe(expected);
+    });
+
+    it.each([
+        ['another ticker', '0.5 ETH', { unit: 'BTC' }],
+        ['fiat sign in coin mode', '$10', { unit: 'BTC' }],
+        ['wrong fiat sign', '€10', { unit: 'USD', fiatCurrency: 'USD' }],
+        ['stacked units', '$1 BTC', { unit: 'BTC' }],
+    ])('refuses %s', (_label, input, options) => {
+        expect(normalizeAmountFieldInput(input, options)).toBeNull();
     });
 });
 
@@ -191,5 +241,34 @@ describe('shared/amountFormat token precision validation', () => {
         })).toBe('Price can have at most 2 decimal places for CENTS.');
         expect(tokenAmountPrecisionError('1.23', { divisibility: 2, tick: 'CENTS' })).toBeNull();
         expect(tokenAmountPrecisionError('1.234', { divisibility: null, tick: 'CENTS' })).toBeNull();
+    });
+});
+
+describe('shared/amountFormat exact rendering', () => {
+    it.each([
+        ['zero scale', '123', 0, '123'],
+        ['fractional scale', '123', 2, '1.23'],
+        ['numeric string scale', '123', '2', '1.23'],
+        ['leading fractional zeros', '1', 8, '0.00000001'],
+        ['negative quantity', '-123', 2, '-1.23'],
+        ['invalid quantity', '1.2', 2, null],
+        ['negative scale', '123', -1, null],
+        ['fractional scale value', '123', 1.5, null],
+        ['non-numeric scale', '123', Number.NaN, null],
+    ])('converts %s', (_label, value, decimals, expected) => {
+        expect(decimalFromBaseUnits(value, decimals)).toBe(expected);
+    });
+
+    it.each([
+        ['pads exact values', '1.2', 3, '1.200'],
+        ['rounds below half down', '1.234', 2, '1.23'],
+        ['rounds half up', '1.235', 2, '1.24'],
+        ['rounds negative halves away from zero', '-1.235', 2, '-1.24'],
+        ['carries into the whole part', '9.99', 0, '10'],
+        ['rejects invalid values', 'not-a-number', 2, null],
+        ['rejects negative precision', '1.2', -1, null],
+        ['rejects fractional precision', '1.2', 1.5, null],
+    ])('%s', (_label, value, precision, expected) => {
+        expect(roundDecimalString(value, precision)).toBe(expected);
     });
 });

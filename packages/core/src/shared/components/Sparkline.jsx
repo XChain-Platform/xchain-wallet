@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo } from 'react';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 /**
  * Pure-SVG sparkline. Renders finite samples as a polyline inside a
@@ -101,9 +102,8 @@ export function describeChartSeries(series, options = {}) {
     const high = Math.max(...values);
     const delta = end - start;
     const change = `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatValue(Math.abs(delta))}`;
-    const percentage = start !== 0
-        ? ` (${delta > 0 ? '+' : ''}${((delta / start) * 100).toFixed(2)}%)`
-        : '';
+    const pctDisplay = start !== 0 ? percentChangeDisplay((delta / start) * 100) : null;
+    const percentage = pctDisplay ? ` (${pctDisplay.text})` : '';
     const selectedRange = rangeLabel ? ` Range ${rangeLabel}.` : '';
     return `${label}.${selectedRange} Values range from ${formatValue(low)} to ${formatValue(high)}. Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
 }

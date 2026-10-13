@@ -36,7 +36,9 @@ for (const [name, css] of [
     assert.ok(css.includes(query), `${name} has the short landscape query`);
 }
 
-assert.match(bottomBar, /\.bar\s*\{\s*height: 44px;/,
+// min-height in rem (44px at the default text size) lets the bar grow with
+// text zoom instead of clipping its labels.
+assert.match(bottomBar, /\.bar\s*\{\s*min-height: 2\.75rem;/,
     'bottom bar shrinks to 44px');
 assert.match(leftNav, /padding-bottom: calc\(44px \+ env\(safe-area-inset-bottom/,
     'main layout reserves the same 44px bottom-bar height');

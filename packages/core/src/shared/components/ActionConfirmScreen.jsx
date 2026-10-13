@@ -24,7 +24,7 @@ import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
-import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
@@ -33,25 +33,34 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Native ticker for the §5.2.5 exact-fee line, resolved from the composed
 // envelope's own chainId so no call site has to pass it.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(chainId) {
-    const coin = chainId ? chainRegistry.get(chainId)?.coin : null;
-    if (!coin) return '';
-    return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
+    return tickerForDescriptor(chainId ? chainRegistry.get(chainId) : null);
 }
 
 function useSourceIdentity(address, chainId, walletId) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const [identity, setIdentity] = useState({ label: '', walletName: '' });
+    const [identity, setIdentity] = useState({ label: '', walletName: '', wallet: null });
 
     useEffect(() => {
         let cancelled = false;
-        setIdentity({ label: '', walletName: '' });
-        if (!address || typeof messaging?.listWallets !== 'function'
-            || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+        setIdentity({ label: '', walletName: '', wallet: null });
+        if (typeof messaging?.listWallets !== 'function') return undefined;
 
         Promise.resolve().then(() => messaging.listWallets()).then(async (walletsValue) => {
             const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            const signingWallet = walletId
+                ? wallets.find((wallet) => wallet.id === walletId)
+                : null;
+            if (!address || typeof messaging?.getAddressesByChain !== 'function') {
+                if (!cancelled) {
+                    setIdentity({
+                        label: '',
+                        walletName: '',
+                        wallet: signingWallet || (wallets.length === 1 ? wallets[0] : null),
+                    });
+                }
+                return;
+            }
             const matches = await Promise.all(wallets.map(async (wallet) => {
                 try {
                     const byChain = await messaging.getAddressesByChain(wallet.id);
@@ -77,6 +86,7 @@ function useSourceIdentity(address, chainId, walletId) {
             setIdentity({
                 label: match?.record?.label || '',
                 walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
+                wallet: signingWallet || match?.wallet || (wallets.length === 1 ? wallets[0] : null),
             });
         }).catch(() => {});
 
@@ -173,10 +183,13 @@ export function ActionConfirmScreen({
     // stays labelled as an estimate rather than passing for the real thing.
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
+    const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
     const ticker = coinTicker || nativeTickerFor(composed?.chainId);
     // An envelope's total covers its commit and its reveal, and says so.
     const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
-    const exactCoinAmount = Number.isFinite(exactSats) ? satsToCoinDecimal(exactSats) : null;
+    const exactCoinAmount = Number.isFinite(exactSats)
+        ? formatNativeBaseUnits(exactSats, descriptor)
+        : null;
     const exactFeeFiat = exactCoinAmount && typeof formatNativeFee === 'function'
         ? formatNativeFee(exactCoinAmount)
         : null;
@@ -186,7 +199,7 @@ export function ActionConfirmScreen({
         : null;
     const dustChangeLimit = composed?.dustChangeLimitSats;
     const dustChangeText = Number.isFinite(dustChangeLimit) && dustChangeLimit > 0
-        ? `No change output was created. Any remainder below ${satsToCoinDecimal(dustChangeLimit)} ${ticker}`
+        ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
             + ' is included in the network fee shown above.'
         : null;
     const displayedFee = dustChangeText ? (
@@ -210,7 +223,7 @@ export function ActionConfirmScreen({
         && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
         ? trimAmountTail(sumDecimalStrings([
             amountDetail.value,
-            satsToCoinDecimal(exactSats),
+            formatNativeBaseUnits(exactSats, descriptor),
         ]))
         : null;
 
@@ -257,6 +270,7 @@ export function ActionConfirmScreen({
             error={confirmAction.error}
             sourceAddress={sourceAddress}
             sourceName={sourceName}
+            signingWallet={sourceIdentity.wallet}
             chainLabel={chainLabel}
             feeText={displayedFee}
             totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}

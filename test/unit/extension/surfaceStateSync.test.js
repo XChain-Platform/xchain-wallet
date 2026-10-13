@@ -6,9 +6,10 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
+import { sendMessage } from '../../../packages/extension/src/shared/chromeMessaging.js';
 import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
@@ -49,7 +50,11 @@ function surface() {
 }
 
 describe('extension popup and side-panel state synchronization', () => {
-    it('delivers lock, wallet and network changes to every open surface', async () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('delivers lock, wallet, settings and network changes to every open surface', async () => {
         const bus = sessionStorageBus();
         const popup = surface();
         const sidePanel = surface();
@@ -64,23 +69,61 @@ describe('extension popup and side-panel state synchronization', () => {
 
         await events.publish('session', { state: 'locked' });
         await events.publish('wallet', { walletId: 'wallet-two' });
+        await events.publish('settings', { settings });
         await events.publish('network', { settings });
 
         for (const openSurface of [popup, sidePanel]) {
             expect(openSurface.calls.refreshSession).toHaveBeenCalledTimes(1);
             expect(openSurface.calls.selectWallet).toHaveBeenCalledWith('wallet-two');
+            expect(openSurface.calls.settingsChanged).toHaveBeenCalledTimes(2);
             expect(openSurface.calls.settingsChanged).toHaveBeenCalledWith(settings);
             expect(openSurface.calls.remountNetworkState).toHaveBeenCalledTimes(1);
         }
         const revisions = bus.storageArea.set.mock.calls.map(
             ([record]) => record[SURFACE_STATE_STORAGE_KEY].revision,
         );
-        expect(new Set(revisions).size).toBe(3);
+        expect(new Set(revisions).size).toBe(4);
 
         detachPopup();
         await events.publish('session', { state: 'unlocked' });
         expect(popup.calls.refreshSession).toHaveBeenCalledTimes(1);
         expect(sidePanel.calls.refreshSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('syncs a successful side-panel settings write to an open popup through chrome storage', async () => {
+        const bus = sessionStorageBus();
+        const popup = surface();
+        const settings = { theme: 'dark', fiatCurrency: 'EUR' };
+        const runtime = {
+            sendMessage: vi.fn((_message, callback) => callback({ ok: true, result: settings })),
+        };
+        vi.stubGlobal('chrome', {
+            runtime,
+            storage: { session: bus.storageArea, onChanged: bus.onChanged },
+        });
+        const detachPopup = attachSurfaceStateListener(popup.receive);
+
+        await expect(sendMessage('settings.update', { patch: { theme: 'dark' } }))
+            .resolves.toEqual(settings);
+        await vi.waitFor(() => {
+            expect(popup.calls.settingsChanged).toHaveBeenCalledWith(settings);
+        });
+        expect(runtime.sendMessage).toHaveBeenCalledWith(
+            { type: 'settings.update', request: { patch: { theme: 'dark' } } },
+            expect.any(Function),
+        );
+        expect(popup.calls.remountNetworkState).not.toHaveBeenCalled();
+
+        popup.calls.settingsChanged.mockClear();
+        runtime.sendMessage.mockImplementationOnce((_message, callback) => callback({
+            ok: false,
+            error: { name: 'Error', message: 'write refused' },
+        }));
+        await expect(sendMessage('settings.update', { patch: { theme: 'light' } }))
+            .rejects.toThrow('write refused');
+        expect(popup.calls.settingsChanged).not.toHaveBeenCalled();
+
+        detachPopup();
     });
 
     it('ignores unrelated storage areas and malformed events', () => {
