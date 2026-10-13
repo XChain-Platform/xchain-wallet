@@ -251,6 +251,25 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(onPaired).toHaveBeenCalled();
     });
 
+    it('returns through onBack when no completion callback is provided', async () => {
+        const messaging = mkMessaging();
+        const onBack = vi.fn();
+        mount(messaging, { onBack });
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fill(/Shared recovery phrase/i, PHRASE);
+        fill(/^Password for this device$/i, PASSWORD);
+        fill(/Confirm password/i, PASSWORD);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
+        });
+        fill(/Paste the other wallet's code/i, 'XCW-PAIR:cGFydG5lcg');
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+        expect(onBack).toHaveBeenCalledOnce();
+    });
+
     it('reports a shell with no pairing support rather than hanging', async () => {
         const messaging = mkMessaging({ pairingPayloadRequest: undefined });
         await reachExchange(messaging);

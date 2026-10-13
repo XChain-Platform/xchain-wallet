@@ -466,7 +466,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                 <Button
                     variant="primary"
                     block
-                    onClick={() => { if (typeof onPaired === 'function') onPaired(); }}
+                    onClick={() => { (typeof onPaired === 'function' ? onPaired : onBack)?.(); }}
                 >
                     Finish
                 </Button>
@@ -505,8 +505,6 @@ const CODE_BOX = {
     borderRadius: 'var(--xc-radius-md)',
     padding: 'var(--xc-space-2)',
     marginBlock: 'var(--xc-space-2)',
-    maxHeight: 120,
-    overflowY: 'auto',
     overflowWrap: 'anywhere',
 };
 
