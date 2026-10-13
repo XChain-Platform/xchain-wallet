@@ -43,7 +43,8 @@ import {
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
-import styles from './ActionsMenu.module.css';
+import actionStyles from './ActionsMenu.module.css';
+import settingsStyles from './Settings.module.css';
 
 /**
  * Settings page (§35).
@@ -356,7 +357,7 @@ export function Settings({
             );
             return (
                 <Screen variant={variant} header={subpageHeader}>
-                    <ListPage>
+                    <ListPage className={settingsStyles.page} data-settings-layout="responsive">
                         <SectionComponent
                             key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
                             {...(section.props || {})}
@@ -376,6 +377,8 @@ export function Settings({
     return (
         <Screen variant={variant} header={header}>
             <ListPage
+                className={settingsStyles.page}
+                data-settings-layout="responsive"
                 toolbar={(
                     <input
                         type="search"
@@ -485,7 +488,7 @@ function DrillRow({ title, summary, onClick }) {
     return (
         <button
             type="button"
-            className={styles.entry}
+            className={actionStyles.entry}
             style={{
                 width: '100%',
                 flexDirection: 'row',
@@ -495,7 +498,7 @@ function DrillRow({ title, summary, onClick }) {
             }}
             onClick={onClick}
         >
-            <span className={styles.entryLabel} style={{ flexShrink: 0 }}>{title}</span>
+            <span className={actionStyles.entryLabel} style={{ flexShrink: 0 }}>{title}</span>
             <span style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -527,7 +530,11 @@ function DrillRow({ title, summary, onClick }) {
 function PanelBlock({ title, description, children }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-3)' }}>
-            <SectionHeader title={title} description={description} />
+            <SectionHeader
+                className={settingsStyles.sectionHeader}
+                title={title}
+                description={description}
+            />
             {children}
         </div>
     );
