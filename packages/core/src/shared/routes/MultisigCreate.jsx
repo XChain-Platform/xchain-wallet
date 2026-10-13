@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -81,7 +81,6 @@ const newRowId = () => `cosigner-${++_idCounter}`;
 export function MultisigCreate({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -218,7 +217,8 @@ export function MultisigCreate({ walletId, onBack }) {
         return null;
     }, [rows, threshold, scheme]);
 
-    async function handleSubmit() {
+    async function handleSubmit(event) {
+        event?.preventDefault();
         if (composeError) return;
         if (!chainId) return;
         setStage('submitting');
@@ -256,28 +256,26 @@ export function MultisigCreate({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const config = result?.config;
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.successTitle}>Multisig configured</p>
                 <p className={styles.hint}>
                     Wallet "{result?.wallet?.name || walletId}" now has a{' '}
@@ -300,7 +298,7 @@ export function MultisigCreate({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -308,26 +306,40 @@ export function MultisigCreate({ walletId, onBack }) {
     const localAddresses = (addressesByChain[chainId] || []);
 
     return wrap(
-        <>
-            <p className={styles.hint} style={{ textAlign: 'left' }}>
-                Multisig is currently available only on Bitcoin networks. Pick
-                the network this multisig configuration belongs to, then add at
-                least 2 cosigners. The current wallet contributes the
-                "local" cosigner; external cosigners come in via xpub paste
-                or hardware-pairing. To join someone else's multisig, open
-                "Share this wallet as a cosigner" below and send them the values.
-            </p>
-
-            <ChainPicker
-                label="Network"
-                value={chainId}
-                onChange={setChainId}
-                chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
-                chainRegistry={chainRegistry}
-            />
-
-            <fieldset style={fieldsetStyle}>
-                <legend style={legendStyle}>Cosigners</legend>
+        <FormPage
+            label="Create multisig"
+            onSubmit={handleSubmit}
+            sectioned
+            intro={'Multisig is currently available only on Bitcoin networks. Pick the network this multisig configuration belongs to, then add at least 2 cosigners. The current wallet contributes the "local" cosigner; external cosigners come in via xpub paste or hardware-pairing. To join someone else\'s multisig, open "Share this wallet as a cosigner" below and send them the values.'}
+            status={composeError || submitError ? (
+                <>
+                    {composeError ? (
+                        <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
+                    ) : null}
+                    {submitError ? (
+                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={Boolean(composeError) || stage === 'submitting'}
+                    loading={stage === 'submitting'}
+                >
+                    Create multisig
+                </Button>
+            )}
+        >
+            <FormSection title="Cosigners">
+                <ChainPicker
+                    label="Network"
+                    value={chainId}
+                    onChange={setChainId}
+                    chainIds={btcChainIds.filter((cid) => Array.isArray(addressesByChain[cid]) && addressesByChain[cid].length > 0)}
+                    chainRegistry={chainRegistry}
+                />
                 {rows.map((row, i) => (
                     <CosignerRow
                         key={row.id}
@@ -345,12 +357,10 @@ export function MultisigCreate({ walletId, onBack }) {
                         + Add cosigner
                     </Button>
                 </div>
-            </fieldset>
+                <MultisigCosignerShare walletId={walletId} addresses={localAddresses} />
+            </FormSection>
 
-            <MultisigCosignerShare walletId={walletId} addresses={localAddresses} />
-
-            <fieldset style={fieldsetStyle}>
-                <legend style={legendStyle}>Scheme</legend>
+            <FormSection title="Scheme">
                 {SCHEMES.map((s) => (
                     <label key={s.value} className={styles.checkRow} style={{ alignItems: 'flex-start' }}>
                         <input
@@ -368,45 +378,28 @@ export function MultisigCreate({ walletId, onBack }) {
                         </span>
                     </label>
                 ))}
-            </fieldset>
+            </FormSection>
 
-            <Input
-                label={`Threshold (1..${rows.length})`}
-                value={threshold}
-                onChange={(e) => setThreshold(e.target.value.replace(/\D/g, ''))}
-                inputMode="numeric"
-            />
+            <FormSection title="Configuration">
+                <Input
+                    label={`Threshold (1..${rows.length})`}
+                    value={threshold}
+                    onChange={(e) => setThreshold(e.target.value.replace(/\D/g, ''))}
+                    inputMode="numeric"
+                />
 
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                </dd>
-                <dt className={styles.detailsLabel}>Configuration</dt>
-                <dd className={styles.detailsValue}>
-                    {threshold || '?'}-of-{rows.length} {schemeLabel(scheme)}
-                </dd>
-            </dl>
-
-            {composeError ? (
-                <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage>
-            ) : null}
-            {submitError ? (
-                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleSubmit}
-                    disabled={Boolean(composeError) || stage === 'submitting'}
-                    loading={stage === 'submitting'}
-                >
-                    Create multisig
-                </Button>
-            </div>
-        </>,
+                <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Network</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    <dt className={styles.detailsLabel}>Configuration</dt>
+                    <dd className={styles.detailsValue}>
+                        {threshold || '?'}-of-{rows.length} {schemeLabel(scheme)}
+                    </dd>
+                </dl>
+            </FormSection>
+        </FormPage>,
     );
 }
 

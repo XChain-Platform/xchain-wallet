@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -48,7 +48,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function OperatorDashboard({ walletId, chainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     /** @typedef {{ loading: boolean, rows: any[], error: string | null }} Section */
     const empty = () => ({ loading: true, rows: [], error: null });
@@ -144,7 +143,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? dashStyles.listFull : dashStyles.listPopup}>
+            <ListPage>
                 <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                     {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : <span>{chainId}</span>}
                     <AddressText address={address} />
@@ -163,15 +162,17 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                             ) : null}
                         </ul>
                     ) : (
-                        <p className={dashStyles.entryDescription}>
-                            No active stake on this address. Stake first to populate the operator dashboard.
-                        </p>
+                        <EmptyState
+                            title="No active stake on this address."
+                            body="Stake first to populate the operator dashboard."
+                            titleAs="h3"
+                        />
                     )}
                 </Section>
 
                 <Section title="Delegation chain" loading={delegations.loading} error={delegations.error}>
                     {delegations.rows.length === 0 ? (
-                        <p className={dashStyles.entryDescription}>No delegations issued.</p>
+                        <EmptyState title="No delegations issued." titleAs="h3" />
                     ) : (
                         <ul style={{ margin: 0, paddingLeft: '1rem', fontFamily: 'monospace', fontSize: '0.85rem' }}>
                             {delegations.rows.slice(0, 10).map((d, i) => (
@@ -195,14 +196,17 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                             {ownValidator.last_seen_block ? <li>Last seen: block {ownValidator.last_seen_block}</li> : null}
                         </ul>
                     ) : activePubkey ? (
-                        <p className={dashStyles.entryDescription}>
-                            Your delegated pubkey isn't yet appearing in the hub's validator roster.
-                            Validators show up after the activation window completes.
-                        </p>
+                        <EmptyState
+                            title="Your delegated pubkey isn't yet appearing in the hub's validator roster."
+                            body="Validators show up after the activation window completes."
+                            titleAs="h3"
+                        />
                     ) : (
-                        <p className={dashStyles.entryDescription}>
-                            No delegated signing pubkey. Delegate one before the hub will track validator metrics.
-                        </p>
+                        <EmptyState
+                            title="No delegated signing pubkey."
+                            body="Delegate one before the hub will track validator metrics."
+                            titleAs="h3"
+                        />
                     )}
                 </Section>
 
@@ -228,9 +232,11 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 
                 <Section title="Publishing activity" loading={broadcasts.loading} error={broadcasts.error}>
                     {recentBroadcasts.length === 0 ? (
-                        <p className={dashStyles.entryDescription}>
-                            No published feed values from this address yet. Use Publisher mode below to publish one.
-                        </p>
+                        <EmptyState
+                            title="No published feed values from this address yet."
+                            body="Use Publisher mode below to publish one."
+                            titleAs="h3"
+                        />
                     ) : (
                         <ul style={{ margin: 0, paddingLeft: '1rem' }}>
                             {recentBroadcasts.map((b, i) => (
@@ -259,9 +265,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                     variant={variant}
                 />
 
-                <div className={dashStyles.actions}>
-                </div>
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -271,8 +275,8 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
  */
 function Section({ title, loading, error, children }) {
     return (
-        <section style={{ margin: '0.75rem 0', paddingTop: '0.5rem', borderTop: '1px solid var(--xc-border)' }}>
-            <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>{title}</h3>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', paddingTop: 'var(--xc-space-2)', borderTop: '1px solid var(--xc-border)' }}>
+            <SectionHeader title={title} />
             {loading ? (
                 <p className={dashStyles.entryDescription}>Loading…</p>
             ) : error ? (

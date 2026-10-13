@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
@@ -117,7 +117,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isUnstake = mode === 'unstake';
     const verb = isUnstake ? 'Unstake' : 'Claim rewards';
 
@@ -588,12 +587,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
-    if (!addressesByChain) return wrap(<p>Loading addresses…</p>);
+    if (!addressesByChain) return wrap(<ListPage><p>Loading addresses…</p></ListPage>);
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
@@ -601,19 +600,21 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+            return wrap(<ListPage><QueuedResultPanel onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         }
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <WatcherResultPanel
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     {isUnstake
                         ? 'Unstake broadcast. The network will return your staked XCHAIN after the on-chain confirmation window.'
@@ -626,13 +627,37 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`Review ${verb.toLowerCase()}`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : verb}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     {isUnstake
                         ? (isPartial
@@ -696,28 +721,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : verb}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -762,7 +766,23 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={`${verb} staking`}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing || !totalKnown}
+                >
+                    {singleEncode ? verb : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -845,20 +865,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing || !totalKnown}
-                >
-                    {singleEncode ? verb : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

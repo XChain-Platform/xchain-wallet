@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -154,7 +154,6 @@ export function DeployContractForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const supportedChains = useSupportedChains(chainRegistry);
     const deployChains = useMemo(
@@ -857,13 +856,13 @@ export function DeployContractForm({ walletId, onBack }) {
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
     if (!addressesByChain) {
-        return wrap(<p>Loading addresses…</p>);
+        return wrap(<ListPage><p>Loading addresses…</p></ListPage>);
     }
 
     if (stage === 'done' && result) {
@@ -871,18 +870,20 @@ export function DeployContractForm({ walletId, onBack }) {
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ListPage><QueuedResultPanel onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <WatcherResultPanel
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     Contract published. The transaction was broadcast; the network will record it shortly.
                 </p>
@@ -901,13 +902,37 @@ export function DeployContractForm({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review contract publication"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Publish on ${descriptor.displayName}` : 'Publish')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     Publish contract {metaName ? `"${metaName}"` : ''} to{' '}
                     {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
@@ -1008,9 +1033,6 @@ export function DeployContractForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 {/* A chunked run lives entirely in `submitting`, which renders THIS
                     screen - so the explanation has to be here. It used to sit in the
                     form-stage JSX, i.e. on a screen the user has already left by the
@@ -1032,25 +1054,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         {indexerWaitMessage(indexerWait)}
                     </p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Publish on ${descriptor.displayName}` : 'Publish')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1094,7 +1098,23 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Publish contract"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !code.trim() || actionConfirm.composing}
+                >
+                    {singleEncode ? 'Publish' : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField
                 value={chainId}
                 onChange={setChainId}
@@ -1251,7 +1271,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         setValidation(null);
                         setSizeInfo(null);
                     }}
-                    rows={isFull ? 20 : 10}
+                    rows={10}
                     spellCheck={false}
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -1385,20 +1405,6 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !code.trim() || actionConfirm.composing}
-                >
-                    {singleEncode ? 'Publish' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
