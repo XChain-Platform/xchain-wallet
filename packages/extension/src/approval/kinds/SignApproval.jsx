@@ -118,6 +118,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [busy, setBusy] = useState(false);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
+    const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Sign-in signs as one address the user picks here, from the list the
@@ -162,6 +163,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // lands. Idempotent under the registry has() guard.
                 try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
+                setSettings(s || null);
                 setDeveloperMode(Boolean(s?.developerMode));
                 setWalletMode(s?.walletMode || 'full');
             })
@@ -759,6 +761,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         result={previewResult}
                         loading={previewBalances.loading}
                         error={previewBalances.error}
+                        chainCoin={descriptor?.coin}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
+                        allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     />
                 </>
             ) : null}
