@@ -22,6 +22,7 @@ import {
     floorStaleMessage,
 } from './platform/webviewFloor.js';
 import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault.js';
+import { installKeyboardViewport } from './platform/keyboardViewport.js';
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
 // registry snapshot. Fire-and-forget soft enhancement: the signature must
@@ -56,6 +57,8 @@ try {
         } catch { /* not safelisted in this browser; web+xchain still works */ }
     }
 } catch { /* registration is a soft enhancement; never block app boot */ }
+
+try { installKeyboardViewport(); } catch { /* layout aid only; never block app boot */ }
 
 const container = document.getElementById('xchain-web-root');
 if (!container) {

@@ -3,15 +3,21 @@
    preview; in full mode the wrapper is a transparent passthrough so
    the existing app layout fills the viewport as it always has. */
 
+/* The full-mode wrappers are as tall as the visible viewport and no taller:
+   --xc-viewport-h (tokens.css) is 100dvh minus the top safe-area inset that
+   body pads by. A plain 100vh here sat under that padding and made the
+   document one inset taller than the screen, so on an iPhone (62pt inset)
+   any swipe slid the whole shell up and left a blank band under the tab
+   bar. Every inset is 0 off iOS, so this is 100vh everywhere else. */
 .fullPage {
-    min-height: 100vh;
+    min-height: var(--xc-viewport-h, 100vh);
     background: var(--xc-bg, #FFFFFF);
 }
 
 .fullFrame {
     /* Transparent passthrough - Vite-built routes own their own width. */
     width: 100%;
-    min-height: 100vh;
+    min-height: var(--xc-viewport-h, 100vh);
 }
 
 /* ───── Small preview (used when wide viewport is forced into small

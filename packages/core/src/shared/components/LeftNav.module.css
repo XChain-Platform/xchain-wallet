@@ -79,6 +79,12 @@
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
 }
 
+/* The bar is hidden while the keyboard is up (BottomTabBar.module.css), so
+   its slot is not held either. */
+:global(html[data-xc-keyboard='open']) .layoutWithBottomBar > .main {
+    padding-bottom: 0;
+}
+
 .bottomBarSlot {
     display: contents;
 }

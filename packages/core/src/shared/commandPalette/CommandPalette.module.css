@@ -9,14 +9,18 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 12vh;
+    /* vh is the full layout viewport and ignores the iOS keyboard; the shell
+       height (--xc-viewport-h, fitted above the keyboard by
+       web/src/platform/keyboardViewport.js) does not, so the gap and the panel
+       shrink with it and the results stay above the keys. */
+    padding-top: min(12vh, calc(var(--xc-viewport-h, 100vh) * 0.12));
     padding-inline: var(--xc-space-4);
 }
 
 .panel {
     width: 100%;
     max-width: 560px;
-    max-height: 70vh;
+    max-height: min(70vh, 100%);
     display: flex;
     flex-direction: column;
     background: var(--xc-surface-raised, var(--xc-surface));

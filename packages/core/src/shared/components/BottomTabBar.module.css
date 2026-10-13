@@ -26,6 +26,13 @@
     box-sizing: content-box;
 }
 
+/* Off while the on-screen keyboard is up (web/src/platform/keyboardViewport.js
+   sets the attribute on iOS, where the keyboard overlays the page): the
+   bar would sit on the keyboard and take the room the focused field needs. */
+:global(html[data-xc-keyboard='open']) .bar {
+    display: none;
+}
+
 .tab {
     flex: 1 1 0;
     display: flex;
