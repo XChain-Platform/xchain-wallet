@@ -39,6 +39,10 @@
     max-width: 100%;
 }
 
+.toolbar > div {
+    margin-bottom: 0;
+}
+
 .toolbar > :first-child:not(button) {
     flex: 1 1 12rem;
 }
