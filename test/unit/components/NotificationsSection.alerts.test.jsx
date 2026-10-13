@@ -62,6 +62,31 @@ afterEach(() => {
 });
 
 describe('notification categories and permission', () => {
+    it('requests and revokes the optional Chrome notification permission', async () => {
+        const prior = globalThis.chrome;
+        const contains = vi.fn(async () => false);
+        const request = vi.fn(async () => true);
+        const remove = vi.fn(async () => true);
+        globalThis.chrome = { permissions: { contains, request, remove } };
+        try {
+            render(<NotificationsSection />);
+
+            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+            expect(screen.getByText(/Optional\. Allows XChain Wallet/)).toHaveTextContent(
+                'You can revoke access here at any time.',
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Allow notifications' }));
+
+            await waitFor(() => expect(request).toHaveBeenCalledWith({ permissions: ['notifications'] }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Revoke permission' }));
+
+            await waitFor(() => expect(remove).toHaveBeenCalledWith({ permissions: ['notifications'] }));
+            expect(await screen.findByRole('button', { name: 'Allow notifications' })).toBeTruthy();
+        } finally {
+            globalThis.chrome = prior;
+        }
+    });
+
     it('explains that denied permission must be allowed in browser or system settings', () => {
         const prior = globalThis.Notification;
         globalThis.Notification = { permission: 'denied', requestPermission: vi.fn() };

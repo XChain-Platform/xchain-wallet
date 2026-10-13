@@ -63,7 +63,8 @@
             "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
         }
     ],
-    "permissions": ["storage", "sidePanel", "notifications", "alarms"],
+    "permissions": ["storage", "sidePanel", "alarms"],
+    "optional_permissions": ["notifications"],
     "host_permissions": [],
     "protocol_handlers": [
         {
