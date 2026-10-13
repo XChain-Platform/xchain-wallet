@@ -95,24 +95,32 @@ function sharedStatusRead(getStatus, chainId, intervalMs, force = false) {
  * @returns {{ status: SignerStatus, detail: string | null, refresh: () => void }}
  */
 export function useSignerStatus({ getStatus, chainId }) {
-    const [status, setStatus] = useState(/** @type {SignerStatus} */ ('idle'));
-    const [detail, setDetail] = useState(/** @type {string | null} */ (null));
-    const aliveRef = useRef(true);
+    const [snapshot, setSnapshot] = useState(() => ({
+        status: /** @type {SignerStatus} */ ('idle'),
+        detail: /** @type {string | null} */ (null),
+        getStatus,
+        chainId,
+    }));
     const requestRef = useRef(0);
     const timerRef = useRef(/** @type {any} */ (null));
+    const generationRef = useRef(0);
     // Mirror the latest status into a ref so the long-lived polling
     // loop below reads the *current* value when picking its cadence.
     // The loop's effect intentionally does not re-run on status changes
     // (doing so would tear down and immediately re-fire the poll), so a
     // plain closure over `status` would go stale at the mount value.
-    const statusRef = useRef(status);
-    statusRef.current = status;
+    const statusRef = useRef(snapshot.status);
+    const statusMatchesInput = snapshot.getStatus === getStatus
+        && snapshot.chainId === chainId;
+    statusRef.current = statusMatchesInput ? snapshot.status : 'idle';
 
-    const doPoll = useCallback(async (force = false) => {
-        if (!getStatus || !aliveRef.current) return;
+    const doPoll = useCallback(async (force = false, generation = generationRef.current) => {
+        if (!getStatus || generation !== generationRef.current) return;
+        // The newest read in this generation wins, so a refresh that lands
+        // before an older poll is not overwritten by it.
         const request = requestRef.current + 1;
         requestRef.current = request;
-        const isCurrent = () => aliveRef.current && requestRef.current === request;
+        const isCurrent = () => generation === generationRef.current && requestRef.current === request;
         try {
             const interval = statusRef.current === 'available'
                 ? STEADY_INTERVAL_MS
@@ -124,57 +132,83 @@ export function useSignerStatus({ getStatus, chainId }) {
                 ? res.detail
                 : null;
             statusRef.current = s;
-            setStatus(s);
-            setDetail(d);
+            setSnapshot((previous) => (
+                previous.status === s
+                && previous.detail === d
+                && previous.getStatus === getStatus
+                && previous.chainId === chainId
+                    ? previous
+                    : { status: s, detail: d, getStatus, chainId }
+            ));
         } catch (err) {
             if (!isCurrent()) return;
             const cancelled = isDeviceCancellation(err);
-            statusRef.current = cancelled ? 'cancelled' : 'disconnected';
-            setStatus(cancelled ? 'cancelled' : 'disconnected');
-            setDetail(cancelled ? null : (err && err.message ? String(err.message) : null));
+            const nextStatus = cancelled ? 'cancelled' : 'disconnected';
+            const nextDetail = cancelled
+                ? null
+                : (err && err.message ? String(err.message) : null);
+            statusRef.current = nextStatus;
+            setSnapshot((previous) => (
+                previous.status === nextStatus
+                && previous.detail === nextDetail
+                && previous.getStatus === getStatus
+                && previous.chainId === chainId
+                    ? previous
+                    : {
+                        status: nextStatus,
+                        detail: nextDetail,
+                        getStatus,
+                        chainId,
+                    }
+            ));
         }
     }, [getStatus, chainId]);
 
-    const refresh = useCallback(() => { doPoll(true); }, [doPoll]);
+    const refresh = useCallback(() => { void doPoll(true); }, [doPoll]);
 
     useEffect(() => {
-        let cancelled = false;
-        aliveRef.current = true;
+        const generation = generationRef.current + 1;
+        generationRef.current = generation;
         if (!getStatus) {
-            setStatus('idle');
-            setDetail(null);
+            statusRef.current = 'idle';
+            setSnapshot((previous) => (
+                previous.status === 'idle'
+                && previous.detail === null
+                && previous.getStatus === getStatus
+                && previous.chainId === chainId
+                    ? previous
+                    : { status: 'idle', detail: null, getStatus, chainId }
+            ));
             return () => {
-                cancelled = true;
-                aliveRef.current = false;
-                requestRef.current += 1;
+                if (generationRef.current === generation) generationRef.current += 1;
             };
         }
         const scheduleNext = () => {
-            if (cancelled || !aliveRef.current) return;
+            if (generation !== generationRef.current) return;
             const interval = statusRef.current === 'available'
                 ? STEADY_INTERVAL_MS
                 : FAST_INTERVAL_MS;
             timerRef.current = setTimeout(async () => {
-                if (cancelled || !aliveRef.current) return;
-                if (!isDocumentHidden()) await doPoll();
+                if (generation !== generationRef.current) return;
+                if (!isDocumentHidden()) await doPoll(false, generation);
                 scheduleNext();
             }, interval);
         };
         // The next cadence starts when the immediate answer lands, so an
         // available signer waits the full steady interval before rereading.
         const start = async () => {
-            if (!isDocumentHidden()) await doPoll();
+            if (!isDocumentHidden()) await doPoll(false, generation);
             scheduleNext();
         };
-        start();
-        const onVisible = () => { if (!isDocumentHidden()) doPoll(); };
+        void start();
+        const onVisible = () => {
+            if (!isDocumentHidden()) void doPoll(false, generation);
+        };
         if (typeof document !== 'undefined') {
             document.addEventListener('visibilitychange', onVisible);
         }
         return () => {
-            cancelled = true;
-            aliveRef.current = false;
-            requestRef.current += 1;
+            if (generationRef.current === generation) generationRef.current += 1;
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
@@ -185,5 +219,9 @@ export function useSignerStatus({ getStatus, chainId }) {
         };
     }, [doPoll, getStatus]);
 
-    return { status, detail, refresh };
+    return {
+        status: statusMatchesInput ? snapshot.status : 'idle',
+        detail: statusMatchesInput ? snapshot.detail : null,
+        refresh,
+    };
 }

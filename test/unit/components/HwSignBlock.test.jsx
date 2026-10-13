@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HwSignBlock } from '../../../packages/core/src/shared/components/HwSignBlock.jsx';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 const baseProps = {
     signerKind: 'ledger',
@@ -71,5 +74,64 @@ describe('HwSignBlock device instructions', () => {
         const { container } = render(<HwSignBlock {...baseProps} getStatus={null} />);
 
         expect(container.querySelector('[data-status]')).toBeNull();
+    });
+
+    it('notifies its parent only when the committed status snapshot changes', () => {
+        const onStatusChange = vi.fn();
+        const { rerender } = render(
+            <HwSignBlock {...baseProps} getStatus={null} onStatusChange={onStatusChange} />,
+        );
+
+        expect(onStatusChange).toHaveBeenCalledTimes(1);
+        expect(onStatusChange).toHaveBeenLastCalledWith({
+            status: 'idle',
+            detail: null,
+            refresh: expect.any(Function),
+        });
+
+        rerender(
+            <HwSignBlock {...baseProps} getStatus={null} onStatusChange={onStatusChange} />,
+        );
+        expect(onStatusChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a status result from the previous chain', async () => {
+        vi.useFakeTimers();
+        let resolveBitcoin;
+        let resolveLitecoin;
+        const readStatus = vi.fn(({ chainId }) => new Promise((resolve) => {
+            if (chainId === 'bitcoin-mainnet') resolveBitcoin = resolve;
+            if (chainId === 'litecoin-mainnet') resolveLitecoin = resolve;
+        }));
+        const { container, rerender } = render(
+            <HwSignBlock {...baseProps} getStatus={(options) => readStatus(options)} />,
+        );
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(readStatus).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <HwSignBlock
+                {...baseProps}
+                chainId="litecoin-mainnet"
+                getStatus={(options) => readStatus(options)}
+            />,
+        );
+        expect(container.querySelector('[data-status]')).toBeNull();
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(readStatus).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+            resolveLitecoin({ status: 'available', detail: 'litecoin ready' });
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(container.querySelector('[data-status="available"]')).toBeTruthy();
+
+        await act(async () => {
+            resolveBitcoin({ status: 'disconnected', detail: 'stale bitcoin result' });
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(container.querySelector('[data-status="available"]')).toBeTruthy();
+        expect(screen.queryByText(/Device not detected/)).toBeNull();
+        expect(vi.getTimerCount()).toBe(1);
     });
 });
