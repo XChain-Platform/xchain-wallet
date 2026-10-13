@@ -74,6 +74,9 @@
     --xc-type-body-size: var(--xc-text-sm);
     --xc-type-body-weight: 400;
 
+    /* Prose stays readable while its surrounding surface remains fluid. */
+    --xc-prose-max-width: 70ch;
+
     /* Icon sizes use one named scale across controls and navigation rows. */
     --xc-icon-xs: 14px;
     --xc-icon-sm: 16px;
@@ -759,6 +762,12 @@ body {
 *::before,
 *::after {
     box-sizing: border-box;
+}
+
+/* Paragraphs carry prose measure without narrowing their list, card, table,
+ * or form ancestors. Component rules can keep intentionally shorter copy. */
+:where(p) {
+    max-width: var(--xc-prose-max-width);
 }
 
 /* Controls and decorative glyphs behave as one touch target instead of

@@ -18,6 +18,7 @@
 
 .intro {
     margin: 0;
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-sm);
     line-height: 1.45;
     color: var(--xc-text-muted);

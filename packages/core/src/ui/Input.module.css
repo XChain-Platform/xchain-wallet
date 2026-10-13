@@ -133,6 +133,7 @@
 
 .hint {
     margin-block-start: var(--xc-help-gap);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -142,6 +143,7 @@
     display: flex;
     align-items: flex-start;
     gap: var(--xc-space-1);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     line-height: 1.4;
     color: var(--xc-danger-fg);
@@ -173,6 +175,7 @@
 
 .capsLock {
     margin-block-start: var(--xc-help-gap);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-warning, var(--xc-text-muted));
     display: flex;

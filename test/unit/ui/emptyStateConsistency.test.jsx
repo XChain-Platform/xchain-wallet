@@ -51,8 +51,8 @@ describe('empty-state consistency', () => {
 
         expect(stylesheet).toMatch(/\.wrap\s*\{[^}]*padding:\s*var\(--xc-space-6\) var\(--xc-space-4\)/s);
         expect(stylesheet).toMatch(/\.icon\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-xl\)/s);
-        expect(stylesheet).toMatch(/\.title\s*\{[^}]*font-size:\s*var\(--xc-text-md\)[^}]*font-weight:\s*600/s);
-        expect(stylesheet).toMatch(/\.body\s*\{[^}]*max-width:\s*40ch[^}]*font-size:\s*var\(--xc-text-sm\)/s);
+        expect(stylesheet).toMatch(/\.title\s*\{[^}]*font-size:\s*var\(--xc-type-card-title-size\)[^}]*font-weight:\s*var\(--xc-type-card-title-weight\)/s);
+        expect(stylesheet).toMatch(/\.body\s*\{[^}]*max-width:\s*var\(--xc-prose-max-width\)[^}]*font-size:\s*var\(--xc-type-body-size\)/s);
         expect(stylesheet).toMatch(/\.actions\s*\{[^}]*display:\s*flex[^}]*gap:\s*var\(--xc-space-2\)/s);
         expect(stylesheet).not.toMatch(/\.icon svg\s*\{[^}]*(?:width|height):\s*32px/s);
     });
