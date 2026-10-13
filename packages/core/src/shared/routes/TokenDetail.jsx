@@ -45,6 +45,7 @@ import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -893,6 +894,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     let priceLabel = 'Price';
     let marketCapCell = 'N/A';
     let floorCell = 'N/A';
+    let pctLabel24h;
     let pctTone24h;
     let pct24h = 'N/A';
     let sparkline = null;
@@ -908,8 +910,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat, fiatCurrency);
             if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
             if (e.change24hPct != null) {
-                pct24h = formatPct(e.change24hPct);
-                pctTone24h = pctTone(e.change24hPct);
+                const display = percentChangeDisplay(e.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
                 // Real CoinGecko sparkline = 168 hourly points (7d).
@@ -939,7 +943,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <section className={styles.stats}>
                     <StatCell label="Price" value={priceCell} />
                     <StatCell label="Market cap" value={marketCapCell} />
-                    <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
                 </section>
                 {sparkline ? (
                     <div className={styles.chart} aria-label={`${range.label} price chart`}>
@@ -998,8 +1002,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
             if (synth.change24hPct != null) {
-                pct24h = formatPct(synth.change24hPct);
-                pctTone24h = pctTone(synth.change24hPct);
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             sparkline = synth.sparkline;
         }
@@ -1009,8 +1015,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
             if (synth.change24hPct != null) {
-                pct24h = formatPct(synth.change24hPct);
-                pctTone24h = pctTone(synth.change24hPct);
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             sparkline = synth.sparkline;
         }
@@ -1023,7 +1031,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             <section className={styles.stats}>
                 <StatCell label={priceLabel} value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
-                <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
             </section>
             {sparkline ? (
                 <div className={styles.chart} aria-label={`${range.label} price chart`}>
@@ -2369,14 +2377,14 @@ function holderIdentity(holder) {
     return holder?.address ?? holder?.ADDRESS ?? null;
 }
 
-function StatCell({ label, value, tone }) {
+function StatCell({ label, value, valueLabel, tone }) {
     const cls = tone === 'positive' ? styles.statValuePositive
         : tone === 'negative' ? styles.statValueNegative
         : styles.statValue;
     return (
         <div className={styles.statCell}>
             <div className={styles.statLabel}>{label}</div>
-            <div className={cls}>{value}</div>
+            <div className={cls} aria-label={valueLabel}>{value}</div>
         </div>
     );
 }
@@ -2389,19 +2397,6 @@ function formatCompactFiat(value, currency) {
     if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
     if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
     return formatFiat(value, currency);
-}
-
-function formatPct(pct) {
-    if (pct === null || pct === undefined || !isFinite(pct)) return 'N/A';
-    const sign = pct > 0 ? '+' : '';
-    return `${sign}${pct.toFixed(2)}%`;
-}
-
-function pctTone(pct) {
-    if (typeof pct !== 'number' || !isFinite(pct)) return undefined;
-    if (pct > 0) return 'positive';
-    if (pct < 0) return 'negative';
-    return undefined;
 }
 
 function kindLabel(kind) {
