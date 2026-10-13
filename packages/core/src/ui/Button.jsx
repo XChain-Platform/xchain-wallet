@@ -28,6 +28,7 @@ function defaultIconFor(children) {
  * @param {boolean} [props.loading]
  * @param {boolean} [props.disabled]
  * @param {'button' | 'submit' | 'reset'} [props.type]
+ * @param {string} [props.className]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
  * @param {import('react').ReactNode} [props.children]
@@ -39,6 +40,7 @@ export function Button({
     loading = false,
     disabled = false,
     type = 'button',
+    className,
     onClick,
     icon,
     children,
@@ -49,22 +51,23 @@ export function Button({
     // no icon at all. Any truthy value renders verbatim.
     const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
     const iconOnly = Boolean(resolvedIcon) && children == null;
-    const className = [
+    const classes = [
         styles.btn,
         styles[variant],
         styles[size],
         iconOnly ? styles.iconOnly : null,
         block ? styles.block : null,
         loading ? styles.loading : null,
+        className,
     ].filter(Boolean).join(' ');
     return (
         <button
+            {...rest}
             type={type}
-            className={className}
+            className={classes}
             disabled={disabled || loading}
             onClick={onClick}
             aria-busy={loading ? 'true' : 'false'}
-            {...rest}
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
             {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
