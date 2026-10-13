@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
-import { EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
@@ -36,7 +36,7 @@ function unwrap(resp) {
 const MAX_MARKET_READS = 25;
 
 function statusLabel(status) {
-    if (status === 'open') return 'Waiting on the result';
+    if (status === 'open') return 'Pending resolution';
     if (status === 'won') return 'Won';
     if (status === 'lost') return 'Lost';
     if (status === 'refunded') return 'Refunded';
@@ -196,12 +196,61 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
     if (rows.length === 0) {
         return wrap(
             <EmptyState
-                title="You have not placed any bets yet."
+                title="No bets yet"
+                body="Bets placed from this wallet appear here."
             />,
         );
     }
 
     const openCount = rows.filter((r) => r.bet_status === 'open').length;
+    const pendingRows = rows.filter((r) => r.bet_status === 'open');
+    const pastRows = rows.filter((r) => r.bet_status !== 'open');
+
+    const betRow = (b) => {
+        const c = statusColor(b.bet_status);
+        const clickable = onOpenMarket && b.feed_action_index !== undefined && b.feed_action_index !== null;
+        // Named by the market's own label where it is known, and by
+        // the index alone where it is not. The index is always
+        // shown: it is what the wager actually carries.
+        const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
+        const body = (
+            <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong>Market #{String(b.feed_action_index)}</strong>
+                    <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                        {statusLabel(b.bet_status)}
+                    </span>
+                </div>
+                <div className={styles.hint}>
+                    {b.bet_status === 'invalid'
+                        // "staked 100 XCHAIN" is false on a rejected bet: the amount is
+                        // what the transaction ASKED for, and no stake was ever taken.
+                        // The fees were, which is the part worth saying.
+                        ? <>Would have backed {backed} for {String(b.amount)} {b.tick || ''} · nothing was staked, but the fees were spent</>
+                        : <>Backed {backed} · staked {String(b.amount)} {b.tick || ''}</>}
+                </div>
+                {/* Payouts credit the address that PLACED the bet, so name it:
+                    a sweep does not move a bet escrow or its winnings. */}
+                <div className={styles.hint}>from {b.owner}</div>
+                {b.bet_status !== 'open' && b.settled_block !== undefined && b.settled_block !== null ? (
+                    <div className={styles.hint}>Settled in block {String(b.settled_block)}</div>
+                ) : null}
+            </>
+        );
+        return clickable ? (
+            <button
+                key={`${b.chainId}:${b.action_index}`}
+                type="button"
+                onClick={() => onOpenMarket(b.chainId, b.feed_action_index)}
+                className={styles.listCard}
+                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
+            >
+                {body}
+            </button>
+        ) : (
+            <div key={`${b.chainId}:${b.action_index}`} className={styles.listCard}>{body}</div>
+        );
+    };
 
     return wrap(
         <>
@@ -210,54 +259,27 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                 {rows.length} bet{rows.length === 1 ? '' : 's'} across all of your addresses
                 {openCount ? `, ${openCount} still waiting on a result` : ''}.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {rows.map((b) => {
-                    const c = statusColor(b.bet_status);
-                    const clickable = onOpenMarket && b.feed_action_index !== undefined && b.feed_action_index !== null;
-                    // Named by the market's own label where it is known, and by
-                    // the index alone where it is not. The index is always
-                    // shown: it is what the wager actually carries.
-                    const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
-                    const body = (
-                        <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <strong>Market #{String(b.feed_action_index)}</strong>
-                                <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                                    {statusLabel(b.bet_status)}
-                                </span>
-                            </div>
-                            <div className={styles.hint}>
-                                {b.bet_status === 'invalid'
-                                    // "staked 100 XCHAIN" is false on a rejected bet: the amount is
-                                    // what the transaction ASKED for, and no stake was ever taken.
-                                    // The fees were, which is the part worth saying.
-                                    ? <>Would have backed {backed} for {String(b.amount)} {b.tick || ''} · nothing was staked, but the fees were spent</>
-                                    : <>Backed {backed} · staked {String(b.amount)} {b.tick || ''}</>}
-                            </div>
-                            {/* Payouts credit the address that PLACED the bet, so name it:
-                                a sweep does not move a bet escrow or its winnings. */}
-                            <div className={styles.hint}>from {b.owner}</div>
-                        </>
-                    );
-                    return clickable ? (
-                        <button
-                            key={`${b.chainId}:${b.action_index}`}
-                            type="button"
-                            onClick={() => onOpenMarket(b.chainId, b.feed_action_index)}
-                            className={styles.listCard}
-                            style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                        >
-                            {body}
-                        </button>
-                    ) : (
-                        <div key={`${b.chainId}:${b.action_index}`} className={styles.listCard}>{body}</div>
-                    );
-                })}
-            </div>
+            {pendingRows.length > 0 ? (
+                <section>
+                    <SectionHeader as="h3" title="Pending resolution" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {pendingRows.map(betRow)}
+                    </div>
+                </section>
+            ) : null}
+            {pastRows.length > 0 ? (
+                <section>
+                    <SectionHeader as="h3" title="Past bets" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {pastRows.map(betRow)}
+                    </div>
+                </section>
+            ) : null}
             <p className={styles.hint}>
-                Winnings are paid to the address that placed the bet. Sweeping an address moves its
-                spendable balance but not its bets, so a payout can still land on an address you have
-                already swept.
+                There is no claim transaction. When a market resolves, the protocol credits winnings
+                or refunds automatically to the address that placed the bet. Sweeping an address moves
+                its spendable balance but not its bets, so a payout can still land on an address you
+                have already swept.
             </p>
         </>,
     );

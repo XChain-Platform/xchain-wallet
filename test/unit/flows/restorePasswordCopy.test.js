@@ -163,6 +163,21 @@ describe('restoreFailureMessage names the password it is talking about', () => {
         expectNamesAField(restoreFailureMessage(new Error('importBackupFile: devicePassword is required')));
     });
 
+    it('names the field for raw file and pointer flow preconditions', () => {
+        for (const raw of [
+            'importBackupFile: password is required',
+            'restoreFromBackupPointer: password is required',
+        ]) {
+            const shown = restoreFailureMessage(new Error(raw));
+            expect(shown).toContain(RESTORE_PASSWORD_LABELS.file);
+            expect(shown).toMatch(/is required/);
+        }
+        const freshDevice = restoreFailureMessage(new Error(
+            'wallet.importBackup.fresh: password is required (the password this device will unlock with)',
+        ));
+        expect(freshDevice).toContain(RESTORE_PASSWORD_LABELS.device.fresh);
+    });
+
     it('turns a conflict into the checkbox that resolves it', () => {
         const m = restoreFailureMessage(new Error(
             'importBackupFile: refusing to overwrite 2 existing record(s): wallets/w1, accounts/a1',

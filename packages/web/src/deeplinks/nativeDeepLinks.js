@@ -52,7 +52,7 @@ export const LINKS_PLUGIN = 'XChainLinks';
 // constant EQUALS the parser's WEB_LINK_PREFIX.
 const ALLOWED_HTTPS_ORIGIN = 'https://xchain.io';
 const ALLOWED_HTTPS_PREFIX = '/wallet/link/';
-const APP_SCHEME = 'xchain:';
+const APP_SCHEMES = ['xchain:', 'bitcoin:', 'litecoin:', 'dogecoin:'];
 
 /**
  * A URL is worth handing to the parser only if it is one we claim. The native
@@ -65,7 +65,7 @@ const APP_SCHEME = 'xchain:';
 export function isAcceptableDeepLink(url) {
     if (typeof url !== 'string' || url.length === 0 || url.length > 4096) return false;
     const lower = url.toLowerCase();
-    if (lower.startsWith(APP_SCHEME)) return true;
+    if (APP_SCHEMES.some((scheme) => lower.startsWith(scheme))) return true;
     if (!lower.startsWith(`${ALLOWED_HTTPS_ORIGIN}/`)) return false;
     // Parse rather than prefix-match the path: `https://xchain.io.evil.com/`
     // and `https://xchain.io@evil.com/` both pass a naive startsWith.

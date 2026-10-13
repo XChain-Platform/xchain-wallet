@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
+import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
 // SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
@@ -33,9 +34,10 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
  * @param {boolean} [props.sensitive]     seed words, private keys: never to a synced or unmarked clipboard (SSC-4)
  * @param {() => void} [props.onCopied]   fires after a successful copy
  */
-export function CopyButton({ value, label = 'Copy', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
+export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
+    const haptic = useHapticFeedback();
 
     async function handleCopy() {
         // A sensitive copy can come back false on a native shell whose
@@ -46,12 +48,14 @@ export function CopyButton({ value, label = 'Copy', ariaLabel, feedbackMs = 1500
         if (ok) {
             setState('copied');
             setFailureText('');
+            haptic.tap();
             onCopied?.();
         } else {
             setState('failed');
             setFailureText(reason === CopyFailure.NO_NATIVE_CLIPBOARD
                 ? 'Copy blocked: this app has no secure clipboard.'
                 : 'Copy failed: the clipboard is unavailable.');
+            haptic.error();
         }
         setTimeout(() => setState('idle'), feedbackMs);
     }

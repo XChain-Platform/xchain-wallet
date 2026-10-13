@@ -195,6 +195,10 @@ export function LanguageRegionSection() {
                     {selectorValue === CUSTOM_CURRENCY_VALUE ? (
                         <input
                             type="text"
+                            enterKeyHint="done"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
                             defaultValue={knownCurrency ? '' : settings.fiatCurrency}
                             onBlur={(e) => onCustomCurrencyCommit(e.target.value)}
                             onKeyDown={(e) => {

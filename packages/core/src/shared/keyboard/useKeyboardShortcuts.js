@@ -103,13 +103,18 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
             // combos (none of ours use them) so we don't hijack OS chords.
             if (mod && !e.altKey && !e.shiftKey) {
                 const action = COMBO.get((e.key || '').toLowerCase());
+                clearLeader();
                 if (action) { e.preventDefault(); run(action); }
                 return;
             }
-            if (mod) return; // some other modifier chord; not ours
+            if (mod || e.altKey) { clearLeader(); return; }
 
             // From here down: no modifier. Suppress while typing.
             if (isEditableTarget(e.target)) { clearLeader(); return; }
+
+            // Shift may produce a catalogued printable key such as '?', but
+            // it does not turn leader keys into additional shortcut chords.
+            if (e.shiftKey && !SINGLE.has(e.key)) { clearLeader(); return; }
 
             const key = (e.key || '').toLowerCase();
 

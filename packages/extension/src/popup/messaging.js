@@ -232,6 +232,11 @@ export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
 }
 
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
+}
+
 /**
  * §7/§8 SPV: verify a single token balance against a quorum-signed
  * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`

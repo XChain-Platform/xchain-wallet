@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -95,9 +95,18 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     const [browseByChain, setBrowseByChain] = useState(
         /** @type {Record<string, LoadState>} */ ({}),
     );
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [contractsReload, setContractsReload] = useState(0);
+    const retryContracts = () => {
+        setMyByChain({});
+        setInteractionsByChain({});
+        setBrowseByChain({});
+        setContractsReload((value) => value + 1);
+    };
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -109,7 +118,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, addressesReload]);
 
     const vmChainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
@@ -165,7 +174,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging]);
+    }, [addressesByChain, activeChains, messaging, contractsReload]);
 
     // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
@@ -250,7 +259,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging]);
+    }, [addressesByChain, activeChains, messaging, contractsReload]);
 
     useEffect(() => {
         if (activeChains.length === 0) {
@@ -282,7 +291,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 });
         }
         return () => { cancelled = true; };
-    }, [activeChains, messaging]);
+    }, [activeChains, messaging, contractsReload]);
 
         const header = (
         <PageHeader
@@ -298,14 +307,36 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     );
 
     if (addressesError) {
-        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setAddressesError(null);
+                        setAddressesByChain(null);
+                        setAddressesReload((value) => value + 1);
+                    },
+                }}
+            >
+                {addressesError}
+            </StatusMessage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading contracts">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
     if (vmChainsWithAddresses.length === 0) {
         return wrap(
-            <EmptyState title="To use contracts, you need an address on a chain that supports them. Use Receive to generate one first." />,
+            <EmptyState
+                title="No supported address"
+                body="Contracts require an address on a chain that supports them."
+            />,
         );
     }
 
@@ -342,7 +373,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
+                                    emptyTitle="No published contracts"
                                     emptyText="No contracts published from this chain's addresses yet."
+                                    onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
@@ -355,7 +388,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
+                                    emptyTitle="No contract interactions"
                                     emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
+                                    onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <InteractionRow row={row} chainId={cid} />} />
                     );
@@ -376,7 +411,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyText="No contracts indexed on this chain yet."
+                                    emptyTitle="No indexed contracts"
+                                    emptyText="Contracts indexed on this chain appear here."
+                                    onRetry={retryContracts}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
@@ -430,7 +467,7 @@ function ChainFilterBar({ chains, value, onChange }) {
     );
 }
 
-function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, renderRow }) {
+function ChainGroup({ descriptor, chainId, state, emptyTitle, emptyText, onRetry, onOpenContract, renderRow }) {
     return (
         <section>
             <SectionHeader
@@ -440,25 +477,36 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                     : <span>{chainId}</span>}
             />
             {state.loading ? (
-                <p className={styles.entryDescription}>Loading…</p>
-            ) : state.error && state.rows.length === 0 ? (
-                <StatusMessage variant="error" className={styles.entryDescription}>
-                    Couldn't load contracts: {state.error}
-                </StatusMessage>
-            ) : state.rows.length === 0 ? (
-                <EmptyState title={emptyText} titleAs="p" />
+                <div role="status" aria-label={`Loading contracts on ${descriptor?.displayName || chainId}`}>
+                    <Skeleton.List rows={3} />
+                </div>
             ) : (
-                state.rows.map((row, i) => (
-                    <button
-                        key={String(rowKey(row)) + ':' + i}
-                        type="button"
-                        className={styles.entry}
-                        aria-label={contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}
-                        onClick={() => onOpenContract(chainId, String(rowKey(row)))}
-                    >
-                        {renderRow(row)}
-                    </button>
-                ))
+                <>
+                    {state.error ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.entryDescription}
+                            recovery={{ label: 'Try again', onAction: onRetry }}
+                        >
+                            Couldn't load contracts: {state.error}
+                        </StatusMessage>
+                    ) : null}
+                    {state.rows.length === 0 ? (
+                        state.error ? null : <EmptyState title={emptyTitle} body={emptyText} titleAs="p" />
+                    ) : (
+                        state.rows.map((row, i) => (
+                            <button
+                                key={String(rowKey(row)) + ':' + i}
+                                type="button"
+                                className={styles.entry}
+                                aria-label={contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}
+                                onClick={() => onOpenContract(chainId, String(rowKey(row)))}
+                            >
+                                {renderRow(row)}
+                            </button>
+                        ))
+                    )}
+                </>
             )}
         </section>
     );
