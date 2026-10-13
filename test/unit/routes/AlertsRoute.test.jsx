@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -15,6 +16,13 @@ import { userEvent } from '../../helpers/userEvent.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 let messaging = {};
+const alertsCss = readFileSync(
+    'packages/core/src/shared/components/AlertsOverlay.module.css',
+    'utf8',
+);
+const ruleBody = (selector) => alertsCss.match(
+    new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`),
+)?.[1] ?? '';
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging, shell: 'web' }),
@@ -30,6 +38,10 @@ vi.mock('../../../packages/core/src/shared/components/AlertsOverlay.module.css',
         unread: 'unread-style',
         read: 'read-style',
         severity: 'severity-style',
+        list: 'list-style',
+        alertHead: 'alert-head-style',
+        alertTitle: 'alert-title-style',
+        alertMessage: 'alert-message-style',
     },
 }));
 
@@ -293,5 +305,41 @@ describe('AlertsRoute alert list', () => {
         expect(within(item).getByText('Still visible')).toBeTruthy();
         expect(within(item).getByText('Info')).toBeTruthy();
         expect(item.className.split(' ')).toContain('info-style');
+    });
+
+    it('keeps long rows and every action reachable in a 320px route', () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        const actions = [
+            { label: 'Mark read', onSelect: vi.fn() },
+            { label: 'Clear', onSelect: vi.fn() },
+            { label: 'Open', onSelect: vi.fn() },
+        ];
+        const longText = 'alert-content-without-break-opportunities-'.repeat(12);
+        const alerts = actions.map((action, index) => ({
+            id: `narrow-${index}`,
+            severity: index === 0 ? 'critical' : index === 1 ? 'warning' : 'info',
+            title: `${longText}${index}`,
+            message: `${longText}${index}`,
+            action,
+        }));
+
+        try {
+            mount({ alerts });
+
+            expect(window.innerWidth).toBe(320);
+            expect(screen.getAllByRole('listitem')).toHaveLength(3);
+            for (const action of actions) {
+                fireEvent.click(screen.getByRole('button', { name: action.label }));
+                expect(action.onSelect).toHaveBeenCalledTimes(1);
+            }
+            expect(ruleBody('list')).toMatch(/width:\s*100%[\s\S]*max-width:\s*100%/);
+            expect(ruleBody('alert')).toMatch(/max-width:\s*100%[\s\S]*min-width:\s*0/);
+            expect(ruleBody('alertHead')).toMatch(/flex-wrap:\s*wrap/);
+            expect(ruleBody('alertTitle')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(ruleBody('alertMessage')).toMatch(/overflow-wrap:\s*anywhere/);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
     });
 });
