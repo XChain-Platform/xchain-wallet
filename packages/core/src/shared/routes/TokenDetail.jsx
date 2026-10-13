@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -124,6 +124,7 @@ export function TokenDetail({
             .catch(() => { /* A read failure is not proof that the token is gone. */ });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, isNative, isDemo]);
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -680,6 +681,7 @@ export function TokenDetail({
                                         kind={kind}
                                         isNative={isNative}
                                         assetInfo={assetInfo}
+                                        loading={metadataLoading}
                                         quantity={quantity}
                                         divisibility={divisibility}
                                         fiat={fiat}
@@ -693,6 +695,7 @@ export function TokenDetail({
                                     isNative={isNative}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -700,6 +703,7 @@ export function TokenDetail({
                                 <MediaPanel
                                     isNative={isNative}
                                     assetInfo={assetInfo}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -1045,6 +1049,7 @@ function DetailsPanel({
     kind,
     isNative,
     assetInfo,
+    loading,
     quantity,
     divisibility,
     fiat,
@@ -1052,7 +1057,12 @@ function DetailsPanel({
 }) {
     const [balanceHidden] = useBalancesHidden();
     return (
-        <div className={styles.infoStack}>
+        <div
+            className={styles.infoStack}
+            role="region"
+            aria-label="Token details"
+            aria-busy={loading || undefined}
+        >
             <table className={styles.metaTable}>
                 <tbody>
                     <tr className={styles.metaRow}>
@@ -1111,28 +1121,34 @@ function DetailsPanel({
                                     : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
                         </td>
                     </tr>
-                    {!isNative && assetInfo?.creator ? (
+                    {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Creator</th>
                             <td>
-                                <span className={styles.copyableValue}>
-                                    <span className={styles.creatorCell} title={assetInfo.creator}>
-                                        {shorten(assetInfo.creator)}
+                                {loading ? (
+                                    <Skeleton shape="text" width="70%" height={20} />
+                                ) : assetInfo?.creator ? (
+                                    <span className={styles.copyableValue}>
+                                        <span className={styles.creatorCell} title={assetInfo.creator}>
+                                            {shorten(assetInfo.creator)}
+                                        </span>
+                                        <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
                                     </span>
-                                    <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
-                                </span>
+                                ) : 'N/A'}
                             </td>
                         </tr>
                     ) : null}
-                    {!isNative && assetInfo ? (
+                    {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Status</th>
                             <td>
-                                {assetInfo.locked ? (
+                                {loading ? (
+                                    <Skeleton shape="text" width="40%" height={20} />
+                                ) : assetInfo?.locked ? (
                                     <span className={styles.lockedFlag}>Locked</span>
-                                ) : (
+                                ) : assetInfo ? (
                                     <span className={styles.unlockedFlag}>Mutable</span>
-                                )}
+                                ) : 'N/A'}
                             </td>
                         </tr>
                     ) : null}
@@ -1148,7 +1164,7 @@ function DetailsPanel({
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription }) {
+function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
             <div className={styles.infoCard}>
@@ -1158,11 +1174,20 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
             </div>
         );
     }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token information" aria-busy="true">
+                <Skeleton.List rows={3} rowHeight={48} avatar={false} />
+            </div>
+        );
+    }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading token information…</p>
-            </div>
+            <EmptyState
+                title="No additional information"
+                body="Information published by the token issuer appears here."
+                titleAs="p"
+            />
         );
     }
     const hasLinks = Boolean(assetInfo.website)
@@ -1241,7 +1266,7 @@ function DnsBlock({ dns }) {
 // document. Pure visual surface; everything textual lives in the
 // About tab so a user can browse the artwork without being asked to
 // also read prose.
-function MediaPanel({ isNative, assetInfo }) {
+function MediaPanel({ isNative, assetInfo, loading }) {
     // Only large + hires images count toward the Image surface (icon
     // and standard buckets render in the page header instead). We
     // derive the buckets unconditionally so the React hook below can
@@ -1285,11 +1310,20 @@ function MediaPanel({ isNative, assetInfo }) {
             </div>
         );
     }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token media" aria-busy="true">
+                <Skeleton height={144} />
+            </div>
+        );
+    }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading media…</p>
-            </div>
+            <EmptyState
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
+                titleAs="p"
+            />
         );
     }
     if (subtabs.length === 0) {

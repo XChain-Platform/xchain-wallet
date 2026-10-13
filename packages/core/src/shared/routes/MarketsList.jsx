@@ -122,6 +122,7 @@ export function MarketsList({
         : null;
     const marketsLoading = Boolean(selectedAsset)
         && (loading || settledAssetKey !== selectedAssetKey);
+    const hasCachedMarkets = settledAssetKey === selectedAssetKey;
 
     const watchlistKeySet = useMemo(() => {
         const s = new Set();
@@ -328,44 +329,45 @@ export function MarketsList({
                 )}
             >
 
-                {!selectedAsset ? (
-                    <EmptyState
-                        title="No asset selected"
-                        body="Choose a coin or token to view its markets."
-                    />
-                ) : marketsLoading ? (
-                    <div role="status" aria-label="Loading markets">
-                        <Skeleton.List rows={5} />
-                    </div>
-                ) : loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        className={styles.hint}
-                        recovery={{
-                            label: 'Try again',
-                            onAction: () => {
-                                setSettledAssetKey(null);
-                                setLoading(true);
-                                setMarketsReload((value) => value + 1);
-                            },
-                        }}
-                    >
-                        {loadError}
-                    </StatusMessage>
-                ) : displayMarkets.length === 0 ? (
-                    <EmptyState
-                        title={search.trim()
-                            ? 'No matches'
-                            : tab === 'watchlist'
-                                ? 'Empty watchlist'
-                                : `No markets for ${selectedAsset.tick}`}
-                        body={search.trim()
-                            ? `No markets match "${search.trim()}".`
-                            : tab === 'watchlist'
-                                ? `Starred markets for ${selectedAsset.tick} appear here.`
-                                : 'No pairs found involving this asset on its chain.'}
-                    />
-                ) : (
+                <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                    {!selectedAsset ? (
+                        <EmptyState
+                            title="No asset selected"
+                            body="Choose a coin or token to view its markets."
+                        />
+                    ) : marketsLoading && !hasCachedMarkets ? (
+                        <div role="status" aria-label="Loading markets">
+                            <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
+                        </div>
+                    ) : loadError ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.hint}
+                            recovery={{
+                                label: 'Try again',
+                                onAction: () => {
+                                    setSettledAssetKey(null);
+                                    setLoading(true);
+                                    setMarketsReload((value) => value + 1);
+                                },
+                            }}
+                        >
+                            {loadError}
+                        </StatusMessage>
+                    ) : displayMarkets.length === 0 ? (
+                        <EmptyState
+                            title={search.trim()
+                                ? 'No matches'
+                                : tab === 'watchlist'
+                                    ? 'Empty watchlist'
+                                    : `No markets for ${selectedAsset.tick}`}
+                            body={search.trim()
+                                ? `No markets match "${search.trim()}".`
+                                : tab === 'watchlist'
+                                    ? `Starred markets for ${selectedAsset.tick} appear here.`
+                                    : 'No pairs found involving this asset on its chain.'}
+                        />
+                    ) : (
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                             {displayMarkets.map((m, idx) => (
@@ -386,7 +388,8 @@ export function MarketsList({
                             ))}
                         </ul>
                     </div>
-                )}
+                    )}
+                </div>
             </ListPage>
         </Screen>
     );

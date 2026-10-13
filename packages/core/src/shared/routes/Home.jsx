@@ -208,6 +208,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const balancesScopeRef = useRef(/** @type {string | null} */ (null));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
@@ -540,11 +541,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [activeWalletId, messaging]);
 
     // Per-wallet load: balances, multisig indicator, pending airdrops and
-    // unfinished confirms. `reset: true` (wallet/account switch,
-    // manual reload key) flushes state to the loading-skeleton first;
-    // `reset: false` (poll / focus refresh below) fetches quietly in the
-    // background and only swaps state in once fresh data lands, so an
-    // incoming token doesn't flash the whole screen back to a skeleton.
+    // unfinished confirms. Scope changes clear data that belongs to another
+    // wallet or account. Same-scope reloads, polls and focus refreshes keep
+    // cached data visible until fresh data lands.
     // Start (or restart) a rate-limit wait: the banner counts down from here
     // and the effect below re-loads when it reaches zero.
     const beginRateLimitWait = useCallback((secondsOrNull) => {
@@ -566,9 +565,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             return;
         }
         if (reset) {
-            // A switch (or a manual reload) is about to replace everything on
-            // screen, so nothing an earlier wallet polled may hold off the
-            // re-polls that follow.
+            const scopeKey = `${walletId}:${accountId || ''}`;
+            const hasCachedBalances = balancesScopeRef.current === scopeKey;
+            // A reset owns a fresh polling window even when cached rows remain
+            // visible for the same wallet and account.
             pollThrottleRef.current.reset();
             // ...but the load about to run DOES take the in-flight slot, the
             // way an event-driven one does. Without it a cold open that is
@@ -576,12 +576,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
-            setBalances(null);
-            setBalancesFetchedAt(null);
-            setActiveByChain({});
-            setMultisig(null);
-            setPendingAirdrops([]);
-            setConfirmSessions([]);
+            if (!hasCachedBalances) {
+                setBalances(null);
+                setBalancesFetchedAt(null);
+                setActiveByChain({});
+                setMultisig(null);
+                setPendingAirdrops([]);
+                setConfirmSessions([]);
+            }
             setLoadError(null);
         }
 
@@ -597,6 +599,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // Fresh balances: this is what restarts the re-poll window,
                 // whichever path asked for them.
                 pollThrottleRef.current.succeed();
+                balancesScopeRef.current = `${walletId}:${accountId || ''}`;
                 setBalances(b);
                 setBalancesFetchedAt(Date.now());
                 // A read can LAND and still be rate limited: the aggregator
@@ -990,8 +993,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (
-                    <div role="status" aria-label="Loading balances">
-                        <Skeleton.List rows={5} />
+                    <div role="status" aria-label="Loading balances" aria-busy="true">
+                        <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
                     </div>
                 ) : null}
 
