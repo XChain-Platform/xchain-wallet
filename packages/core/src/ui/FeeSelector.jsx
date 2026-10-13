@@ -59,6 +59,7 @@ const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 
  *                     in the same readout slot the tier modes use, so the live
  *                     fee stays visible as the user edits the rate.
  *   - disabled   `boolean`
+ *   - showEstimateNotice  whether fee-source availability notices render
  *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
  *               amount so it's unambiguous which coin the fee is paid in
  *
@@ -76,6 +77,7 @@ export function FeeSelector({
     allowCustom = true,
     label = null,
     coinTicker = '',
+    showEstimateNotice = true,
 }) {
     const customInputId = useId();
     const feeInputId = useId();
@@ -129,7 +131,9 @@ export function FeeSelector({
         return (
             <div className={styles.wrap}>
                 {headerRow()}
-                <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
+                {showEstimateNotice ? (
+                    <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
+                ) : null}
             </div>
         );
     }
@@ -411,7 +415,7 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
-            {usesFallbackRates ? (
+            {showEstimateNotice && usesFallbackRates ? (
                 <p className={styles.placeholder} aria-live="polite">
                     Live fee estimate unavailable. Using safe default rates. Custom fees remain available.
                 </p>
