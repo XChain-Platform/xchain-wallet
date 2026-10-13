@@ -23,6 +23,7 @@
 .headline {
     font-weight: 700;
     color: var(--xc-text);
+    white-space: normal;
 }
 
 .summary {

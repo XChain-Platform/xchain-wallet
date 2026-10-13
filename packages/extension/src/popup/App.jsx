@@ -79,6 +79,7 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -2604,6 +2605,7 @@ function AppInner() {
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                         activeAccountId={activeAccountId}
                         onSwitchAccount={handleSwitchAccount}
+                        demoBannerInHeader
                         onCommandPalette={palette.openPalette}
                         // The popup's only VISIBLE route into Settings.
                         // Web and desktop deliberately pass nothing here: they
@@ -2619,6 +2621,9 @@ function AppInner() {
             })();
             return (
                 <>
+                    {activeWalletId ? (
+                        <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                    ) : null}
                     <Suspense fallback={<Skeleton.List rows={5} />}>
                         <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     </Suspense>

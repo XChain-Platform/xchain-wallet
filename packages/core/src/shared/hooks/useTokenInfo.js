@@ -42,11 +42,13 @@ import {
  * @param {string | null | undefined} args.chainId
  * @param {string | null | undefined} args.tick
  * @param {boolean} [args.skip]                 caller can opt out (e.g. native coins)
+ * @param {boolean} [args.demo]                 isolates synthetic demo metadata and cache entries
  * @returns {import('../../flows/tokenInfo.js').TokenInfo | null}
  */
-export function useTokenInfo({ chainId, tick, skip = false }) {
+export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
     const { messaging } = useMessaging();
-    const key = tokenInfoCacheKey(chainId, tick);
+    const baseKey = tokenInfoCacheKey(chainId, tick);
+    const key = demo && baseKey ? `demo|${baseKey}` : baseKey;
     const [info, setInfo] = useState(/** @type {any} */ (readTokenInfoCache(key).value));
     // Bumped when this tick is invalidated, purely to re-run the fetch effect
     // on a component that never unmounted (the Manage Token page driving its
@@ -74,7 +76,7 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
         }
         if (typeof messaging?.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
-        messaging.getTokenInfo({ chainId, tick })
+        messaging.getTokenInfo({ chainId, tick, demo })
             .then((next) => {
                 if (cancelled) return;
                 writeTokenInfoCache(key, next);
@@ -82,7 +84,7 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
             })
             .catch(() => { /* silent; renderer falls back to "no metadata" copy */ });
         return () => { cancelled = true; };
-    }, [key, skip, messaging, chainId, tick, revision]);
+    }, [key, skip, messaging, chainId, tick, demo, revision]);
 
     return info;
 }
@@ -96,15 +98,18 @@ export function useTokenInfo({ chainId, tick, skip = false }) {
  * @param {object | null} messaging
  * @param {string | null | undefined} chainId
  * @param {string | null | undefined} tick
+ * @param {{ demo?: boolean }} [opts]
  * @returns {Promise<any | null>}
  */
-export function fetchTokenInfo(messaging, chainId, tick) {
-    const key = tokenInfoCacheKey(chainId, tick);
+export function fetchTokenInfo(messaging, chainId, tick, opts = {}) {
+    const baseKey = tokenInfoCacheKey(chainId, tick);
+    const demo = opts.demo === true;
+    const key = demo && baseKey ? `demo|${baseKey}` : baseKey;
     if (!key) return Promise.resolve(null);
     const cached = readTokenInfoCache(key);
     if (cached.hit) return Promise.resolve(cached.value);
     if (typeof messaging?.getTokenInfo !== 'function') return Promise.resolve(null);
-    return messaging.getTokenInfo({ chainId, tick })
+    return messaging.getTokenInfo({ chainId, tick, demo })
         .then((next) => {
             writeTokenInfoCache(key, next);
             return next;

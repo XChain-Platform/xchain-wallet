@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for the demo disclosure reaches Home in every shell,
-// exactly once.
+// Smoke for the demo disclosure reaches every unlocked screen in each shell,
+// exactly once on Home.
 //
 // The component's own behaviour is covered by
 // test/unit/components/DemoBanner.test.jsx. What is pinned HERE is the
@@ -17,18 +17,12 @@
 // mounting one component cannot see:
 //
 //   1. DemoBanner is not suppressed back to an unconditional `return
-//      null`. It was, for months, while still mounting for its 24h
-//      auto-expire effect, which is exactly why the absence read as
-//      "component exists, must be fine".
-//   2. Home mounts it for shells that have nowhere else to put it.
-//   3. Shells that DO mount it in their layout header say so with
+//      null`; it remains visible while its 24h auto-expire effect runs.
+//   2. Home mounts it for shells whose shared layout does not carry it.
+//   3. Shells that mount it above the route tree say so with
 //      `demoBannerInHeader`, so the disclosure never renders twice on
 //      Home. The header mount renders above Home in those shells, so
 //      the visitor is still told without leaving Home.
-//
-// The extension popup has no header slot, so it must NOT pass the flag;
-// asserting that keeps a well-meaning "make the shells consistent" edit
-// from silently deleting the popup's only disclosure.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -126,15 +120,15 @@ for (const [label, src] of [['web', webSrc], ['desktop', desktopSrc]]) {
     );
 }
 
-assert.doesNotMatch(
+assert.match(
     popupSrc,
     /demoBannerInHeader/,
-    'the extension popup has no header slot, so Home must keep mounting the banner there',
+    'the extension tells Home that its unlocked route tree already carries the banner',
 );
-assert.doesNotMatch(
+assert.match(
     popupSrc,
-    /<DemoBanner/,
-    'the popup shell does not mount its own banner either',
+    /<DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/>[\s\S]+?<Suspense/,
+    'the extension mounts the banner outside the active route so forms and details keep the disclosure and expiry watcher',
 );
 
 console.log('demo-disclosure-on-home smoke OK');

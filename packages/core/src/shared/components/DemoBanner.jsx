@@ -26,20 +26,12 @@ const NARROW_VIEWPORT = '(max-width: 599px)';
  * the App state into the onboarding screen so the user lands back on
  * the Welcome view (next step: G060 animated explainers).
  *
- * the visible banner was suppressed for a while, leaving
- * WalletDetails as the only surface that named the demo. A first-time
- * visitor never opens that page, so the funnel showed a seven-figure
- * portfolio above action forms reading "0 BTC available" and no text
- * anywhere reconciling the two: read surfaces are fixture-fed, action
- * forms are chain-fed. The copy below has to close exactly that gap,
- * so it names the demo AND says why the forms read zero. Operator
- * decision 2026-08-11 put the disclosure back on Home.
+ * The disclosure reconciles fixture-fed read surfaces with chain-fed
+ * action forms: sample balances can be large while forms correctly read
+ * "0 available" because the wallet holds no spendable funds.
  *
- * Mounted once per view: the web and desktop shells mount this in
- * their layout header (it then persists across every unlocked view,
- * Home included) and pass `demoBannerInHeader` to Home so Home skips
- * its own copy. The extension popup has no header slot, so Home mounts
- * it there.
+ * Each shell mounts this once above its unlocked route tree and passes
+ * `demoBannerInHeader` to Home so Home skips its fallback copy.
  *
  * @param {object} props
  * @param {string | null | undefined} props.activeWalletId
@@ -53,6 +45,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [expiry, setExpiry] = useState(/** @type {{ expiresAt: number } | null} */ (null));
+    const [now, setNow] = useState(() => Date.now());
     const [autoWiped, setAutoWiped] = useState(false);
     const [expanded, setExpanded] = useState(viewportStartsExpanded);
 
@@ -68,6 +61,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
     useEffect(() => {
         setIsDemo(flowsLib.isDemoWallet(activeWalletId));
         setExpiry(flowsLib.getDemoWalletExpiry());
+        setNow(Date.now());
     }, [activeWalletId]);
 
     async function handleExit() {
@@ -75,11 +69,9 @@ export function DemoBanner({ activeWalletId, onExited }) {
         setBusy(true);
         setError(null);
         try {
-            // Same teardown as the Wallet-details exit. Dropping the
-            // record alone leaves the vault meta behind, so the 24h
-            // auto-expire below used to hand the user an unlock screen
-            // for an empty vault whose throwaway password it had just
-            // deleted (wallet E2E session 16, D-61).
+            // Every exit uses the shared teardown because removing only the
+            // wallet record leaves vault metadata that routes the next boot
+            // to an unlock screen for an empty vault.
             const { reloaded } = await exitDemoWallet({
                 messaging,
                 walletId: activeWalletId,
@@ -102,7 +94,9 @@ export function DemoBanner({ activeWalletId, onExited }) {
     useEffect(() => {
         if (!isDemo || autoWiped || busy) return undefined;
         const tick = () => {
-            if (flowsLib.isDemoWalletExpired()) {
+            const tickNow = Date.now();
+            setNow(tickNow);
+            if (flowsLib.isDemoWalletExpired({ now: tickNow })) {
                 setAutoWiped(true);
                 handleExit();
             }
@@ -117,12 +111,14 @@ export function DemoBanner({ activeWalletId, onExited }) {
 
     if (!isDemo) return null;
 
-    const expiryHint = formatExpiryHint(expiry);
+    const expiryHint = formatExpiryHint(expiry, now);
     return (
         <div className={styles.banner} role="status" aria-label="Demo wallet">
             <div className={styles.body}>
                 <div className={styles.summary}>
-                    <strong className={styles.headline}>Demo wallet: read-only</strong>
+                    <strong className={styles.headline}>
+                        Demo wallet: read-only; cannot move funds
+                    </strong>
                     <button
                         type="button"
                         className={styles.detailsToggle}
@@ -175,9 +171,9 @@ function viewportStartsExpanded() {
     return !window.matchMedia(NARROW_VIEWPORT).matches;
 }
 
-function formatExpiryHint(expiry) {
+function formatExpiryHint(expiry, now = Date.now()) {
     if (!expiry || typeof expiry.expiresAt !== 'number') return null;
-    const remaining = expiry.expiresAt - Date.now();
+    const remaining = expiry.expiresAt - now;
     if (remaining <= 0) return 'Auto-wipe imminent.';
     const minutes = Math.floor(remaining / 60_000);
     const hours = Math.floor(minutes / 60);

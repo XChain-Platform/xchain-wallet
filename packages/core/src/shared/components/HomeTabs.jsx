@@ -72,6 +72,7 @@ import styles from './HomeTabs.module.css';
  */
 export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const [active, setActive] = useState('coins');
+    const isDemo = isDemoWallet(walletId);
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
     // here so it persists across tab switches.
@@ -93,9 +94,9 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
     const nativeCoins = useMemo(() => {
-        if (settingsLoading || isDemoWallet(walletId)) return [];
+        if (settingsLoading || isDemo) return [];
         return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
-    }, [builtRows, settingsLoading, walletId]);
+    }, [builtRows, settingsLoading, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
         fiatCurrency: settings?.fiatCurrency || 'USD',
@@ -150,7 +151,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // pretty icon (e.g. PEPECASH) belongs in Tokens, not here, and a true
     // collectible with no artwork still earns its tile (letter fallback).
     // A tick can appear in BOTH Tokens (balance row) and NFTs (tile).
-    const collectibleKeys = useCollectibleKeys(filteredRows);
+    const collectibleKeys = useCollectibleKeys(filteredRows, isDemo);
     const nfts = useMemo(
         () => sortByChainThenAsset(filteredRows.filter(
             (r) => r.kind !== 'native'
@@ -301,6 +302,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         ) : null}
                         <CollectiblesView
                             rows={nfts}
+                            demo={isDemo}
                             emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
                             emptyBody={networkFilter === 'all'
                                 ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
@@ -316,7 +318,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ) : null}
 
                 {active === 'activity' ? (
-                    isDemoWallet(walletId) ? (
+                    isDemo ? (
                         <DemoActivityList
                             chainIds={Object.keys(balances || {})}
                             balances={balances}
@@ -343,7 +345,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 ) : null}
 
                 {active === 'defi' ? (
-                    isDemoWallet(walletId) ? (
+                    isDemo ? (
                         <DemoDefiList
                             networkFilter={networkFilter}
                             balances={balances}
