@@ -143,12 +143,12 @@ const EXPLANATION_CASES = [
     {
         name: 'signed transaction hex',
         input: RAW_TRANSACTION,
-        message: /signed transaction.*can't broadcast raw transaction hex/i,
+        message: /signed transaction.*Broadcast transaction.*scan or paste it there/i,
     },
     {
         name: 'backup pointer',
         input: 'xchain-backup:1?loc=https%3A%2F%2Fexample.com%2Fwallet&name=Cold',
-        message: /backup pointer.*Import wallet.*Encrypted backup/i,
+        message: /encrypted-backup code.*Import wallet.*Encrypted backup/i,
     },
     {
         name: 'pairing code',
@@ -163,7 +163,7 @@ const EXPLANATION_CASES = [
     {
         name: 'private key',
         input: 'KwXGs3HkgjKA5exN3UiMQtGQakRrJ9zysFDa4rY4dcEdqeerF1tF',
-        message: /private key.*Import Wallet.*Import WIF/i,
+        message: /private key.*Import wallet.*Private key/i,
     },
     {
         name: 'recovery phrase',

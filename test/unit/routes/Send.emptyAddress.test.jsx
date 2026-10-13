@@ -66,7 +66,7 @@ describe('Send from an address holding no coin', () => {
         const { onReceive } = mount('0');
 
         const template = await screen.findByRole('group', { name: 'Send' });
-        expect(within(template).getByRole('heading', { name: /wallet has no coins to send yet/i }))
+        expect(within(template).getByRole('heading', { name: 'Nothing to send yet' }))
             .toBeInTheDocument();
         expect(screen.queryByRole('form', { name: 'Send' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
@@ -90,7 +90,7 @@ describe('Send from an address holding no coin', () => {
         mount('0', { walletBalancesError: true });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: /wallet has no coins to send yet/i })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
     });
 });
 

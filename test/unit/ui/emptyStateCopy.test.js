@@ -108,8 +108,8 @@ function localeCopy() {
         .map(([key, value]) => ({
             file: 'English locale',
             line: key,
-            titles: /(?:Title|Found)$/.test(key) ? [value] : [],
-            bodies: /Body$/.test(key) ? [value] : [],
+            titles: /(?:Title|Found|\.title)$/.test(key) ? [value] : [],
+            bodies: /(?:Body|\.body)$/.test(key) ? [value] : [],
         }));
 }
 

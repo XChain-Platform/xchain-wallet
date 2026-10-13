@@ -878,7 +878,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <EmptyState
                     title={NO_CHAINS_TITLE}
                     body={NO_CHAINS_BODY}
-                    actionLabel="Open Network settings"
+                    actionLabel="Open network settings"
                     onAction={() => setNetworkSettingsOpen(true)}
                     actionIcon={<Icon.GearIcon />}
                 />
