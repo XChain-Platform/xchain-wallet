@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 
 const tabsCss = readFileSync(
@@ -16,6 +16,7 @@ const tabsCss = readFileSync(
 );
 
 const widgetFailure = vi.hoisted(() => ({ current: null }));
+const messagingHarness = vi.hoisted(() => ({ current: {} }));
 let consoleError;
 const preventExpectedError = (event) => event.preventDefault();
 
@@ -45,8 +46,7 @@ vi.mock('../../../packages/core/src/shared/components/CollectiblesView.jsx', asy
 // settings through useSettings, whose effects key on the messaging identity,
 // so a fresh object per render re-runs them forever.
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => {
-    const value = { messaging: {}, shell: 'web' };
-    return { useMessaging: () => value };
+    return { useMessaging: () => ({ messaging: messagingHarness.current, shell: 'web' }) };
 });
 vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => ({
     useCollectibleKeys: () => new Set(),
@@ -91,6 +91,7 @@ function TablistKeyboard({ children }) {
 }
 
 beforeEach(() => {
+    messagingHarness.current = {};
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventExpectedError);
 });
@@ -187,6 +188,50 @@ describe('HomeTabs empty states', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'DeFi' }));
 
         expect(screen.getByText('No DeFi positions yet')).toBeTruthy();
+    });
+
+    it('keeps recent activity live as a sent transaction fails or confirms', async () => {
+        let phase = 'pending';
+        const txid = 'activity-tx';
+        messagingHarness.current = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{ address: 'bc1qsender' }],
+            }),
+            getAddressHistory: vi.fn(async () => phase === 'confirmed' ? [{
+                action: 'SEND',
+                action_index: '7',
+                block_index: 100,
+                timestamp: 1_700_000_000,
+                tx_hash: txid,
+                status: 'valid',
+                details: { source: 'bc1qsender', destination: 'bc1qrecipient', tick: 'BTC', amount: '1' },
+            }] : []),
+            getPendingTxsForAddress: vi.fn(async () => phase === 'confirmed' ? [] : [{
+                id: 'pending-1',
+                txid,
+                status: phase === 'failed' ? 'failed' : 'broadcast',
+                fromAddress: 'bc1qsender',
+                toAddress: 'bc1qrecipient',
+                action: 'SEND',
+                tick: 'BTC',
+                amount: '1',
+                broadcastAt: new Date().toISOString(),
+            }]),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 102 }),
+        };
+        mount('real-wallet');
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+
+        expect(await screen.findByText('Pending')).toBeInTheDocument();
+
+        phase = 'failed';
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(await screen.findByText('Failed')).toBeInTheDocument();
+
+        phase = 'confirmed';
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(await screen.findByText('Confirmed')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('3 Confirmations')).toBeInTheDocument());
     });
 
     it('does not justify placeholder body text', () => {

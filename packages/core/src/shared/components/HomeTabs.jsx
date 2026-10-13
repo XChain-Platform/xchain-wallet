@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useEffect, useId, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -49,6 +49,14 @@ import {
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
+import {
+    compareMergedEntries,
+    mergePendingEntries,
+    pendingTxToEntry,
+} from '../utils/pendingHistory.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
+import { BALANCE_POLL_INTERVAL_MS } from '../../flows/balances.js';
 import styles from './HomeTabs.module.css';
 
 const BALANCE_SORT_STORAGE_KEY = 'xc:balances:sort';
@@ -135,7 +143,7 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  *   Tokens   - every non-native tick, divisible or not
  *   NFTs     - the subset of Tokens matching the protocol collectible
  *              rule (DECIMALS = 0 AND LOCK_MAX_SUPPLY = 1)
- *   History  - chronological transaction stream (placeholder)
+ *   Activity - recent pending and confirmed transactions
  *   DeFi     - staking, dispensers, contracts (placeholder)
  *
  * The Tokens and NFTs descriptions above were stale until 2026-09-22 and
@@ -152,6 +160,7 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {import('../../registry/index.js').ChainRegistry} props.chainRegistry
  * @param {Record<string, Array<{ balances: any | null }>>} props.balances
  * @param {number | null} [props.balancesFetchedAt]   Unix ms of the last successful balance fetch. Drives the staleness label below the tab strip (Cluster G FOLLOWUP 5 / G155).
+ * @param {string | null} [props.accountId] active account used to scope the activity feed
  * @param {string} props.networkFilter   'all' or a coin family
  * @param {{ threshold: number, cosignerCount: number, scheme: string } | null} [props.multisig]
  * @param {string} [props.multisigChainId]
@@ -160,12 +169,12 @@ export function sortBalanceRows(rows, sortBy, nativePriceMap = {}) {
  * @param {() => void} [props.onBuy]       opens the coin exchange from the first-funding state
  * @param {boolean} [props.hasAddresses]   whether the active account has any receiving address
  * @param {() => void} [props.onAddAddress] opens address generation for an account with no addresses
- * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
+ * @param {() => void} [props.onHistory]   opens the complete chronological feed from the recent Activity list
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
  * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  */
-export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, accountId = null, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const tabsId = useId();
     const [active, setActive] = useState('coins');
     const [sortBy, setSortBy] = useState(() => readBalanceSort(walletId));
@@ -656,19 +665,15 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             allowRemoteImages={allowRemoteImages}
                         />
                     ) : (
-                        <Placeholder
-                            title="Your activity is in History"
-                            body="Every send, receive and other transaction, newest first."
-                            action={(
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={onHistory}
-                                    disabled={!onHistory}
-                                >
-                                    Open History
-                                </Button>
-                            )}
+                        <RealActivityList
+                            walletId={walletId}
+                            accountId={accountId}
+                            networkFilter={networkFilter}
+                            balances={balances}
+                            chainRegistry={chainRegistry}
+                            onSelectEntry={onSelectEntry}
+                            onHistory={onHistory}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     )
                 ) : null}
@@ -960,7 +965,7 @@ const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLoo
                                 <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
                                 {confirms != null ? (
                                     <span className={styles.confirmationsPill}>
-                                        {confirms} Confirms
+                                        {confirms} {confirms === 1 ? 'Confirmation' : 'Confirmations'}
                                     </span>
                                 ) : null}
                             </>
@@ -978,6 +983,165 @@ const ActivityRow = memo(function ActivityRow({ entry, walletAddresses, assetLoo
         </li>
     );
 });
+
+function responseRows(response) {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.rows)) return response.rows;
+    return [];
+}
+
+function RealActivityList({
+    walletId,
+    accountId,
+    networkFilter,
+    balances,
+    chainRegistry,
+    onSelectEntry,
+    onHistory,
+    allowRemoteImages,
+}) {
+    const { messaging } = useMessaging();
+    const [entries, setEntries] = useState([]);
+    const [chainTips, setChainTips] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [failed, setFailed] = useState(false);
+    const requestRef = useRef(0);
+
+    const refresh = useCallback(async () => {
+        const requestId = ++requestRef.current;
+        try {
+            const addressesByChain = await messaging.getAddressesByChain(walletId, accountId);
+            const scopes = [];
+            const ownAddresses = new Set();
+            for (const [chainId, addresses] of Object.entries(addressesByChain || {})) {
+                for (const addressRecord of Array.isArray(addresses) ? addresses : []) {
+                    if (!addressRecord?.address) continue;
+                    scopes.push({ chainId, address: addressRecord.address });
+                    ownAddresses.add(String(addressRecord.address).toLowerCase());
+                }
+            }
+
+            const reads = await Promise.all(scopes.map(async ({ chainId, address }) => {
+                const [history, pending] = await Promise.all([
+                    messaging.getAddressHistory({ chainId, address })
+                        .then(responseRows)
+                        .catch(() => []),
+                    typeof messaging.getPendingTxsForAddress === 'function'
+                        ? messaging.getPendingTxsForAddress({ chainId, address })
+                            .then(responseRows)
+                            .catch(() => [])
+                        : Promise.resolve([]),
+                ]);
+                return { chainId, address, history, pending };
+            }));
+
+            const confirmed = [];
+            const pending = [];
+            const observedAtMs = Date.now();
+            for (const read of reads) {
+                for (const row of read.history) {
+                    const entry = normalizeHistoryRow(row, read);
+                    if (entry) confirmed.push(entry);
+                }
+                for (const record of read.pending) {
+                    const entry = pendingTxToEntry({
+                        chainId: read.chainId,
+                        address: read.address,
+                        pendingTx: record,
+                        ownAddresses,
+                        observedAtMs,
+                    });
+                    if (entry) pending.push(entry);
+                }
+            }
+
+            const merged = mergePendingEntries({ confirmed, pending }).entries;
+            merged.sort(compareMergedEntries);
+            if (requestId !== requestRef.current) return;
+            setEntries(merged.slice(0, 10));
+
+            const chainIds = [...new Set(scopes.map((scope) => scope.chainId))];
+            const watermarks = await Promise.all(chainIds.map(async (chainId) => {
+                try {
+                    const result = await messaging.getIndexerWatermark({ chainId });
+                    return [chainId, Number(result?.watermark)];
+                } catch {
+                    return [chainId, 0];
+                }
+            }));
+            if (requestId !== requestRef.current) return;
+            setChainTips(Object.fromEntries(watermarks.filter(([, tip]) => Number.isFinite(tip) && tip > 0)));
+            setFailed(false);
+        } catch {
+            if (requestId !== requestRef.current) return;
+            setFailed(true);
+        } finally {
+            if (requestId === requestRef.current) setLoading(false);
+        }
+    }, [accountId, messaging, walletId]);
+
+    useEffect(() => {
+        let active = true;
+        const run = () => {
+            if (active) void refresh();
+        };
+        run();
+        const stop = startVisibleInterval(run, BALANCE_POLL_INTERVAL_MS);
+        return () => {
+            active = false;
+            requestRef.current += 1;
+            stop();
+        };
+    }, [refresh]);
+
+    const filteredEntries = networkFilter === 'all'
+        ? entries
+        : entries.filter((entry) => coinFromChainId(entry.chainId) === networkFilter);
+    const walletAddresses = useMemo(() => {
+        const values = new Set();
+        for (const entry of entries) {
+            if (entry.address) values.add(String(entry.address).toLowerCase());
+        }
+        return values;
+    }, [entries]);
+    const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
+
+    if (loading && entries.length === 0) {
+        return <Placeholder title="Loading activity" body="Checking recent transactions." />;
+    }
+    if (failed && entries.length === 0) {
+        return <Placeholder title="Could not load activity" body="Open History to try again." />;
+    }
+    if (filteredEntries.length === 0) {
+        return (
+            <Placeholder
+                title="No activity yet"
+                body="Recent sends and receives will appear here."
+                action={onHistory ? <Button variant="secondary" size="sm" onClick={onHistory}>Open History</Button> : null}
+            />
+        );
+    }
+    return (
+        <>
+            <ul className={styles.demoList} aria-label="Recent activity">
+                {filteredEntries.map((entry) => (
+                    <ActivityRow
+                        key={entry.key}
+                        entry={entry}
+                        walletAddresses={walletAddresses}
+                        assetLookup={assetLookup}
+                        chainTip={chainTips[entry.chainId] || null}
+                        descriptor={chainRegistry.get(entry.chainId)}
+                        onSelectEntry={onSelectEntry}
+                        allowRemoteImages={allowRemoteImages}
+                    />
+                ))}
+            </ul>
+            {onHistory ? <Button variant="secondary" size="sm" onClick={onHistory}>Open History</Button> : null}
+        </>
+    );
+}
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
