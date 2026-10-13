@@ -2792,6 +2792,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             disabled={contactSaveStage === 'saving'}
                         />
                         <div className={styles.saveRecipientActions}>
+                            {contactSaveStage === 'saving' ? (
+                                <p id="save-recipient-disabled-reason" role="status" className={styles.hint}>
+                                    {t('send.saveRecipient.saving')}
+                                </p>
+                            ) : null}
                             <Button
                                 type="button"
                                 variant="secondary"
@@ -2804,7 +2809,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             >
                                 {t('common.cancel')}
                             </Button>
-                            <Button type="submit" variant="primary" disabled={contactSaveStage === 'saving'}>
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                disabled={contactSaveStage === 'saving'}
+                                aria-describedby={contactSaveStage === 'saving' ? 'save-recipient-disabled-reason' : undefined}
+                            >
                                 {contactSaveStage === 'saving' ? t('send.saveRecipient.saving') : t('send.saveRecipient.save')}
                             </Button>
                         </div>
@@ -2840,6 +2850,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const softwareSignLabel = descriptor?.displayName
             ? t('send.review.signOn', { device: descriptor.displayName })
             : t('send.review.sign');
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the send…'
+            : networkOffline
+                ? t('send.offline.body')
+                : testSendGate
+                    ? 'Complete the test-send check to continue.'
+                    : isWatcherMode
+                        ? null
+                        : isHwSource
+                            ? hwStatus !== 'available'
+                                ? 'Connect and unlock the hardware wallet to continue.'
+                                : signRisk.requireExplicitConfirm && !hwExplicitConfirmed
+                                    ? 'Confirm the hardware signing warning to continue.'
+                                    : null
+                            : (!signerReady && password.length === 0) ? t('send.passwordHint') : null;
         return wrap(
             <FormPage
                 id="send-review-form"
@@ -2863,6 +2888,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </StatusMessage>
                 ) : null}
                 actions={(
+                    <>
+                    {reviewDisabledReason ? (
+                        <p id="send-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
@@ -2877,6 +2906,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                         || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
                                     : (!signerReady && password.length === 0))
                         }
+                        aria-describedby={reviewDisabledReason ? 'send-review-disabled-reason' : undefined}
                         title={networkOffline ? t('send.offline.title') : undefined}
                     >
                         {isWatcherMode
@@ -2891,6 +2921,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 })
                                 : t('send.review.submitAction', { label: softwareSignLabel })}
                     </Button>
+                    </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
@@ -3104,6 +3135,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         </StatusMessage>
     ) : null;
     const hasTokenSelected = !!chainId && !!tick.trim();
+    const sendDisabledReason = networkOffline
+        ? t('send.offline.body')
+        : testSendGate
+            ? 'Complete the test-send check to continue.'
+            : null;
     const sendFormErrors = [];
     if (formError) {
         let id;
@@ -3163,14 +3199,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </StatusMessage>
             ) : null}
             actions={(
+                <>
+                {sendDisabledReason ? (
+                    <p id="send-disabled-reason" role="status" className={styles.hint}>{sendDisabledReason}</p>
+                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     disabled={networkOffline || !!testSendGate}
+                    aria-describedby={sendDisabledReason ? 'send-disabled-reason' : undefined}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}
                 </Button>
+                </>
             )}
         >
             {/*

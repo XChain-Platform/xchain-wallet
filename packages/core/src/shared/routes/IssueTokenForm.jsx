@@ -654,6 +654,13 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewDisabledReason = stage === 'submitting'
+            ? 'Submitting the token issue…'
+            : isWatcherMode
+                ? null
+                : isHwSource
+                    ? hwStatus !== 'available' ? 'Connect and unlock the hardware wallet to continue.' : null
+                    : (!signerReady && password.length === 0) ? t('send.passwordHint') : null;
         // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
         // because changing form inputs is the recovery path.
         return wrap(
@@ -669,17 +676,16 @@ export function IssueTokenForm({ walletId, onBack }) {
                     </StatusMessage>
                 ) : null}
                 actions={(
+                    <>
+                    {reviewDisabledReason ? (
+                        <p id="issue-review-disabled-reason" role="status" className={styles.hint}>{reviewDisabledReason}</p>
+                    ) : null}
                     <Button
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
+                        disabled={Boolean(reviewDisabledReason)}
+                        aria-describedby={reviewDisabledReason ? 'issue-review-disabled-reason' : undefined}
                     >
                         {isWatcherMode
                             ? t('send.review.createUnsigned')
@@ -689,6 +695,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                                     ? t('send.review.signOn', { device: descriptor.displayName })
                                     : t('send.review.sign'))}
                     </Button>
+                    </>
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
@@ -839,6 +846,15 @@ export function IssueTokenForm({ walletId, onBack }) {
     const issueErrors = formError
         ? [{ ...issueErrorTarget, message: formError }]
         : [];
+    const issueDisabledReason = actionConfirm.composing
+        ? 'Preparing the token issue for review…'
+        : !fromAddress
+            ? 'Add or choose a source address to continue.'
+            : !ticker.trim()
+                ? 'Enter a token ticker to continue.'
+                : !supply.trim()
+                    ? 'Enter the token supply to continue.'
+                    : null;
 
     return wrap(
         <FormPage
@@ -847,14 +863,20 @@ export function IssueTokenForm({ walletId, onBack }) {
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
             actions={(
+                <>
+                {issueDisabledReason ? (
+                    <p id="issue-disabled-reason" role="status" className={styles.hint}>{issueDisabledReason}</p>
+                ) : null}
                 <Button
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
+                    disabled={Boolean(issueDisabledReason)}
+                    aria-describedby={issueDisabledReason ? 'issue-disabled-reason' : undefined}
                 >
                     {singleEncode ? t('issue.title') : t('common.preview')}
                 </Button>
+                </>
             )}
         >
             {draftBanner}
