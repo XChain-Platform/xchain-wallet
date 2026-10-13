@@ -244,6 +244,19 @@ function clickReason(err) {
  * A crawl bound to one page. `screens` are discovered once and then crawled
  * in the order given; the caller picks its shard of them.
  */
+// WebKit reports every failed load twice: once with the URL through the
+// request events below (where the app's own origin is judged), and again as
+// a console line or page error with no URL ("Failed to load resource: ...
+// 404", "Origin ... is not allowed by Access-Control-Allow-Origin", "Fetch API
+// cannot load ... due to access control checks") even when the app catches the
+// rejection. Those carry no way to tell an own-origin failure from a third
+// party's, so they are left to the request events.
+export function isWebKitNetworkNoise(text) {
+    return /^Failed to load resource\b/.test(text)
+        || /is not allowed by Access-Control-Allow-Origin/.test(text)
+        || /due to access control checks\.?$/.test(text);
+}
+
 export function createCrawl(page, { venue, outDir, origin }) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
@@ -251,9 +264,14 @@ export function createCrawl(page, { venue, outDir, origin }) {
     let action = 'start';
     const events = [];
 
-    page.on('pageerror', (err) => events.push({ action, kind: 'page error', text: String(err?.message || err).slice(0, 300) }));
+    page.on('pageerror', (err) => {
+        const text = String(err?.message || err);
+        if (isWebKitNetworkNoise(text)) return;
+        events.push({ action, kind: 'page error', text: text.slice(0, 300) });
+    });
     page.on('console', (msg) => {
         if (msg.type() !== 'error') return;
+        if (isWebKitNetworkNoise(msg.text())) return;
         events.push({ action, kind: 'console.error', text: msg.text().slice(0, 300) });
     });
     page.on('requestfailed', (req) => {
