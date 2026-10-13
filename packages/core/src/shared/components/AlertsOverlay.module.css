@@ -12,6 +12,7 @@
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
     max-width: min(380px, 100%);
     min-width: 0;

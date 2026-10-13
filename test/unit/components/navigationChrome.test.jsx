@@ -225,7 +225,7 @@ describe('More sheet dismissal', () => {
         fireEvent.click(more);
         await settleFocus();
 
-        const receive = screen.getByRole('button', { name: 'Receive' });
+        const receive = screen.getByRole('button', { name: 'Close more navigation' });
         const lock = screen.getByRole('button', { name: 'Lock' });
         expect(receive).toHaveFocus();
 

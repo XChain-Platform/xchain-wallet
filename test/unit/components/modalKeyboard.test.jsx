@@ -248,7 +248,7 @@ describe('BottomTabBar modal sheet keyboard contract', () => {
         more.focus();
         fireEvent.click(more);
         await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
-        const first = screen.getByRole('button', { name: 'Receive' });
+        const first = screen.getByRole('button', { name: 'Close more navigation' });
         const last = screen.getByRole('button', { name: 'Lock' });
 
         expect(first).toHaveFocus();
@@ -259,7 +259,7 @@ describe('BottomTabBar modal sheet keyboard contract', () => {
         expect(last).toHaveFocus();
         fireEvent.keyDown(window, { key: 'Escape' });
         await act(async () => {});
-        expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
         expect(more).toHaveFocus();
     });
 

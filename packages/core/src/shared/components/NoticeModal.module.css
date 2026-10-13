@@ -19,8 +19,10 @@
     min-width: 0;
     max-width: 320px;
     max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     background: var(--xc-surface);
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
@@ -29,6 +31,19 @@
     padding: var(--xc-space-4);
     text-align: center;
     animation: pop 140ms ease-out;
+}
+
+.content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: var(--xc-space-2);
 }
 
 @keyframes pop {
@@ -48,6 +63,12 @@
     .panel {
         max-height: calc(100% - var(--xc-space-2) - var(--xc-space-2));
         padding: var(--xc-space-3);
+    }
+}
+
+@media (max-width: 360px) {
+    .actions {
+        flex-direction: column;
     }
 }
 

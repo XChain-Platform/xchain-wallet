@@ -110,6 +110,7 @@
 }
 
 .sheet {
+    box-sizing: border-box;
     position: fixed;
     inset-inline-start: 0;
     inset-inline-end: 0;
@@ -121,7 +122,10 @@
     border-start-end-radius: var(--xc-radius-lg, 12px);
     z-index: var(--xc-z-modal);
     max-height: 70vh;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     padding: var(--xc-space-2)
         env(safe-area-inset-right, 0px)
         env(safe-area-inset-bottom, var(--xc-space-3))
@@ -129,12 +133,54 @@
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
+.sheetHeader {
+    position: relative;
+    min-height: var(--xc-tap-min);
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
 .handle {
     width: 36px;
     height: 4px;
-    margin: var(--xc-space-2) auto var(--xc-space-3);
+    margin: 0 auto;
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
+}
+
+.sheetClose {
+    position: absolute;
+    inset-inline-end: var(--xc-space-2);
+    top: 0;
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    appearance: none;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--xc-text-muted);
+    cursor: pointer;
+}
+
+.sheetClose:hover {
+    background: var(--xc-surface);
+    color: var(--xc-text);
+}
+
+.sheetClose:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+.sheetBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .sheetList {
