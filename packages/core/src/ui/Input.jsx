@@ -56,7 +56,7 @@ export const Input = forwardRef(function Input(
 ) {
     const autoId = useId();
     const inputId = id || autoId;
-    const hintId = hint ? `${inputId}-hint` : undefined;
+    const hintId = hint && !error ? `${inputId}-hint` : undefined;
     const errorId = error ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
     const isDateTime = type === 'datetime-local';

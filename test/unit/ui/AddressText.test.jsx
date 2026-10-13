@@ -9,6 +9,7 @@ import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { AddressText, truncateAddress } from '../../../packages/core/src/ui/AddressText.jsx';
 
 const ADDRESS = 'bc1q1234567890abcdefghijklmnopqrstuvwxyz';
+const SHORT_ADDRESS = 'bc1qabcdefghijklmnopqrstuv';
 
 describe('truncateAddress', () => {
     it('keeps short values intact', () => {
@@ -47,5 +48,35 @@ describe('<AddressField>', () => {
         expect(input).toHaveValue(ADDRESS);
         expect(input).toHaveAttribute('title', ADDRESS);
         expect(screen.getByText('bc1q12…uvwxyz').closest('[aria-hidden="true"]')).not.toBeNull();
+    });
+});
+
+describe('<AddressText> rendering', () => {
+    it('truncates long addresses visually while preserving the accessible value', () => {
+        render(<AddressText address={SHORT_ADDRESS} />);
+        const value = screen.getByLabelText(SHORT_ADDRESS);
+        expect(value).toHaveTextContent(`${SHORT_ADDRESS.slice(0, 6)}…${SHORT_ADDRESS.slice(-6)}`);
+        expect(value).toHaveAttribute('title', SHORT_ADDRESS);
+    });
+
+    it('renders the full address when truncation is disabled', () => {
+        render(<AddressText address={SHORT_ADDRESS} truncate={false} />);
+        expect(screen.getByLabelText(SHORT_ADDRESS)).toHaveTextContent(SHORT_ADDRESS);
+    });
+
+    it('splits highlighted addresses into head, middle, and tail without changing their name', () => {
+        const { container } = render(<AddressText address={SHORT_ADDRESS} highlight truncate={false} />);
+        const value = screen.getByLabelText(SHORT_ADDRESS);
+        expect(value.children).toHaveLength(3);
+        expect(value.children[0]).toHaveTextContent(SHORT_ADDRESS.slice(0, 6));
+        expect(value.children[1]).toHaveTextContent(SHORT_ADDRESS.slice(6, -6));
+        expect(value.children[2]).toHaveTextContent(SHORT_ADDRESS.slice(-6));
+        expect(container.firstChild).toBe(value);
+    });
+
+    it('shows a neutral placeholder for absent addresses', () => {
+        const { container } = render(<AddressText address="" size="sm" />);
+        expect(container.firstChild).toHaveTextContent('…');
+        expect(container.firstChild).not.toHaveAttribute('aria-label');
     });
 });
