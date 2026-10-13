@@ -43,12 +43,14 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(guide).not.toContain("fontSize: 'var(--xc-text-lg)'");
     });
 
-    it('matches the FormPage viewport breakpoint and EmptyState props', () => {
+    it('documents the FormPage breakpoint, full-width ListPage and EmptyState props', () => {
         const formCss = read('packages/core/src/ui/FormPage.module.css');
         const emptyState = read('packages/core/src/ui/EmptyState.jsx');
         expect(formCss).toContain('@media (min-width: 600px)');
         expect(guide).toContain('**Narrow, under 600px**');
         expect(guide).toContain('**Wide, 600px and up**');
+        expect(guide).toContain('### The list rule: full width to the scrollbar');
+        expect(guide).toContain('Do not wrap it in a card or add a centered maximum width');
         for (const prop of [
             'title', 'body', 'icon', 'actionLabel', 'onAction', 'actionIcon', 'titleAs', 'role', 'className',
         ]) {
@@ -57,17 +59,46 @@ describe('STYLE_GUIDE component contracts', () => {
         }
     });
 
-    it('keeps documented spacing and type values aligned with tokens.css', () => {
+    it('keeps documented token scales aligned with tokens.css', () => {
         const tokens = read('packages/core/src/ui/tokens.css');
         const names = [
             '--xc-space-1', '--xc-space-2', '--xc-space-3', '--xc-space-4', '--xc-space-5', '--xc-space-6', '--xc-space-8',
             '--xc-text-xs', '--xc-text-sm', '--xc-text-md', '--xc-text-lg', '--xc-text-xl', '--xc-text-2xl',
+            '--xc-icon-xs', '--xc-icon-sm', '--xc-icon-md', '--xc-icon-lg', '--xc-icon-xl',
+            '--xc-radius-sm', '--xc-radius-md', '--xc-radius-lg', '--xc-radius-pill',
+            '--xc-shadow-sm', '--xc-shadow-md',
+            '--xc-z-base', '--xc-z-sticky', '--xc-z-dropdown', '--xc-z-overlay', '--xc-z-modal', '--xc-z-toast',
         ];
         for (const name of names) {
             const value = new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)?.[1].trim();
             expect(value, name).toBeTruthy();
             expect(guide).toContain(`| \`${name}\` | ${value} |`);
         }
+    });
+
+    it('documents semantic status tokens, shared icon sizing and the browser baseline', () => {
+        const tokens = read('packages/core/src/ui/tokens.css');
+        const icons = read('packages/core/src/ui/icons/index.jsx');
+        for (const name of [
+            '--xc-danger', '--xc-danger-fg', '--xc-danger-bg', '--xc-danger-text', '--xc-on-danger',
+            '--xc-info', '--xc-info-bg', '--xc-info-text',
+            '--xc-warning', '--xc-warning-bg', '--xc-warning-text',
+            '--xc-success', '--xc-success-fill', '--xc-success-bg', '--xc-on-success',
+        ]) {
+            expect(tokens).toContain(`${name}:`);
+            expect(guide).toContain(`\`${name}\``);
+        }
+        expect(tokens).toContain(':where(svg[data-xc-icon])');
+        expect(icons).toContain("'data-xc-icon': ''");
+        expect(guide).toContain('Shared icons are sized by the `svg[data-xc-icon]` rule in `tokens.css`');
+        expect(guide).toContain('Never put `var()` in an SVG sizing attribute');
+        expect(guide).toContain('Chrome 102 is the oldest supported Android WebView engine');
+    });
+
+    it('documents sentence case and canonical wallet terminology', () => {
+        expect(guide).toContain('Use sentence case for page titles, headings, buttons, menu items, field labels and status messages.');
+        expect(guide).toContain('say **recovery phrase**, not seed phrase or mnemonic');
+        expect(guide).toContain('**network fee**, not transaction fee, miner fee or gas fee');
     });
 
     it('points composed fields at their implemented shared components', () => {
