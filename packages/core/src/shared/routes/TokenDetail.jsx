@@ -25,6 +25,7 @@ import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
@@ -542,26 +543,36 @@ export function TokenDetail({
                     chart uses, so the toggle persists across both surfaces). */}
                 {chartVisible ? (
                     <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                        <MarketPanel
-                            isNative={isNative}
-                            nativePrice={nativePrice}
-                            showNativeStats={showNativeStats}
-                            showSparkline={showSparkline}
-                            isDemo={isDemo}
-                            assetInfo={assetInfo}
-                            tick={tick}
-                            chainId={chainId}
-                            hasMarketData={hasMarketData}
-                            fiatRate={fiatRate}
-                            fiatRateSource={fiatRateSource}
-                            fiatCurrency={fiatCurrency}
-                        />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:market`}
+                        >
+                            <MarketPanel
+                                isNative={isNative}
+                                nativePrice={nativePrice}
+                                showNativeStats={showNativeStats}
+                                showSparkline={showSparkline}
+                                isDemo={isDemo}
+                                assetInfo={assetInfo}
+                                tick={tick}
+                                chainId={chainId}
+                                hasMarketData={hasMarketData}
+                                fiatRate={fiatRate}
+                                fiatRateSource={fiatRateSource}
+                                fiatCurrency={fiatCurrency}
+                            />
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 
                 {!isNative && supplyHistory.length >= 2 ? (
                     <div className={styles.infoCard}>
-                        <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:supply`}
+                        >
+                            <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 

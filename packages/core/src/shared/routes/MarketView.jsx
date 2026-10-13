@@ -19,6 +19,7 @@ import { PlaceOrderPanel } from '../components/PlaceOrderPanel.jsx';
 import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -225,10 +226,14 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             {summaryError ? (
                 <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
             ) : null}
-            {headerCard}
+            <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
+                {headerCard}
+            </RouteErrorBoundary>
 
             <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
+                    <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                </RouteErrorBoundary>
             </div>
 
             <div
@@ -261,47 +266,49 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 })}
             </div>
 
-            {tab === 'book' ? (
-                <OrderbookPanel
-                    key={marketKey}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                    demo={demo}
-                    onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
-                />
-            ) : null}
-            {tab === 'trades' ? (
-                <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
-            ) : null}
-            {tab === 'place' ? (
-                <PlaceOrderPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                    prefillPrice={prefillPrice}
-                />
-            ) : null}
-            {tab === 'orders' ? (
-                <OpenOrdersPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                />
-            ) : null}
-            {tab === 'history' ? (
-                <TradeHistoryPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                />
-            ) : null}
+            <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:${tab}`}>
+                {tab === 'book' ? (
+                    <OrderbookPanel
+                        key={marketKey}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                        demo={demo}
+                        onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
+                    />
+                ) : null}
+                {tab === 'trades' ? (
+                    <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                ) : null}
+                {tab === 'place' ? (
+                    <PlaceOrderPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                        prefillPrice={prefillPrice}
+                    />
+                ) : null}
+                {tab === 'orders' ? (
+                    <OpenOrdersPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                    />
+                ) : null}
+                {tab === 'history' ? (
+                    <TradeHistoryPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                    />
+                ) : null}
+            </RouteErrorBoundary>
         </>,
     );
 }

@@ -6,7 +6,7 @@
 // HomeTabs empty states: one explanation per tab, left to the empty card.
 
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 
@@ -15,12 +15,32 @@ const tabsCss = readFileSync(
     'utf8',
 );
 
+const widgetFailure = vi.hoisted(() => ({ current: null }));
+let consoleError;
+const preventExpectedError = (event) => event.preventDefault();
+
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
-    TotalBalanceHero: () => null,
+    TotalBalanceHero: () => {
+        if (widgetFailure.current === 'ticker') throw new Error('price ticker failed');
+        return React.createElement('div', null, 'Price ticker');
+    },
 }));
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
-    PortfolioChart: () => null,
+    PortfolioChart: () => {
+        if (widgetFailure.current === 'chart') throw new Error('portfolio chart failed');
+        return React.createElement('div', null, 'Portfolio chart');
+    },
 }));
+vi.mock('../../../packages/core/src/shared/components/CollectiblesView.jsx', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        CollectiblesView: (props) => {
+            if (widgetFailure.current === 'collectibles') throw new Error('collectibles grid failed');
+            return React.createElement(actual.CollectiblesView, props);
+        },
+    };
+});
 // One object for every render, as the real context provides: HomeTabs reads
 // settings through useSettings, whose effects key on the messaging identity,
 // so a fresh object per render re-runs them forever.
@@ -62,7 +82,17 @@ function mount(walletId, overrides = {}) {
     );
 }
 
-afterEach(() => cleanup());
+beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.addEventListener('error', preventExpectedError);
+});
+
+afterEach(() => {
+    widgetFailure.current = null;
+    cleanup();
+    window.removeEventListener('error', preventExpectedError);
+    consoleError.mockRestore();
+});
 
 describe('HomeTabs empty states', () => {
     it('shows one actionable first-funding state for an empty wallet', () => {
@@ -126,5 +156,34 @@ describe('HomeTabs empty states', () => {
     it('does not justify placeholder body text', () => {
         const rule = tabsCss.match(/\.placeholderBody\s*\{[^}]*\}/)[0];
         expect(rule).not.toMatch(/text-align:\s*justify/);
+    });
+
+    it.each([
+        ['price ticker', 'ticker', 'Price ticker'],
+        ['portfolio chart', 'chart', 'Portfolio chart'],
+    ])('keeps Home usable when the %s throws and retries it inline', (_label, failure, recoveredText) => {
+        widgetFailure.current = failure;
+        mount('real-wallet');
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('tablist', { name: 'Wallet view' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+
+        widgetFailure.current = null;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText(recoveredText)).toBeInTheDocument();
+    });
+
+    it('keeps the NFT tab usable when the collectibles grid throws and retries it inline', () => {
+        widgetFailure.current = 'collectibles';
+        mount('real-wallet');
+        fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('tab', { name: 'Coins' })).toBeInTheDocument();
+
+        widgetFailure.current = null;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText('No collectibles yet')).toBeInTheDocument();
     });
 });

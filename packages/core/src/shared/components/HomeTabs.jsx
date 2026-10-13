@@ -26,6 +26,7 @@ import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
 import { TotalBalanceHero } from './TotalBalanceHero.jsx';
 import { PortfolioChart } from './PortfolioChart.jsx';
+import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import {
     isDemoWallet,
@@ -244,25 +245,35 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             {/* Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
                 their own dollar amounts via separate flows once they
                 wire up; for now they're not in the sum. */}
-            <TotalBalanceHero
-                rows={portfolioRows}
-                walletId={walletId}
-                networkFilter={networkFilter}
-                lastSyncedAt={balancesFetchedAt}
-                pricesFetchedAt={pricesFetchedAt}
-                onRefresh={onRefresh}
-                refreshing={refreshing}
-                filterOpen={filterOpen}
-                onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
-                onCommandPalette={onCommandPalette}
-                onOpenSettings={onOpenSettings}
-                onLockWallet={onLockWallet}
-            />
+            <RouteErrorBoundary
+                variant="compact"
+                resetKey={`${walletId || ''}:${networkFilter}:price`}
+            >
+                <TotalBalanceHero
+                    rows={portfolioRows}
+                    walletId={walletId}
+                    networkFilter={networkFilter}
+                    lastSyncedAt={balancesFetchedAt}
+                    pricesFetchedAt={pricesFetchedAt}
+                    onRefresh={onRefresh}
+                    refreshing={refreshing}
+                    filterOpen={filterOpen}
+                    onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
+                    onCommandPalette={onCommandPalette}
+                    onOpenSettings={onOpenSettings}
+                    onLockWallet={onLockWallet}
+                />
+            </RouteErrorBoundary>
 
-            <PortfolioChart
-                rows={portfolioRows}
-                walletId={walletId}
-            />
+            <RouteErrorBoundary
+                variant="compact"
+                resetKey={`${walletId || ''}:${networkFilter}:chart`}
+            >
+                <PortfolioChart
+                    rows={portfolioRows}
+                    walletId={walletId}
+                />
+            </RouteErrorBoundary>
 
             {actions}
 
@@ -437,21 +448,26 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             never grow. Everything you hold, collectible or not, is also under Tokens.
                         </p>
                         ) : null}
-                        <CollectiblesView
-                            rows={nfts}
-                            demo={isDemo}
-                            emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
-                            emptyBody={networkFilter === 'all'
-                                ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
-                                : 'Collectibles on this network appear here after this wallet receives them.'}
-                            onReceive={networkFilter === 'all' ? onReceive : undefined}
-                            onSelectToken={onSelectToken}
-                            pinnedKeys={pinnedKeys}
-                            onTogglePin={onTogglePin}
-                            hiddenKeys={hiddenKeys}
-                            onToggleHide={onToggleHide}
-                            allowRemoteImages={allowRemoteImages}
-                        />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${walletId || ''}:${networkFilter}:collectibles`}
+                        >
+                            <CollectiblesView
+                                rows={nfts}
+                                demo={isDemo}
+                                emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
+                                emptyBody={networkFilter === 'all'
+                                    ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
+                                    : 'Collectibles on this network appear here after this wallet receives them.'}
+                                onReceive={networkFilter === 'all' ? onReceive : undefined}
+                                onSelectToken={onSelectToken}
+                                pinnedKeys={pinnedKeys}
+                                onTogglePin={onTogglePin}
+                                hiddenKeys={hiddenKeys}
+                                onToggleHide={onToggleHide}
+                                allowRemoteImages={allowRemoteImages}
+                            />
+                        </RouteErrorBoundary>
                     </>
                 ) : null}
 

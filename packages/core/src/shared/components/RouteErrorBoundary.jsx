@@ -54,6 +54,17 @@ export class RouteErrorBoundary extends Component {
     render() {
         if (!this.state.failed) return this.props.children;
 
+        if (this.props.variant === 'compact') {
+            return (
+                <div role="alert" className={styles.compactRecovery}>
+                    <span>Could not load this section.</span>
+                    <Button type="button" variant="secondary" size="sm" onClick={this.retry}>
+                        Retry
+                    </Button>
+                </div>
+            );
+        }
+
         const actions = (
             <>
                 {this.props.onHome ? (
