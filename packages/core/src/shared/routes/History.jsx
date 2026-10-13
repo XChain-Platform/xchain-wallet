@@ -1328,8 +1328,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="History"
+            backLabel={t('common.backToHome')}
+            title={t('history.title')}
         />
     );
     const wrap = (children) => (
@@ -1345,7 +1345,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     variant="error"
                     className={styles.error}
                     recovery={{
-                        label: 'Try again',
+                        label: t('common.tryAgain'),
                         onAction: () => {
                             setLoadError(null);
                             setAddressesByChain(null);
@@ -1362,7 +1362,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (!addressesByChain) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label="Loading history">
+                <div role="status" aria-label={t('history.loading')}>
                     <Skeleton.List rows={5} />
                 </div>
             </ListPage>,
@@ -1372,9 +1372,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return wrap(
             <ListPage>
                 <EmptyState
-                    title="No addresses yet"
-                    body="Generate a receive address to populate history."
-                    actionLabel={onReceive ? 'Receive' : undefined}
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('history.empty.noAddressesBody')}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
                     icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
@@ -1384,7 +1384,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     return wrap(
         <ListPage toolbar={(
-            <div className={styles.filterCard} role="group" aria-label="History filters">
+            <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
                 <input
                     ref={searchInputRef}
                     type="search"
@@ -1393,8 +1393,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     autoCorrect="off"
                     spellCheck={false}
                     className={styles.searchInput}
-                    placeholder="Search action, address, token, txid, memo…"
-                    aria-label="Search history"
+                    placeholder={t('history.filters.searchPlaceholder')}
+                    aria-label={t('history.filters.searchLabel')}
                     value={searchQuery}
                     onChange={(ev) => setSearchQuery(ev.target.value)}
                     autoComplete="off"
@@ -1403,7 +1403,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <div className={styles.dateRow}>
                     <input
                         type="date"
-                        aria-label="From date"
+                        aria-label={t('history.filters.fromDate')}
                         value={dateFrom}
                         max={dateTo || undefined}
                         onChange={(ev) => updateDateFrom(ev.target.value)}
@@ -1412,7 +1412,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     <span className={styles.dateSep}>→</span>
                     <input
                         type="date"
-                        aria-label="To date"
+                        aria-label={t('history.filters.toDate')}
                         value={dateTo}
                         min={dateFrom || undefined}
                         onChange={(ev) => updateDateTo(ev.target.value)}
@@ -1428,7 +1428,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         aria-expanded={moreFiltersOpen}
                         aria-controls="history-more-filters"
                     >
-                        <span>Additional details</span>
+                        <span>{t('history.filters.additionalDetails')}</span>
                         {moreFiltersOpen
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
@@ -1440,25 +1440,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
-                        title="Show the fiat equivalent for native-coin amounts"
+                        title={t('history.filters.fiatHelp')}
                     >
-                        {showFiatInHistory ? `Fiat: ${fiatCurrency}` : 'Show fiat'}
+                        {showFiatInHistory
+                            ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
+                            : t('history.filters.showFiat')}
                     </button>
-                    <div className={styles.segGroup} role="radiogroup" aria-label="Grouping mode">
+                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
                         <button
                             type="button"
                             role="radio"
                             aria-checked={groupingMode === 'grouped'}
                             onClick={() => setGroupingMode('grouped')}
                             className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
-                        >Grouped</button>
+                        >{t('history.filters.grouped')}</button>
                         <button
                             type="button"
                             role="radio"
                             aria-checked={groupingMode === 'flat'}
                             onClick={() => setGroupingMode('flat')}
                             className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
-                        >Flat</button>
+                        >{t('history.filters.flat')}</button>
                     </div>
                 </div>
 
@@ -1467,7 +1469,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         id="history-more-filters"
                         className={styles.morePanel}
                         role="group"
-                        aria-label="Advanced filters"
+                        aria-label={t('history.filters.advanced')}
                     >
                         <ChainPicker
                             activeChainIds={activeChainIds}
@@ -1483,19 +1485,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             options={ACTION_TYPE_OPTIONS}
                             selected={actionTypeFilter}
                             onToggle={toggleSetMember(setActionTypeFilter)}
-                            allLabel="All action types"
-                            summaryNoun="action type"
+                            allLabel={t('history.filters.allActionTypes')}
+                            summaryNoun={t('history.filters.actionType')}
                             iconForId={actionTypeIcon}
-                            menuHeader="Action types"
+                            menuHeader={t('history.filters.actionTypes')}
                         />
 
                         <CheckboxPicker
                             options={STATUS_OPTIONS}
                             selected={statusFilter}
                             onToggle={toggleSetMember(setStatusFilter)}
-                            allLabel="All statuses"
-                            summaryNoun="status"
-                            menuHeader="Status"
+                            allLabel={t('history.filters.allStatuses')}
+                            summaryNoun={t('history.filters.status')}
+                            menuHeader={t('history.filters.statusHeader')}
                         />
 
                         <CheckboxPicker
@@ -1508,10 +1510,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             onToggle={(id) => {
                                 if (id === 'crosschain') setCrossChainOnly((v) => !v);
                             }}
-                            allLabel="No special filters"
-                            summaryNoun="filter"
+                            allLabel={t('history.filters.noSpecialFilters')}
+                            summaryNoun={t('history.filters.filter')}
                             iconForId={specialFilterIcon}
-                            menuHeader="Special"
+                            menuHeader={t('history.filters.special')}
                         />
 
                         {multisigAddress ? (
@@ -1521,7 +1523,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 aria-pressed={multisigOnly}
                                 onClick={() => setMultisigOnly((v) => !v)}
                             >
-                                Multisig only
+                                {t('history.filters.multisigOnly')}
                             </button>
                         ) : null}
 
@@ -1552,7 +1554,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             {!historyLoaded || loadingChains.size > 0 ? (
-                <div role="status" aria-label="Loading history">
+                <div role="status" aria-label={t('history.loading')}>
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
                 </div>
             ) : null}
@@ -1560,19 +1562,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
-                        title="No matches for the current filters"
-                        body="Adjust or clear the filters to see more history."
-                        actionLabel="Clear filters"
+                        title={t('history.empty.noMatchesTitle')}
+                        body={t('history.empty.noMatchesBody')}
+                        actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
                     />
                 ) : (
                     <EmptyState
                         title={crossChainOnly
-                            ? 'No cross-chain actions yet'
-                            : 'No activity yet'}
+                            ? t('history.empty.noCrossChainTitle')
+                            : t('history.empty.noActivityTitle')}
                         body={crossChainOnly
-                            ? 'Cross-chain transfers sent or received by this wallet appear here.'
-                            : 'Once you send or receive on the selected chains, the activity feed populates.'}
+                            ? t('history.empty.noCrossChainBody')
+                            : t('history.empty.noActivityBody')}
                     />
                 )
             ) : null}
@@ -1589,8 +1591,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
                             >
                                 {entries.length > 0
-                                    ? 'No rows match the current filters.'
-                                    : 'There are no history rows to export.'}
+                                    ? t('history.export.noMatchingRows')
+                                    : t('history.export.noRows')}
                             </span>
                         ) : null}
                         <button
@@ -1602,7 +1604,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             onClick={() => setExportModalOpen(true)}
                             disabled={visibleEntries.length === 0}
                         >
-                            Export…
+                            {t('history.export.open')}
                         </button>
                     </div>
                 </div>
@@ -1658,7 +1660,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                             item.members.length,
                                                         )}
                                                     >
-                                                        Show more group entries ({Math.min(memberLimit, item.members.length).toLocaleString('en-US')} of {item.members.length.toLocaleString('en-US')} shown)
+                                                        {t('history.showMoreGroupEntries', {
+                                                            shown: Math.min(memberLimit, item.members.length).toLocaleString('en-US'),
+                                                            total: item.members.length.toLocaleString('en-US'),
+                                                        })}
                                                     </Button>
                                                 </li>
                                             ) : null}
@@ -1692,7 +1697,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {visibleItemCount < groupedItems.length ? (
                 <div className={styles.pagination} aria-live="polite">
                     <span className={styles.paginationCount}>
-                        {Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US')} of {groupedItems.length.toLocaleString('en-US')} history items shown
+                        {t('history.itemsShown', {
+                            shown: Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US'),
+                            total: groupedItems.length.toLocaleString('en-US'),
+                        })}
                     </span>
                     <Button
                         type="button"
@@ -1700,7 +1708,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         icon={null}
                         onClick={showMoreItems}
                     >
-                        Show more history
+                        {t('history.showMore')}
                     </Button>
                 </div>
             ) : null}
@@ -1970,7 +1978,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     }
 
     return (
-        <div className={styles.detailContainer} role="region" aria-label="Action detail">
+        <div className={styles.detailContainer} role="region" aria-label={t('history.detail.label')}>
             {/* M2.3: the pending branch. First, because on a pending
                 entry the thing the user came to find out is what is
                 happening to it, and because the warning states have to
@@ -2014,7 +2022,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 the More menu independent preserves Speed up and Cancel for
                 incomplete pending records. */}
             {explorerButtons.length > 0 || moreOptions.length > 0 ? (
-                <div className={styles.detailActions} role="group" aria-label="Action options">
+                <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
                     {explorerButtons.map((link) => (
                         <a
                             key={link.id}
@@ -2045,7 +2053,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onClick={() => setMoreOpen((o) => !o)}
                         >
                             <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
+                            <span>{t('history.detail.more')}</span>
                         </button>
                         {moreOpen ? (
                             <div className={styles.moreMenu} role="menu">
@@ -2074,7 +2082,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         className={styles.moreMenuItem}
                                         disabled
                                     >
-                                        <span>No additional actions</span>
+                                        <span>{t('history.detail.noAdditionalActions')}</span>
                                     </button>
                                 )}
                             </div>
@@ -2102,7 +2110,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                 <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
                     <label className={styles.saveContactLabel}>
-                        Save {shortenAddress(contactPeer || '')} as
+                        {t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
                         <input
                             type="text"
                             enterKeyHint="go"
@@ -2111,7 +2119,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onChange={(e) => setContactName(e.target.value)}
                             autoFocus
                             maxLength={80}
-                            placeholder="Contact name"
+                            placeholder={t('history.contact.name')}
                         />
                     </label>
                     {contactSaveError ? (
@@ -2129,7 +2137,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             }}
                             disabled={contactSaveStage === 'saving'}
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </Button>
                         <Button
                             type="submit"
@@ -2137,14 +2145,14 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             size="sm"
                             loading={contactSaveStage === 'saving'}
                         >
-                            Save
+                            {t('history.contact.save')}
                         </Button>
                     </div>
                 </form>
             ) : null}
 
             {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
-            <div className={styles.detailTabs} role="tablist" aria-label="Action detail view">
+            <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
                 {detailTabs.map((t) => (
                     <button
                         key={t.id}
@@ -2189,7 +2197,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             <span className={styles.rawJsonCopy}>
                                 <CopyIconButton
                                     value={decodeActionToText(rawForDisplay)}
-                                    label="Copy raw JSON"
+                                    label={t('history.detail.copyRawJson')}
                                 />
                             </span>
                             <pre className={styles.detailDecoded}>
@@ -2199,18 +2207,21 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
                                 <h4 className={styles.detailSectionHeading}>
-                                    Peer · {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}
+                                    {t('history.detail.peerHeading', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}
                                 </h4>
                                 {peer?.loading ? (
-                                    <p className={styles.empty}>Loading the linked transaction…</p>
+                                    <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
                                 ) : peer?.error ? (
-                                    <p className={styles.error}>Couldn't load peer: {peer.error}</p>
+                                    <p className={styles.error}>{t('history.detail.peerError', { error: peer.error })}</p>
                                 ) : peer?.action ? (
                                     <div className={styles.rawJsonWrap}>
                                         <span className={styles.rawJsonCopy}>
                                             <CopyIconButton
                                                 value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
-                                                label="Copy peer raw JSON"
+                                                label={t('history.detail.copyPeerRawJson')}
                                             />
                                         </span>
                                         <pre className={styles.detailDecoded}>
@@ -2218,11 +2229,10 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         </pre>
                                     </div>
                                 ) : (
-                                    <p className={styles.empty}>
-                                        Peer chain not bundled in this wallet; open the
-                                        block explorer for {entry.link.peerCoinTicker} to
-                                        view {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}.
-                                    </p>
+                                    <p className={styles.empty}>{t('history.detail.peerUnavailable', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}</p>
                                 )}
                             </div>
                         ) : null}
@@ -2253,7 +2263,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         }).catch(() => { /* main returns ok:false on failure */ });
                     }}
                 >
-                    Open in new window
+                    {t('history.detail.openNewWindow')}
                 </Button>
             ) : null}
         </div>
@@ -2555,7 +2565,7 @@ function copyLabelForDetailField(key) {
     return null;
 }
 
-function CopyIconButton({ value, label = 'Copy to clipboard' }) {
+function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
     const haptic = useHapticFeedback();
@@ -2576,8 +2586,8 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
             type="button"
             onClick={handleClick}
             className={styles.copyIconButton}
-            aria-label={copied ? 'Copied' : label}
-            title={copied ? 'Copied!' : label}
+            aria-label={copied ? t('history.copy.copied') : label}
+            title={copied ? t('history.copy.copiedTitle') : label}
         >
             {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
         </button>
@@ -2602,7 +2612,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={formatDecimalAmount(entry.actionIndex)}
                 fullValue={String(entry.actionIndex)}
-                ariaLabel="Copy action number"
+                ariaLabel={t('history.copy.actionNumber')}
             />
         )]);
     }
@@ -2623,7 +2633,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.txHash}
                 fullValue={entry.txHash}
-                ariaLabel="Copy transaction ID"
+                ariaLabel={t('history.copy.transactionId')}
             />
         )]);
     }
@@ -2632,7 +2642,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.source}
                 fullValue={entry.source}
-                ariaLabel="Copy from address"
+                ariaLabel={t('history.copy.fromAddress')}
             />
         )]);
     }
@@ -2641,7 +2651,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.address}
                 fullValue={entry.address}
-                ariaLabel="Copy wallet address"
+                ariaLabel={t('history.copy.walletAddress')}
             />
         )]);
     }
@@ -2917,7 +2927,9 @@ function RecipientsBlock({ entry }) {
         return (
             <div style={blockStyle}>
                 <Button type="button" variant="secondary" size="sm" onClick={load}>
-                    {isDividend ? 'Show holders' : 'Show recipients'}
+                    {isDividend
+                        ? t('history.recipients.showHolders')
+                        : t('history.recipients.showRecipients')}
                 </Button>
                 {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
             </div>
@@ -2926,7 +2938,9 @@ function RecipientsBlock({ entry }) {
     if (stage === 'loading') {
         return (
             <div style={blockStyle}>
-                <span style={headingStyle}>{isDividend ? 'Loading holders…' : 'Loading recipients…'}</span>
+                <span style={headingStyle}>{isDividend
+                    ? t('history.recipients.loadingHolders')
+                    : t('history.recipients.loadingRecipients')}</span>
             </div>
         );
     }
@@ -2934,7 +2948,7 @@ function RecipientsBlock({ entry }) {
         return (
             <div style={blockStyle}>
                 <span style={headingStyle} role="status">
-                    Saved {recipients.length} address{recipients.length === 1 ? '' : 'es'} as a single contact "{name.trim()}".
+                    {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
                 </span>
             </div>
         );
@@ -2944,7 +2958,9 @@ function RecipientsBlock({ entry }) {
     return (
         <div style={blockStyle}>
             <span style={headingStyle}>
-                {recipients.length} {isDividend ? 'holder' : 'recipient'}{recipients.length === 1 ? '' : 's'}
+                {isDividend
+                    ? t('history.recipients.holderCount', { count: recipients.length })
+                    : t('history.recipients.recipientCount', { count: recipients.length })}
             </span>
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
@@ -2964,16 +2980,18 @@ function RecipientsBlock({ entry }) {
                     ))}
                     {recipients.length > 20 ? (
                         <div style={{ color: 'var(--xc-text-muted)', marginTop: 'var(--xc-space-1)' }}>
-                            … and {recipients.length - 20} more not shown
+                            {t('history.recipients.moreNotShown', { count: recipients.length - 20 })}
                         </div>
                     ) : null}
                 </div>
             ) : (
                 <EmptyState
-                    title={<>No {isDividend ? 'holders' : 'recipients'} found</>}
+                    title={isDividend
+                        ? t('history.recipients.noHoldersFound')
+                        : t('history.recipients.noRecipientsFound')}
                     body={isDividend
-                        ? 'Token holders appear here after balances are indexed.'
-                        : 'Matching recipients appear here after history is indexed.'}
+                        ? t('history.recipients.noHoldersBody')
+                        : t('history.recipients.noRecipientsBody')}
                     titleAs="p"
                 />
             )}
@@ -2984,7 +3002,7 @@ function RecipientsBlock({ entry }) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
-                        aria-label="Contact name"
+                        aria-label={t('history.contact.name')}
                         disabled={stage === 'saving'}
                         style={{
                             flex: 1,
@@ -3004,7 +3022,7 @@ function RecipientsBlock({ entry }) {
                         loading={stage === 'saving'}
                         onClick={handleSaveAll}
                     >
-                        Save {recipients.length} as one contact
+                        {t('history.recipients.saveAsContact', { count: recipients.length })}
                     </Button>
                 </div>
             ) : null}
@@ -3247,7 +3265,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     {entry.link ? (
                         <span
                             className={styles.crosschainBadge}
-                            title={`Linked to ${entry.link.peerCoinTicker} #${entry.link.peerActionIndex}`}
+                            title={t('history.row.linkedTo', {
+                                ticker: entry.link.peerCoinTicker,
+                                index: entry.link.peerActionIndex,
+                            })}
                         >
                             🔗
                         </span>
@@ -3268,10 +3289,14 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>
-                            <span>Block {formatDecimalAmount(entry.blockIndex)}</span>
+                            <span>{t('history.row.block', {
+                                block: formatDecimalAmount(entry.blockIndex),
+                            })}</span>
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
-                                    {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
+                                    {t('history.row.confirmations', {
+                                        count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+                                    })}
                                 </span>
                             ) : null}
                         </>
@@ -3369,7 +3394,7 @@ function GroupCard({ item, expanded, onToggle }) {
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? (
                     <span title={formatTimestamp(newest.timestamp)}>
-                        Latest {formatRelativeTime(newest.timestamp)}
+                        {t('history.group.latest', { when: formatRelativeTime(newest.timestamp) })}
                     </span>
                 ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
@@ -3504,12 +3529,12 @@ function shortenAddress(addr) {
  */
 function StatusPill({ status }) {
     if (status === 'confirmed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title="Confirmed">Confirmed</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title={t('history.status.confirmed')}>{t('history.status.confirmed')}</span>;
     }
     if (status === 'failed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title="Failed">Failed</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title={t('history.status.failed')}>{t('history.status.failed')}</span>;
     }
-    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title="Pending">Pending</span>;
+    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title={t('history.status.pending')}>{t('history.status.pending')}</span>;
 }
 
 function formatTimestamp(ts) {
@@ -3853,7 +3878,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : 'All chains'}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -3868,7 +3893,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>All chains</span>
+                            <span>{t('history.filters.allChains')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {
@@ -4009,12 +4034,12 @@ function ExportModal({
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Export history"
+                aria-label={t('history.export.title')}
             >
-                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>Export history</h2>
+                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
 
                 <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Format</legend>
+                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
                     <label style={MODAL_LABEL}>
                         <input
                             type="radio"
@@ -4023,7 +4048,7 @@ function ExportModal({
                             checked={format === 'csv'}
                             onChange={() => setFormat('csv')}
                         />
-                        CSV (RFC-4180; compact, opens in spreadsheets)
+                        {t('history.export.csv')}
                     </label>
                     <label style={MODAL_LABEL}>
                         <input
@@ -4033,12 +4058,12 @@ function ExportModal({
                             checked={format === 'json'}
                             onChange={() => setFormat('json')}
                         />
-                        JSON (preserves the full row including link / raw)
+                        {t('history.export.json')}
                     </label>
                 </fieldset>
 
                 <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Columns</legend>
+                    <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
                     {flowsLib.EXPORT_COLUMNS.map((col) => (
                         <label key={col} style={MODAL_LABEL}>
                             <input
@@ -4052,18 +4077,18 @@ function ExportModal({
                 </fieldset>
 
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                    {visibleCount.toLocaleString()} filtered row{visibleCount === 1 ? '' : 's'} will be exported.
+                    {t('history.export.rowCount', { count: visibleCount })}
                 </p>
 
                 <div style={MODAL_ACTIONS}>
-                    <button type="button" className={styles.chip} onClick={onClose}>Cancel</button>
+                    <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
                     <button
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
                         disabled={visibleCount === 0 || columns.size === 0}
                     >
-                        Export
+                        {t('history.export.confirm')}
                     </button>
                 </div>
             </div>

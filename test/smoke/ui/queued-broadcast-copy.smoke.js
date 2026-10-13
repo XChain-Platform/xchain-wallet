@@ -145,7 +145,15 @@ const QUEUED_SURFACES = [
 for (const [rel, dontRepeat] of QUEUED_SURFACES) {
     // Copy wraps across lines and escapes its apostrophes, so read it the way
     // the DOM ends up showing it.
-    const src = readFileSync(join(shared, rel), 'utf8')
+    const routeSrc = readFileSync(join(shared, rel), 'utf8');
+    if (rel === 'routes/Send.jsx') {
+        assert.match(routeSrc, /t\('send\.queued\.body'\)/,
+            'Send routes its queued result copy through i18n');
+    }
+    const localizedSrc = rel === 'routes/Send.jsx'
+        ? `${routeSrc} ${readFileSync(join(core, 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')}`
+        : routeSrc;
+    const src = localizedSrc
         .replace(/&apos;/g, "'")
         .replace(/'\s*\+\s*'/g, '')
         .replace(/\s+/g, ' ');

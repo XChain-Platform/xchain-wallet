@@ -157,7 +157,7 @@ assert.ok(!/Export CSV<\/button>/.test(historySrc),
     'History.jsx no longer renders the bare Export-CSV chip');
 assert.ok(!/Export JSON<\/button>/.test(historySrc),
     'History.jsx no longer renders the bare Export-JSON chip');
-assert.ok(/Export…/.test(historySrc),
+assert.ok(/t\('history\.export\.open'\)/.test(historySrc),
     'History.jsx now renders a single "Export…" trigger');
 assert.ok(/aria-haspopup="dialog"/.test(historySrc),
     'Export trigger announces it opens a dialog');
@@ -173,7 +173,7 @@ assert.ok(!/name="export-scope"/.test(historySrc),
     'ExportModal cannot switch away from the filtered view');
 assert.ok(/EXPORT_COLUMNS\.map/.test(historySrc),
     'ExportModal renders one checkbox per EXPORT_COLUMNS entry');
-assert.ok(/filtered row/.test(historySrc),
+assert.ok(/t\('history\.export\.rowCount', \{ count: visibleCount \}\)/.test(historySrc),
     'ExportModal explains that it exports filtered rows');
 assert.ok(/e\.key === 'Escape'/.test(historySrc),
     'ExportModal closes on Escape');
