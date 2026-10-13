@@ -547,13 +547,13 @@ function StakeRow({ row, cooldown, onSelect }) {
                 </div>
                 <div className={local.subtitle}>{row.subtitle}</div>
                 {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
-                {cooldown ? <div className={local.subtitle}>{cooldown}</div> : null}
             </div>
             <div className={local.trailing}>
                 <span className={`${local.status} ${local[`status_${row.status}`] || ''}`}>
                     {row.status}
                 </span>
                 <span className={local.amount}>{row.amountLabel}</span>
+                {cooldown ? <span className={local.duration}>{cooldown}</span> : null}
                 {row.rewardLabel ? (
                     <span className={local.rewardChip}>{row.rewardLabel}</span>
                 ) : null}

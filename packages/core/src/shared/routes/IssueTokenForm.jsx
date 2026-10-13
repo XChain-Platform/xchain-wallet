@@ -17,7 +17,7 @@ import {
     Input,
     ChainBadge,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+ NetworkField,  Icon, StatusMessage, FeeSelector, AddressField, FormErrorSummary,} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -151,6 +151,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -377,6 +378,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -818,12 +820,28 @@ export function IssueTokenForm({ walletId, onBack }) {
         </StatusMessage>
     ) : null;
 
+    let issueErrorTarget;
+    if (/ticker/i.test(formError || '')) issueErrorTarget = { id: 'issue-ticker', label: 'Ticker' };
+    else if (/^Supply /i.test(formError || '')) issueErrorTarget = { id: 'issue-supply', label: 'Supply' };
+    else if (/initial mint/i.test(formError || '') && !/destination|Sending the initial mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-initial-mint', label: 'Initial mint' };
+    } else if (/Max mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-max-mint', label: 'Max mint per transaction' };
+    } else if (/Transfer ownership/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-transfer-owner', label: 'Transfer ownership to' };
+    } else if (/Initial mint destination|Sending the initial mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-transfer-supply', label: 'Send the initial mint to' };
+    }
+    const issueErrors = formError
+        ? [{ ...issueErrorTarget, message: formError }]
+        : [];
+
     return wrap(
         <FormPage
             label="Issue token"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
             actions={(
                 <Button
                     type="submit"
@@ -855,6 +873,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             )}
 
             <Input
+                id="issue-ticker"
                 label="Ticker"
                 hint={TICKER_HINT}
                 value={ticker}
@@ -865,6 +884,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 spellCheck={false}
             />
             <Input
+                id="issue-supply"
                 label="Supply"
                 hint="The most that can ever exist."
                 inputMode="decimal"
@@ -873,6 +893,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
             />
             <Input
+                id="issue-initial-mint"
                 label="Initial mint (optional)"
                 hint={mintHeadroom
                     ? `Leaves ${mintHeadroom} to mint later.`
@@ -883,6 +904,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
             />
             <Input
+                id="issue-max-mint"
                 label="Max mint per transaction (optional)"
                 hint="Caps how much can be minted in one transaction. Leave blank for no limit."
                 inputMode="decimal"
@@ -945,6 +967,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 </p>
             </div>
             <AddressField
+                id="issue-transfer-owner"
                 label="Transfer ownership to (optional)"
                 icon="contacts"
                 hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
@@ -953,6 +976,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
             />
             <AddressField
+                id="issue-transfer-supply"
                 label="Send the initial mint to (optional)"
                 icon="contacts"
                 hint="Leave blank to keep the minted tokens at the issuing address."

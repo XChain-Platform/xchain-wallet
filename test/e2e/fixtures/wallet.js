@@ -192,7 +192,7 @@ export async function gotoSection(page, name) {
         if (await clickDestination(bar, name)) return;
 
         await bar.getByRole('button', { name: 'More', exact: true }).click();
-        const sheet = page.getByRole('dialog', { name: 'More navigation' });
+        const sheet = page.getByRole('dialog', { name: 'More', exact: true });
         await sheet.waitFor({ state: 'visible', timeout: 15_000 });
         if (await clickDestination(sheet, name)) return;
         throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);

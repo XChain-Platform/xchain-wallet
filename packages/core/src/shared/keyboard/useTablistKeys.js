@@ -19,6 +19,32 @@
 
 import { useEffect } from 'react';
 
+const TABLIST = '[role="tablist"]';
+const TAB = '[role="tab"]';
+
+function tabsOf(list) {
+    return Array.from(list.querySelectorAll(TAB))
+        .filter((tab) => (
+            tab.closest(TABLIST) === list
+            && !tab.disabled
+            && tab.getAttribute('aria-disabled') !== 'true'
+            && !tab.hidden
+        ));
+}
+
+function setRovingTab(tabs, current) {
+    for (const tab of tabs) tab.tabIndex = tab === current ? 0 : -1;
+}
+
+function normalizeTablist(list) {
+    const tabs = tabsOf(list);
+    if (tabs.length === 0) return;
+    const focused = tabs.includes(document.activeElement) ? document.activeElement : null;
+    const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
+    const authored = tabs.find((tab) => tab.tabIndex === 0);
+    setRovingTab(tabs, focused || selected || authored || tabs[0]);
+}
+
 /**
  * Index of the tab to move to for an arrow/Home/End key, or null when the
  * key is not a tab-navigation key.
@@ -45,17 +71,17 @@ function handleTablistKeyDown(e) {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     const target = e.target;
     if (!target || typeof target.closest !== 'function') return;
-    const tab = target.closest('[role="tab"]');
-    const list = tab && tab.closest('[role="tablist"]');
+    const tab = target.closest(TAB);
+    const list = tab && tab.closest(TABLIST);
     if (!tab || !list) return;
-    const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
-        .filter((t) => !t.disabled && t.getAttribute('aria-disabled') !== 'true' && !t.hidden);
+    const tabs = tabsOf(list);
     const index = tabs.indexOf(tab);
     if (index < 0) return;
     const rtl = typeof getComputedStyle === 'function' && getComputedStyle(list).direction === 'rtl';
     const next = nextTabIndex(e.key, index, tabs.length, rtl);
     if (next === null || next === index) return;
     e.preventDefault();
+    setRovingTab(tabs, tabs[next]);
     tabs[next].focus();
     tabs[next].click();
 }
@@ -64,7 +90,32 @@ function handleTablistKeyDown(e) {
 export function useTablistKeys() {
     useEffect(() => {
         if (typeof document === 'undefined') return undefined;
+        document.querySelectorAll(TABLIST).forEach(normalizeTablist);
+        const observer = new MutationObserver((records) => {
+            const lists = new Set();
+            for (const record of records) {
+                const parent = record.target.nodeType === Node.ELEMENT_NODE
+                    ? record.target.closest?.(TABLIST)
+                    : null;
+                if (parent) lists.add(parent);
+                for (const node of record.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    if (node.matches(TABLIST)) lists.add(node);
+                    node.querySelectorAll?.(TABLIST).forEach((list) => lists.add(list));
+                }
+            }
+            lists.forEach(normalizeTablist);
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['aria-selected', 'aria-disabled', 'disabled', 'hidden'],
+        });
         document.addEventListener('keydown', handleTablistKeyDown);
-        return () => document.removeEventListener('keydown', handleTablistKeyDown);
+        return () => {
+            observer.disconnect();
+            document.removeEventListener('keydown', handleTablistKeyDown);
+        };
     }, []);
 }

@@ -135,7 +135,7 @@ describe('subscribeToNativeDeepLinks', () => {
         expect(onLink).toHaveBeenCalledWith('xchain:BTC/send?address=abc');
     });
 
-    it('filters a hostile URL even when the native side forwards one', async () => {
+    it('filters a hostile URL or unclaimed path even when the native side forwards one', async () => {
         // Native validates too. This is the half that still runs if the
         // plugin is ever replaced or an event is spoofed from inside the
         // WebView.
@@ -145,6 +145,7 @@ describe('subscribeToNativeDeepLinks', () => {
         subscribeToNativeDeepLinks(onLink);
         await vi.waitFor(() => expect(plugin.addListener).toHaveBeenCalled());
         plugin.emit('https://xchain.io.evil.com/wallet/send');
+        plugin.emit('https://xchain.io/wallet/privacy/?uri=xchain%3ABTC%2Fsend');
         plugin.emit('javascript:alert(1)');
         plugin.emit(undefined);
         expect(onLink).not.toHaveBeenCalled();

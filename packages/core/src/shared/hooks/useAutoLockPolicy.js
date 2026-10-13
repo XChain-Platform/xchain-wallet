@@ -77,7 +77,7 @@ export function resolveAutoLockMinutes(raw) {
  * @param {string | null | undefined} [opts.activeWalletId]
  * @param {(() => void) | undefined} [opts.onLocked] shell refresh, run after a
  *   successful lock so the view switches to the Locked screen.
- * @returns {{ armed: boolean, idleMs: number, minutes: number }}
+ * @returns {{ armed: boolean, idleMs: number, minutes: number, checkNow: () => boolean }}
  */
 export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {}) {
     const { messaging, shell } = useMessaging();
@@ -136,7 +136,7 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         });
     }, [showToast]);
 
-    useAutoLock(lock, { enabled: armed, idleMs, onDeferred: explainDeferredLock });
+    const checkNow = useAutoLock(lock, { enabled: armed, idleMs, onDeferred: explainDeferredLock });
 
     // §26 out-of-renderer backstop: the foreground hook above dies with the
     // renderer, so hand the shell's own process the arm decision and the
@@ -160,5 +160,5 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         ).catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 
-    return { armed, idleMs, minutes };
+    return { armed, idleMs, minutes, checkNow };
 }

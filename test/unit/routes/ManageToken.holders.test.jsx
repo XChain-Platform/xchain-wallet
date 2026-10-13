@@ -23,9 +23,9 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount({ holders, rejectHolders = null, omitHolders = false } = {}) {
+function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo = {} } = {}) {
     const messaging = {
-        getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8 }),
+        getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8, ...tokenInfo }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OWNER }] }),
         getWalletBalances: vi.fn().mockResolvedValue({}),
         getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
@@ -45,6 +45,21 @@ function mount({ holders, rejectHolders = null, omitHolders = false } = {}) {
 }
 
 describe('ManageToken holders', () => {
+    it.each([
+        ['locked', true, 'Locked supply'],
+        ['unlocked', false, 'Unlocked supply'],
+    ])('labels and formats %s supply', async (_state, locked, label) => {
+        mount({ tokenInfo: {
+            locked,
+            totalSupply: '12345678901234567890.30000000000000004',
+            maxSupply: '99999999999999999999',
+        } });
+
+        expect(await screen.findByText(label)).toBeTruthy();
+        expect(screen.getByText('12,345,678,901,234,567,890.3')).toBeTruthy();
+        expect(screen.getByText('of 99,999,999,999,999,999,999 cap')).toBeTruthy();
+    });
+
     it('renders real and demo holder shapes with the right units and copy values', async () => {
         mount({ holders: { data: [
             { address: HOLDER, amount: '12345.5' },

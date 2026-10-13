@@ -92,8 +92,7 @@
 
 .sliderTicks {
     position: relative;
-    /* Tall enough to hold a tick at the tap-target floor below. */
-    height: var(--xc-tap-min);
+    height: calc(var(--xc-tap-min) + var(--xc-space-2));
 }
 
 .sliderTick {
@@ -111,15 +110,20 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     text-align: center;
-    /* slice 2: "Low" measured 21x13. The stops are the fastest way
-       to set a fee tier and were the smallest targets in the send form.
-       Flex-centred so the label stays optically on its nub while the
-       button around it reaches the 24px floor. */
+    /* Fee tier stops are the quickest way to set a fee. Flex centering keeps
+       each label on its nub while the button meets the pointer-target floor. */
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
+}
+
+.sliderTickEta {
+    font-size: 0.6875rem;
+    font-weight: 400;
+    color: var(--xc-text-muted);
 }
 
 .sliderTick:first-child { transform: translateX(0); }

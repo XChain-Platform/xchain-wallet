@@ -1777,7 +1777,7 @@ export async function readReceiveAddress(page) {
         // already the exact option text and no mapping is needed.
         await page.getByRole('option', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
 
-        await page.getByRole('list', { name: 'Wallet addresses' })
+        await page.getByRole('list', { name: 'Addresses' })
             .getByRole('button', { name: /^View address / }).first().click();
     }
 
