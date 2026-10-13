@@ -156,14 +156,10 @@ export function SignMessageForm({ walletId, onBack }) {
         ));
     }, [chainId, addressesByChain, activeByChain]);
 
-    const chainOptions = useMemo(() => {
+    const chainIds = useMemo(() => {
         if (!addressesByChain) return [];
         return Object.keys(addressesByChain)
-            .filter((id) => (addressesByChain[id] || []).length > 0)
-            .map((id) => {
-                const desc = chainRegistry.get(id);
-                return { id, label: desc?.displayName || id };
-            });
+            .filter((id) => (addressesByChain[id] || []).length > 0);
     }, [addressesByChain]);
 
     const addressOptions = useMemo(() => {
@@ -372,9 +368,13 @@ export function SignMessageForm({ walletId, onBack }) {
             {draftBanner}
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
-                    chains={chainOptions}
-                    selectedChainId={chainId}
-                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    value={chainId || ''}
+                    onChange={(nextChainId) => {
+                        setChainId(nextChainId);
+                        if (error) setError(null);
+                    }}
                     label="Chain"
                 />
             </div>

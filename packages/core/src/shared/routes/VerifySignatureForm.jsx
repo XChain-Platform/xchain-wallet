@@ -37,6 +37,25 @@ import { useSupportedChains } from '../hooks/useSupportedChains.js';
 const chainRegistry = registryLib.defaultRegistry();
 
 /**
+ * Remove paste formatting from a base64 signature and reject malformed input.
+ *
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function normalizeSignatureInput(value) {
+    if (typeof value !== 'string') return null;
+    const compact = value.replace(/\s+/g, '');
+    if (!compact || compact.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
+        return null;
+    }
+    try {
+        return atob(compact).length > 0 ? compact : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * @param {object} props
  * @param {() => void} props.onBack
  */
@@ -47,11 +66,8 @@ export function VerifySignatureForm({ onBack }) {
     // Live registry read: a synced descriptor batch reaches this picker without
     // a restart (the boot sync usually lands after first mount).
     const supportedChains = useSupportedChains(chainRegistry);
-    const chains = useMemo(() => supportedChains.map((c) => ({
-        id: c.id,
-        label: c.displayName || c.id,
-    })), [supportedChains]);
-    const [chainId, setChainId] = useState(chains[0]?.id || null);
+    const chainIds = useMemo(() => supportedChains.map((c) => c.id), [supportedChains]);
+    const [chainId, setChainId] = useState(chainIds[0] || null);
     const [address, setAddress] = useState('');
     const [message, setMessage] = useState('');
     const [signature, setSignature] = useState('');
@@ -68,6 +84,8 @@ export function VerifySignatureForm({ onBack }) {
         if (address.trim().length === 0) { setError('Enter an address.'); return; }
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
+        const normalizedSignature = normalizeSignatureInput(signature);
+        if (!normalizedSignature) { setError('Enter a valid base64 signature.'); return; }
         if (typeof messaging.verifyMessageRequest !== 'function') {
             setError('Signature verification is not available in this app.');
             return;
@@ -78,11 +96,11 @@ export function VerifySignatureForm({ onBack }) {
                 chainId,
                 address: address.trim(),
                 message,
-                signature: signature.trim(),
+                signature: normalizedSignature,
             });
             setResult(r?.valid ? 'valid' : 'invalid');
-        } catch (err) {
-            setError(err?.message || 'Verification failed.');
+        } catch {
+            setError('Could not verify this signature. Check the chain, address, message, and signature.');
         } finally {
             setBusy(false);
         }
@@ -117,8 +135,8 @@ export function VerifySignatureForm({ onBack }) {
                     }}
                 >
                     {result === 'valid'
-                        ? '✓ Signature is valid for this address.'
-                        : '✗ Signature does NOT match this address.'}
+                        ? 'Signature matches this message and address.'
+                        : 'Signature does not match this message and address.'}
                 </div>
             ) : null}
         </>
@@ -128,9 +146,14 @@ export function VerifySignatureForm({ onBack }) {
         <>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
-                    chains={chains}
-                    selectedChainId={chainId}
-                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    value={chainId || ''}
+                    onChange={(nextChainId) => {
+                        setChainId(nextChainId);
+                        setResult(null);
+                        if (error) setError(null);
+                    }}
                     label="Chain"
                 />
             </div>
