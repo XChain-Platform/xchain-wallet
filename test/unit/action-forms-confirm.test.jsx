@@ -1019,7 +1019,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: BroadcastForm,
             props: {},
             actionLabel: 'Broadcast',
-            fill: (utils) => setValue(utils, 'Message', 'hello chain'),
+            fill: (utils) => setValue(utils, 'Message (optional)', 'hello chain'),
         });
         expectSingleEncode(calls, {
             action: 'BROADCAST',
@@ -1061,7 +1061,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            setValue(utils, 'Message', 'hello from hardware');
+            setValue(utils, 'Message (optional)', 'hello from hardware');
             await drainMicrotasks();
         });
         await domAct(async () => {
@@ -1359,7 +1359,7 @@ describe('A migrated form maps its Approve failure through the one helper', () =
             },
         });
         const text = utils.container.textContent || '';
-        expect(text).toContain('has no BTC to spend');
+        expect(text).toContain('needs BTC for the protocol fee');
         expect(text, 'the encoder developer string never reaches the screen')
             .not.toContain('no spendable UTXOs');
     });
@@ -1381,7 +1381,7 @@ describe('A migrated form maps its Approve failure through the one helper', () =
             },
         });
         const text = utils.container.textContent || '';
-        expect(text).toContain('has no BTC to spend');
+        expect(text).toContain('needs BTC for the protocol fee');
         expect(text, 'the encoder developer string never reaches the screen')
             .not.toContain('no spendable UTXOs');
     });

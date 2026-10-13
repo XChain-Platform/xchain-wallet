@@ -90,7 +90,7 @@ function knownSdkErrorMessage(err) {
     return SDK_ERROR_MESSAGES[String(e.name || '')] || null;
 }
 
-const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry|review|try|update|wait)\b/i;
+const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
 
 function isSignerCancellation(err) {
@@ -100,9 +100,24 @@ function isSignerCancellation(err) {
     return SIGNER_CANCELLED_RE.test(String(e.message || ''));
 }
 
+function compactActionableMessage(message) {
+    const plain = message
+        .replace(/,\s*quoting "[A-Z][A-Z0-9_]+"/g, '')
+        .replace(/; retrying\./g, '; wait before trying again.');
+    const sentences = plain.split(/(?<=[.!?])\s+/);
+    if (sentences.length <= 2) return plain;
+
+    const context = sentences.slice(0, -1).map((sentence, index) => {
+        const clause = sentence.replace(/[.!?]+$/, '');
+        return index === 0 ? clause : clause.charAt(0).toLowerCase() + clause.slice(1);
+    }).join('; ');
+    return `${context}. ${sentences.at(-1)}`;
+}
+
 function safeBuildMessage(message, generic) {
     const safe = userFacingMessage(message, generic);
-    return NEXT_STEP_RE.test(safe) ? safe : `${safe} Review the form and try again.`;
+    const actionable = NEXT_STEP_RE.test(safe) ? safe : `${safe} Review the form and try again.`;
+    return compactActionableMessage(actionable);
 }
 
 /**
@@ -316,7 +331,7 @@ export function submitFailureMessage(
         // fee-bearing action reads a quote from it - and a message that matched
         // an encoder or params refusal is the more specific answer.
         const explorerCopy = explorerErrorMessage(err);
-        if (explorerCopy) return explorerCopy;
+        if (explorerCopy) return safeBuildMessage(explorerCopy, generic);
         const sdkCopy = knownSdkErrorMessage(err);
         if (sdkCopy) return sdkCopy;
     }

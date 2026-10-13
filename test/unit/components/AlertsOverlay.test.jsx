@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 vi.mock('../../../packages/core/src/ui/backStack.js', () => ({
     useBackHandler: () => {},
@@ -14,10 +15,6 @@ vi.mock('../../../packages/core/src/ui/backStack.js', () => ({
 
 vi.mock('../../../packages/core/src/shared/utils/focusTrap.js', () => ({
     useFocusTrap: () => {},
-}));
-
-vi.mock('@xchain-wallet/core/ui', () => ({
-    Icon: { XIcon: () => <span aria-hidden="true">x</span> },
 }));
 
 const { AlertsOverlay } = await import(
@@ -28,9 +25,37 @@ const overlayCss = readFileSync(
     'utf8',
 );
 
+const AXE_STATES = [
+    ['unread', [{
+        id: 'unread-message',
+        severity: 'info',
+        title: 'Unread message',
+        message: 'A new message is ready to review.',
+        action: { label: 'Open message', onSelect: () => {} },
+    }]],
+    ['read', [{
+        id: 'read-message',
+        severity: 'info',
+        title: 'Read message',
+        message: 'This message has already been reviewed.',
+    }]],
+    ['empty', []],
+];
+
 afterEach(cleanup);
 
 describe('AlertsOverlay', () => {
+    it.each(AXE_STATES)('has no serious axe violations in the %s state', async (
+        _state,
+        alerts,
+    ) => {
+        const { container } = render(
+            <AlertsOverlay alerts={alerts} onClose={() => {}} />,
+        );
+
+        await expectNoSeriousAxeViolations(container);
+    });
+
     it('stacks every alert in one ordered, scrollable list', () => {
         const alerts = [
             { id: 'one', severity: 'critical', title: 'First', message: 'First message' },

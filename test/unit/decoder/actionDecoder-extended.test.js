@@ -91,8 +91,12 @@ describe('decodeAction extended', () => {
         // what is being burned instead of telling the user to go read raw
         // params on the screen where they approve an irreversible burn.
         it('multi-destroy names each leg and keeps the irreversibility warning', () => {
-            const d = decodeAction({ action: 'DESTROY', params: { TICK: 'XCP', AMOUNT: '5', VERSION: '1' } });
+            const d = decodeAction({
+                action: 'DESTROY',
+                params: { TICK: 'XCP', AMOUNT: '5', MEMO: 'burn note', VERSION: '2' },
+            });
             expect(d.summary).toBe('Destroy: 5 XCP');
+            expect(d.details).toContainEqual({ label: 'Memo', value: 'burn note' });
             expect(d.warnings.some((w) => /irreversible/i.test(w))).toBe(true);
             expect(d.warnings.join('\n')).not.toMatch(/No plain-English summary is available/);
         });
@@ -514,7 +518,7 @@ describe('decodeAction extended', () => {
 
         it('v3 per-drop memos shown', () => {
             const d = decodeAction({ action: 'AIRDROP', params: { VERSION: '3', TICK: ['XCP'], AMOUNT: ['1'], LIST_ACTION_INDEX: ['1'], MEMO: ['hi'] } });
-            expect(d.details.some((r) => r.label.includes('Memo'))).toBe(true);
+            expect(d.details).toContainEqual({ label: 'Memo', value: 'hi' });
         });
     });
 
