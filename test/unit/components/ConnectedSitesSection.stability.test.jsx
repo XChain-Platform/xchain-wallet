@@ -77,7 +77,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByText('account-1')).toBeTruthy();
         expect(screen.getByText('ask every time')).toBeTruthy();
         expect(screen.getByText('always allow').style.color).toBe('var(--xc-success, #2a8)');
-        expect(screen.getByText('never allow').style.color).toBe('var(--xc-error, #c33)');
+        expect(screen.getByText('never allow').style.color).toBe('var(--xc-danger-fg)');
     });
 
     it('requires confirmation before disconnecting a site', async () => {
