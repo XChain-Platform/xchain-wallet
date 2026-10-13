@@ -7,6 +7,10 @@
 
 /* ───── Tab strip ───── */
 
+.tabsRow {
+    display: contents;
+}
+
 .tabs {
     display: flex;
     gap: var(--xc-space-1);
@@ -70,6 +74,11 @@
     font-weight: 600;
 }
 
+.sortCompactValue,
+.sortCompactIcon {
+    display: none;
+}
+
 .sortSelect {
     min-height: 36px;
     box-sizing: border-box;
@@ -87,15 +96,80 @@
 }
 
 @media (max-width: 420px) {
+    .tabsRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: stretch;
+        border-bottom: 1px solid var(--xc-border);
+        margin-bottom: -1px;
+    }
+
+    .tabs {
+        min-width: 0;
+        border-bottom: 0;
+        margin-bottom: 0;
+    }
+
     .sortControl {
-        justify-content: space-between;
+        position: relative;
+        align-self: center;
+        justify-content: center;
+        gap: var(--xc-space-1);
+        min-height: 36px;
+        margin-inline-start: var(--xc-space-1);
+        padding: 0 var(--xc-space-2);
+        border: 1px solid var(--xc-border-strong);
+        border-radius: var(--xc-radius-md);
+        background: var(--xc-surface);
+        color: var(--xc-text);
+    }
+
+    .sortControl:focus-within {
+        outline: 2px solid var(--xc-focus-ring);
+        outline-offset: -2px;
+    }
+
+    .sortLabel {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .sortCompactValue,
+    .sortCompactIcon {
+        display: inline-flex;
+        align-items: center;
+        pointer-events: none;
+    }
+
+    .sortCompactIcon {
+        width: var(--xc-icon-sm);
+        height: var(--xc-icon-sm);
+    }
+
+    .sortCompactIcon > svg {
         width: 100%;
+        height: 100%;
     }
 
     .sortSelect {
-        min-height: 44px;
-        min-width: 0;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        min-height: 0;
+        opacity: 0;
+        cursor: pointer;
         font-size: 16px;
+    }
+
+    .sortSelect:focus-visible {
+        outline: none;
     }
 }
 

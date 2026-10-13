@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 
 const mocks = vi.hoisted(() => ({
     getNativePricesRequest: vi.fn(),
@@ -42,6 +43,11 @@ import {
     getTokenFiatRate,
     refreshTokenFiatRate,
 } from '../../../packages/core/src/flows/priceLookup.js';
+
+const tabsCss = readFileSync(
+    'packages/core/src/shared/components/HomeTabs.module.css',
+    'utf8',
+);
 
 const descriptors = new Map([
     ['bitcoin-mainnet', {
@@ -143,14 +149,19 @@ describe('balance row sorting', () => {
         expect(sortBalanceRows(rows, 'change').map((row) => row.tick)).toEqual(['BBB', 'AAA', 'CCC']);
     });
 
-    it('exposes the sort control on a narrow screen and applies native 24h changes', async () => {
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    it('keeps the populated sort control compact on the tab row at 360px', async () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         mount();
 
         const sort = screen.getByRole('combobox', { name: 'Sort balances' });
+        const tablist = screen.getByRole('tablist', { name: 'Wallet view' });
         expect(sort).toBeVisible();
+        expect(sort.closest('label')?.parentElement).toBe(tablist.parentElement);
         expect([...sort.options].map((option) => option.textContent))
             .toEqual(['Value', 'Name', '24h change']);
+        const phoneRules = tabsCss.slice(tabsCss.indexOf('@media (max-width: 420px)'));
+        expect(phoneRules).toMatch(/\.tabsRow\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
+        expect(phoneRules).toMatch(/\.sortSelect\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;/s);
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
@@ -164,6 +175,25 @@ describe('balance row sorting', () => {
             'dogecoin-mainnet:DOGE',
             'litecoin-mainnet:LTC',
         ]);
+    });
+
+    it('does not render sort controls above the first-funding card at 360px', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{}}
+                walletId="empty-wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(screen.getByText('Fund your wallet')).toBeVisible();
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(screen.getByText('No tokens yet')).toBeVisible();
+        expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
     });
 
     it('restores the choice only for the wallet that saved it', () => {

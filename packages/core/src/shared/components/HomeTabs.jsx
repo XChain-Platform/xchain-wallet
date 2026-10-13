@@ -334,6 +334,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     }, [filteredRows]);
     const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
+    const showBalanceSort = (active === 'coins' && !showFirstFunding && coins.length > 0)
+        || (active === 'tokens' && filteredTokens.length > 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
     // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a
@@ -407,60 +409,69 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                 />
             ) : null}
 
-            {/* Only the active tab is in the Tab order, so the arrow keys, Home and End move between tabs. */}
-            <div
-                className={styles.tabs}
-                role="tablist"
-                aria-label="Wallet view"
-                onKeyDown={(event) => {
-                    const index = tabs.findIndex((t) => t.id === active);
-                    const last = tabs.length - 1;
-                    const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
-                        : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
-                            : event.key === 'Home' ? 0
-                                : event.key === 'End' ? last : -1;
-                    if (nextIndex < 0 || index < 0) return;
-                    event.preventDefault();
-                    setActive(tabs[nextIndex].id);
-                    document.getElementById(`${tabsId}-tab-${tabs[nextIndex].id}`)?.focus();
-                }}
-            >
-                {tabs.map((t) => (
-                    <button
-                        key={t.id}
-                        id={`${tabsId}-tab-${t.id}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={active === t.id ? 'true' : 'false'}
-                        aria-controls={`${tabsId}-panel`}
-                        tabIndex={active === t.id ? 0 : -1}
-                        className={`${styles.tab} ${active === t.id ? styles.tabActive : ''}`}
-                        onClick={() => setActive(t.id)}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
+            <div className={styles.tabsRow}>
+                {/* Only the active tab is in the Tab order, so the arrow keys, Home and End move between tabs. */}
+                <div
+                    className={styles.tabs}
+                    role="tablist"
+                    aria-label="Wallet view"
+                    onKeyDown={(event) => {
+                        const index = tabs.findIndex((t) => t.id === active);
+                        const last = tabs.length - 1;
+                        const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                            : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+                                : event.key === 'Home' ? 0
+                                    : event.key === 'End' ? last : -1;
+                        if (nextIndex < 0 || index < 0) return;
+                        event.preventDefault();
+                        setActive(tabs[nextIndex].id);
+                        document.getElementById(`${tabsId}-tab-${tabs[nextIndex].id}`)?.focus();
+                    }}
+                >
+                    {tabs.map((t) => (
+                        <button
+                            key={t.id}
+                            id={`${tabsId}-tab-${t.id}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={active === t.id ? 'true' : 'false'}
+                            aria-controls={`${tabsId}-panel`}
+                            tabIndex={active === t.id ? 0 : -1}
+                            className={`${styles.tab} ${active === t.id ? styles.tabActive : ''}`}
+                            onClick={() => setActive(t.id)}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
 
-            {active === 'coins' || active === 'tokens' ? (
-                <label className={styles.sortControl}>
-                    <span>Sort balances</span>
-                    <select
-                        className={styles.sortSelect}
-                        value={sortBy}
-                        onChange={(event) => {
-                            const value = event.target.value;
-                            if (!BALANCE_SORT_OPTIONS.has(value)) return;
-                            setSortBy(value);
-                            persistBalanceSort(walletId, value);
-                        }}
-                    >
-                        <option value="value">Value</option>
-                        <option value="name">Name</option>
-                        <option value="change">24h change</option>
-                    </select>
-                </label>
-            ) : null}
+                {showBalanceSort ? (
+                    <label className={styles.sortControl}>
+                        <span className={styles.sortLabel}>Sort balances</span>
+                        <span className={styles.sortCompactValue} aria-hidden="true">
+                            {sortBy === 'change' ? '24h change' : sortBy[0].toUpperCase() + sortBy.slice(1)}
+                        </span>
+                        <span className={styles.sortCompactIcon} aria-hidden="true">
+                            <Icon.ChevronDownIcon />
+                        </span>
+                        <select
+                            className={styles.sortSelect}
+                            aria-label="Sort balances"
+                            value={sortBy}
+                            onChange={(event) => {
+                                const value = event.target.value;
+                                if (!BALANCE_SORT_OPTIONS.has(value)) return;
+                                setSortBy(value);
+                                persistBalanceSort(walletId, value);
+                            }}
+                        >
+                            <option value="value">Value</option>
+                            <option value="name">Name</option>
+                            <option value="change">24h change</option>
+                        </select>
+                    </label>
+                ) : null}
+            </div>
 
             <div
                 id={`${tabsId}-panel`}
