@@ -103,12 +103,13 @@ export function useFocusTrap(containerRef, { active, initialFocusRef, trap = tru
             const first = focusables[0];
             const last = focusables[focusables.length - 1];
             const activeEl = document.activeElement;
+            const activeIndex = focusables.indexOf(activeEl);
             if (e.shiftKey) {
-                if (activeEl === first || !container.contains(activeEl)) {
+                if (activeIndex <= 0) {
                     e.preventDefault();
                     last.focus();
                 }
-            } else if (activeEl === last || !container.contains(activeEl)) {
+            } else if (activeIndex === -1 || activeEl === last) {
                 e.preventDefault();
                 first.focus();
             }

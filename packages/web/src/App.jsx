@@ -87,6 +87,7 @@ import { DEX_SURFACE_ENABLED, renderDexRoute } from './surfaces/dex.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
+import { useFocusTrap } from '@xchain-wallet/core/shared/utils/focusTrap.js';
 import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
@@ -404,6 +405,11 @@ function AppInner() {
     // route; psbt opens the PSBT-sign route. Mirrors the existing
     // dedicated 'scan' route handler.
     const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
+    const globalScannerRef = useRef(null);
+    useFocusTrap(globalScannerRef, {
+        active: globalScannerOpen,
+        initialFocusRef: globalScannerRef,
+    });
     // The overlay covers the content area but not the navigation, so the
     // bottom bar, the rail and the header stay live underneath it. Any
     // navigation therefore closes it; otherwise the scanner (and the camera)
@@ -2933,9 +2939,11 @@ function AppInner() {
                     ) : null}
                     {globalScannerOpen ? (
                         <div
+                            ref={globalScannerRef}
                             role="dialog"
                             aria-modal="true"
                             aria-label="Scan a QR code"
+                            tabIndex={-1}
                             style={{
                                 position: 'absolute',
                                 inset: 0,
