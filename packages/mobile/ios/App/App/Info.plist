@@ -56,9 +56,9 @@
 	<!-- Usage strings are shown verbatim in the OS permission prompt, so they say
 	     what the wallet does with the hardware and nothing more. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Scan QR codes: addresses, payment requests, and transactions passed from an offline device.</string>
+	<string>Allow XChain Wallet to use the camera to scan QR codes for addresses, payment requests, and transactions.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Unlock your wallet. Face ID never approves a transaction on its own; signing always asks for your approval.</string>
+	<string>Allow XChain Wallet to use Face ID to unlock your wallet. Face ID does not approve transactions.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

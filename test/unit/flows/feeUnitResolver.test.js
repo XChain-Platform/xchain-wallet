@@ -25,6 +25,7 @@ import {
     isPerKbUnit,
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
+    fetchNativeSendFeeTiers,
     customFeeEstimate,
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
@@ -92,5 +93,34 @@ describe('resolveFeeUnit', () => {
         expect(est.unit).toBe('DOGE/kB');
         expect(est.rate).toBe('1 DOGE/kB');
         expect(est.rateValue).toBe(1);
+    });
+
+    it('provides each chain family confirmation times and display-unit relay floor', () => {
+        const reg = new ChainRegistry();
+        const btc = estimateNativeSendFeeTiers({ chainId: 'bitcoin-mainnet', chainRegistry: reg });
+        const ltc = estimateNativeSendFeeTiers({ chainId: 'litecoin-mainnet', chainRegistry: reg });
+        const doge = estimateNativeSendFeeTiers({ chainId: 'dogecoin-mainnet', chainRegistry: reg });
+
+        expect([btc.low.etaMinutes, btc.normal.etaMinutes, btc.fast.etaMinutes]).toEqual([60, 30, 10]);
+        expect([ltc.low.etaMinutes, ltc.normal.etaMinutes, ltc.fast.etaMinutes]).toEqual([5, 3, 2]);
+        expect([doge.low.etaMinutes, doge.normal.etaMinutes, doge.fast.etaMinutes]).toEqual([5, 1, 1]);
+        expect([btc.minimumRate, ltc.minimumRate, doge.minimumRate]).toEqual([1, 1, 1]);
+        expect([btc.unit, ltc.unit, doge.unit]).toEqual(['sat/vB', 'sat/vB', 'DOGE/kB']);
+    });
+
+    it('converts an estimator relay floor from the internal rate to the display unit', async () => {
+        const reg = new ChainRegistry();
+        const tiers = await fetchNativeSendFeeTiers({
+            chainId: 'dogecoin-mainnet',
+            chainRegistry: reg,
+            messaging: {
+                estimateFee: async () => ({
+                    unit: 'DOGE/kB',
+                    minimumRate: 150_000,
+                }),
+            },
+        });
+
+        expect(tiers.minimumRate).toBe(1.5);
     });
 });

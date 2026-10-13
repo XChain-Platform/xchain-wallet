@@ -12,6 +12,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 import { useState } from 'react';
 import { nextTabIndex, useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
 
@@ -55,6 +56,23 @@ describe('nextTabIndex', () => {
 });
 
 describe('useTablistKeys', () => {
+    it('keeps one tab stop as user keyboard navigation changes selection', async () => {
+        const user = userEvent.setup();
+        render(<Strip />);
+        const tabs = screen.getAllByRole('tab');
+
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+        await user.tab();
+        expect(tabs[0]).toHaveFocus();
+        fireEvent.keyDown(tabs[0], { key: 'ArrowRight' });
+        expect(tabs[1]).toHaveFocus();
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1]);
+        fireEvent.keyDown(tabs[1], { key: 'End' });
+        expect(tabs[2]).toHaveFocus();
+        fireEvent.keyDown(tabs[2], { key: 'Home' });
+        expect(tabs[0]).toHaveFocus();
+    });
+
     it('moves focus and selection with the arrow keys', () => {
         render(<Strip />);
         const a = screen.getByRole('tab', { name: 'a' });

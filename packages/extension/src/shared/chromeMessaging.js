@@ -27,6 +27,14 @@
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
 import { hydrateEnvelopeError } from '../background/MessageHost.js';
+import { createSurfaceStateBroadcaster } from './surfaceStateSync.js';
+
+let surfaceStateEvents;
+
+function publishSettingsChange(settings) {
+    surfaceStateEvents ??= createSurfaceStateBroadcaster();
+    void surfaceStateEvents.publish('settings', { settings });
+}
 
 /**
  * @param {string} type
@@ -54,6 +62,10 @@ export function sendMessage(type, request) {
                 if (typeof type === 'string' && type.startsWith('action.')) {
                     const req = /** @type {any} */ (request);
                     invalidateTokenInfoForAction(req?.chainId, req);
+                }
+                if (type === 'settings.update' && response.result
+                    && typeof response.result === 'object') {
+                    publishSettingsChange(response.result);
                 }
                 resolve(response.result);
                 return;
