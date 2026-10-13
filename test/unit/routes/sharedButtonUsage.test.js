@@ -79,6 +79,14 @@ describe('shared route button usage', () => {
     });
 
     it.each(Object.entries(styleGuideRoutes))('%s uses kit form and action controls', (routeName, controls) => {
+    it.each([
+        ['SellOwnershipForm', ['Button', 'Input'], 0],
+        ['Settings', ['Button', 'Input'], 1],
+        ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
+        ['TokenPicker', ['Button', 'Input'], 0],
+        ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
+        ['WalletPicker', ['Button'], 1],
+    ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
             'utf8',
@@ -211,5 +219,14 @@ describe('trade form style guide primitives', () => {
         expect(tokens).toMatch(/<EmptyState\b/);
         expect(tokens.match(/<button\b/g)).toHaveLength(2);
         expect(tokens.match(/role="radio"/g)).toHaveLength(2);
+    });
+        for (const primitive of primitives) {
+            expect(source).toMatch(new RegExp(`<${primitive}\\b`));
+        }
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        expect(source.match(/<button\b/g) || []).toHaveLength(nativeRowCount);
+        if (nativeRowCount > 0) {
+            expect(source).toMatch(/Keep the native button because the complete .+ row is the list .+ target\./);
+        }
     });
 });

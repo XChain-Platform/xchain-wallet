@@ -2,6 +2,14 @@
     min-width: 0;
 }
 
+.searchField {
+    width: 100%;
+}
+
+.searchField > * {
+    margin-bottom: 0;
+}
+
 /* Settings section headings remain in document flow while the page header
    stays docked above the scrolling content. */
 .sectionHeader {

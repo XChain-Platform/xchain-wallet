@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -530,8 +530,8 @@ export function TokenPicker({
 
     const toolbar = (
         <>
-            <div style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
-                <input
+            <div className={styles.searchField} style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
+                <Input
                     ref={searchRef}
                     type="search"
                     enterKeyHint="search"
@@ -575,9 +575,10 @@ export function TokenPicker({
                 {KIND_OPTIONS.map((opt) => {
                     const active = (kindFilter || 'all') === opt.id;
                     return (
-                        <button
+                        <Button
                             key={opt.id}
                             type="button"
+                            icon={null}
                             role="tab"
                             tabIndex={active ? 0 : -1}
                             aria-selected={active}
@@ -585,7 +586,7 @@ export function TokenPicker({
                             onClick={() => setKindFilter(opt.id)}
                         >
                             {opt.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
