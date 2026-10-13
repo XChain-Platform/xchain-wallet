@@ -763,14 +763,18 @@ export function ContractStakeForm({
                 </Button>
             )}
         >
-            <div className={styles.summary} style={{ marginBottom: '0.5rem' }}>
-                Target: contract #{contractActionIndex},{' '}
-                <strong>{contractMeta.cooldown}-block cooldown</strong>.{' '}
-                Slashed funds are routed to{' '}
-                {contractMeta.slashDestination
-                    ? <AddressText address={contractMeta.slashDestination} />
-                    : '(configured at deploy)'}.
-            </div>
+            <dl className={styles.detailsList}>
+                <dt className={styles.detailsLabel}>Target</dt>
+                <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
+                <dt className={styles.detailsLabel}>Cooldown</dt>
+                <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
+                <dt className={styles.detailsLabel}>Slashed funds</dt>
+                <dd className={styles.detailsValue}>
+                    {contractMeta.slashDestination
+                        ? <AddressText address={contractMeta.slashDestination} truncate={false} />
+                        : '(configured at deploy)'}
+                </dd>
+            </dl>
 
             {fromAddress ? (
                 <AddressField
@@ -788,9 +792,9 @@ export function ContractStakeForm({
                 </StatusMessage>
             )}
 
-            <fieldset style={{ border: 'none', padding: 0, marginBottom: '0.75rem' }}>
+            <fieldset className={styles.radioGroup}>
                 <legend style={{ fontWeight: 'bold' }}>Action</legend>
-                <label style={{ marginRight: '1rem' }}>
+                <label className={styles.radioOption}>
                     <input
                         type="radio"
                         name="contract-stake-mode"
@@ -798,7 +802,7 @@ export function ContractStakeForm({
                         onChange={() => { setMode('stake'); setAmount(''); }}
                     /> Stake
                 </label>
-                <label style={{ marginRight: '1rem' }}>
+                <label className={styles.radioOption}>
                     <input
                         type="radio"
                         name="contract-stake-mode"
@@ -806,7 +810,7 @@ export function ContractStakeForm({
                         onChange={() => { setMode('unstake'); setAmount(''); }}
                     /> Unstake
                 </label>
-                <label>
+                <label className={styles.radioOption}>
                     <input
                         type="radio"
                         name="contract-stake-mode"

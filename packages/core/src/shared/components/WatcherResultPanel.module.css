@@ -7,6 +7,7 @@
     font-weight: 700;
     margin: 0 0 var(--xc-space-3);
     color: var(--xc-success);
+    overflow-wrap: anywhere;
 }
 
 .successLabel {
@@ -20,6 +21,10 @@
 
 .successCard {
     display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     flex-direction: column;
     gap: var(--xc-space-3);
     align-items: stretch;
@@ -34,6 +39,7 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .successSummary {
@@ -73,7 +79,15 @@
 .successTxidBlock {
     display: flex;
     flex-direction: column;
+    min-width: 0;
     gap: var(--xc-space-1);
+}
+
+.successTxidBlock textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .successTxidRow {
@@ -114,6 +128,9 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);

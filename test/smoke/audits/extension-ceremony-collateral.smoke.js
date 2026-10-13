@@ -36,7 +36,7 @@
 // declaration of record (privacy/trader-identity.md) or from the code.
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -883,23 +883,32 @@ assert.ok(worktreeReadable,
     + 'cannot run. It is not optional: exit 0 alone is satisfied by a script that does its work and '
     + 'succeeds, which is the defect measured. Fix the checkout rather than skipping this.');
 
-for (const tool of releaseScripts) {
+const execFileResult = (file, args, options) => new Promise((resolveResult) => {
+    execFile(file, args, options, (error, stdout, stderr) => {
+        resolveResult({ error, stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+});
+
+const checkHelp = async (tool) => {
     const runner = tool.endsWith('.sh') ? 'bash' : 'node';
-    const before = worktreeState();
+    const beforeResult = await execFileResult('git', ['status', '--porcelain'], {
+        cwd: walletRoot, encoding: 'utf8', timeout: 30_000,
+    });
+    assert.ifError(beforeResult.error);
+    const before = beforeResult.stdout;
 
-    let ok = true;
-    let stdout = '';
-    let first = '';
-    try {
-        stdout = execFileSync(runner, [join(walletRoot, tool), '--help'],
-            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
-    } catch (e) {
-        ok = false;
-        stdout = String(e.stdout || '');
-        first = String(e.stdout || e.stderr || '').split('\n').filter(Boolean)[0] || '(no output)';
-    }
+    const help = await execFileResult(runner, [join(walletRoot, tool), '--help'], {
+        encoding: 'utf8', timeout: 30_000,
+    });
+    const ok = !help.error;
+    const stdout = help.stdout;
+    const first = (help.stdout || help.stderr).split('\n').filter(Boolean)[0] || '(no output)';
 
-    const after = worktreeState();
+    const afterResult = await execFileResult('git', ['status', '--porcelain'], {
+        cwd: walletRoot, encoding: 'utf8', timeout: 30_000,
+    });
+    assert.ifError(afterResult.error);
+    const after = afterResult.stdout;
 
     // 1. exit 0.
     assert.ok(ok,
@@ -921,7 +930,6 @@ for (const tool of releaseScripts) {
         + 'because the work succeeded; capture-update-check.mjs used to overwrite the update capture '
         + 'the download page is checked against. (If a neighbouring session wrote a file during this '
         + `run, the entry named here will be unrelated to ${tool} - re-run before believing it.)`);
-
     // 2. Real usage, not silence and not the tool's own work output. Three
     //    cheap, independent signals; a script that ran its work passes none.
     const lines = stdout.split('\n').filter((l) => l.trim());
@@ -940,7 +948,18 @@ for (const tool of releaseScripts) {
         + 'exited 0; emulation-preflight.sh took --help as its Docker-platform positional and '
         + 'reported "host arm64 must EMULATE --help", also exiting 0. Both read, to a person and to '
         + 'the previous cut of this gate, as a help screen having been shown.');
-}
+};
+
+// Each tool keeps its own before/after worktree snapshots while independent
+// help checks overlap, so process startup does not serialize the audit.
+let nextReleaseScript = 0;
+await Promise.all(Array.from({ length: Math.min(6, releaseScripts.length) }, async () => {
+    while (nextReleaseScript < releaseScripts.length) {
+        const tool = releaseScripts[nextReleaseScript];
+        nextReleaseScript += 1;
+        await checkHelp(tool);
+    }
+}));
 
 // 13b. A help screen may not be extracted by absolute line number.
 //

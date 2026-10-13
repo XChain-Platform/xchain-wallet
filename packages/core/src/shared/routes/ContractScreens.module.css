@@ -1,0 +1,73 @@
+/* Contract identifiers and ABI metadata are author-controlled, so their
+   layout must not assume that a value contains natural break points. */
+.contractRow {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.toolbarSearch {
+    flex: 1 1 200px;
+    min-width: 0;
+    margin-bottom: calc(var(--xc-space-3) * -1);
+}
+
+.chainFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    max-width: 100%;
+}
+
+.abiField {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.abiField label {
+    overflow-wrap: anywhere;
+}
+
+/* Single-line technical values stay intact and scroll within their control.
+   This keeps long hex and JSON arguments from widening the screen. */
+.monospaceInput {
+    min-width: 0;
+    max-width: 100%;
+    font-family: var(--xc-font-mono);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.monospaceValue {
+    min-width: 0;
+    max-width: 100%;
+    font-family: var(--xc-font-mono);
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.codeSource {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: var(--xc-space-2);
+    font-family: var(--xc-font-mono);
+    font-size: 0.85rem;
+    overflow: auto;
+    white-space: pre;
+    resize: vertical;
+}
+
+.toolActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-bottom: var(--xc-space-2);
+}
+
+.toolActions > * {
+    flex: 0 1 auto;
+}

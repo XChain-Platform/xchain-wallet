@@ -21,6 +21,7 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 const CHAIN = 'bitcoin-regtest';
 const ICON_URL = 'https://assets.example/icon.png';
 const MEDIA_URL = 'https://assets.example/large.png';
+const UNNAMED_MEDIA_URL = 'https://assets.example/unnamed.png';
 const MEDIA_NAME = 'An artwork title with oneuninterruptedwordthatmustnotbreakthelayout';
 
 let savedResizeObserver;
@@ -44,6 +45,7 @@ function renderDetail() {
             images: [
                 { type: 'icon', url: ICON_URL },
                 { type: 'large', url: MEDIA_URL, name: MEDIA_NAME },
+                { type: 'large', url: UNNAMED_MEDIA_URL },
             ],
         }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
@@ -85,5 +87,16 @@ describe('TokenDetail collectible media', () => {
         expect(screen.getByRole('img', { name: `${MEDIA_NAME} unavailable` })).toBeTruthy();
         expect(screen.getByText('Image unavailable')).toBeTruthy();
         expect(screen.getByText(MEDIA_NAME)).toBeTruthy();
+    });
+
+    it('names media links by the action even when an image has no title', async () => {
+        renderDetail();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+
+        expect(await screen.findByRole('link', { name: 'Open token image' }))
+            .toHaveAttribute('href', UNNAMED_MEDIA_URL);
+        expect(screen.getByRole('link', { name: `Open image ${MEDIA_NAME}` }))
+            .toHaveAttribute('href', MEDIA_URL);
     });
 });

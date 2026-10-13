@@ -63,6 +63,10 @@ describe('Settings search', () => {
         ['theme', 'Appearance'],
         ['biometric unlock', 'Safety'],
         ['lock wallet', 'Keyboard'],
+        ['wallet mode', 'Wallet mode'],
+        ['network endpoint', 'Network & endpoints'],
+        ['connected site', 'Connected sites'],
+        ['donation', 'Automatic donation system'],
         ['saved chain filters', 'Display'],
         ['quiet hours', 'Notifications'],
         ['localhost auto sign', 'Developer mode'],
@@ -73,6 +77,22 @@ describe('Settings search', () => {
 
         expect(screen.getByText(sectionTitle)).toBeTruthy();
         expect(screen.queryByText('About')).toBeNull();
+    });
+
+    it.each([
+        ['wallet', 'This wallet'],
+        ['wallet mode', 'Wallet mode'],
+        ['network endpoint', 'Network & endpoints'],
+        ['connected site', 'Connected sites'],
+        ['donation', 'Automatic donation system'],
+        ['localhost auto sign', 'Developer mode'],
+    ])('exposes the %s drilldown as %s', (query, sectionTitle) => {
+        mount();
+        searchFor(query);
+
+        expect(screen.getByRole('button', {
+            name: new RegExp(`^${sectionTitle}(?:\\s|$)`),
+        })).toBeTruthy();
     });
 
     it('opens a matching drilldown section', () => {

@@ -173,19 +173,16 @@ test.describe('BET oracle record against a live explorer', () => {
             await expect(main.getByText(`#${feedIndex}`, { exact: false }).first()).toBeVisible();
         });
 
-        await test.step('follow the oracle link into the record', async () => {
+        await test.step('follow the oracle action into the record', async () => {
             const main = page.getByRole('main');
-            // The market page renders the feed source as a link ONLY when the
-            // shell passes onOpenOracle. That prop shipped once with no caller at
-            // all, so this click is the reachability assertion, not navigation
-            // convenience.
-            const link = main.getByRole('link', { name: oracle });
-            await expect(link, 'the market page links to its oracle').toBeVisible({ timeout: 30_000 });
-            await link.click();
+            // The market page renders the feed source as an action only when the
+            // shell passes onOpenOracle, so this click asserts route reachability.
+            const oracleButton = main.getByRole('button', { name: oracle });
+            await expect(oracleButton, 'the market page links to its oracle').toBeVisible({ timeout: 30_000 });
+            await oracleButton.click();
 
-            // The route's title lives in PageHeader, which renders OUTSIDE the main
-            // region and not as a heading role, so arrival is asserted on the
-            // record's own first row instead.
+            // The route title sits outside main, so arrival is asserted on the
+            // record's first row within main.
             await expect(page.getByRole('main').getByText('Markets opened', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
         });

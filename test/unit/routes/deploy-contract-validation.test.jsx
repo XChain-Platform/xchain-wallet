@@ -13,6 +13,7 @@ import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
+import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = [
@@ -79,6 +80,33 @@ async function renderAndValidate(result) {
 }
 
 describe('DeployContractForm validation diagnostics', () => {
+    it.each([320, 360])('keeps source and tool controls inside the %ipx form', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        let utils;
+
+        try {
+            await domAct(async () => {
+                utils = render(
+                    <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                        <DeployContractForm walletId="w" onBack={() => {}} />
+                    </MessagingProvider>,
+                );
+                await drain();
+            });
+
+            const source = utils.getByLabelText('Code source');
+            const tools = utils.getByRole('button', { name: 'Validate code' }).parentElement;
+            expect(source).toHaveClass(contractStyles.codeSource);
+            expect(source).toHaveAttribute('wrap', 'off');
+            expect(tools).toHaveClass(contractStyles.toolActions);
+            expect(utils.getByRole('button', { name: 'Estimate size' })).toBeInTheDocument();
+            expect(utils.getByRole('button', { name: 'Suggest gas' })).toBeInTheDocument();
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('shows every structured warning with its location and rule, and jumps to its line', async () => {
         const utils = await renderAndValidate({
             valid: true,

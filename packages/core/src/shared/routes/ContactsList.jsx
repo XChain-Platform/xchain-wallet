@@ -869,11 +869,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         className={picker.modalOverlay}
                         role="dialog"
                         aria-modal="true"
-                        aria-label="Add address"
+                        aria-labelledby="xc-contact-add-address-title"
                         onMouseDown={(ev) => { if (ev.target === ev.currentTarget) setAddAddrOpen(false); }}
                     >
                         <div className={picker.modalCard}>
-                            <div className={picker.modalTitle}>Add address</div>
+                            <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
                             <Input
                                 label="Address"
                                 value={addAddrValue}

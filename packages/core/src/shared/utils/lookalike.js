@@ -11,17 +11,14 @@
 // Lookalike address detection: §21.5 + §12.3.
 //
 // On paste / blur, compare the entered address against the user's
-// known set (contacts + recent send history). If a known address is a
-// near-match (same length, only one or two characters off), surface
-// a warning so a clipboard hijack that swapped a single character
-// can't slip through unnoticed.
+// known set (contacts + recent send history). A warning covers both
+// near-edit typos and address-poisoning matches that preserve the first
+// and last visible characters while replacing the middle.
 //
 // The Send route feeds in the same `Suggestion[]` it already uses for
-// autocomplete. Because the threshold is per-character (similarity =
-// 1 - editDistance / max(a.length, b.length)), addresses of very
-// different lengths score low and don't fire. That is exactly what we
-// want: a real typo lands in the same bucket; a totally different chain
-// looks dissimilar.
+// autocomplete. Near-edit matching uses a per-character similarity score;
+// matching-end detection is independent so a fully replaced middle still
+// triggers the warning.
 
 /**
  * Levenshtein edit distance between two strings. Iterative DP over a
@@ -79,9 +76,9 @@ export function similarity(a, b) {
  * @typedef {object} LookalikeOpts
  * @property {string} address               address the user entered
  * @property {Array<{ address: string, label?: string }>} candidates  known set (contacts + history)
- * @property {number} [threshold]           similarity ≥ threshold AND addresses unequal → match. Default 0.9.
+ * @property {number} [threshold]           near-edit similarity threshold. Default 0.9.
  * @property {number} [minLength]           skip when entered address is shorter than this (avoids matching half-typed input). Default 20.
- * @property {number} [maxDistance]         absolute upper bound on edit distance regardless of similarity score. Default 4.
+ * @property {number} [maxDistance]         near-edit distance ceiling. Default 4.
  */
 
 /**
@@ -89,12 +86,27 @@ export function similarity(a, b) {
  * @property {{ address: string, label?: string }} match
  * @property {number} score
  * @property {number} distance
+ * @property {'matching-ends' | 'near-edit'} kind
+ * @property {number} prefixLength
+ * @property {number} suffixLength
  */
+
+function sharedEdgeLength(a, b, fromEnd = false) {
+    const limit = Math.min(a.length, b.length, 6);
+    let length = 0;
+    while (length < limit) {
+        const aIndex = fromEnd ? a.length - 1 - length : length;
+        const bIndex = fromEnd ? b.length - 1 - length : length;
+        if (a[aIndex] !== b[bIndex]) break;
+        length += 1;
+    }
+    return length;
+}
 
 /**
  * Check `address` against `candidates`. Returns the closest known
- * address that scores above threshold (and is not identical), or null
- * when no match qualifies.
+ * address that either shares 4-6 characters at both ends or scores above
+ * the edit-distance threshold. Identical addresses never produce a warning.
  *
  * @param {LookalikeOpts} opts
  * @returns {LookalikeMatch | null}
@@ -113,6 +125,36 @@ export function findLookalike({
         const cand = c?.address;
         if (typeof cand !== 'string' || cand.length === 0) continue;
         if (cand === address) return null; // exact match → no warning
+
+        const prefixLength = sharedEdgeLength(address, cand);
+        const suffixLength = sharedEdgeLength(address, cand, true);
+        if (prefixLength >= 4 && suffixLength >= 4) {
+            const distance = levenshtein(address, cand);
+            const score = 1 - distance / Math.max(address.length, cand.length);
+            const edgeStrength = Math.min(prefixLength, suffixLength);
+            const bestEdgeStrength = best?.kind === 'matching-ends'
+                ? Math.min(best.prefixLength, best.suffixLength)
+                : -1;
+            if (
+                best?.kind !== 'matching-ends'
+                || edgeStrength > bestEdgeStrength
+                || (edgeStrength === bestEdgeStrength && score > best.score)
+            ) {
+                best = {
+                    match: c,
+                    score,
+                    distance,
+                    kind: 'matching-ends',
+                    prefixLength,
+                    suffixLength,
+                };
+            }
+            continue;
+        }
+
+        // A matching-ends result is the stronger security signal even when
+        // another candidate happens to have a smaller edit distance.
+        if (best?.kind === 'matching-ends') continue;
         // Length gating: only compare addresses within ±2 of input length.
         if (Math.abs(cand.length - address.length) > 2) continue;
         const dist = levenshtein(address, cand);
@@ -120,7 +162,14 @@ export function findLookalike({
         const score = 1 - dist / Math.max(address.length, cand.length);
         if (score < threshold) continue;
         if (!best || score > best.score) {
-            best = { match: c, score, distance: dist };
+            best = {
+                match: c,
+                score,
+                distance: dist,
+                kind: 'near-edit',
+                prefixLength,
+                suffixLength,
+            };
         }
     }
     return best;
