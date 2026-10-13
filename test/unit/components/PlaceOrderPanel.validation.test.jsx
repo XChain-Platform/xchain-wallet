@@ -59,7 +59,9 @@ describe('PlaceOrderPanel validation', () => {
         mount({}, { getWalletBalances: vi.fn(() => balanceRequest.promise) });
 
         expect(screen.getByRole('status')).toHaveTextContent('Loading wallet balances…');
-        expect(screen.getByRole('button', { name: 'Loading wallet…' })).toBeDisabled();
+        const loadingSubmit = screen.getByRole('button', { name: 'Place buy order' });
+        expect(loadingSubmit).toBeDisabled();
+        expect(loadingSubmit).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => balanceRequest.resolve({}));
 
