@@ -145,6 +145,7 @@ export function AppHeader({
                         onClick={onMenuOpen}
                         aria-label="Open menu"
                         aria-haspopup="dialog"
+                        title="Open menu"
                     >
                         <Icon.MenuIcon />
                     </button>
@@ -169,6 +170,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
+    const triggerRef = useRef(null);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -176,7 +178,11 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
             if (wrapRef.current?.contains(e.target)) return;
             setOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setOpen(false);
+            triggerRef.current?.focus();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -191,8 +197,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
         { id: 'view', label: 'View address', Icon: Icon.EyeIcon, handler: onViewAddress },
     ].filter((it) => typeof it.handler === 'function');
 
-    // Kept on screen like the settings panel: on a 375px phone the menu
-    // hung 9px past the edge of the content area (2026-10-12).
+    // The clamp keeps the anchored menu reachable at phone widths.
     const clamp = useViewportClamp(open);
 
     if (items.length === 0) return null;
@@ -200,6 +205,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     return (
         <div ref={wrapRef} className={styles.scanWrap}>
             <button
+                ref={triggerRef}
                 type="button"
                 className={styles.menuBtn}
                 onClick={() => setOpen((v) => !v)}
@@ -219,6 +225,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
                             role="menuitem"
                             className={styles.scanItem}
                             onClick={() => { setOpen(false); handler(); }}
+                            title={label}
                         >
                             <span className={styles.scanItemIcon} aria-hidden="true">
                                 <ItemIcon />

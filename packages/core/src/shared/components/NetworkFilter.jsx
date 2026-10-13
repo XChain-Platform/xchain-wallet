@@ -95,6 +95,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 onClick={() => setOpen((v) => !v)}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
                     {triggerIconUrl ? (
@@ -136,6 +137,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); setOpen(false); setQuery(''); }}
+                                title="All networks"
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
@@ -154,6 +156,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
                                         onClick={() => { onChange(e.coin); setOpen(false); setQuery(''); }}
+                                        title={e.label}
                                     >
                                         <span className={styles.itemIcon} aria-hidden="true">
                                             {iconUrl ? <img src={iconUrl} alt="" /> : null}

@@ -22,8 +22,9 @@
 .right {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    gap: var(--xc-space-1);
     flex-shrink: 0;
+    flex-wrap: nowrap;
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect

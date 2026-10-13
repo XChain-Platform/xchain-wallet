@@ -65,6 +65,7 @@ export function HeaderSettingsButton({
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
+    const triggerRef = useRef(null);
     // The gear sits wherever the header puts it; at phone width that is
     // near the left edge, and a panel aligned to it would hang off-screen.
     const clamp = useViewportClamp(open);
@@ -75,7 +76,11 @@ export function HeaderSettingsButton({
             if (wrapRef.current?.contains(e.target)) return;
             setOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setOpen(false);
+            triggerRef.current?.focus();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -103,6 +108,7 @@ export function HeaderSettingsButton({
     return (
         <div ref={wrapRef} className={styles.wrap}>
             <button
+                ref={triggerRef}
                 type="button"
                 className={`${styles.btn} ${anyNonDefault ? styles.btnActive : ''}`}
                 onClick={() => setOpen((v) => !v)}
@@ -128,6 +134,7 @@ export function HeaderSettingsButton({
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => { setOpen(false); onOpenWalletPicker(); }}
+                                title={walletLabel || 'Choose wallet'}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
                                     {walletLabel || 'No wallet'}
@@ -143,6 +150,7 @@ export function HeaderSettingsButton({
                                 type="button"
                                 className={styles.summaryRow}
                                 onClick={() => { setOpen(false); onOpenAccountPicker(); }}
+                                title={accountLabel || 'Choose account'}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
                                     {accountLabel || 'Account 1'}
