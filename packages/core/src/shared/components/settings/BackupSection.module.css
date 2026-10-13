@@ -1,6 +1,55 @@
+.formSection > div:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+}
+
+.fieldRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(8rem, auto);
+    gap: var(--xc-space-2);
+    align-items: end;
+}
+
+.mnemonicInput {
+    font-family: var(--xc-font-mono);
+}
+
+.gapLimitInput {
+    width: 7rem;
+}
+
+.reportList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.secret > span {
+    justify-content: flex-start;
+    text-align: start;
+}
+
 .sheetMeta {
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+@media (max-width: 420px) {
+    .fieldRow {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .gapLimitInput {
+        width: 100%;
+    }
 }
 
 @media print {

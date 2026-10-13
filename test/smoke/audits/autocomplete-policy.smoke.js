@@ -62,7 +62,7 @@ assert.match(recoveryPhrase, /autoComplete="off"/, 'recovery phrase disables aut
 assert.match(recoveryPhrase, /spellCheck=\{false\}/, 'recovery phrase disables spellcheck');
 
 const backupPhrase = backupSection.match(
-    /<textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,
+    /<Textarea[\s\S]{0,500}?placeholder="Recovery phrase, words separated by spaces"[\s\S]{0,500}?\/>/,
 )?.[0] || '';
 assert.match(backupPhrase, /autoComplete="off"/, 'backup test phrase disables autocomplete');
 assert.match(backupPhrase, /spellCheck=\{false\}/, 'backup test phrase disables spellcheck');
