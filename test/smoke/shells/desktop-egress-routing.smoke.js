@@ -247,7 +247,7 @@ function buildRuntimeFor(userData, calls) {
         'nothing kicks the hub sync before applyTorRouting is awaited',
     );
     const bootPrefix = mainIndex.slice(
-        mainIndex.indexOf('app.whenReady().then('),
+        mainIndex.indexOf('await app.whenReady();'),
         mainIndex.indexOf('await ensureHost(runtime);'),
     );
     assert.ok(bootPrefix.length > 0, 'found the whenReady body ahead of the boot ensureHost');
