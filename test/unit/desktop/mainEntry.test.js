@@ -14,17 +14,27 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const electron = vi.hoisted(() => {
     const appListeners = new Map();
     const isolatedSession = { partition: 'trezor-connect-isolated' };
+    const ownerWindow = {};
+    const popup = vi.fn();
+    class BrowserWindow {
+        static fromWebContents = vi.fn(() => ownerWindow);
+    }
     return {
         appListeners,
         isolatedSession,
+        ownerWindow,
+        popup,
         app: {
             isPackaged: true,
             on: vi.fn((name, listener) => { appListeners.set(name, listener); }),
             quit: vi.fn(),
             whenReady: vi.fn(() => new Promise(() => {})),
         },
-        BrowserWindow: class BrowserWindow {},
-        Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
+        BrowserWindow,
+        Menu: {
+            buildFromTemplate: vi.fn(() => ({ popup })),
+            setApplicationMenu: vi.fn(),
+        },
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
         session: {
@@ -168,6 +178,55 @@ describe('desktop main entry point', () => {
         const webview = { preventDefault: vi.fn() };
         handlers.get('will-attach-webview')(webview);
         expect(webview.preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('provides context editing actions without exposing an inspect action', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const handlers = new Map();
+        const contents = {
+            session: electron.session.defaultSession,
+            getURL: () => appIndex,
+            setWindowOpenHandler: vi.fn(),
+            on: vi.fn((name, handler) => { handlers.set(name, handler); }),
+        };
+        electron.appListeners.get('web-contents-created')({}, contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: true,
+            selectionText: 'wallet',
+            editFlags: {
+                canCut: false,
+                canCopy: true,
+                canPaste: false,
+                canSelectAll: true,
+            },
+        });
+
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'cut', enabled: false },
+            { role: 'copy', enabled: true },
+            { role: 'paste', enabled: false },
+            { type: 'separator' },
+            { role: 'selectAll', enabled: true },
+        ]);
+        expect(electron.popup).toHaveBeenLastCalledWith({ window: electron.ownerWindow });
+        expect(electron.BrowserWindow.fromWebContents).toHaveBeenLastCalledWith(contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: 'read-only text',
+            editFlags: { canCopy: true },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'copy', enabled: true },
+        ]);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: '',
+            editFlags: { canCopy: false },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(2);
     });
 
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {

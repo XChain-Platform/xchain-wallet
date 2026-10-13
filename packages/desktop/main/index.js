@@ -205,6 +205,23 @@ function getTrezorConnectSession() {
 
 function hardenWebContents(contents) {
     if (!contents || typeof contents.setWindowOpenHandler !== 'function') return;
+    contents.on('context-menu', (_event, params) => {
+        const template = params.isEditable
+            ? [
+                { role: 'cut', enabled: params.editFlags.canCut },
+                { role: 'copy', enabled: params.editFlags.canCopy },
+                { role: 'paste', enabled: params.editFlags.canPaste },
+                { type: 'separator' },
+                { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+            ]
+            : params.selectionText
+                ? [{ role: 'copy', enabled: params.editFlags.canCopy }]
+                : [];
+        if (template.length === 0) return;
+        Menu.buildFromTemplate(template).popup({
+            window: BrowserWindow.fromWebContents(contents) ?? undefined,
+        });
+    });
     contents.setWindowOpenHandler(({ url, frameName }) => {
         // §40.12: the one narrow exception to "deny every
         // window.open". Only the app's own trusted renderer (never the
