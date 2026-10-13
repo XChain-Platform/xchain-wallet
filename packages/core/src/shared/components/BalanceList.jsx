@@ -49,7 +49,7 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
- * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
+ * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
  */
 export function BalanceList({
     rows,
@@ -113,6 +113,7 @@ export function BalanceList({
             ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.tick}`)),
         ]
         : visible;
+    const labelChains = showChain || new Set(rows.map((row) => row.chainId).filter(Boolean)).size > 1;
     return (
         <div
             className={styles.list}
@@ -136,7 +137,7 @@ export function BalanceList({
                         hidden={false}
                         onToggleHide={onToggleHide}
                         verify={verifyMap ? verifyMap[key] : null}
-                        showChain={showChain}
+                        showChain={labelChains}
                     />
                 );
             })}
@@ -169,7 +170,7 @@ export function BalanceList({
                                 hidden
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
                             />
                         );
                     }) : null}
@@ -204,7 +205,7 @@ export function BalanceList({
                                 hidden={false}
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
                             />
                         );
                     }) : null}

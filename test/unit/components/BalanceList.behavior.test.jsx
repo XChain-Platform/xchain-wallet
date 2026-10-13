@@ -103,4 +103,21 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByRole('button', { name: `Open ${displayName} details` })).toBeInTheDocument();
     });
+
+    it('names each chain when rows from more than one chain share the list', () => {
+        render(
+            <BalanceList rows={[
+                row('XCHAIN', { chainDisplayName: 'Bitcoin', networkKind: 'mainnet' }),
+                row('XCHAIN', {
+                    chainId: 'litecoin-regtest',
+                    coin: 'litecoin',
+                    chainDisplayName: 'Litecoin',
+                    networkKind: 'regtest',
+                }),
+            ]} />,
+        );
+
+        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+    });
 });

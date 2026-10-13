@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -419,6 +419,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
 function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainClock, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const descriptor = chainRegistry.get(row.chainId);
     // Badge the LIFECYCLE state (open / cancelling / cancelled / expired /
     // complete), not the create action's validity: `row.status` is frozen at
     // 'valid' forever, which dressed every dispenser - cancelled and drained
@@ -477,6 +478,9 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
             <div className={local.body}>
                 <div className={local.name}>
                     {label ? `${label}: ` : ''}{row.give_tick || '?'}
+                </div>
+                <div className={local.subtitle}>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
                 </div>
                 <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
                 {/* Escrow is only stated when it is known. The explorer's

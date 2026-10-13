@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -57,13 +57,16 @@ function persistContactsSort(walletId, value) {
 }
 
 /**
- * Small round coin badge for a contact entry's chain. Shows the network
- * icon when the chain is recognized, or a question-mark-in-a-circle when
- * the address format could not be matched to a known network ('unknown').
+ * Chain badge for a contact entry. The address selects the network kind so
+ * testnet rows say testnet instead of relying on the coin artwork alone.
+ * Unknown formats keep the question-mark fallback.
  */
-function ChainCoinIcon({ chain }) {
+function ChainCoinIcon({ chain, address }) {
+    const chainId = chainIdFor(chain, address);
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
     const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
-    if (opt) return <img src={opt.iconUrl} alt={opt.label} className={picker.chainIcon} />;
+    if (opt) return <span>{opt.label}</span>;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
@@ -782,7 +785,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         className={picker.addrMenuItem}
                                         onClick={() => runAction(addrPicker, e)}
                                     >
-                                        <ChainCoinIcon chain={resolvedChain(e)} />
+                                        <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
                                         <span className={picker.addressText} title={e.address}>{e.address}</span>
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                     </button>
@@ -811,7 +814,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {active.entries.map((e, i) => {
                         return (
                             <li key={i} className={picker.addressCard}>
-                                <ChainCoinIcon chain={resolvedChain(e)} />
+                                <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
                                 <span className={picker.addressText} title={e.address}>{e.address}</span>
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
                                 <button
@@ -946,7 +949,10 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {
-                        const uniqueChains = [...new Set((c.entries || []).map(resolvedChain))];
+                        const uniqueChains = [...new Map((c.entries || []).map((entry) => [
+                            `${resolvedChain(entry)}:${chainIdFor(resolvedChain(entry), entry.address) || ''}`,
+                            entry,
+                        ])).values()];
                         return (
                             <button
                                 key={c.id}
@@ -957,8 +963,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             >
                                 <span className={picker.rowName}>{c.name}</span>
                                 <span className={picker.rowChains}>
-                                    {uniqueChains.map((chain) => (
-                                        <ChainCoinIcon key={chain} chain={chain} />
+                                    {uniqueChains.map((entry) => (
+                                        <ChainCoinIcon
+                                            key={`${resolvedChain(entry)}:${entry.address}`}
+                                            chain={resolvedChain(entry)}
+                                            address={entry.address}
+                                        />
                                     ))}
                                 </span>
                             </button>

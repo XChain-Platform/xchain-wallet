@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -304,6 +304,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             hideSmallBalances={hideSmallBalances}
                             smallBalanceThreshold={settings?.smallBalanceThreshold}
                             numberFormat={settings?.numberFormat}
+                            showChain={networkFilter === 'all'}
                         />
                     )
                 ) : null}
@@ -332,6 +333,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         hideSmallBalances={hideSmallBalances}
                         smallBalanceThreshold={settings?.smallBalanceThreshold}
                         numberFormat={settings?.numberFormat}
+                        showChain={networkFilter === 'all'}
                     />
                     {issuedUnheld.length > 0 ? (
                         <section aria-label="Issued by you" data-testid="issued-unheld">
@@ -346,6 +348,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                                 onToggleHide={onToggleHide}
                                 verifyMap={verifyMap}
                                 numberFormat={settings?.numberFormat}
+                                showChain={networkFilter === 'all'}
                             />
                         </section>
                     ) : null}
@@ -389,6 +392,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             balances={balances}
                             networkFilter={networkFilter}
                             walletId={walletId}
+                            chainRegistry={chainRegistry}
                             onSelectEntry={onSelectEntry}
                         />
                     ) : (
@@ -414,6 +418,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         <DemoDefiList
                             networkFilter={networkFilter}
                             balances={balances}
+                            chainRegistry={chainRegistry}
                             onSelectEntry={onSelectEntry}
                         />
                     ) : (
@@ -561,7 +566,7 @@ const ACTION_ICON = {
 //   1. action icon + action label + status pill (right)
 //   2. amount + tick (primary content)
 //   3. Block N + Confirms pill + relative time (right)
-function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick }) {
+function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, descriptor, onClick }) {
     const [balancesHidden] = useBalancesHidden();
     const kind = classifyEntryAction(entry, walletAddresses);
     const status = classifyEntryStatus(entry);
@@ -624,6 +629,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                 </div>
                 <div className={styles.demoRowBody}>
                     <div className={styles.demoRowMain}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : <span>{entry.chainId}</span>}
                         <span className={styles.activityActionIcon} aria-hidden="true">{iconFn('icon')}</span>
                         <span className={styles.demoActionTag}>{label}</span>
                         <span className={`${styles.statusBadge} ${statusClass}`}>{statusLabel}</span>
@@ -658,7 +664,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
 
 // Demo activity feed: synthesizes per-chain rows, wraps each in the
 // History entry shape so onSelectEntry can hand them to ActionDetail.
-function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelectEntry }) {
+function DemoActivityList({ chainIds, balances, networkFilter, walletId, chainRegistry, onSelectEntry }) {
     void walletId;
     const walletAddresses = useMemo(() => new Set(['demo-address']), []);
     const assetLookup = useMemo(() => buildTokenLookup(balances), [balances]);
@@ -717,6 +723,7 @@ function DemoActivityList({ chainIds, balances, networkFilter, walletId, onSelec
                     walletAddresses={walletAddresses}
                     assetLookup={assetLookup}
                     chainTip={chainTips[e.chainId] || null}
+                    descriptor={chainRegistry.get(e.chainId)}
                     onClick={() => {
                         if (typeof onSelectEntry === 'function') onSelectEntry(e);
                     }}
@@ -753,7 +760,7 @@ function defiPositionToEntry(position, idx) {
     };
 }
 
-function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
+function DemoDefiList({ networkFilter, balances, chainRegistry, onSelectEntry }) {
     const [balancesHidden] = useBalancesHidden();
     const positions = useMemo(() => {
         const all = synthesizeDemoDefiPositions();
@@ -843,6 +850,9 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                             </div>
                             <div className={styles.demoRowBody}>
                                 <div className={styles.demoRowMain}>
+                                    {chainRegistry.get(p.chainId)
+                                        ? <ChainBadge descriptor={chainRegistry.get(p.chainId)} size="sm" />
+                                        : <span>{p.chainId}</span>}
                                     {(() => {
                                         const iconFn = ACTION_ICON[String(p.action || '').toLowerCase()] || ACTION_ICON.other;
                                         return (
