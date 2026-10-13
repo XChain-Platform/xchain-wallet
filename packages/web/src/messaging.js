@@ -18,12 +18,14 @@ import { getRecentShellErrors } from './errorCapture.js';
 let hostBridgePromise;
 const loadHostBridge = () => (hostBridgePromise ??= import('./hostBridge.js'));
 
-// An arrow binding rather than a function declaration, because the host
-// route-table test reads a declared parameter list as a computed send type.
-export const sendMessage = async (type, request) => {
+// An arrow binding exported by name: the host route-table test reads a
+// declared parameter list as a computed send type, and the shell parity
+// smoke reads exports from declarations or an export list.
+const sendMessage = async (type, request) => {
     const { sendMessage: sendToHost } = await loadHostBridge();
     return sendToHost(type, request);
 };
+export { sendMessage };
 
 export async function getSessionStatus() {
     const { getSessionStatus: getStatus } = await loadHostBridge();
