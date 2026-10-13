@@ -29,6 +29,7 @@ import { DemoExitConfirm } from '../../../packages/core/src/shared/components/De
 import { DerivationPathCrossCheck } from '../../../packages/core/src/shared/components/DerivationPathCrossCheck.jsx';
 import { DiagnosticDetails } from '../../../packages/core/src/shared/components/DiagnosticDetails.jsx';
 import { DispenserBadge, __clearDispenserBadgeCache } from '../../../packages/core/src/shared/components/DispenserBadge.jsx';
+import { DraftDiscardButton } from '../../../packages/core/src/shared/components/DraftDiscardButton.jsx';
 import { EmptyStateNudge } from '../../../packages/core/src/shared/components/EmptyStateNudge.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
@@ -223,6 +224,9 @@ const fixtures = [
     ['DispenserBadge', () => withMessaging(
         <DispenserBadge chainId="bitcoin-mainnet" tick="XCHAIN" />,
     ), () => screen.findByRole('status', { name: /open dispenser/i })],
+    ['DraftDiscardButton', () => (
+        <DraftDiscardButton onClick={noop} label="Discard saved draft">Discard</DraftDiscardButton>
+    )],
     ['EmptyStateNudge', () => (
         <EmptyStateNudge title="No tokens" body="Tokens appear here." actionLabel="Receive" onAction={noop} />
     )],
