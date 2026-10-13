@@ -210,11 +210,10 @@
     --xc-spinner-size: var(--xc-icon-xl);
 }
 
+/* Overlays the centre of a busy Button; inset 0 centres it in either writing direction. */
 .busySpinner {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    inset: 0;
 }
 
 .loading .icon,

@@ -63,10 +63,14 @@
 }
 
 @media (pointer: coarse), (hover: none) {
+    /* Expand the touch target to the shared hit floor without changing the painted box. */
     .amountUnitSwap::after {
         content: '';
         position: absolute;
-        inset: -6px 0;
+        inset-inline: 0;
+        top: 50%;
+        height: max(100%, var(--xc-control-hit-min));
+        transform: translateY(-50%);
     }
 }
 

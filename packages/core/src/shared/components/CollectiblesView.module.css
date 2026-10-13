@@ -124,6 +124,14 @@
     height: var(--xc-control-h-sm);
 }
 
+/* The ring sits over card artwork, so it uses the on-accent colour. */
+.card .pinBtn:focus-visible,
+.card .hideBtn:focus-visible {
+    outline: 2px solid var(--xc-on-accent);
+    /* The two-pixel focus separation has no spacing-token equivalent. */
+    outline-offset: 2px;
+}
+
 .card .pinBtn { inset-inline-end: var(--xc-space-4); }
 .card .hideBtn {
     inset-inline-end: calc(

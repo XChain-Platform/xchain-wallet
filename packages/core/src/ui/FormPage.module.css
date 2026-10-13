@@ -78,10 +78,6 @@
     overflow-wrap: anywhere;
 }
 
-.title:focus {
-    outline: none;
-}
-
 .description {
     max-width: 32rem;
     margin: 0;

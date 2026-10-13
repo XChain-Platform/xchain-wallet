@@ -1887,12 +1887,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         aria-busy={fiatToggleBusy}
                         aria-label={showFiatInHistory
                             ? undefined
-                            : `${t('history.filters.showFiat')}: Off`}
+                            : t('history.filters.showFiatOff')}
                         title={t('history.filters.fiatHelp')}
                     >
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
-                            : t('history.filters.fiatCurrency', { currency: 'Off' })}
+                            : t('history.filters.fiatOff')}
                     </Button>
                     <SegmentedControl
                         aria-label={t('history.filters.groupingMode')}

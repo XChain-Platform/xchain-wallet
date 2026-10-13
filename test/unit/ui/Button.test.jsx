@@ -40,7 +40,8 @@ describe('<Button>', () => {
         expect(btn.querySelector(`.${styles.icon}`)).toBeInTheDocument();
         expect(btn.querySelector(`.${styles.label}`)).toHaveTextContent('Signing');
         // Button overlays the kit Spinner through .busySpinner so the shared .spinner stays an inline loader.
-        expect(css).toMatch(/\.busySpinner\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*left:\s*50%/s);
+        expect(css).toMatch(/\.busySpinner\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/s);
+        expect(css).toMatch(/\.spinnerStatus\s*\{[^}]*align-items:\s*center[^}]*justify-content:\s*center/s);
         expect(css).toMatch(/\.loading \.icon,\s*\.loading \.label\s*\{[^}]*opacity:\s*0/s);
     });
 
