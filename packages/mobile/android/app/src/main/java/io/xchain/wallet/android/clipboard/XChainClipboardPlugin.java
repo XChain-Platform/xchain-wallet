@@ -50,6 +50,7 @@ public class XChainClipboardPlugin extends Plugin {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable pendingClear;
+    private ClipboardManager.OnPrimaryClipChangedListener pendingClipListener;
 
     @PluginMethod
     public void write(PluginCall call) {
@@ -73,13 +74,13 @@ public class XChainClipboardPlugin extends Plugin {
             extras.putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true);
             clip.getDescription().setExtras(extras);
         }
-        cm.setPrimaryClip(clip);
         cancelPendingClear();
+        cm.setPrimaryClip(clip);
 
         long ttl = 0L;
         if (sensitive) {
             ttl = Math.min(Math.max((long) requested, 0L), MAX_SENSITIVE_TTL_SECONDS);
-            if (ttl > 0L) scheduleClear(ttl, value);
+            if (ttl > 0L) scheduleClear(ttl, cm);
         }
 
         JSObject res = new JSObject();
@@ -98,8 +99,7 @@ public class XChainClipboardPlugin extends Plugin {
 
     @PluginMethod
     public void clear(PluginCall call) {
-        String expectedValue = call.getString("expectedValue");
-        boolean cleared = clearIfExpected(expectedValue);
+        boolean cleared = clearClipboard();
         JSObject res = new JSObject();
         res.put("ok", true);
         res.put("cleared", cleared);
@@ -114,30 +114,34 @@ public class XChainClipboardPlugin extends Plugin {
      * a user who copies a seed, pastes it into a password manager and leaves
      * the app open.
      */
-    private void scheduleClear(long ttlSeconds, String expectedValue) {
+    private void scheduleClear(long ttlSeconds, ClipboardManager cm) {
+        pendingClipListener = this::cancelPendingClear;
+        cm.addPrimaryClipChangedListener(pendingClipListener);
         pendingClear = () -> {
+            cm.removePrimaryClipChangedListener(pendingClipListener);
+            pendingClipListener = null;
             pendingClear = null;
-            clearIfExpected(expectedValue);
+            clearClipboard();
         };
         handler.postDelayed(pendingClear, ttlSeconds * 1000L);
     }
 
     private void cancelPendingClear() {
-        if (pendingClear == null) return;
-        handler.removeCallbacks(pendingClear);
-        pendingClear = null;
+        if (pendingClear != null) {
+            handler.removeCallbacks(pendingClear);
+            pendingClear = null;
+        }
+        if (pendingClipListener != null) {
+            ClipboardManager cm = clipboard();
+            if (cm != null) cm.removePrimaryClipChangedListener(pendingClipListener);
+            pendingClipListener = null;
+        }
     }
 
-    /** Clear only when the current text still matches the wallet's copy. */
-    private boolean clearIfExpected(String expectedValue) {
+    /** Clear without reading clipboard contents back into the app. */
+    private boolean clearClipboard() {
         ClipboardManager cm = clipboard();
         if (cm == null) return false;
-        if (expectedValue != null) {
-            ClipData current = cm.getPrimaryClip();
-            if (current == null || current.getItemCount() == 0) return false;
-            CharSequence text = current.getItemAt(0).coerceToText(getContext());
-            if (text == null || !expectedValue.contentEquals(text)) return false;
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             cm.clearPrimaryClip();
         } else {

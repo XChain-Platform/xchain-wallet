@@ -21,6 +21,8 @@
 // code a fake `navigator.clipboard` that RECORDS what it was asked to write,
 // and then asserts that the secret never appears in that recording.
 
+import { createElement } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     CLIPBOARD_PLUGIN_NAME,
@@ -33,6 +35,11 @@ import {
     sensitiveCopySupported,
 } from '../../../packages/core/src/shared/clipboard.js';
 import { getNativePlugin, isNativeShell } from '../../../packages/core/src/shared/nativeShell.js';
+import { ClipboardPasteButton } from '../../../packages/core/src/ui/ClipboardPasteButton.jsx';
+import {
+    checkPasteIntegrity,
+    MAX_PASTE_INTEGRITY_LENGTH,
+} from '../../../packages/core/src/shared/utils/pasteIntegrity.js';
 
 const SEED = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
 
@@ -40,6 +47,7 @@ const SEED = 'legal winner thank year wave sausage worth useful legal winner tha
 function makeEnv({ native = false, plugin = true, throwOnWrite = false } = {}) {
     const webWrites = [];
     const pluginCalls = [];
+    const clipboardListeners = new Set();
     const env = {
         clipboardValue: '',
         navigator: { clipboard: {
@@ -48,9 +56,19 @@ function makeEnv({ native = false, plugin = true, throwOnWrite = false } = {}) {
                 env.clipboardValue = t;
             },
             readText: async () => env.clipboardValue,
+            addEventListener: (type, listener) => {
+                if (type === 'clipboardchange') clipboardListeners.add(listener);
+            },
+            removeEventListener: (type, listener) => {
+                if (type === 'clipboardchange') clipboardListeners.delete(listener);
+            },
         } },
         webWrites,
         pluginCalls,
+        replaceClipboard: (value) => {
+            env.clipboardValue = value;
+            for (const listener of clipboardListeners) listener();
+        },
     };
     if (native || plugin) {
         env.Capacitor = {
@@ -79,6 +97,48 @@ afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
     configureClipboardAutoClear(SENSITIVE_CLIP_TTL_SECONDS);
+    delete globalThis.navigator.clipboard;
+});
+
+describe('clipboard reads', () => {
+    it('reads only after a paste click and rejects oversized text before use', async () => {
+        const readText = vi.fn().mockResolvedValue('  abcde  ');
+        const onPaste = vi.fn();
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            value: { readText },
+            configurable: true,
+        });
+
+        render(createElement(ClipboardPasteButton, { onPaste, maxLength: 4 }));
+
+        const button = screen.getByRole('button', { name: 'Paste from clipboard' });
+        expect(readText).not.toHaveBeenCalled();
+        fireEvent.focus(button);
+        expect(readText).not.toHaveBeenCalled();
+        fireEvent.click(button);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Clipboard content is too long. Paste manually instead.',
+        );
+        expect(readText).toHaveBeenCalledOnce();
+        expect(onPaste).not.toHaveBeenCalled();
+    });
+
+    it('bounds and normalizes an explicit paste before checking clipboard contents', async () => {
+        const readText = vi.fn().mockResolvedValue(' value ');
+        await expect(checkPasteIntegrity({
+            pastedText: '  value\n',
+            clipboard: { readText },
+        })).resolves.toMatchObject({ ok: true });
+        expect(readText).toHaveBeenCalledOnce();
+
+        readText.mockClear();
+        await expect(checkPasteIntegrity({
+            pastedText: 'x'.repeat(MAX_PASTE_INTEGRITY_LENGTH + 1),
+            clipboard: { readText },
+        })).resolves.toEqual({ ok: true, skipped: true });
+        expect(readText).not.toHaveBeenCalled();
+    });
 });
 
 describe('a native shell with the clipboard plugin', () => {
@@ -132,7 +192,7 @@ describe('a native shell with the clipboard plugin', () => {
         }]);
     });
 
-    it('asks the native shell to compare the value at the selected delay', async () => {
+    it('leaves native expiry to the sensitivity-aware plugin', async () => {
         vi.useFakeTimers();
         const env = makeEnv({ native: true });
         configureClipboardAutoClear(7);
@@ -142,7 +202,6 @@ describe('a native shell with the clipboard plugin', () => {
 
         expect(env.pluginCalls).toEqual([
             { method: 'write', value: SEED, sensitive: true, ttlSeconds: 7 },
-            { method: 'clear', expectedValue: SEED },
         ]);
     });
 });
@@ -211,9 +270,10 @@ describe('an ordinary browser', () => {
         expect(res).toMatchObject({ ok: false, reason: CopyFailure.UNAVAILABLE });
     });
 
-    it('clears at the selected delay only while its own value remains', async () => {
+    it('clears at the selected delay without reading the clipboard', async () => {
         vi.useFakeTimers();
         const env = makeEnv({ plugin: false });
+        const readSpy = vi.spyOn(env.navigator.clipboard, 'readText');
         configureClipboardAutoClear(12);
 
         await copyText(SEED, { sensitive: true, env });
@@ -221,6 +281,7 @@ describe('an ordinary browser', () => {
         expect(env.webWrites).toEqual([SEED]);
         await vi.advanceTimersByTimeAsync(1);
         expect(env.webWrites).toEqual([SEED, ' ']);
+        expect(readSpy).not.toHaveBeenCalled();
     });
 
     it('cancels the older timer when the wallet makes a newer copy', async () => {
@@ -241,7 +302,7 @@ describe('an ordinary browser', () => {
         const env = makeEnv({ plugin: false });
 
         await copyText(SEED, { sensitive: true, ttlSeconds: 5, env });
-        env.clipboardValue = 'new clipboard value';
+        env.replaceClipboard('new clipboard value');
         await vi.advanceTimersByTimeAsync(5_000);
 
         expect(env.webWrites).toEqual([SEED]);
