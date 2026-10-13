@@ -107,12 +107,12 @@ export function CollectiblesView({
                 </button>
             ) : null}
             {hidden.length > 0 && hiddenExpanded ? (
-                <div className={styles.grid}>
+                <div className={styles.grid} role="list" aria-label="Hidden collectibles">
                     {hidden.map((r) => (
                         <CollectibleCard
                             key={`hidden:${r.chainId}:${r.tick}`}
                             row={r}
-                            pinned={false}
+                            pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                             hidden
                             onSelect={onSelectToken}
                             onTogglePin={onTogglePin}
@@ -126,7 +126,7 @@ export function CollectiblesView({
 }
 
 function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
-    const [imgFailed, setImgFailed] = useState(false);
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Fetch tick metadata to surface a real image when the row payload
     // doesn't already carry one. `useTokenInfo`'s module-level cache means
@@ -146,7 +146,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
         : fallbackImageUrl;
     const showImage = typeof effectiveImageUrl === 'string'
         && effectiveImageUrl.length > 0
-        && !imgFailed;
+        && failedImageUrl !== effectiveImageUrl;
     const clickable = typeof onSelect === 'function';
     const handleClick = clickable
         ? () => onSelect({
@@ -157,85 +157,80 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
             quantity: row.quantity,
+            imageUrl: effectiveImageUrl,
         })
         : undefined;
-    const Tag = clickable ? 'button' : 'div';
     const key = `${row.chainId}:${row.tick}`;
+    const CardContent = clickable ? 'button' : 'div';
     return (
-        <Tag
+        <div
             className={`${styles.card} ${clickable ? styles.cardClickable : ''} ${pinned ? styles.cardPinned : ''} ${hidden ? styles.cardHidden : ''}`}
-            type={clickable ? 'button' : undefined}
             role="listitem"
-            onClick={handleClick}
-            aria-label={clickable
-                ? `Open ${row.displayName || row.tick} details`
-                : undefined}
         >
-            <div className={styles.thumb}>
-                {showImage ? (
-                    <img
-                        src={effectiveImageUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.thumbImg}
-                        onError={() => setImgFailed(true)}
-                    />
-                ) : (
-                    <span
-                        className={styles.thumbLetter}
-                        style={{ background: tickerColor(row.tick) }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 2)}
-                    </span>
-                )}
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={row.chainDisplayName}
-                        className={styles.chainOverlay}
-                    />
-                ) : null}
-                {typeof onTogglePin === 'function' ? (
-                    <span
-                        role="button"
-                        tabIndex={0}
-                        className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
-                        aria-pressed={pinned}
-                        aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onTogglePin(key, !pinned);
-                        }}
-                    >
-                        {pinned ? '★' : '☆'}
-                    </span>
-                ) : null}
-                {typeof onToggleHide === 'function' ? (
-                    <span
-                        role="button"
-                        tabIndex={0}
-                        className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
-                        aria-pressed={hidden}
-                        aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onToggleHide(key, !hidden);
-                        }}
-                    >
-                        {hidden ? '⊕' : '⊘'}
-                    </span>
-                ) : null}
-            </div>
-            <div className={styles.meta}>
-                <div className={styles.name} title={row.displayName}>{row.displayName}</div>
-                <div className={styles.subtitle}>{row.tick}</div>
-            </div>
-        </Tag>
+            <CardContent
+                className={styles.cardContent}
+                type={clickable ? 'button' : undefined}
+                onClick={handleClick}
+                aria-label={clickable
+                    ? `Open ${row.displayName || row.tick} details`
+                    : undefined}
+            >
+                <div className={styles.thumb}>
+                    {showImage ? (
+                        <img
+                            src={effectiveImageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.thumbImg}
+                            onError={() => setFailedImageUrl(effectiveImageUrl)}
+                        />
+                    ) : (
+                        <span
+                            className={styles.thumbLetter}
+                            style={{ background: tickerColor(row.tick) }}
+                            aria-hidden="true"
+                        >
+                            {row.tick.slice(0, 2)}
+                        </span>
+                    )}
+                    {chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={row.chainDisplayName}
+                            className={styles.chainOverlay}
+                        />
+                    ) : null}
+                </div>
+                <div className={styles.meta}>
+                    <div className={styles.name} title={row.displayName}>{row.displayName}</div>
+                    <div className={styles.subtitle}>{row.tick}</div>
+                </div>
+            </CardContent>
+            {typeof onTogglePin === 'function' ? (
+                <button
+                    type="button"
+                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                    aria-pressed={pinned}
+                    aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
+                    onClick={() => onTogglePin(key, !pinned)}
+                >
+                    {pinned ? '★' : '☆'}
+                </button>
+            ) : null}
+            {typeof onToggleHide === 'function' ? (
+                <button
+                    type="button"
+                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                    aria-pressed={hidden}
+                    aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
+                    onClick={() => onToggleHide(key, !hidden)}
+                >
+                    {hidden ? '⊕' : '⊘'}
+                </button>
+            ) : null}
+        </div>
     );
 }
 
