@@ -44,6 +44,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -143,9 +144,7 @@ async function readFillStates(messaging, candidates) {
 }
 
 function fmtDate(unixSec) {
-    const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    return formatLocalDateTime(unixSec);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -201,9 +200,19 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveExpiration = () => (items || []).some((item) => {
+            const expiration = Number(item.fill?.expiration ?? item.row?.expiration);
+            return Number.isFinite(expiration) && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveExpiration()) return undefined;
+        const t = setInterval(() => {
+            setNowSec(Math.floor(Date.now() / 1000));
+            if (!hasLiveExpiration()) clearInterval(t);
+        }, 30000);
         return () => clearInterval(t);
-    }, []);
+    }, [items]);
 
     const load = useCallback(async () => {
         if (typeof messaging?.getAddressesByChain !== 'function'

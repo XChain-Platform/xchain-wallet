@@ -18,13 +18,15 @@
 // COINPAY confirming after expiry loses the buyer's native coin with no
 // settlement, so a user who reads a far-future "block" number can
 // broadcast past the real 2-hour deadline and lose funds. Render it as
-// an absolute UTC time instead.
+// an absolute local time with its zone instead.
+
+import { formatLocalDateTime } from '../shared/utils/dateTime.js';
 
 /**
  * Human-readable expiry for a coinpay obligation.
  *
  * @param {unknown} expiration  UNIX timestamp in seconds
- * @returns {string | null}  e.g. "Tue, 08 Jul 2026 14:00:00 GMT", or
+ * @returns {string | null} local date and time with a zone label, or
  *   null when the value is missing / not a sane timestamp.
  */
 export function coinpayExpiryText(expiration) {
@@ -33,7 +35,5 @@ export function coinpayExpiryText(expiration) {
     // values. Guard the upper bound too so a millisecond value (or
     // garbage) doesn't render a year-50000 date.
     if (!Number.isFinite(n) || n <= 0 || n > 1e13) return null;
-    const d = new Date(n * 1000);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toUTCString();
+    return formatLocalDateTime(n);
 }

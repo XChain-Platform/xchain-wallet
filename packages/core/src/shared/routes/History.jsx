@@ -64,6 +64,7 @@ import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -3081,7 +3082,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span className={styles.rowRelativeTime}>
+                        <span className={styles.rowRelativeTime} title={formatTimestamp(entry.timestamp)}>
                             {formatRelativeTime(entry.timestamp)}
                         </span>
                     ) : null}
@@ -3305,30 +3306,7 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    if (!ts) return '-';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return '-';
-    return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
-}
-
-// Human-readable "X ago" from a unix timestamp (seconds or ms).
-function formatRelativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
+    return formatLocalDateTime(ts) || '-';
 }
 
 /**
