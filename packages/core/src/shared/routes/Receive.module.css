@@ -187,18 +187,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.requestRow {
-    display: flex;
-    gap: var(--xc-space-2);
-    flex-wrap: wrap;
-    margin-top: var(--xc-space-3);
-}
-
-.requestRow > * {
-    flex: 1 1 140px;
-    min-width: 140px;
-}
-
 .qrActions {
     display: flex;
     gap: var(--xc-space-2);

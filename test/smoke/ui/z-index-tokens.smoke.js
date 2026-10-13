@@ -24,7 +24,6 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/routes/Home.module.css': ['20'],
     'shared/routes/ManageToken.module.css': ['20'],
     'shared/routes/StakeDetail.module.css': ['20'],
-    'shared/routes/TokenDetail.module.css': ['20'],
     'shared/routes/WalletPicker.module.css': ['1'],
 }));
 

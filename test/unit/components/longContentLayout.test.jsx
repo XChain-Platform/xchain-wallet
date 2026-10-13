@@ -160,7 +160,7 @@ describe('long content layout', () => {
 
         expect(await screen.findByTitle(walletName)).toHaveTextContent(walletName);
         expect(screen.getByRole('button', { name: new RegExp(walletName) })).toBeInTheDocument();
-        expect(rule(walletPickerCss, '.rowText > span')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(walletPickerCss, '.rowName')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
     it('retains a complete string title on a generic PageHeader', () => {
