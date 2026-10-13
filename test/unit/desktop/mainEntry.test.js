@@ -749,6 +749,6 @@ describe('desktop application menu', () => {
             .filter(Boolean)
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
-        expect(accelerators).toEqual(['cmdorctrl+n']);
+        expect(accelerators).toEqual(['cmdorctrl+shift+n']);
     });
 });

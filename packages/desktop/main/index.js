@@ -771,7 +771,7 @@ export function installApplicationMenu({
             submenu: [
                 {
                     label: 'New Window',
-                    accelerator: 'CmdOrCtrl+N',
+                    accelerator: 'CmdOrCtrl+Shift+N',
                     click: () => { void openWindowAfterIdleCheck(); },
                 },
                 { type: 'separator' },

@@ -30,6 +30,29 @@ import { useMenuKeys } from './useMenuKeys.js';
 const LEADER_WINDOW_MS = 1200;
 
 /**
+ * Global wallet shortcuts stay out of editable controls and modal dialogs,
+ * and `mod` maps to the platform's primary modifier only.
+ *
+ * @param {KeyboardEvent} event
+ * @param {Document | undefined} [documentObject]
+ * @param {string} [platform]
+ * @returns {boolean}
+ */
+export function canHandleGlobalShortcut(
+    event,
+    documentObject = globalThis.document,
+    platform = globalThis.navigator?.platform || globalThis.navigator?.userAgent || '',
+) {
+    if (isEditableTarget(event.target)) return false;
+    if (documentObject?.querySelector?.('dialog[open], [aria-modal="true"]')) return false;
+    if (!event.metaKey && !event.ctrlKey) return true;
+    const mac = /mac|iphone|ipad|ipod/i.test(platform);
+    return mac
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+}
+
+/**
  * Build the dispatcher's lookup maps from the effective (default +
  * user-override) bindings. Leader sequences map lead-key -> (second-key ->
  * action) so a rebind like 'g h' -> 't h' works without hardcoding 'g'.
@@ -95,7 +118,7 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
         };
 
         const onKey = (e) => {
-            if (isEditableTarget(e.target)) {
+            if (!canHandleGlobalShortcut(e)) {
                 clearLeader();
                 return;
             }

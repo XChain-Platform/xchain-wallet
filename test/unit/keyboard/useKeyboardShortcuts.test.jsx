@@ -10,7 +10,11 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@testing-library/react';
-import { useKeyboardShortcuts } from '../../../packages/core/src/shared/keyboard/useKeyboardShortcuts.js';
+import {
+    canHandleGlobalShortcut,
+    useKeyboardShortcuts,
+} from '../../../packages/core/src/shared/keyboard/useKeyboardShortcuts.js';
+import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
 afterEach(() => cleanup());
 
@@ -29,12 +33,40 @@ function setup(overrides = {}) {
 const press = (init) => fireEvent.keyDown(document.body, init);
 
 describe('useKeyboardShortcuts', () => {
-    it('fires modifier combos outside editable fields: Cmd/Ctrl+L locks, Cmd/Ctrl+, opens settings', () => {
+    it('fires modifier combos outside editable fields', () => {
         const h = setup();
         press({ key: 'l', ctrlKey: true });
         expect(h.lock).toHaveBeenCalledOnce();
-        press({ key: ',', metaKey: true });
+        press({ key: ',', ctrlKey: true });
         expect(h.navigate).toHaveBeenCalledWith('settings');
+    });
+
+    it('maps mod to Meta on macOS and Control on Windows and Linux', () => {
+        const base = { target: document.body, metaKey: false, ctrlKey: false };
+        expect(canHandleGlobalShortcut({ ...base, metaKey: true }, document, 'MacIntel')).toBe(true);
+        expect(canHandleGlobalShortcut({ ...base, ctrlKey: true }, document, 'MacIntel')).toBe(false);
+        expect(canHandleGlobalShortcut({ ...base, ctrlKey: true }, document, 'Win32')).toBe(true);
+        expect(canHandleGlobalShortcut({ ...base, metaKey: true }, document, 'Linux x86_64')).toBe(false);
+    });
+
+    it('suppresses wallet and palette shortcuts while a modal is open', () => {
+        const handlers = { navigate: vi.fn(), lock: vi.fn(), openHelp: vi.fn() };
+        let palette;
+        function WithModal() {
+            palette = useCommandPalette();
+            useKeyboardShortcuts({ handlers });
+            return <div role="dialog" aria-modal="true">Confirm</div>;
+        }
+        render(<WithModal />);
+
+        press({ key: 'l', ctrlKey: true });
+        press({ key: 'k', ctrlKey: true });
+        press({ key: 'g' });
+        press({ key: 'h' });
+
+        expect(handlers.lock).not.toHaveBeenCalled();
+        expect(handlers.navigate).not.toHaveBeenCalled();
+        expect(palette.open).toBe(false);
     });
 
     it('Cmd/Ctrl+N maps to a new send', () => {

@@ -19,7 +19,7 @@
 // the open toggle and leaves every focused editable field alone.
 
 import { useCallback, useEffect, useState } from 'react';
-import { isEditableTarget } from '../keyboard/shortcuts.js';
+import { canHandleGlobalShortcut } from '../keyboard/useKeyboardShortcuts.js';
 
 /**
  * @param {object} [opts]
@@ -65,9 +65,8 @@ export function useCommandPalette(opts = {}) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
-            if (isEditableTarget(e.target)) return;
-            // Cmd+key (mac) / Ctrl+key (win/linux). We accept either
-            // modifier so both platforms get the same binding.
+            if (!canHandleGlobalShortcut(e)) return;
+            // Cmd+key (mac) / Ctrl+key (win/linux).
             if ((e.key || '').toLowerCase() === comboKey
                 && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
