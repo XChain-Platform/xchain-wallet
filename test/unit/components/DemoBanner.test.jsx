@@ -237,6 +237,28 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         expect(exitDemoWallet).toHaveBeenCalledTimes(1);
     });
 
+    it('counts down to expiry and auto-wipes only the marked demo wallet', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        try {
+            markDemoWallet('demo-1', { ttlMs: 61_000, now: Date.now() });
+            mount({ activeWalletId: 'demo-1' });
+            expect(screen.getByRole('status')).toHaveTextContent('Auto-wipes in 1m.');
+
+            await act(async () => { vi.advanceTimersByTime(60_000); });
+            expect(screen.getByRole('status')).toHaveTextContent('Auto-wipes in under a minute.');
+            expect(exitDemoWallet).not.toHaveBeenCalled();
+
+            await act(async () => { vi.advanceTimersByTime(60_000); });
+            expect(exitDemoWallet).toHaveBeenCalledTimes(1);
+            expect(exitDemoWallet).toHaveBeenCalledWith(expect.objectContaining({
+                walletId: 'demo-1',
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('mounts the extension banner in the layout notices slot, beside the AppHeader header, so it cannot consume route height', () => {
         expect(popupAppSource).toMatch(
             /<FullLayoutWithNav[\s\S]*?header=\{\(\s*<AppHeader[\s\S]*?\/>\s*\)\}\s*notices=\{\(\s*<>[\s\S]*?\{activeWalletId \? <DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/> : null\}\s*<\/>\s*\)\}\s*bottomBar=/,

@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 
@@ -31,11 +32,26 @@ function mount(props = {}) {
             <History walletId="w1" accountId="a1" {...props} />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    clearDemoWalletId();
+});
 
 describe('History empty state', () => {
+    it('loads chain history for a real wallet while another id is marked as demo', async () => {
+        markDemoWallet('demo-wallet');
+        const messaging = mount();
+
+        await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
+        expect(messaging.getAddressHistory).toHaveBeenCalledWith({
+            chainId: CHAIN,
+            address: 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi',
+        });
+    });
+
     it('does not render a late history response from the previous wallet', async () => {
         let resolveOldHistory;
         let resolveNewAddresses;
