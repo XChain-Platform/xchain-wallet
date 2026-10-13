@@ -137,7 +137,7 @@ export function WalletPicker({
                                                 <Icon.CheckIcon />
                                             </span>
                                         ) : null}
-                                        <span className={pickerStyles.rowName} title={walletName}>
+                                        <span className={pickerStyles.rowName}>
                                             <WalletIdentity wallet={w} active={active} />
                                         </span>
                                     </span>

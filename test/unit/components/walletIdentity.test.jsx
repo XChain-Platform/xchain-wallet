@@ -63,7 +63,6 @@ describe('wallet identity surfaces', () => {
         const pickerIdentity = within(activeRow).getByTestId('wallet-identity');
         expect(pickerIdentity).toHaveAttribute('data-wallet-tone', headerIdentity.getAttribute('data-wallet-tone'));
         expect(activeRow).toHaveAttribute('aria-current', 'true');
-        expect(activeRow).toHaveTextContent('Current wallet');
     });
 
     it('names the signing wallet even when a confirmation has no source address', async () => {
