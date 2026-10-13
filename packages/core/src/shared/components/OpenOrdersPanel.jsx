@@ -310,9 +310,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         borderRadius: '4px',
                     }}
                 >
-                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem' }}>
-                        Cancel order #{String(confirmOrder.action_index)}
+                    <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                        Cancel order #{String(confirmOrder.action_index)}?
                         {confirmOwner ? <> from <AddressText address={confirmOwner.address} /></> : null}
+                    </p>
+                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
+                        This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.
                     </p>
                     {submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>

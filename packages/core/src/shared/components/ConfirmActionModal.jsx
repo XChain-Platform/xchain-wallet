@@ -35,10 +35,31 @@ import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
+import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
+
+function formatReviewDecoded(decoded) {
+    if (!decoded) return decoded;
+    let summary = String(decoded.summary || '');
+    const details = (decoded.details || []).map((detail) => {
+        if (!/(^|\s)(amount|quantity)$/i.test(String(detail?.label || ''))) return detail;
+        const value = String(detail.value ?? '');
+        const formatted = formatDisplayAmount(value);
+        if (value !== formatted) {
+            const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            summary = summary.replace(
+                new RegExp(`(^|\\s)${escaped}(?=\\s|$|[),])`),
+                (match, prefix) => `${prefix}${formatted}`,
+            );
+        }
+        return { ...detail, value: formatted };
+    });
+    return { ...decoded, summary, details };
+}
 
 /**
  * @param {object} props
@@ -95,6 +116,7 @@ export function ConfirmActionModal({
     sourceAddress = null, sourceName = '', nativeTicker = '',
     formatNativeFee, formatProtocolFee,
 }) {
+    const formattedDecoded = formatReviewDecoded(decoded);
     const fallbackHeadline = variant === 'message'
         ? 'Sign message'
         : variant === 'psbt'
@@ -102,12 +124,12 @@ export function ConfirmActionModal({
             : 'Review action';
     const headlineText = headline !== undefined
         ? headline
-        : (decoded?.summary?.split('\n')[0] || fallbackHeadline);
+        : (formattedDecoded?.summary?.split('\n')[0] || fallbackHeadline);
     const defaultApproveLabel = 'Approve';
     const resolvedApproveLabel = approveLabel || (variant === 'action'
         ? `${defaultApproveLabel} ${headlineText}`
         : headlineText);
-    const reviewDetails = (decoded?.details || []).map((detail, index) => ({
+    const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
         label: detail.label === 'Destination'
             ? 'To'
@@ -123,7 +145,9 @@ export function ConfirmActionModal({
         };
         return rank(left.label) - rank(right.label) || left.index - right.index;
     }).map(({ index, ...detail }) => detail);
-    const reviewDecoded = decoded ? { ...decoded, details: reviewDetails } : decoded;
+    const reviewDecoded = formattedDecoded
+        ? { ...formattedDecoded, details: reviewDetails }
+        : formattedDecoded;
     //Read off the composed envelope rather than taken as a prop, for
     // the same reason as the label above: a rule every adapter has to remember
     // is a rule one of them will forget, and the one that forgets shows a

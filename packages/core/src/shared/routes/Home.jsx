@@ -209,6 +209,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
+    balancesRef.current = balances;
+    const balancesScopeRef = useRef(/** @type {string | null} */ (null));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
@@ -547,11 +550,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [activeWalletId, messaging]);
 
     // Per-wallet load: balances, multisig indicator, pending airdrops and
-    // unfinished confirms. `reset: true` (wallet/account switch,
-    // manual reload key) flushes state to the loading-skeleton first;
-    // `reset: false` (poll / focus refresh below) fetches quietly in the
-    // background and only swaps state in once fresh data lands, so an
-    // incoming token doesn't flash the whole screen back to a skeleton.
+    // unfinished confirms. Scope changes clear data that belongs to another
+    // wallet or account. Same-scope reloads, polls and focus refreshes keep
+    // cached data visible until fresh data lands.
     // Start (or restart) a rate-limit wait: the banner counts down from here
     // and the effect below re-loads when it reaches zero.
     const beginRateLimitWait = useCallback((secondsOrNull) => {
@@ -564,7 +565,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
     }, []);
 
-    const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+    const loadHomeData = useCallback(async (walletId, accountId, {
+        reset,
+        isCancelled,
+        reportError = false,
+    }) => {
         // A browser offline event is definitive enough to avoid starting work
         // that cannot finish. In particular, keep the last successful balance
         // state on screen instead of replacing it with a loading skeleton.
@@ -573,9 +578,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             return;
         }
         if (reset) {
-            // A switch (or a manual reload) is about to replace everything on
-            // screen, so nothing an earlier wallet polled may hold off the
-            // re-polls that follow.
+            const scopeKey = `${walletId}:${accountId || ''}`;
+            const hasCachedBalances = balancesScopeRef.current === scopeKey;
+            // A reset owns a fresh polling window even when cached rows remain
+            // visible for the same wallet and account.
             pollThrottleRef.current.reset();
             // ...but the load about to run DOES take the in-flight slot, the
             // way an event-driven one does. Without it a cold open that is
@@ -583,12 +589,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
-            setBalances(null);
-            setBalancesFetchedAt(null);
-            setActiveByChain({});
-            setMultisig(null);
-            setPendingAirdrops([]);
-            setConfirmSessions([]);
+            if (!hasCachedBalances) {
+                setBalances(null);
+                setBalancesFetchedAt(null);
+                setActiveByChain({});
+                setMultisig(null);
+                setPendingAirdrops([]);
+                setConfirmSessions([]);
+            }
             setLoadError(null);
         }
 
@@ -601,20 +609,36 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // loadDisplayBalances holds that branch so the palette shows the same.
             const b = await loadDisplayBalances(messaging, walletId, accountId);
             if (!isCancelled()) {
-                // Fresh balances: this is what restarts the re-poll window,
-                // whichever path asked for them.
-                pollThrottleRef.current.succeed();
-                setBalances(b);
-                setBalancesFetchedAt(Date.now());
                 // A read can LAND and still be rate limited: the aggregator
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
                 // came back, on the poll path as well as the reset one. The
                 // balances that did land stay on screen either way.
                 const wait = rateLimitWaitFromBalances(b);
-                if (wait) {
-                    beginRateLimitWait(wait.seconds);
+                const refreshHasFailure = reportError
+                    && balancesRef.current !== null
+                    && Object.values(b || {}).some((rows) => (
+                        Array.isArray(rows) && rows.some((entry) => entry?.error)
+                    ));
+                if (refreshHasFailure) {
+                    pollThrottleRef.current.fail();
+                    showToast({
+                        message: wait
+                            ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                            : "Couldn't refresh balances. Try again.",
+                        variant: 'error',
+                    });
                 } else {
+                    // Fresh balances restart the re-poll window, whichever
+                    // path asks for them.
+                    pollThrottleRef.current.succeed();
+                    balancesScopeRef.current = `${walletId}:${accountId || ''}`;
+                    setBalances(b);
+                    setBalancesFetchedAt(Date.now());
+                }
+                if (wait && !refreshHasFailure) {
+                    beginRateLimitWait(wait.seconds);
+                } else if (!refreshHasFailure) {
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -631,7 +655,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // A silent poll that fails (e.g. a transient network blip)
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
-            if (!isCancelled() && reset) {
+            if (!isCancelled()) {
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -640,8 +664,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // channel, a chain-wide fault), and it is the path that used to
                 // print the wire text.
                 const humanized = humanizeError(err, BALANCES_VERB);
-                if (humanized.cause === 'rate_limited') beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                else setLoadError(humanized.message);
+                if (reportError && balancesRef.current !== null) {
+                    showToast({
+                        message: humanizeError(err, 'refresh balances').message,
+                        variant: 'error',
+                    });
+                } else if (reset && humanized.cause === 'rate_limited') {
+                    beginRateLimitWait(humanized.retryAfterSeconds ?? null);
+                } else if (reset) {
+                    setLoadError(humanized.message);
+                }
             }
         }
 
@@ -701,8 +733,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging]);
 
+    // The one manual refresh on Home (the hero's button): reloads balances,
+    // and with them the prices, quietly over what is on screen. A failure is a
+    // toast, never a skeleton or a banner over balances that are still good.
+    // A load already in flight (a poll, a focus refresh) is not doubled up.
     const refreshPortfolio = useCallback(async () => {
-        if (!activeWalletId || portfolioRefreshing || !isNavigatorOnline()) return;
+        if (!activeWalletId || portfolioRefreshing || !browserOnline || !isNavigatorOnline()) return;
+        if (pollThrottleRef.current.isInFlight()) return;
         const refreshId = portfolioRefreshIdRef.current + 1;
         portfolioRefreshIdRef.current = refreshId;
         setPortfolioRefreshing(true);
@@ -711,12 +748,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         try {
             await loadHomeData(activeWalletId, activeAccountId || undefined, {
                 reset: false,
+                reportError: true,
                 isCancelled: () => portfolioRefreshIdRef.current !== refreshId,
             });
         } finally {
             if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
         }
-    }, [activeWalletId, activeAccountId, loadHomeData, portfolioRefreshing]);
+    }, [activeWalletId, activeAccountId, browserOnline, loadHomeData, portfolioRefreshing]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -806,6 +844,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const reconnected = !wasBrowserOnlineRef.current && browserOnline;
         wasBrowserOnlineRef.current = browserOnline;
         if (!reconnected || !activeWalletId) return;
+        if (pollThrottleRef.current.isInFlight()) return;
         pollThrottleRef.current.reset();
         pollThrottleRef.current.start();
         let cancelled = false;
@@ -846,8 +885,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setRateLimitTickNow(now);
                 return;
             }
+            if (pollThrottleRef.current.isInFlight()) return;
             setRateLimitRetryAt(null);
             setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(null)}`);
+            pollThrottleRef.current.reset();
             pollThrottleRef.current.start();
             loadHomeData(walletId, accountId, {
                 reset: false,
@@ -973,6 +1014,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         return (
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
+                    <h1 className="sr-only">Home</h1>
                     {loadErrorText ? (
                         <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                     ) : null}
@@ -1016,8 +1058,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (
-                    <div role="status" aria-label="Loading balances">
-                        <Skeleton.List rows={5} />
+                    <div role="status" aria-label="Loading balances" aria-busy="true">
+                        <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
                     </div>
                 ) : null}
 

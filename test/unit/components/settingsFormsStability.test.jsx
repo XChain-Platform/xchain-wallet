@@ -97,7 +97,11 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/whole number of sats/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain('test-send-threshold-hint');
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
@@ -110,6 +114,22 @@ describe('settings form validation', () => {
         expect(update).toHaveBeenCalledWith({
             grace: { testSendThresholdSats: '9007199254740993' },
         });
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+        render(<SafetySection />);
+        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
     });
 
     it('explains the exact test-send gate and always-on recipient warnings', () => {
@@ -151,7 +171,10 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alert').textContent).toMatch(/non-negative decimal fee rate/);
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/non-negative decimal fee rate/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
     it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {
@@ -181,6 +204,32 @@ describe('settings form validation', () => {
                 },
             },
         });
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent fee rates', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert').textContent).toMatch(/non-negative decimal fee rate/);
     });
 
     it('allows shared settings rows to wrap on narrow screens', () => {

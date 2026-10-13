@@ -154,35 +154,37 @@ describe('History still shows a well-formed pending amount exactly', () => {
     it('renders a plain amount on the row and in the panel', async () => {
         const { view } = mountHistory({ mempool: [sendRow('100')] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe('receiving 100 XCHAIN');
+        expect(annotation(view).textContent).toBe('receiving +100 XCHAIN');
 
         const panel = await openPendingPanel(view);
-        expect(within(panel).getByText(`100 XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(within(panel).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
     });
 
-    it('carries a decimal past float precision through verbatim', async () => {
+    it('groups a decimal past float precision without changing its digits', async () => {
         // 92233720368547758.07 is not representable as a JS number; any
         // guard that parses it hands the screen 92233720368547760.
         const exact = '92233720368547758.07';
         const { view } = mountHistory({ mempool: [sendRow(exact)] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe(`receiving ${exact} XCHAIN`);
+        const displayed = '92,233,720,368,547,758.07';
+        expect(annotation(view).textContent).toBe(`receiving +${displayed} XCHAIN`);
 
         const panel = await openPendingPanel(view);
-        expect(within(panel).getByText(`${exact} XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(within(panel).getByText(`+${displayed} XCHAIN to ${OURS}`)).toBeTruthy();
     });
 
     it('keeps a small amount whose float round-trip becomes exponent notation', async () => {
         const exact = '0.000000010000000001';
         const { view } = mountHistory({ mempool: [sendRow(exact)] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe(`receiving ${exact} XCHAIN`);
+        expect(annotation(view).textContent).toBe(`receiving +${exact} XCHAIN`);
     });
 
     it('accepts an amount with more digits than a number can hold', async () => {
         const exact = '123456789012345678901234567890';
         const { view } = mountHistory({ mempool: [sendRow(exact)] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe(`receiving ${exact} XCHAIN`);
+        expect(annotation(view).textContent)
+            .toBe('receiving +123,456,789,012,345,678,901,234,567,890 XCHAIN');
     });
 });

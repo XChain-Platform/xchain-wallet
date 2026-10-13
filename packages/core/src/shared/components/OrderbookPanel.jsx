@@ -34,6 +34,7 @@ import {
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
+import styles from './MarketTrading.module.css';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -100,11 +101,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))',
-                gap: '0.5rem',
-            }}>
+            <div className={styles.orderBookGrid}>
                 <LevelsColumn
                     title="Bids"
                     side="bid"
@@ -141,35 +138,42 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
 
 function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, tick2 }) {
     return (
-        <div style={{ minWidth: 0 }}>
-            <p style={{ margin: '0 0 0.25rem', fontSize: '0.75rem', fontWeight: 700 }}>{title}</p>
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
-                    gap: '0.25rem',
-                    fontSize: '0.75rem',
-                    color: 'var(--xc-text-muted)',
-                    padding: '0 0.25rem 0.25rem',
-                    textAlign: 'right',
-                    fontVariantNumeric: 'tabular-nums',
-                }}
-            >
-                <span>Price ({tick2})</span>
-                <span>Size ({tick1})</span>
-                <span>Total ({tick1})</span>
+        <div
+            className={styles.levelsScroller}
+            role="region"
+            aria-label={`${title} order book levels`}
+            tabIndex={0}
+        >
+            <div className={styles.levelsTable}>
+                <p style={{ margin: '0 0 0.25rem', fontSize: '0.75rem', fontWeight: 700 }}>{title}</p>
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
+                        gap: '0.25rem',
+                        fontSize: '0.75rem',
+                        color: 'var(--xc-text-muted)',
+                        padding: '0 0.25rem 0.25rem',
+                        textAlign: 'right',
+                        fontVariantNumeric: 'tabular-nums',
+                    }}
+                >
+                    <span>Price ({tick2})</span>
+                    <span>Size ({tick1})</span>
+                    <span>Total ({tick1})</span>
+                </div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {levels.map((level) => (
+                        <LevelRow
+                            key={`${side}-${level.displayPrice}`}
+                            level={level}
+                            maxCumulative={maxCumulative}
+                            side={side}
+                            onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
+                        />
+                    ))}
+                </ul>
             </div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {levels.map((level) => (
-                    <LevelRow
-                        key={`${side}-${level.displayPrice}`}
-                        level={level}
-                        maxCumulative={maxCumulative}
-                        side={side}
-                        onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
-                    />
-                ))}
-            </ul>
         </div>
     );
 }

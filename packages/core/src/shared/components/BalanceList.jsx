@@ -318,6 +318,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
+                            loading="lazy"
+                            decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
@@ -327,6 +329,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
+                            loading="lazy"
+                            decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
                             onError={(e) => {
                                 e.currentTarget.style.display = 'none';
@@ -340,6 +344,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             aria-hidden="true"
                             title={row.chainDisplayName}
                             className={styles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
                         />
                     ) : null}
                 </div>

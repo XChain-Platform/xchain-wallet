@@ -161,7 +161,7 @@ describe('stake amount and review state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         expect(await screen.findByText(/Stake 1 XCHAIN for signing pubkey/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByLabelText(/^Amount/)).toHaveValue('1');
         expect(screen.getByLabelText('Signing public key')).toHaveValue(PUBKEY);
@@ -195,7 +195,7 @@ describe('staking action load and review state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
         expect(await screen.findByText(/Claim 4 XCHAIN/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByLabelText(/^Amount/)).toHaveValue('4');
     });
