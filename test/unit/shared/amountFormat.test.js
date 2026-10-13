@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     formatWithThousands,
+    normalizeAmountFieldInput,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
     formatDisplayAmount,
@@ -120,6 +121,9 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['de-DE', '1.234,56', '1234.56'],
         ['de-DE', '1,234.56', '1234.56'],
         ['fr-FR', '1\u202f234,56', '1234.56'],
+        ['en-US', '1 234,56', '1234.56'],
+        ['en-US', '1 234 567', '1234567'],
+        ['en-US', '1 234,567.89', '1234567.89'],
         ['fr-FR', '1,234.56', '1234.56'],
         ['de-DE', '1.234', '1234'],
         ['de-DE', '1,25', '1.25'],
@@ -133,9 +137,38 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['de-DE', '12.34,56'],
         ['fr-FR', '1,234,56'],
         ['en-US', '1.2.3'],
+        ['en-US', '1 23'],
+        ['en-US', '12 34.56'],
+        ['en-US', '1\n234'],
         ['de-DE', '12 EUR'],
     ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
+    });
+});
+
+describe('shared/amountFormat normalizeAmountFieldInput', () => {
+    it.each([
+        ['coin ticker', '0.5 BTC', { unit: 'BTC' }, '0.5'],
+        ['lowercase ticker', '0,5 btc', { unit: 'BTC' }, '0.5'],
+        ['fiat sign', '$ 1,234.56', { unit: 'USD', fiatCurrency: 'USD' }, '1234.56'],
+        ['trailing fiat sign', '1.234,56 €', { unit: 'EUR', fiatCurrency: 'EUR' }, '1234.56'],
+        ['leading fiat code', 'USD 25.00', { unit: 'USD', fiatCurrency: 'USD' }, '25.00'],
+    ])('normalizes a pasted %s without changing its decimal value', (
+        _label,
+        input,
+        options,
+        expected,
+    ) => {
+        expect(normalizeAmountFieldInput(input, options)).toBe(expected);
+    });
+
+    it.each([
+        ['another ticker', '0.5 ETH', { unit: 'BTC' }],
+        ['fiat sign in coin mode', '$10', { unit: 'BTC' }],
+        ['wrong fiat sign', '€10', { unit: 'USD', fiatCurrency: 'USD' }],
+        ['stacked units', '$1 BTC', { unit: 'BTC' }],
+    ])('refuses %s', (_label, input, options) => {
+        expect(normalizeAmountFieldInput(input, options)).toBeNull();
     });
 });
 
