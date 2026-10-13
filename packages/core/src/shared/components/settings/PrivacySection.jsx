@@ -16,6 +16,7 @@
 // `settings.privacy.clipboardAutoClearSeconds`, which shared/clipboard.js
 // reads on every shell, so a privacy control here always governs something.
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
 import {
@@ -42,15 +43,18 @@ import {
 
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
+    const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onToggle = async (field, next) => {
+        setSaveError(null);
         try {
             await update({ privacy: { [field]: next } });
         } catch (err) {
+            setSaveError(field);
             // eslint-disable-next-line no-console
             console.error(`privacy.${field} update failed:`, err);
         }
@@ -61,12 +65,15 @@ export function PrivacySection() {
             {/* Only a host that can proxy wallet-owned traffic exposes the
                 live setting. Browser-based shells show the disabled row. */}
             {shellCapabilities().socksProxy && (
-                <ToggleRow
-                    label="Tor routing"
-                    hint="Desktop only. Send the wallet's network traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050. Tor must already be running: if it is unreachable, requests fail rather than quietly going direct."
-                    checked={settings.privacy.torRouting}
-                    onChange={(v) => onToggle('torRouting', v)}
-                />
+                <>
+                    <ToggleRow
+                        label="Tor routing"
+                        hint="Desktop only. Send the wallet's network traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050. Tor must already be running: if it is unreachable, requests fail rather than quietly going direct."
+                        checked={settings.privacy.torRouting}
+                        onChange={(v) => onToggle('torRouting', v)}
+                    />
+                    <PrivacySaveError visible={saveError === 'torRouting'} />
+                </>
             )}
             {/* An unavailable shell always renders this switch off because
                 its stored desktop preference cannot affect local traffic. */}
@@ -85,49 +92,65 @@ export function PrivacySection() {
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
+            <PrivacySaveError visible={saveError === 'changeAddressRotation'} />
             <ToggleRow
                 label="Blur sensitive data on blur"
                 hint="Blur the entire wallet display while its window or tab is unfocused or hidden, then reveal it again when focus returns."
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
+            <PrivacySaveError visible={saveError === 'blurOnBlur'} />
             <ToggleRow
                 label="Labels survive restore"
                 hint="In the browser extension, batch label and contact edits and prompt for one on-chain publish per unlock window. Every app can still publish and restore labels manually from Backup."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
+            <PrivacySaveError visible={saveError === 'labelsSurviveRestore'} />
             <ToggleRow
                 label="Haptic feedback"
                 hint="Allow vibration for tap, success, warning, and error events when the device supports the Vibration API. OS or in-app reduced-motion settings suppress haptics."
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
+            <PrivacySaveError visible={saveError === 'hapticsEnabled'} />
             <ToggleRow
                 label="Native coin price data"
                 hint="Allow third-party CoinGecko requests for native-coin detail stats and fallback fiat rates, and allow price-alert checks when alerts are enabled. Turning this off blocks CoinGecko and hides the detail stats and chart; explorer-backed on-chain oracle rates can still appear as normal wallet API traffic."
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
+            <PrivacySaveError visible={saveError === 'priceDataEnabled'} />
             <ToggleRow
                 label="Fetch token metadata"
                 hint="When a token description points to a Token Information Standard (TIS) JSON document, fetch it and load its referenced artwork or media from issuer-selected hosts. Turning this off shows only on-chain token fields without TIS or remote-media requests."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
+            <PrivacySaveError visible={saveError === 'metadataFetchEnabled'} />
             <ToggleRow
                 label="Always require hardware cross-check confirm"
                 hint={`Require the explicit "I've verified path + address" checkbox on every hardware-wallet sign. Without this setting, the checkbox is still required for large amounts, first-time recipients, and multisig signs.`}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
+            <PrivacySaveError visible={saveError === 'alwaysRequireHwExplicitConfirm'} />
             <ClipboardAutoClearRow settings={settings} update={update} />
             <FormDraftTtlRow settings={settings} update={update} />
         </div>
     );
 }
 
+function PrivacySaveError({ visible }) {
+    return visible ? (
+        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
+            Could not save this privacy setting. Try again.
+        </span>
+    ) : null;
+}
+
 function ClipboardAutoClearRow({ settings, update }) {
+    const [saveError, setSaveError] = useState(false);
     const stored = settings?.privacy?.clipboardAutoClearSeconds;
     const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
     const onChange = async (event) => {
@@ -135,9 +158,11 @@ function ClipboardAutoClearRow({ settings, update }) {
         if (!Number.isInteger(next)
             || next < CLIPBOARD_AUTO_CLEAR_MIN
             || next > CLIPBOARD_AUTO_CLEAR_MAX) return;
+        setSaveError(null);
         try {
             await update({ privacy: { clipboardAutoClearSeconds: next } });
         } catch (err) {
+            setSaveError(true);
             // eslint-disable-next-line no-console
             console.error('privacy.clipboardAutoClearSeconds update failed:', err);
         }
@@ -163,20 +188,24 @@ function ClipboardAutoClearRow({ settings, update }) {
                 aria-label="Clipboard auto-clear seconds"
                 style={{ ...INPUT, width: '6rem' }}
             />
+            <PrivacySaveError visible={saveError} />
         </div>
     );
 }
 
 // Cluster P FOLLOWUP 6: form-draft retention dropdown.
 function FormDraftTtlRow({ settings, update }) {
+    const [saveError, setSaveError] = useState(false);
     const current = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
         : FORM_DRAFT_TTL_DEFAULT;
     const onChange = async (e) => {
         const next = Number(e.target.value);
+        setSaveError(null);
         try {
             await update({ privacy: { formDraftTtlMs: next } });
         } catch (err) {
+            setSaveError(true);
             // eslint-disable-next-line no-console
             console.error('privacy.formDraftTtlMs update failed:', err);
         }
@@ -209,6 +238,7 @@ function FormDraftTtlRow({ settings, update }) {
                 <option value={FORM_DRAFT_TTL_24H}>24 hours</option>
                 <option value={FORM_DRAFT_TTL_7D}>7 days</option>
             </select>
+            <PrivacySaveError visible={saveError} />
         </div>
     );
 }

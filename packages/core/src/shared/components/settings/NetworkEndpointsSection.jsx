@@ -329,6 +329,8 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             await onSave({ ...next, custom: !matchesDefault });
             setEditing(false);
         } catch (err) {
+            setDraft(persisted);
+            setEditing(false);
             setSaveError(userFacingMessage(err, 'Could not save these endpoints. Try again.'));
         } finally {
             setSaving(false);
@@ -347,6 +349,8 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             });
             setEditing(false);
         } catch (err) {
+            setDraft(persisted);
+            setEditing(false);
             setSaveError(userFacingMessage(err, 'Could not reset these endpoints. Try again.'));
         } finally {
             setSaving(false);

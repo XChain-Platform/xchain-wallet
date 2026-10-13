@@ -192,17 +192,19 @@ describe('NetworkEndpointsSection', () => {
         expect(within(block).getByLabelText('Hub URL').value).toBe(LTC_REGTEST.hub);
     });
 
-    it('keeps the editor open and shows a rejected save', async () => {
+    it('restores the persisted endpoint and shows a rejected save', async () => {
         updateSpy.mockRejectedValueOnce(new Error('Storage is unavailable.'));
         render(<NetworkEndpointsSection />);
         const block = ltcRegtestBlock();
-        fireEvent.change(within(block).getByLabelText('Explorer URL'), {
+        const explorer = within(block).getByLabelText('Explorer URL');
+        fireEvent.change(explorer, {
             target: { value: 'http://10.0.0.9:18080' },
         });
         fireEvent.click(within(block).getByText('Save'));
 
         expect(await within(block).findByRole('alert')).toHaveTextContent('Storage is unavailable.');
-        await waitFor(() => expect(within(block).getByRole('button', { name: 'Save' })).toBeEnabled());
+        expect(explorer).toHaveValue(LTC_REGTEST.explorer);
+        expect(within(block).queryByRole('button', { name: 'Save' })).toBeNull();
     });
 
     it('resets only the selected chain to its defaults', async () => {

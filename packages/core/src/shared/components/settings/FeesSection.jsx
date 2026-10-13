@@ -73,6 +73,7 @@ const CHAIN_HEADER = {
 export function FeesSection() {
     const { settings, loading, error, update } = useSettings();
     const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
+    const [saveErrors, setSaveErrors] = useState(/** @type {Record<string, string>} */ ({}));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -87,10 +88,20 @@ export function FeesSection() {
         );
     }
 
-    const onPatch = async (chainId, patch) => {
+    const onPatch = async (chainId, patch, rollback) => {
+        setSaveErrors((current) => {
+            const next = { ...current };
+            delete next[chainId];
+            return next;
+        });
         try {
             await update({ fees: { [chainId]: patch } });
         } catch (err) {
+            rollback?.();
+            setSaveErrors((current) => ({
+                ...current,
+                [chainId]: 'Could not save this fee setting. Try again.',
+            }));
             // eslint-disable-next-line no-console
             console.error(`fees.${chainId} update failed:`, err);
         }
@@ -170,11 +181,16 @@ export function FeesSection() {
                                             return next;
                                         });
                                         const n = displayRateToSettingsCustom(unit, displayRate);
+                                        const input = e.currentTarget;
+                                        const previous = formatWithThousands(settingsCustomToDisplayRate(
+                                            unit,
+                                            fees.customSatsPerKb ?? seedRate,
+                                        ));
                                         onPatch(chainId, {
                                             strategy: 'custom',
                                             customSatsPerKb: n,
                                             rbfByDefault: fees.rbfByDefault,
-                                        });
+                                        }, () => { input.value = previous; });
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                     aria-label={`${displayName} custom fee rate`}
@@ -188,6 +204,11 @@ export function FeesSection() {
                         {rateErrors[chainId] ? (
                             <div id={rateErrorId} role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
                                 {rateErrors[chainId]}
+                            </div>
+                        ) : null}
+                        {saveErrors[chainId] ? (
+                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
+                                {saveErrors[chainId]}
                             </div>
                         ) : null}
 

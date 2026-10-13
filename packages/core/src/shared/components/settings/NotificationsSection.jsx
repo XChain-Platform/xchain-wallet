@@ -192,7 +192,7 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
 export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
     const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
-    const [toggleError, setToggleError] = useState(/** @type {string | null} */ (null));
+    const [toggleError, setToggleError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -204,7 +204,7 @@ export function NotificationsSection({ walletId } = {}) {
         try {
             await update({ notifications: { [key]: next } });
         } catch (err) {
-            setToggleError(`Could not update ${label.toLowerCase()}. Try again.`);
+            setToggleError({ key, message: `Could not update ${label.toLowerCase()}. Try again.` });
             // eslint-disable-next-line no-console
             console.error(`notifications.${key} update failed:`, err);
         } finally {
@@ -224,6 +224,7 @@ export function NotificationsSection({ walletId } = {}) {
                         disabled={pendingKey !== null}
                         onChange={(v) => onToggle(f.key, f.label, v)}
                     />
+                    <NotificationSaveError message={toggleError?.key === f.key ? toggleError.message : null} />
                     {f.key === 'priceAlerts' ? (
                         <PriceAlertsManager
                             walletId={walletId}
@@ -233,11 +234,16 @@ export function NotificationsSection({ walletId } = {}) {
                     ) : null}
                 </div>
             ))}
-            {toggleError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{toggleError}</span> : null}
             <QuietHoursRow settings={settings} update={update} />
             <SoundsBlock settings={settings} update={update} />
         </div>
     );
+}
+
+function NotificationSaveError({ message }) {
+    return message ? (
+        <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>{message}</span>
+    ) : null;
 }
 
 /**
@@ -263,11 +269,14 @@ function SoundsBlock({ settings, update }) {
     const { shell } = useMessaging();
     const canPreview = shell === 'web';
     const enabled = settings.sounds?.enabled === true;
+    const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     const onToggle = async (next) => {
+        setSaveError(null);
         try {
             await update({ sounds: { enabled: next } });
         } catch (err) {
+            setSaveError('enabled');
             // eslint-disable-next-line no-console
             console.error('notifications.sounds update failed:', err);
         }
@@ -275,9 +284,11 @@ function SoundsBlock({ settings, update }) {
     // One family's patch, not the whole map: the settings merge recurses,
     // so writing a single key leaves every sibling family untouched.
     const onPick = async (familyKey, soundId) => {
+        setSaveError(null);
         try {
             await update({ sounds: { perKind: { [familyKey]: soundId } } });
         } catch (err) {
+            setSaveError(familyKey);
             // eslint-disable-next-line no-console
             console.error(`notifications.sounds.${familyKey} update failed:`, err);
         }
@@ -299,37 +310,45 @@ function SoundsBlock({ settings, update }) {
                 checked={enabled}
                 onChange={onToggle}
             />
+            <NotificationSaveError
+                message={saveError === 'enabled' ? 'Could not save the notification sound setting. Try again.' : null}
+            />
             {enabled ? (
                 <div style={MANAGER}>
                     {SOUND_FAMILIES.map((family) => {
                         const picked = pickedSoundForFamily(settings, family.key);
                         return (
-                            <div key={family.key} style={ALERT_ROW}>
-                                <span>{family.label}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                                    <select
-                                        style={SELECT}
-                                        aria-label={`${family.label} sound`}
-                                        value={picked}
-                                        onChange={(e) => onPick(family.key, e.target.value)}
-                                    >
-                                        {SOUND_PALETTE.map((s) => (
-                                            <option key={s.id} value={s.id}>{s.label}</option>
-                                        ))}
-                                        <option value={SOUND_NONE}>No sound</option>
-                                    </select>
-                                    {canPreview ? (
-                                        <button
-                                            type="button"
-                                            style={LINK_BTN}
-                                            aria-label={`Preview ${family.label} sound`}
-                                            disabled={picked === SOUND_NONE}
-                                            onClick={() => onPreview(picked)}
+                            <div key={family.key} style={STACK}>
+                                <div style={ALERT_ROW}>
+                                    <span>{family.label}</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                                        <select
+                                            style={SELECT}
+                                            aria-label={`${family.label} sound`}
+                                            value={picked}
+                                            onChange={(e) => onPick(family.key, e.target.value)}
                                         >
-                                            Preview
-                                        </button>
-                                    ) : null}
-                                </span>
+                                            {SOUND_PALETTE.map((s) => (
+                                                <option key={s.id} value={s.id}>{s.label}</option>
+                                            ))}
+                                            <option value={SOUND_NONE}>No sound</option>
+                                        </select>
+                                        {canPreview ? (
+                                            <button
+                                                type="button"
+                                                style={LINK_BTN}
+                                                aria-label={`Preview ${family.label} sound`}
+                                                disabled={picked === SOUND_NONE}
+                                                onClick={() => onPreview(picked)}
+                                            >
+                                                Preview
+                                            </button>
+                                        ) : null}
+                                    </span>
+                                </div>
+                                <NotificationSaveError
+                                    message={saveError === family.key ? 'Could not save this notification sound. Try again.' : null}
+                                />
                             </div>
                         );
                     })}
@@ -350,20 +369,25 @@ function SoundsBlock({ settings, update }) {
  */
 function QuietHoursRow({ settings, update }) {
     const qh = settings.quietHours || QUIET_HOURS_DEFAULT;
+    const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     const onToggle = async (enabled) => {
+        setSaveError(null);
         try {
             await update({ quietHours: { ...qh, enabled } });
         } catch (err) {
+            setSaveError('enabled');
             // eslint-disable-next-line no-console
             console.error('notifications.quietHours update failed:', err);
         }
     };
     const onTimeChange = async (field, value) => {
         if (!value) return;
+        setSaveError(null);
         try {
             await update({ quietHours: { ...qh, [field]: value } });
         } catch (err) {
+            setSaveError(field);
             // eslint-disable-next-line no-console
             console.error('notifications.quietHours update failed:', err);
         }
@@ -376,6 +400,9 @@ function QuietHoursRow({ settings, update }) {
                 hint="Pause all notifications, including price alerts, during a daily time window."
                 checked={qh.enabled === true}
                 onChange={onToggle}
+            />
+            <NotificationSaveError
+                message={saveError === 'enabled' ? 'Could not save quiet hours. Try again.' : null}
             />
             {qh.enabled ? (
                 <div style={MANAGER}>
@@ -400,6 +427,9 @@ function QuietHoursRow({ settings, update }) {
                     <span style={ROW_HINT}>
                         {qh.start} to {qh.end} your device's local time, every day.
                     </span>
+                    <NotificationSaveError
+                        message={saveError === 'start' || saveError === 'end' ? 'Could not save quiet hours. Try again.' : null}
+                    />
                 </div>
             ) : null}
         </div>
