@@ -49,16 +49,12 @@ for (const s of ['reqAmount', 'reqTick', 'amountInputMode', 'fiatAmount']) {
 assert.match(recvSrc, /qrUri = useMemo/, 'qrUri memo');
 assert.match(
     recvSrc,
-    /uriLib\.buildXchainUri\(/,
-    'encodes an xchain: send URI carrying the requested amount + tick',
-);
-assert.match(recvSrc, /amount: amount \|\| undefined/, 'request URI uses the entered amount');
-assert.match(recvSrc, /tick: tick \|\| undefined/, 'request URI carries the token tick');
-assert.match(
-    recvSrc,
     /uriLib\.encodeBip21Uri\(/,
-    'falls back to a bare BIP21 URI for non-xchain wallets',
+    'encodes a BIP21-style URI carrying the requested amount',
 );
+assert.match(recvSrc, /amount,/, 'request URI uses the entered amount');
+assert.match(recvSrc, /chain: activeChainId/, 'request URI preserves the selected network');
+assert.match(recvSrc, /\.\.\.\(tick \? \{ tick \} : \{\}\)/, 'request URI carries the token tick');
 
 // --- QR generation ---------------------------------------------------
 
@@ -74,8 +70,9 @@ assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
 assert.doesNotMatch(recvSrc, /fetch\(qrDataUrl\)/, 'never fetches the QR data URL');
 assert.match(recvSrc, /dataUrlToBlob\(qrDataUrl\)/, 'decodes the QR data URL in-process');
 // Same report: the read-only address needed a manual select + copy.
-assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap address copy callback');
+assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap request copy callback');
 assert.match(recvSrc, /onClick=\{copyAddress\}/, 'tapping the address field copies it');
+assert.match(recvSrc, /copyText\(qrUri\)/, 'text copy matches the QR payment request');
 assert.match(
     recvSrc,
     /navigator\.clipboard\.write\(\[new ClipboardItem/,

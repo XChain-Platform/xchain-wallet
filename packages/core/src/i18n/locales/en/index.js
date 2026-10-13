@@ -152,9 +152,15 @@ export const en = {
     'scan.error.mnemonic':
         'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
     'scan.error.xcwChunk':
-        'Multi-frame transaction chunk {n}/{total}. Open the Sign panel to capture every frame.',
+        'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
+    'scan.error.transactionHex':
+        'A signed transaction was scanned. This screen cannot broadcast raw transaction hex. Use a compatible broadcasting tool.',
+    'scan.error.backupPointer':
+        'A backup pointer was scanned. Start Import Wallet, choose Restore from backup, and scan it there.',
+    'scan.error.pairingCode':
+        'A wallet pairing code was scanned. Start Pair a watcher or signer, and scan it there.',
     'scan.error.unknown':
-        'Scanned content was not recognized ({type}). Try a clearer code.',
+        'This QR code contains text the wallet does not know how to use.',
 
     // --- pending (unconfirmed) transactions -----------------------
     // Terminology is fixed: "pending" in every string a user reads,

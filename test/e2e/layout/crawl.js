@@ -267,7 +267,54 @@ export function isWebKitNetworkNoise(text) {
         || /due to access control checks\.?$/.test(text);
 }
 
-export function createCrawl(page, { venue, outDir, origin, start = null }) {
+/**
+ * Opens a known screen. Desktop can reopen palette destinations directly,
+ * avoiding a Home transition for every control that leaves the screen.
+ */
+export async function reachKnownScreen(screen, {
+    reentry = false,
+    directReentry = false,
+    home,
+    settle,
+}) {
+    if (reentry && directReentry && screen.reopen) {
+        await screen.reopen();
+        await settle(100);
+        return;
+    }
+    await home();
+    await screen.open();
+    await settle(500);
+}
+
+/** Selects the first balance offered by an empty TokenField in one form. */
+export async function chooseFirstOfferedToken(page, formIndex) {
+    const mainForms = page.locator('main form');
+    const form = (await mainForms.count()) > 0
+        ? mainForms.nth(formIndex)
+        : page.locator('form').nth(formIndex);
+    const field = form.locator('button[aria-label$=": Select a token"]').first();
+    if ((await field.count()) === 0) return null;
+
+    const label = await field.getAttribute('aria-label');
+    await field.click({ timeout: 3_000 });
+    const firstToken = page.getByRole('list', { name: 'Balances' }).getByRole('listitem').first();
+    try {
+        await firstToken.click({ timeout: 10_000 });
+        return label || 'Select a token';
+    } catch {
+        await page.getByRole('button', { name: /^Back/ }).first().click({ timeout: 2_000 }).catch(() => {});
+        return null;
+    }
+}
+
+export function createCrawl(page, {
+    venue,
+    outDir,
+    origin,
+    start = null,
+    directReentry = false,
+}) {
     mkdirSync(outDir, { recursive: true });
     const findings = [];
     const covered = [];
@@ -356,10 +403,11 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
 
     const paletteButton = () => page.getByRole('button', { name: 'Open command palette' }).first();
     const palette = () => page.getByRole('dialog', { name: 'Command palette' });
-    async function openPalette() {
-        if (await paletteButton().isVisible().catch(() => false)) await paletteButton().click();
-        else await page.keyboard.press('ControlOrMeta+k');
-        await palette().waitFor({ state: 'visible', timeout: 10_000 });
+    async function openPalette(timeout = 10_000) {
+        if (await paletteButton().isVisible().catch(() => false)) {
+            await paletteButton().click({ timeout });
+        } else await page.keyboard.press('ControlOrMeta+k');
+        await palette().waitFor({ state: 'visible', timeout });
     }
 
     /** Every screen the sweep reaches, each with a way to open it from Home. */
@@ -382,13 +430,16 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
                 perChain.set(chain, (perChain.get(chain) || 0) + 1);
                 if (perChain.get(chain) > 2) continue;
             }
+            const openDestination = async (timeout = 10_000) => {
+                await openPalette(timeout);
+                await palette().getByRole('combobox').fill(dest, { timeout });
+                await palette().getByRole('option').filter({ hasText: dest }).first()
+                    .click({ timeout: Math.min(timeout, 5_000) });
+            };
             screens.push({
                 label: `palette: ${dest}`,
-                open: async () => {
-                    await openPalette();
-                    await palette().getByRole('combobox').fill(dest);
-                    await palette().getByRole('option').filter({ hasText: dest }).first().click({ timeout: 5_000 });
-                },
+                open: openDestination,
+                reopen: () => openDestination(2_000),
             });
         }
 
@@ -433,11 +484,14 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
         return screens;
     }
 
-    /** Home, then the screen, then a beat for it to settle. */
-    async function reach(screen) {
-        await home();
-        await screen.open();
-        await page.waitForTimeout(500);
+    /** Opens a screen and gives its route a beat to settle. */
+    async function reach(screen, reentry = false) {
+        await reachKnownScreen(screen, {
+            reentry,
+            directReentry,
+            home,
+            settle: (ms) => page.waitForTimeout(ms),
+        });
     }
 
     /** One wallet address to type wherever a form wants one. */
@@ -472,16 +526,19 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
             if (c.disabled) continue;
             if (DESTRUCTIVE.test(c.label)) continue;
             if (c.type === 'submit' && c.inForm) continue; // the form pass submits forms
-            if (c.href && /^https?:/.test(c.href) && !c.href.startsWith(origin)) {
+            // A mail or phone link hands off to another app. Headless Chromium
+            // raises its open-the-app prompt where nobody can see or answer
+            // it, and from then on the tab takes no clicks or keys at all.
+            if (c.href && ((/^https?:/.test(c.href) && !c.href.startsWith(origin)) || /^(mailto|tel|sms):/i.test(c.href))) {
                 covered.push({ screen: label, control: name, result: 'external link, not followed' });
                 continue;
             }
             action = `${label} > ${name}`;
             try {
-                if ((await page.evaluate(screenSignature)) !== signature) await reach(screen);
+                if ((await page.evaluate(screenSignature)) !== signature) await reach(screen, true);
                 let here = await locate(c);
                 if (!here) {
-                    await reach(screen);
+                    await reach(screen, true);
                     here = await locate(c);
                 }
                 if (!here || here.disabled) {
@@ -499,7 +556,7 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
                     await el.click({ timeout: 3_000 });
                 } catch (err) {
                     finding(label, name, 'control cannot be pressed', { error: clickReason(err) });
-                    await reach(screen);
+                    await reach(screen, true);
                     continue;
                 }
                 pressed += 1;
@@ -539,7 +596,7 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
                     && (await page.evaluate(openPopups).catch(() => 0)) > popupsBefore) {
                     await page.keyboard.press('Escape');
                     await page.waitForTimeout(200);
-                    if ((await page.evaluate(openPopups).catch(() => 0)) > popupsBefore) await reach(screen);
+                    if ((await page.evaluate(openPopups).catch(() => 0)) > popupsBefore) await reach(screen, true);
                 }
                 if (dialogsAfter.length > dialogsBefore.length) {
                     await page.keyboard.press('Escape');
@@ -559,7 +616,7 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
                 }
             } catch (err) {
                 finding(label, name, 'crawl error', { error: String(err?.message || err).split('\n')[0].slice(0, 200) });
-                await reach(screen).catch(() => {});
+                await reach(screen, true).catch(() => {});
             }
         }
         return { controls: controls.length, pressed };
@@ -575,9 +632,12 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
             for (const mode of ['valid', 'invalid']) {
                 action = `${label} > form ${f + 1} (${mode})`;
                 try {
-                    await reach(screen);
+                    await reach(screen, true);
+                    const pickedToken = mode === 'valid'
+                        ? await chooseFirstOfferedToken(page, f)
+                        : null;
                     const plan = await page.evaluate(planFill, [f, address, mode]);
-                    if (plan.length === 0) break;
+                    if (plan.length === 0 && !pickedToken) break;
                     for (const step of plan) {
                         const field = (await page.evaluateHandle(fieldAt, [f, step.i])).asElement();
                         if (!field) continue;
@@ -597,7 +657,13 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
                     if (submit.disabled) {
                         if (mode === 'valid') {
                             finding(label, `form ${f + 1} "${submit.label}"`, 'submit stays disabled after plausible input',
-                                { filled: plan.map((p) => `${p.label || '?'}=${p.value}`).slice(0, 8), messages: await page.evaluate(formMessages, f) });
+                                {
+                                    filled: [
+                                        ...plan.map((p) => `${p.label || '?'}=${p.value}`),
+                                        ...(pickedToken ? [pickedToken] : []),
+                                    ].slice(0, 8),
+                                    messages: await page.evaluate(formMessages, f),
+                                });
                         }
                         break;
                     }
@@ -649,9 +715,15 @@ export function createCrawl(page, { venue, outDir, origin, start = null }) {
             return;
         }
         for (const e of since(mark)) finding(screen.label, '(open)', e.kind, { error: e.text });
-        const { controls, pressed } = await pressControls(screen);
-        const forms = screen.chrome ? 0 : await fillForms(screen);
-        covered.push({ screen: screen.label, control: '(screen)', result: `${controls} controls, ${pressed} pressed, ${forms} forms` });
+        // Each pass reopens the screen first; a screen that will not reopen
+        // is a finding for this screen, not the end of the shard.
+        try {
+            const { controls, pressed } = await pressControls(screen);
+            const forms = screen.chrome ? 0 : await fillForms(screen);
+            covered.push({ screen: screen.label, control: '(screen)', result: `${controls} controls, ${pressed} pressed, ${forms} forms` });
+        } catch (err) {
+            finding(screen.label, '(reopen)', 'screen could not be reopened', { error: clickReason(err) });
+        }
     }
 
     function write(shardName) {

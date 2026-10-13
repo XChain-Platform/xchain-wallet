@@ -35,6 +35,39 @@ export class InvalidBip21Error extends Error {
     }
 }
 
+const BIP21_AMOUNT_RE = /^\d+(?:\.\d*)?$/;
+const BIP21_MAX_DECIMALS = 8;
+
+/**
+ * Return the canonical BIP21 decimal representation of an amount.
+ * Empty values omit the parameter. Monetary values stay as strings so a
+ * one-satoshi request cannot turn into scientific notation or lose precision.
+ *
+ * @param {string | number | null | undefined} amount
+ * @returns {string | undefined}
+ */
+export function normalizeBip21Amount(amount) {
+    if (amount === undefined || amount === null || amount === '') return undefined;
+    const raw = String(amount);
+    if (!BIP21_AMOUNT_RE.test(raw)) {
+        throw new Error('amount must be a plain decimal string');
+    }
+
+    const [rawWhole, rawFraction = ''] = raw.split('.');
+    if (rawFraction.length > BIP21_MAX_DECIMALS) {
+        throw new Error(`amount must have at most ${BIP21_MAX_DECIMALS} decimal places`);
+    }
+    const whole = rawWhole.replace(/^0+(?=\d)/, '');
+    const fraction = rawFraction.replace(/0+$/, '');
+    return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function encodeRfc3986Component(value) {
+    return encodeURIComponent(value).replace(/[!'()*]/g, (character) => (
+        `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+    ));
+}
+
 /**
  * @typedef {Object} Bip21Parts
  * @property {string} scheme                     e.g. 'bitcoin'
@@ -110,6 +143,19 @@ export function parseBip21Uri(uri) {
         }
     }
 
+    if (params.amount !== undefined) {
+        try {
+            const amount = normalizeBip21Amount(params.amount);
+            if (amount === undefined) {
+                delete params.amount;
+            } else {
+                params.amount = amount;
+            }
+        } catch (err) {
+            throw new InvalidBip21Error(err?.message || 'invalid amount', uri);
+        }
+    }
+
     /** @type {Bip21Parts} */
     const out = {
         scheme,
@@ -157,11 +203,17 @@ export function encodeBip21Uri({ scheme, address, amount, label, message, params
     if (label !== undefined) merged.label = String(label);
     if (message !== undefined) merged.message = String(message);
 
+    if (merged.amount !== undefined) {
+        const normalizedAmount = normalizeBip21Amount(merged.amount);
+        if (normalizedAmount === undefined) delete merged.amount;
+        else merged.amount = normalizedAmount;
+    }
+
     const entries = Object.entries(merged);
     if (entries.length === 0) return `${scheme}:${address}`;
 
     const query = entries
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .map(([k, v]) => `${encodeRfc3986Component(k)}=${encodeRfc3986Component(v)}`)
         .join('&');
     return `${scheme}:${address}?${query}`;
 }

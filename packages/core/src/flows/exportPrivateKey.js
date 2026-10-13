@@ -77,8 +77,8 @@ export class WrongPasswordError extends Error {
  * @typedef {Object} ExportPrivateKeyOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked session signer (from the pool). When present the WIF is exported from it directly with no password; the pool owns its lifecycle so it is NOT locked here.
- * @property {string} [password]            required only when no pre-unlocked `signer` is supplied
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked session signer used only when no password is supplied; the pool owns its lifecycle so it is NOT locked here.
+ * @property {string} [password]            forces password verification when supplied
  * @property {string} [bip39Passphrase]     required iff wallet.passphraseEnabled and address is HD (password path)
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} [sdkRegistry]  only needed for HD addresses (password unlock path)
@@ -108,11 +108,12 @@ export async function exportPrivateKey({
     sdkRegistry,
     addressId,
 }) {
+    const hasPassword = typeof password === 'string' && password.length > 0;
     if (!vault) throw new Error('exportPrivateKey: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportPrivateKey: walletId is required');
     }
-    if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+    if (!providedSigner && !hasPassword) {
         throw new Error('exportPrivateKey: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('exportPrivateKey: chainRegistry is required');
@@ -143,15 +144,9 @@ export async function exportPrivateKey({
         );
     }
 
-    // Passwordless path: when the caller supplies a pre-unlocked session
-    // signer (the wallet is already open), export the WIF straight from it
-    // with no password. The unlocked SoftwareSigner already holds the seed
-    // (HD) and the decrypted imported WIFs, so no re-derivation/re-decrypt
-    // is needed. The "before you continue" warning in the shell UI is the
-    // gate; the password-every-time ceremony (§17.7.3) was retired by
-    // product decision. The pool owns the signer lifecycle, so we never
-    // lock it here.
-    if (providedSigner && typeof providedSigner.exportWifForPath === 'function') {
+    // Callers that send a password always take the decrypt path so password
+    // confirmation cannot be bypassed by an available session signer.
+    if (!hasPassword && providedSigner && typeof providedSigner.exportWifForPath === 'function') {
         if (addressRecord.source === 'imported-wif') {
             return {
                 wif: providedSigner.exportWifForAddressId(addressId),

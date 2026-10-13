@@ -37,7 +37,14 @@ describe('AmountField fiat gate', () => {
     it('shows the approximate value and the unit toggle when a rate is supplied', () => {
         const u = mount({ fiatRate: RATE });
         expect(u.getByRole('button', { name: /switch input to usd/i })).toBeTruthy();
-        expect(u.container.textContent).toMatch(/≈\s*134,000\.00 USD/);
+        expect(u.container.textContent).toMatch(/≈\s*\$134,000\.00 USD/);
+    });
+
+    it('formats the preview in the selected fiat currency', () => {
+        const u = mount({ fiatRate: { rate: 50000, fiatCurrency: 'EUR' } });
+        expect(u.getByRole('button', { name: /switch input to eur/i })).toBeTruthy();
+        expect(u.container.textContent).toMatch(/≈\s*€100,000\.00 EUR/);
+        expect(u.container.textContent).not.toContain('$');
     });
 
     it('keeps a fiat preview above the safe integer boundary exact', () => {
@@ -46,7 +53,7 @@ describe('AmountField fiat gate', () => {
             fiatRate: { rate: 1, fiatCurrency: 'USD' },
         });
         expect(u.container.textContent)
-            .toContain('≈ 9,007,199,254,740,993.01 USD');
+            .toContain('≈ $9,007,199,254,740,993.01 USD');
     });
 
     // What a token amount must look like: no number, no toggle, nothing to

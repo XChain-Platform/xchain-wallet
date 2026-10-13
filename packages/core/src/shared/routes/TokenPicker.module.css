@@ -1,6 +1,6 @@
 .error {
     margin-bottom: var(--xc-space-3);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
 }
 
@@ -101,6 +101,11 @@
 
 .search::placeholder {
     color: var(--xc-text-muted);
+}
+
+.networkFilter {
+    flex: 0 1 14rem;
+    min-width: 10rem;
 }
 
 /* Narrow shells (Chrome popup, slim mobile web): tighten the segment padding

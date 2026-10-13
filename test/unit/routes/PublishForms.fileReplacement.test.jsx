@@ -60,8 +60,8 @@ function messaging() {
     });
 }
 
-function mount(ui) {
-    return render(<MessagingProvider shell="web" messaging={messaging()}>{ui}</MessagingProvider>);
+function mount(ui, client = messaging()) {
+    return render(<MessagingProvider shell="web" messaging={client}>{ui}</MessagingProvider>);
 }
 
 beforeEach(() => {
@@ -116,5 +116,83 @@ describe('publish forms replace file state safely', () => {
 
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('That file is empty.'));
         expect(readers).toHaveLength(0);
+    });
+
+    it.each([
+        ['public publish', () => mount(<PublishFileForm walletId="w" onBack={() => {}} />), 'Choose file to publish'],
+        ['gated publish', () => mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />), 'File to publish'],
+        ['artwork attachment', () => mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />), 'Choose file to attach'],
+    ])('rejects malformed MIME metadata before reading in %s', async (_name, mountRoute, inputLabel) => {
+        mountRoute();
+        const input = await screen.findByLabelText(inputLabel);
+        fireEvent.change(input, {
+            target: { files: [new File(['bad'], 'bad.bin', { type: 'image/png;payload' })] },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('invalid content type');
+        expect(readers).toHaveLength(0);
+    });
+
+    it('rejects a non-artwork file type before reading it', async () => {
+        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        const input = await screen.findByLabelText('Choose file to attach');
+        fireEvent.change(input, {
+            target: { files: [new File(['%PDF'], 'document.pdf', { type: 'application/pdf' })] },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('not accepted for artwork');
+        expect(readers).toHaveLength(0);
+    });
+
+    it('ignores a stale public-file read that finishes after its replacement', async () => {
+        mount(<PublishFileForm walletId="w" onBack={() => {}} />);
+        const input = await screen.findByLabelText('Choose file to publish');
+        fireEvent.change(input, {
+            target: { files: [new File(['old'], 'old.txt', { type: 'text/plain' })] },
+        });
+        fireEvent.change(input, {
+            target: { files: [new File(['new'], 'new.txt', { type: 'text/plain' })] },
+        });
+
+        await act(async () => readers[1].succeed(3));
+        await waitFor(() => expect(document.body.textContent).toContain('new.txt'));
+        await act(async () => readers[0].succeed(3));
+
+        expect(document.body.textContent).toContain('new.txt');
+        expect(document.body.textContent).not.toContain('old.txt');
+    });
+
+    it('uses the encoding-aware attachment cap and rechecks it after metadata edits', async () => {
+        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        const input = await screen.findByLabelText('Choose file to attach');
+        const file = new File([new Uint8Array(8_080)], 'art.txt', { type: 'text/plain' });
+        fireEvent.change(input, { target: { files: [file] } });
+        await act(async () => readers[0].succeed(8_080));
+        await waitFor(() => expect(document.body.textContent).toContain('art.txt'));
+
+        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+            target: { value: 'x'.repeat(100) },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Shorten the title or memo');
+    });
+
+    it('distinguishes a gated pack lookup failure from an empty pack list', async () => {
+        const client = messaging();
+        client.listGatedKeys.mockRejectedValue(new Error('offline'));
+        mount(
+            <GatedPublishForm
+                walletId="w"
+                chainId={CHAIN}
+                tick="GATE"
+                issuerAddress={SOURCE.address}
+                onBack={() => {}}
+            />,
+            client,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load reusable packs');
+        expect(document.body.textContent).not.toContain('No reusable packs in this wallet yet');
     });
 });

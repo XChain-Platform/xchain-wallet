@@ -11,21 +11,18 @@
 import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button, Icon } from '@xchain-wallet/core/ui';
-import { useMessaging } from '../useMessaging.js';
 import styles from './BackupReminderCard.module.css';
 
 /**
  * §19.7 / G034 + G062: progressive backup reminder card on Home.
  *
- * Loads settings via messaging on mount, then evaluates
- * `flowsLib.computeBackupReminderState({ walletId, walletCreatedAt,
- * settings })`. Renders nothing for the 'hidden' state. 'gentle' renders a
- * quiet card with a Dismiss button; 'firm' renders a more prominent card
+ * Evaluates `flowsLib.computeBackupReminderState({ walletId,
+ * walletCreatedAt })`. Renders nothing for the 'hidden' state. 'gentle' renders a
+ * quiet card with a snooze button; 'firm' renders a more prominent card
  * without a dismiss.
  *
  * The card itself does not navigate. Callers wire `onAction` to take the
- * user to a backup ceremony (Settings → Backup, or a verify lane for
- * never-verified wallets).
+ * user to the Settings > Backup flow.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -33,28 +30,18 @@ import styles from './BackupReminderCard.module.css';
  * @param {() => void} [props.onAction]      "Back up now" CTA
  */
 export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
-    const { messaging } = useMessaging();
     const [state, setState] = useState({ kind: 'hidden' });
 
     useEffect(() => {
-        let cancelled = false;
         if (!walletId) {
             setState({ kind: 'hidden' });
-            return () => { cancelled = true; };
+            return;
         }
-        const settingsPromise = typeof messaging?.getSettings === 'function'
-            ? messaging.getSettings().catch(() => null)
-            : Promise.resolve(null);
-        settingsPromise.then((settings) => {
-            if (cancelled) return;
-            setState(flowsLib.computeBackupReminderState({
-                walletId,
-                walletCreatedAt: walletCreatedAt || null,
-                settings: settings || null,
-            }));
-        });
-        return () => { cancelled = true; };
-    }, [walletId, walletCreatedAt, messaging]);
+        setState(flowsLib.computeBackupReminderState({
+            walletId,
+            walletCreatedAt: walletCreatedAt || null,
+        }));
+    }, [walletId, walletCreatedAt]);
 
     if (state.kind === 'hidden') return null;
 
@@ -85,7 +72,7 @@ export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
                             setState({ kind: 'hidden' });
                         }}
                     >
-                        Not now
+                        Remind me tomorrow
                     </button>
                 ) : null}
             </div>

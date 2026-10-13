@@ -13,6 +13,7 @@
 // `packages/extension/src/popup/messaging.js`; keeps shared route
 // layouts (once extracted) swap-compatible across shells.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import {
     sendMessage,
     getSessionStatus,
@@ -95,6 +96,11 @@ export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
 }
 
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * Rejects with PassphraseMismatchError when the passphrase does not own the
@@ -161,6 +167,11 @@ export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
 }
 
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
+}
+
 /**
  * §7/§8 SPV: verify a single token balance against a quorum-signed
  * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`
@@ -197,6 +208,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
 /** Rename an address (set its label). @param {string} id @param {string} label */
 export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
+}
+
+/** Hide or unhide an address. @param {string} id @param {boolean} hidden */
+export function setAddressHidden(id, hidden) {
+    return /** @type {any} */ (sendMessage('addresses.setHidden', { id, hidden }));
 }
 
 /** Delete an address record by id. @param {string} id */
@@ -665,7 +681,7 @@ export function activateChainRequest(opts) {
 
 /** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**
@@ -1278,6 +1294,10 @@ export function editBetFeedListsActionHw(opts) {
  */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
+}
+
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
 }
 
 // BET reads (no signing): market list / one market with pools + timeline / placed

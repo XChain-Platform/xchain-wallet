@@ -38,8 +38,9 @@ import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.j
  * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
  * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
+ * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
     const { total, unpriced } = useMemo(() => sumFiatValue(rows), [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -204,6 +205,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                     >
                         {hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                     </button>
+                    {typeof onLockWallet === 'function' ? (
+                        <button
+                            type="button"
+                            className={styles.eye}
+                            onClick={onLockWallet}
+                            aria-label="Lock wallet"
+                            title="Lock wallet"
+                        >
+                            <Icon.LockIcon />
+                        </button>
+                    ) : null}
                 </div>
             </div>
             <div className={styles.amount}>

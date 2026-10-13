@@ -98,6 +98,30 @@ describe('RenameWalletForm submission', () => {
         )).toBeTruthy();
         expect(props.onRenamed).not.toHaveBeenCalled();
     });
+
+    it('locks editing and navigation while the rename is in flight', async () => {
+        let finishRename;
+        messaging.renameWallet.mockImplementation(() => new Promise((resolve) => {
+            finishRename = resolve;
+        }));
+        const { props } = mount();
+        const input = screen.getByLabelText('Wallet name');
+        const save = screen.getByRole('button', { name: 'Save' });
+        const back = screen.getByRole('button', { name: 'Back' });
+
+        fireEvent.click(save);
+
+        expect(input.disabled).toBe(true);
+        expect(save.disabled).toBe(true);
+        expect(save.getAttribute('aria-busy')).toBe('true');
+        expect(back.disabled).toBe(true);
+        fireEvent.click(save);
+        expect(messaging.renameWallet).toHaveBeenCalledOnce();
+        expect(props.onBack).not.toHaveBeenCalled();
+
+        finishRename();
+        await waitFor(() => expect(props.onRenamed).toHaveBeenCalledOnce());
+    });
 });
 
 describe('RenameWalletForm submission failures', () => {

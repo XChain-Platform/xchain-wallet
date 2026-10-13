@@ -160,11 +160,25 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     const licenseSatisfied = !!licenseAcceptedAt && licenseAcceptedVersion === LICENSE_VERSION;
 
     useEffect(() => {
-        // If the panel is already short enough that the user can see
-        // everything without scrolling, treat as scrolled.
         const el = licenseScrollRef.current;
-        if (!el) return;
-        if (el.scrollHeight <= el.clientHeight + 4) setScrolledToEnd(true);
+        if (!el || licenseSatisfied) return undefined;
+
+        // Recheck after layout changes as well as on first paint. Font loading,
+        // window resizing, and shell chrome can turn an overflowing panel into
+        // one whose full contents are already visible without firing `scroll`.
+        const checkVisible = () => {
+            if (el.scrollHeight <= el.clientHeight + 4) setScrolledToEnd(true);
+        };
+        checkVisible();
+
+        if (typeof ResizeObserver === 'function') {
+            const observer = new ResizeObserver(checkVisible);
+            observer.observe(el);
+            return () => observer.disconnect();
+        }
+
+        globalThis.addEventListener?.('resize', checkVisible);
+        return () => globalThis.removeEventListener?.('resize', checkVisible);
     }, [licenseSatisfied]);
 
     function handleLicenseScroll(event) {

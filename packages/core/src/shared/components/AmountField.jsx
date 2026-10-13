@@ -16,12 +16,9 @@
 // amount via priceLookup.
 
 import { Input, Icon } from '@xchain-wallet/core/ui';
-import {
-    formatDecimalAmount,
-    formatWithThousands,
-    roundDecimalString,
-} from '../utils/amountFormat.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
 
 /**
@@ -62,7 +59,7 @@ export function AmountField({
     balanceText,
 }) {
     const tickUpper = (typeof tick === 'string' ? tick : '').trim().toUpperCase();
-    const fiatCcy = fiatRate?.fiatCurrency || fiatCurrency;
+    const fiatCcy = String(fiatRate?.fiatCurrency || fiatCurrency || 'USD').toUpperCase();
     const isFiat = amountInputMode === 'fiat' && fiatRate;
     const activeUnit = isFiat ? fiatCcy : tickUpper;
     const otherUnit = isFiat ? tickUpper : fiatCcy;
@@ -75,10 +72,9 @@ export function AmountField({
             : `≈ 0 ${otherUnit}`.trim();
     } else if (fiatRate) {
         const fiatValue = amount ? coinToFiatExact(amount, fiatRate) : null;
-        const roundedFiat = fiatValue == null ? null : roundDecimalString(fiatValue, 2);
-        derivedText = roundedFiat != null
-            ? `≈ ${formatDecimalAmount(roundedFiat)} ${otherUnit}`
-            : `≈ 0.00 ${otherUnit}`;
+        derivedText = fiatValue != null
+            ? `≈ ${formatFiat(fiatValue, fiatCcy)} ${otherUnit}`
+            : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}`;
     }
 
     return (

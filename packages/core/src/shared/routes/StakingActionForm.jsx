@@ -48,6 +48,7 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { compareAmounts } from '../../market/orderMath.js';
 import { stakingActionParams } from '../../flows/unstakeClaimActions.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -141,6 +142,9 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setLoadError(null);
+        setFromAddressId(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -181,9 +185,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     const [positions, setPositions] = useState(
         /** @type {{ stakes: any[], rewards: any[], claims: any[], height: number|null } | null} */ (null),
     );
+    const [positionsError, setPositionsError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         const address = fromAddress?.address;
-        if (!address) { setPositions(null); return undefined; }
+        setPositions(null);
+        setPositionsError(null);
+        if (!address) return undefined;
         let cancelled = false;
         async function load() {
             try {
@@ -222,8 +229,11 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     claims = extractRows(c);
                 }
                 if (!cancelled) setPositions({ stakes, rewards, claims, height });
-            } catch {
-                if (!cancelled) setPositions(null);
+            } catch (err) {
+                if (!cancelled) {
+                    setPositions(null);
+                    setPositionsError(readFailureMessage(err, 'load the available staking balance'));
+                }
             }
         }
         load();
@@ -346,6 +356,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         } else {
             setAmount(stripped);
         }
+        setFormError(null);
         if (typeof cursorPos === 'number' && amountInputRef.current) {
             const formattedNew = formatWithThousands(stripped);
             const nonCommaBefore = countNonCommaBefore(String(rawValue), cursorPos);
@@ -576,9 +587,10 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            backDisabled={stage === 'submitting' || actionConfirm.composing}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
                     : verb}
@@ -772,6 +784,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             onSubmit={handleReview}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : positionsError ? (
+                <StatusMessage variant="error" className={styles.error}>{positionsError}</StatusMessage>
             ) : null}
             actions={(
                 <Button
@@ -786,7 +800,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         >
             <NetworkField
                 value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
                 chainRegistry={chainRegistry}
             />
@@ -812,11 +826,20 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 toggleAmountInputMode={toggleAmountInputMode}
                 onAmountFieldChange={onAmountFieldChange}
                 inputRef={amountInputRef}
-                onMax={() => setAmount(availableAmt != null ? String(availableAmt) : '')}
+                onMax={() => {
+                    const max = availableAmt != null ? String(availableAmt) : '';
+                    amountTouchedRef.current = true;
+                    setAmount(max);
+                    if (amountInputMode === 'fiat') {
+                        const converted = max && fiatRate ? coinToFiat(max, fiatRate) : null;
+                        setFiatAmount(converted != null ? converted.toFixed(2) : '');
+                    }
+                    setFormError(null);
+                }}
                 maxDisabled={availableAmt == null}
                 balanceText={availableAmt != null
                     ? `${formatWithThousands(String(availableAmt))} XCHAIN available`
-                    : 'Loading…'}
+                    : positionsError ? 'Unavailable' : 'Loading…'}
             />
 
             {isUnstake ? (
@@ -828,7 +851,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         <Select
                             label="Staked signing key"
                             value={stakedKeys.includes(signingPubkey) ? signingPubkey : ''}
-                            onChange={(e) => setSigningPubkey(e.target.value)}
+                            onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
                             hint="This address has stakes under more than one signing key; pick which one to unstake."
                         >
                             {stakedKeys.map((k) => (
@@ -842,7 +865,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                             ? 'Filled in from your stake; edit only if you staked with a different key.'
                             : '64-character hex-encoded Ed25519 public key (the same one used to stake).'}
                         value={signingPubkey}
-                        onChange={(e) => setSigningPubkey(e.target.value)}
+                        onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
                         autoComplete="off"
                         autoCapitalize="none"
                         autoCorrect="off"

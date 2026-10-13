@@ -34,6 +34,7 @@ import { LearnNote } from './LearnNote.jsx';
 import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
+import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -65,6 +66,8 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   hostile PSBT is the output set, not the action data)
  * @param {string} [props.messageText]                       §5.5 message variant: the full
  *   message text being signed, shown verbatim
+ * @param {string} [props.requestOrigin]                     browser-verified origin of the site
+ *   that requested this approval; omitted for a wallet-initiated action
  * @param {string} [props.headline]                          header line; defaults to the
  *   decoded summary. The psbt/message variants set it explicitly, since neither
  *   renders a composed action's intent as its headline.
@@ -72,13 +75,9 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   blocking alert INSTEAD of the credentials + Approve, for requests the wallet
  *   will not sign at all. Distinct from a pre-flight error, which the user may
  *   acknowledge; a refusal has no override.
- * @param {string|null} [props.sourceAddress]: the ONE address that signs and pays
- *   (#40). ACTION VARIANT ONLY, and the restriction is the whole design: an action
- *   is composed from a single spender, so naming it is always correct, while a
- *   caller-supplied PSBT may spend several owned addresses at once. That case is
- *   already served better by the psbt variant's input enumeration, which marks
- *   which inputs the wallet owns; collapsing it to one From line would be a lie
- *   dressed as a disclosure. Pass nothing on the psbt and message variants.
+ * @param {string|null} [props.sourceAddress] the single spending address on an
+ *   action, or the signing address on a message. A caller-supplied PSBT may spend
+ *   several owned addresses at once, so its input list identifies them instead.
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
@@ -90,12 +89,17 @@ export function ConfirmActionModal({
     approveLabel,
     credentials, credentialsReady = false, variant = 'action',
     screenVariant = 'small', feeText, error = null,
-    psbtPanel = null, messageText, refusal = null, headline,
+    psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
 }) {
+    const fallbackHeadline = variant === 'message'
+        ? 'Sign message'
+        : variant === 'psbt'
+            ? 'Sign transaction'
+            : 'Review action';
     const headlineText = headline !== undefined
         ? headline
-        : decoded?.summary?.split('\n')[0];
+        : (decoded?.summary?.split('\n')[0] || fallbackHeadline);
     // The footer is a plain Approve / Reject pair, thumbs up and thumbs down, on
     // every variant. This REPLACES the older §21.7 convention where a
     // balance-committing signature appended the chain ("Approve & Sign on
@@ -136,6 +140,7 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    const displayedRequestOrigin = neutralizeControlText(requestOrigin);
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -176,6 +181,17 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
+                    {displayedRequestOrigin ? (
+                        <section
+                            className={styles.requestOrigin}
+                            aria-label="Requesting site"
+                            data-testid="confirm-request-origin"
+                        >
+                            <span className={styles.requestOriginLabel}>Requesting site</span>
+                            <code className={styles.requestOriginValue}>{displayedRequestOrigin}</code>
+                        </section>
+                    ) : null}
+
                     {/* Settings > Developer Mode > Learn Mode. Renders
                         nothing unless the user asked for it; first in the body
                         because it frames everything under it. */}
@@ -188,27 +204,28 @@ export function ConfirmActionModal({
                     {/* §5.5 message variant: the full text, verbatim and
                         never truncated - it is the whole thing being signed. */}
                     {variant === 'message' && messageText !== undefined ? (
-                        <pre className={styles.messageText} data-testid="confirm-message-text">
-                            {messageText}
-                        </pre>
+                        <section className={styles.messageBox} aria-label="Message to sign">
+                            <p className={styles.messageLabel}>Message to sign</p>
+                            <pre className={styles.messageText} data-testid="confirm-message-text">
+                                {messageText}
+                            </pre>
+                        </section>
                     ) : null}
 
-                    {/* WHO PAYS, above what happens (#40). The wallet holds
-                        several addresses per chain and the form's From picker
-                        is gone by the time this page renders, so without this
-                        row the only hint of the spender is a balance debit the
-                        user would have to match against their address list.
-                        The legacy review stage this page replaced always had
-                        it; the single-encode page dropped it. Action variant
-                        only - see the sourceAddress prop doc. */}
-                    {variant === 'action' && sourceAddress ? (
+                    {/* WHO PAYS, above what happens (#40). The wallet can hold
+                        several addresses per chain, so the action row names
+                        the spender alongside the balance debit. Message signing
+                        uses the same row to name the signing address. */}
+                    {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
-                            <dt className={styles.sourceLabel}>From</dt>
+                            <dt className={styles.sourceLabel}>
+                                {variant === 'message' ? 'Signing address' : 'From'}
+                            </dt>
                             <dd className={styles.sourceValue}>
                                 {sourceName ? (
                                     <span className={styles.sourceName}>{sourceName}</span>
                                 ) : null}
-                                <AddressText address={sourceAddress} highlight />
+                                <AddressText address={sourceAddress} highlight truncate={false} />
                             </dd>
                         </dl>
                     ) : null}

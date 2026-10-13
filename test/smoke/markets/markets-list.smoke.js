@@ -138,8 +138,8 @@ for (const [shell, appPath] of [
     const app = readFileSync(appPath, 'utf8')
         + (shell === 'web' ? readFileSync(WEB_DEX_SURFACE, 'utf8') : '');
     assert.ok(
-        /import \{ MarketsList \}/.test(app),
-        `${shell} App imports MarketsList`,
+        app.includes('shared/routes/MarketsList.jsx'),
+        `${shell} App loads MarketsList`,
     );
     assert.ok(
         /unlockedView === 'markets'/.test(app),
