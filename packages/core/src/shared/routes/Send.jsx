@@ -42,7 +42,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
-import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
+import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
@@ -232,7 +232,20 @@ function utxoOutpoint(utxo) {
 // first letter and cannot tell mainnet from testnet on the shared 'm'/'n'/'2'
 // leaders. Returns an error string, or null when the address is good (or when
 // there is not yet a chain to validate against).
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
 function destinationAddressError(address, descriptor) {
+    const a = (address || '').trim();
+    if (a && descriptor?.coin && descriptor?.networkKind
+        && !isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) {
+        // A different coin gets the plain "looks like" wording; the same coin on
+        // another network, or a checksum typo, takes the network-aware copy.
+        const detected = detectAddressCoin(a);
+        if (detected && detected !== descriptor.coin) {
+            const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+            return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+        }
+    }
     return addressValidationError(address, descriptor);
 }
 
