@@ -29,6 +29,7 @@ import { Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 // Resolves coin-code URIs (xchain:TBTC/...) to chainIds in the boot-time
@@ -352,6 +353,7 @@ function AppInner() {
     // Quick "Message sent" confirmation modal, shown over the view the user
     // is returned to after a compose-form send succeeds.
     const [messageSentNotice, setMessageSentNotice] = useState(false);
+    const [deepLinkNotice, setDeepLinkNotice] = useState(/** @type {string | null} */ (null));
     // §47 / Cluster L FOLLOWUP 2: `web+xchain:` deep links arriving via
     // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
     // Parsed on mount, prefill goes into the Send route, then the param
@@ -490,47 +492,24 @@ function AppInner() {
         const raw = params.get('uri');
         if (!raw) return;
         try {
-            // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
-            // a chainId; without it intent.chainId is always undefined, which
-            // Send tolerated but contract routes cannot.
-            //
-            // `hardenUriIntentText` neutralizes the free-text
-            // fields (memo/tick/method/params) before they ever become
-            // prefill state, since this is the first point a query-string
-            // value from a `web+xchain:` click becomes something the popup
-            // renders. `address` stays whatever the link sent; see the
-            // function's own comment for why.
-            const intent = coreUri.hardenUriIntentText(
-                coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY }),
-            );
-            if (intent && intent.kind === 'send') {
-                setSendPrefill({
-                    address: intent.address,
-                    amount: intent.amount,
-                    tick: intent.tick,
-                    chainId: intent.chainId,
-                    memo: intent.memo,
-                });
-                setUnlockedView('send');
-                launchRouteState.current.remember('send');
-            } else if (intent && intent.kind === 'receive') {
-                setUnlockedView('receive');
-                launchRouteState.current.remember('receive');
-            } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
-                // Explorer Write-tab deep link: land on the EXECUTE form
-                // prefilled. Unroutable without a contract index and a
-                // resolved chain, so both are required.
-                setContractRef({ chainId: intent.chainId, contractActionIndex: intent.contractActionIndex });
-                setExecutePrefill({
-                    method: intent.method || '',
-                    paramsText: intent.executeParams || '',
-                });
-                setUnlockedView('contract-execute');
-                launchRouteState.current.remember('contract-execute');
+            const route = deepLinkRoute(raw, APP_CHAIN_REGISTRY);
+            if (!route) return;
+            if (route.view === 'deep-link-error') {
+                setDeepLinkNotice(route.message);
+                pendingUriView.current = null;
+                return;
             }
+            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'contract-execute') {
+                setContractRef(route.contractRef);
+                setExecutePrefill(route.executePrefill);
+            }
+            setUnlockedView(route.view);
+            launchRouteState.current.remember(route.view);
+            pendingUriView.current = route.view;
         } catch {
-            // Parser surfaces unknown via kind === 'unknown'; defensive
-            // try/catch in case future parser changes regress.
+            // The shared router returns an error route for malformed input;
+            // this remains defensive against an unexpected parser failure.
         } finally {
             params.delete('uri');
             const next = params.toString();
@@ -2665,6 +2644,13 @@ function AppInner() {
                         <NoticeModal
                             title="Message sent"
                             onClose={() => setMessageSentNotice(false)}
+                        />
+                    ) : null}
+                    {deepLinkNotice ? (
+                        <NoticeModal
+                            title="Cannot open link"
+                            message={deepLinkNotice}
+                            onClose={() => setDeepLinkNotice(null)}
                         />
                     ) : null}
                     <CommandPalette

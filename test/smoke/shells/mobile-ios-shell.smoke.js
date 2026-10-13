@@ -157,7 +157,11 @@ assert.ok(
 );
 
 const schemes = plistValue(infoPlist, 'CFBundleURLSchemes');
-assert.deepEqual(schemes, ['xchain'], 'exactly one custom scheme, and it is inbound compatibility only');
+assert.deepEqual(
+    schemes,
+    ['xchain', 'bitcoin', 'litecoin', 'dogecoin'],
+    'the wallet accepts its app scheme and the three supported payment schemes',
+);
 
 assert.equal(
     plistValue(infoPlist, 'ITSAppUsesNonExemptEncryption'), false,
@@ -818,6 +822,11 @@ assert.ok(
     + 'tapped Universal Link is silently discarded.',
 );
 const linksSwift = readFileSync(linksSwiftPath, 'utf8');
+assert.match(
+    linksSwift,
+    /coinSchemes = Set\(\["bitcoin", "litecoin", "dogecoin"\]\)/,
+    'the iOS URL declarations and the native link inbox must accept the same payment schemes',
+);
 
 // The SPA looks the plugin up by jsName and REFUSES it unless takePendingLink is
 // callable (nativeDeepLinks.js `linksPlugin()`), so a rename on either side is
@@ -1090,7 +1099,7 @@ console.log(
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
     + ' universal device family; associated domains applinks:xchain.io only, entitlements wired into the build;'
     + ' default ATS asserted by absence; camera + Face ID usage strings present and honest about what biometrics'
-    + ' do; one custom scheme, xchain:, as inbound compatibility; export-compliance flag set; armv7 leftover'
+    + ' do; inbound xchain and payment schemes; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
     + ' and the rails §2 store integer is the same one Android gets.: CAPACITOR_DEBUG lives only in'

@@ -612,6 +612,13 @@ assert.match(
     /<data android:scheme="xchain" \/>/,
     'the xchain: scheme is accepted inbound',
 );
+for (const scheme of ['bitcoin', 'litecoin', 'dogecoin']) {
+    assert.match(
+        manifest,
+        new RegExp(`<data android:scheme="${scheme}" \\/>`),
+        `${scheme}: payment links are accepted inbound`,
+    );
+}
 assert.doesNotMatch(
     manifest,
     /android:scheme="http"[^s]/,
@@ -624,6 +631,13 @@ const linksJava = readFileSync(
     'utf8',
 );
 assert.match(linksJava, /@CapacitorPlugin\(name = "XChainLinks"\)/);
+for (const constant of ['SCHEME_BITCOIN', 'SCHEME_LITECOIN', 'SCHEME_DOGECOIN']) {
+    assert.match(
+        linksJava,
+        new RegExp(`${constant}\\.equalsIgnoreCase\\(scheme\\)`),
+        `${constant} is declared in the manifest but rejected by the native link inbox`,
+    );
+}
 assert.match(
     linksJava,
     /public void takePendingLink\(PluginCall call\)/,
@@ -1419,7 +1433,7 @@ console.log(
     + ' camera and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
-    + ' URLs to the browser, plus the inbound xchain: scheme and no'
+    + ' URLs to the browser, plus inbound xchain and payment schemes and no'
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
     + ` assetlinks ships as a ${fingerprints.length}-fingerprint template (${playSlots.length} Play`
