@@ -72,7 +72,7 @@ test.describe('onboarding', () => {
 
         // Mnemonic display stage
         await revealRecoveryPhrase(page);
-        await page.getByLabel(/i have written down/i).check();
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         // Deliberately wrong words: the wallet must not be created.

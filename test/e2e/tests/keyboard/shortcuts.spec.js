@@ -54,7 +54,7 @@ test.describe('keyboard shortcut residuals', () => {
         await page.getByRole('dialog', { name: 'Command palette' })
             .getByRole('combobox').fill('settings keyboard');
         await page.keyboard.press('Enter');
-        await expect(page.getByText('Click Rebind, then press the new key combination.', { exact: false })).toBeVisible();
+        await expect(page.getByText('Select Rebind, then press the new key combination.', { exact: false })).toBeVisible();
 
         // Rebind Lock wallet to Cmd/Ctrl+J.
         const lockRow = page.locator('div').filter({ hasText: /^Lock wallet/ }).last();

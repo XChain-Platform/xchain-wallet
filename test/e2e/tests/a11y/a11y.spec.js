@@ -89,7 +89,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByLabel('Confirm password').fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
         await readRecoveryPhrase(page);
-        await page.getByLabel(/i have written down/i).check();
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await expect(
             page.getByRole('heading', { name: 'Verify your recovery phrase' }),
@@ -106,7 +106,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByRole('button', { name: 'Next' }).click();
 
         const words = await readRecoveryPhrase(page);
-        await page.getByLabel(/i have written down/i).check();
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         for (let position = 1; position <= words.length; position += 1) {
             const box = page.getByRole('textbox', { name: `Word ${position}`, exact: true });
