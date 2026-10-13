@@ -9,13 +9,11 @@
  * contact legal@dankest.llc. */
 
 /* Custom network dropdown: trigger button + absolute popover. The wrapper
-   shares the toolbar row with a search box, but never below the width of
-   the icon, "All Networks" and the caret: under that the toolbar wraps the
-   filter onto its own line instead of cutting the label to "All Netwo..."
-   or clipping the caret (both seen on 375 to 411px phones, 2026-10-12). */
+   shares the toolbar row with a search box. Both controls may shrink at
+   narrow widths while their labels ellipsize inside the trigger. */
 .networkWrap {
     flex: 1 1 0;
-    min-width: 10.5rem;
+    min-width: 0;
     position: relative;
     box-sizing: border-box;
 }

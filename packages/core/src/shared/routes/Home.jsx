@@ -19,6 +19,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -265,20 +266,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // rather than counting down a number the wallet made up.
     const [rateLimitNamedSeconds, setRateLimitNamedSeconds] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
-    // Network filter can be controlled by the parent shell (web AppHeader
-    // owns the toolbar filter button) or self-managed when the parent
-    // doesn't pass props (popup renders its own filter button inline).
-    const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
-    const networkFilter = networkFilterProp ?? networkFilterLocal;
-    const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
+    // The full shell controls these values so its header and Home share one
+    // model. Compact shells use the same per-wallet model here directly.
+    const walletFilters = useWalletFilters(activeWalletId);
+    const networkFilter = networkFilterProp ?? walletFilters.networkFilter;
+    const setNetworkFilter = onNetworkFilterChangeProp ?? walletFilters.setNetworkFilter;
     // BTC-only gate: multisig is Bitcoin-only at launch (spec 10.3), so the
     // multisig badge data only flows when Bitcoin is in view.
     const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
-    // Free-text token filter follows the same parent-vs-local pattern as
-    // the network filter; popped into the header's filter popover.
-    const [tokenQueryLocal, setTokenQueryLocal] = useState('');
-    const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
-    const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
+    const tokenQuery = tokenQueryProp ?? walletFilters.tokenQuery;
+    const setTokenQuery = onTokenQueryChangeProp ?? walletFilters.setTokenQuery;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);

@@ -37,6 +37,7 @@ import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
+import { useWalletFilters } from '@xchain-wallet/core/shared/hooks/useWalletFilters.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
@@ -371,11 +372,6 @@ function AppInner() {
     const [sweepCtx, setSweepCtx] = useState(
         /** @type {{ walletId: string, chainId: string, fromAddress: string, destination: string, migrateTo: { walletId: string, address: string, name?: string } } | null} */ (null),
     );
-    // Global header state: lifted up so the AppHeader in the layout
-    // header slot can render the same filter + pancake the Home page
-    // historically owned, and so flipping the filter on TokenDetail
-    // affects Home and vice-versa.
-    const [globalNetworkFilter, setGlobalNetworkFilter] = useState('all');
     // Header filter coins come from the live registry, so custom and
     // hub-synced chains appear without a restart (regtest stays dev-only).
     const supportedChains = useSupportedChains(APP_CHAIN_REGISTRY);
@@ -387,11 +383,6 @@ function AppInner() {
         () => registryLib.coinFamiliesForUser(supportedChains, { developerMode }),
         [supportedChains, developerMode],
     );
-    // Free-text token filter: lifted alongside the network filter so the
-    // AppHeader popover and Home's HomeTabs share one source of truth.
-    // The Send and Receive pickers keep their own search text: sharing this
-    // one left a ticker typed there ("LTC") filtering Home's Tokens tab.
-    const [globalTokenQuery, setGlobalTokenQuery] = useState('');
     // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
     // all / coins / tokens. Lifted here so the popover and SendPicker
@@ -458,6 +449,15 @@ function AppInner() {
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );
+    // One per-wallet model feeds the persistent header and every route that
+    // participates in the Home filter. Send and Receive keep separate query
+    // text so typing there cannot narrow Home's Tokens tab.
+    const {
+        networkFilter: globalNetworkFilter,
+        tokenQuery: globalTokenQuery,
+        setNetworkFilter: setGlobalNetworkFilter,
+        setTokenQuery: setGlobalTokenQuery,
+    } = useWalletFilters(activeWalletId);
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
