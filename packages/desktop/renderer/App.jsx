@@ -434,6 +434,11 @@ function AppInner() {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
+    const formDone = () => {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setUnlockedView('home');
+    };
     const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
@@ -812,6 +817,11 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onDone={() => {
+                            setSendPrefill(null);
+                            setSendBackTo('home');
+                            setUnlockedView('home');
+                        }}
                         onChangeAsset={() => {
                             setSendPrefill(null);
                             setUnlockedView('send-picker');
@@ -1037,6 +1047,7 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                        onDone={formDone}
                     />
                 );
             }

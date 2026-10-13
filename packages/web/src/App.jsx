@@ -308,6 +308,11 @@ function AppInner() {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
+    const formDone = () => {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setUnlockedView('home');
+    };
     // When a form was launched from ManageToken, expose the locked
     // (chainId, tick) so it can prefill + visually lock its ticker
     // field. Forms opened from ActionsMenu pass undefined and behave
@@ -1014,6 +1019,11 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onDone={() => {
+                            setSendPrefill(null);
+                            setSendBackTo('home');
+                            setUnlockedView('home');
+                        }}
                         prefill={sendPrefill}
                         onChangeAsset={(carry) => {
                             // Carry the typed To address + amount so picking a
@@ -1250,6 +1260,7 @@ function AppInner() {
                     <BroadcastForm
                         walletId={activeWalletId}
                         onBack={formBack}
+                        onDone={formDone}
                         initialChainId={prefillChainId}
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}

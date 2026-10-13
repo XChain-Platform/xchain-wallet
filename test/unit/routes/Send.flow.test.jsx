@@ -48,7 +48,12 @@ function composedSend() {
     };
 }
 
-function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
+function mount({
+    walletMode = 'full',
+    sendResult = { txid: TXID },
+    onBack = () => {},
+    onDone,
+} = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{
@@ -106,7 +111,7 @@ function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <Send walletId={WALLET_ID} onBack={() => {}} />
+                <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -141,7 +146,9 @@ afterEach(() => {
 
 describe('Send flow with mocked messaging', () => {
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
-        const messaging = mount();
+        const onBack = vi.fn();
+        const onDone = vi.fn();
+        const messaging = mount({ onBack, onDone });
         const confirm = await openPasswordConfirm(messaging);
 
         expect(messaging.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
@@ -175,6 +182,20 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
         expect(screen.getByText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveAttribute('aria-live', 'polite');
+        expect(announcement).toHaveAttribute('aria-atomic', 'true');
+        expect(announcement).toHaveTextContent(/broadcast but is not confirmed yet/i);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Copy transaction id' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View on explorer/i })).toHaveAttribute(
+            'href',
+            `https://explorer.xchain.io/BTC/tx/${TXID}`,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(onDone).toHaveBeenCalledTimes(1);
+        expect(onBack).not.toHaveBeenCalled();
     });
 
     it('ends on the signed-not-broadcast screen when the signed transaction is queued', async () => {

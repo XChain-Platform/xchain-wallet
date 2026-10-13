@@ -162,7 +162,7 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
-function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange }) {
+function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange, onDone }) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
     const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
@@ -224,10 +224,19 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
             settings,
         }) : null;
         return (
-            <div role="status" aria-live="polite">
-                <h2 className={styles.successTitle}>{txid ? 'Transaction broadcast' : 'Transaction queued'}</h2>
+            <div>
+                <div role="status" aria-live="polite" aria-atomic="true">
+                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : 'Transaction queued'}</h2>
+                    {txid ? (
+                        <p className={styles.hint}>
+                            The transaction was broadcast but is not confirmed yet.
+                            Confirmation time depends on the selected network and fee.
+                        </p>
+                    ) : null}
+                </div>
                 {txid ? (
                     <>
+                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -240,6 +249,17 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 ) : (
                     <p>The signed transaction is saved in the broadcast queue. Send it from there when the network is available.</p>
                 )}
+                <div className={styles.actions}>
+                    <Button type="button" onClick={() => {
+                        setRaw('');
+                        setPreview(null);
+                        setResult(null);
+                        setState('form');
+                    }}>
+                        Broadcast another
+                    </Button>
+                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
+                </div>
             </div>
         );
     }
@@ -341,9 +361,11 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onDone]
  */
-export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -755,6 +777,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 setChainId={setChainId}
                 messaging={messaging}
                 onKindChange={setBroadcastKind}
+                onDone={onDone || onBack}
             />,
         );
     }
@@ -779,7 +802,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={onDone || onBack}
                 />,
             );
         }
@@ -788,22 +811,42 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <QueuedResultPanel onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
             );
         }
+        const explorerUrl = txid ? explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        }) : null;
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Broadcast sent</h2>
+                <div role="status" aria-live="polite" aria-atomic="true">
+                    <h2 className={styles.successTitle}>Broadcast pending</h2>
+                    <p className={styles.hint}>
+                        Your action was broadcast but is not confirmed yet.
+                        Confirmation time depends on the selected network and fee.
+                    </p>
+                </div>
                 {txid ? (
                     <>
+                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
+                        {explorerUrl ? (
+                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                                View on explorer
+                            </a>
+                        ) : null}
                     </>
                 ) : (
-                    <p className={styles.hint}>Broadcast complete.</p>
+                    <p className={styles.hint}>The broadcast completed without a transaction ID.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
+                    <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
             </>,
         );

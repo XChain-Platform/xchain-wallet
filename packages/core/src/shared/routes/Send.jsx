@@ -270,8 +270,11 @@ function destinationAddressError(address, descriptor) {
  *        The merged entry exists immediately (built from this wallet's own
  *        pending record) even though the network has not sighted it yet;
  *        the card's copy says as much. Omit to hide the action.
+ * @param {() => void} [props.onDone]
+ *        Leaves a completed send for Home. Falls back to onBack for callers
+ *        that do not distinguish completion from ordinary back navigation.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -2191,7 +2194,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onDone || onBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -2220,7 +2223,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         </p>
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={onBack}>Done</Button>
+                        <Button variant="primary" onClick={onDone || onBack}>Done</Button>
                     </div>
                 </>,
             );
@@ -2228,13 +2231,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
 
         return wrap(
             <>
-                <div className={styles.successCard} role="status" aria-live="polite">
+                <div className={styles.successCard}>
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>Broadcast pending</h2>
-                    <p className={styles.successHint}>
-                        Your transaction is on its way. It will confirm in the next
-                        few blocks; you can leave this screen at any time.
-                    </p>
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        <h2 className={styles.successTitle}>Broadcast pending</h2>
+                        <p className={styles.successHint}>
+                            Your transaction was broadcast but is not confirmed yet.
+                            Confirmation time depends on the selected network and fee.
+                        </p>
+                    </div>
                     {sentAmount || recipient ? (
                         <dl className={styles.successSummary}>
                             {sentAmount ? (
@@ -2251,8 +2256,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             ) : null}
                             {desc ? (
                                 <div className={styles.successRow}>
-                                    <dt>Chain</dt>
-                                    <dd>{desc.displayName}</dd>
+                                    <dt>Network</dt>
+                                    <dd><ChainBadge descriptor={desc} /></dd>
                                 </div>
                             ) : null}
                         </dl>
@@ -2307,7 +2312,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <Button variant="secondary" onClick={sendAnother}>
                         Send another
                     </Button>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
             </>,
         );
