@@ -33,7 +33,7 @@
 .search {
     appearance: none;
     width: 100%;
-    height: 38px;
+    min-height: 38px;
     box-sizing: border-box;
     padding: var(--xc-space-2) 10px var(--xc-space-2) var(--xc-space-8);
     border: 1px solid var(--xc-border-strong);
@@ -42,12 +42,6 @@
     color: var(--xc-text);
     font-family: inherit;
     font-size: var(--xc-text-sm);
-}
-
-/* Keep the reused network dropdown at least as tall as the search input.
-   Longer labels can increase its height instead of being clipped. */
-.netSelect {
-    min-height: 38px;
 }
 
 /* No focus ring on the search box: the user wants it to look identical

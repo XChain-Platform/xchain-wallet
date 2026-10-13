@@ -35,9 +35,10 @@ import { Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
+import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTitle.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
-import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -57,6 +58,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -150,6 +152,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -244,6 +247,11 @@ function AppInner() {
     const [unlockedView, setUnlockedView] = useState(
         /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
     );
+    useDocumentTitle({
+        statusState: status.state,
+        onboardingStep,
+        unlockedView,
+    });
     const [walletDetailsId, setWalletDetailsId] = useState(/** @type {string | null} */ (null));
     const [coSignerAccountId, setCoSignerAccountId] = useState(/** @type {string | null} */ (null));
     // §17.7: the address staged for the key-reveal ceremony; cleared on Back
@@ -333,11 +341,12 @@ function AppInner() {
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
-    // destination. Inert unless unlocked. Contacts feed its fuzzy search and
-    // are loaded lazily the first time it opens.
+    // destination. It stays disabled while locked or while shortcut help owns
+    // the modal layer. Contacts load lazily the first time it opens.
     const palette = useCommandPalette({
-        enabled: status.state === 'unlocked',
+        enabled: status.state === 'unlocked' && !shortcutHelpOpen,
         binding: settings?.keyboard?.bindings?.['command-palette'],
         navigate: setUnlockedView,
         currentView: unlockedView,
@@ -373,8 +382,6 @@ function AppInner() {
         }
         return () => { cancelled = true; };
     }, [palette.open, status.state, activeWalletId, activeAccountId]);
-    // §34 keyboard shortcuts (see the web shell for the reference wiring).
-    const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
     // Which Settings section a palette deep-link should open.
     // Cleared when the user backs out of Settings.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
@@ -388,12 +395,13 @@ function AppInner() {
         if (returnView === 'settings') setSettingsInitialSection('this-wallet');
         setUnlockedView('wallet-picker');
     };
+    // §34 keyboard shortcuts (see the web shell for the reference wiring).
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -435,6 +443,11 @@ function AppInner() {
         setFormReturnView(null);
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
+    };
+    const formDone = () => {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setUnlockedView('home');
     };
     const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
@@ -537,6 +550,36 @@ function AppInner() {
             );
     }, []);
 
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
+
     useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => {
@@ -550,8 +593,10 @@ function AppInner() {
             if (change?.kind !== 'active-wallet' || status.state !== 'unlocked') return;
             const walletId = change.walletId;
             if (typeof walletId !== 'string' || !walletList.some((wallet) => wallet.id === walletId)) return;
+            setActiveAccountId(null);
             setActiveWalletId(walletId);
             writeActiveWallet(walletId);
+            setUnlockedView('home');
         });
     }, [refresh, status.state, walletList]);
 
@@ -814,6 +859,12 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
+                        onDone={() => {
+                            setSendPrefill(null);
+                            setSendBackTo('home');
+                            setUnlockedView('home');
+                        }}
                         onChangeAsset={(carry) => {
                             setSendPrefill({ assetSwitchDraft: carry });
                             setUnlockedView('send-picker');
@@ -1058,6 +1109,7 @@ function AppInner() {
                         initialTick={prefillTick}
                         initialFromAddress={prefillFromAddress}
                         onBack={formBack}
+                        onDone={formDone}
                     />
                 );
             }
@@ -2629,11 +2681,7 @@ function AppInner() {
                 </Fragment>
             );
             })();
-            const handleNavLock = () => {
-                lockWallet()
-                    .then(refresh)
-                    .catch(() => refresh());
-            };
+            const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
@@ -2726,17 +2774,25 @@ function AppInner() {
                             badges={{ messaging: messagingUnread }}
                         />
                     }
-                    header={<WatchOnlyBadge visible={isWatcherMode} />}
+                    header={
+                        <AppHeader
+                            onCommandPalette={palette.openPalette}
+                            onLock={handleNavLock}
+                            isWatcherMode={isWatcherMode}
+                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                        />
+                    }
                     notices={
                         activeWalletId ? (
                             <>
+                                <NetworkBanner activeNetwork={settings?.activeNetwork} />
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout notices slot. */}
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                             </>
-                        ) : null
+                        ) : <NetworkBanner activeNetwork={settings?.activeNetwork} />
                     }
                 >
                     <ScrollRestoration routeKey={unlockedView}>

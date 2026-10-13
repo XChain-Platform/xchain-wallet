@@ -32,7 +32,7 @@ const css = Object.fromEntries([
         collectibles: 'CollectiblesView.module.css',
         derivation: 'DerivationPathCrossCheck.module.css',
         homeFilter: 'HomeFilterBar.module.css',
-        networkSelect: 'HeaderNetworkButton.module.css',
+        networkSelect: 'NetworkFilter.module.css',
     };
     return [
         key,
@@ -207,9 +207,8 @@ describe('shared components at a 320px viewport', () => {
         const narrow = mediaBlock(css.homeFilter, '(max-width: 360px)');
         expect(ruleBody(narrow, '.bar')).toMatch(/flex-wrap:\s*wrap/);
         expect(ruleBody(narrow, '.searchWrap,\n    .networkWrap')).toMatch(/flex-basis:\s*100%/);
-        const labelRule = ruleBody(css.networkSelect, '.networkSelectLabel');
-        expect(labelRule).toMatch(/word-break:\s*normal/);
-        expect(labelRule).not.toMatch(/text-overflow|white-space:\s*nowrap/);
+        const labelRule = ruleBody(css.networkSelect, '.triggerLabel');
+        expect(labelRule).toMatch(/text-overflow:\s*ellipsis/);
         expectNoFixedWidthBeyondViewport(css.homeFilter, css.networkSelect);
     });
 });

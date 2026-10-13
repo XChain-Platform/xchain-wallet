@@ -85,6 +85,10 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {string[]} supportedActions
  * @property {string} uriScheme                   e.g. 'bitcoin' for BIP21
  * @property {number} wifVersionByte              leading byte for WIF-encoded private keys on this network
+ * @property {string} [nativeTicker]              display ticker override for a custom chain
+ * @property {number} [nativeDecimals]            decimal places in one native coin unit; defaults to 8
+ * @property {number|string} [smallBalanceBaseUnits] display-only small-balance threshold in native base units
+ * @property {Array<{ id: string, label: string, url: string, iconImg?: string }>} [transactionExplorers] HTTPS transaction URL templates containing `{txid}`
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} hub

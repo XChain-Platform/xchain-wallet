@@ -59,7 +59,7 @@ describe('Onboarding route accessibility', () => {
         for (const title of [
             'Your recovery phrase is everything',
             'Sending is final',
-            'One wallet, several chains',
+            'Built for the XChain Platform',
         ]) {
             fireEvent.click(screen.getByRole('button', { name: 'Next' }));
             await screen.findByText(title);
