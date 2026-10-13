@@ -11,6 +11,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 let messaging = {};
 
@@ -35,6 +36,23 @@ const { AlertsRoute } = await import(
 function mount(overrides = {}) {
     return render(<AlertsRoute onBack={vi.fn()} {...overrides} />);
 }
+
+const AXE_STATES = [
+    ['unread', [{
+        id: 'unread-message',
+        severity: 'info',
+        title: 'Unread message',
+        message: 'A new message is ready to review.',
+        action: { label: 'Open message', onSelect: () => {} },
+    }]],
+    ['read', [{
+        id: 'read-message',
+        severity: 'info',
+        title: 'Read message',
+        message: 'This message has already been reviewed.',
+    }]],
+    ['empty', []],
+];
 
 afterEach(() => {
     cleanup();
@@ -62,6 +80,17 @@ describe('AlertsRoute empty state', () => {
         const header = screen.getByRole('banner');
 
         expect(within(header).getByText('Alerts')).toBeTruthy();
+    });
+});
+
+describe('AlertsRoute accessibility', () => {
+    it.each(AXE_STATES)('has no serious axe violations in the %s state', async (
+        _state,
+        alerts,
+    ) => {
+        const { container } = mount({ alerts });
+
+        await expectNoSeriousAxeViolations(container);
     });
 });
 
