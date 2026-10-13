@@ -3242,6 +3242,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         {t('send.gated.partial', {
                             total: gatedInfo.groups.length,
                             available: gatedInfo.groups.filter((g) => g.haveKey).length,
+                            missingCount: gatedInfo.groups.filter((g) => !g.haveKey).length,
                             missing: gatedInfo.groups.filter((g) => !g.haveKey)
                                 .map((g) => g.keyHash.slice(0, 12)).join(', '),
                         })}

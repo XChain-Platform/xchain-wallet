@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import {
     extractSingle,
@@ -303,7 +304,7 @@ export function ContractDetail({
                         <StateTable state={state} />
                     ) : (
                         <p className={styles.entryDescription}>
-                            {stateKeyCount(state)} state key(s). Tap Expand to view.
+                            {t('contracts.stateKeyCount', { count: stateKeyCount(state) })}
                         </p>
                     )}
                 </Section>

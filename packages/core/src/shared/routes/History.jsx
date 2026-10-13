@@ -1894,8 +1894,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <div className={styles.pagination} aria-live="polite">
                     <span className={styles.paginationCount}>
                         {t('history.itemsShown', {
-                            shown: Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US'),
-                            total: groupedItems.length.toLocaleString('en-US'),
+                            shown: Math.min(visibleItemCount, groupedItems.length),
+                            total: groupedItems.length,
                         })}
                     </span>
                     <Button

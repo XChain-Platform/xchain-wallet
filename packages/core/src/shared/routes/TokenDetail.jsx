@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
@@ -1758,7 +1759,9 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
                 // packsMeta takes precedence so production payloads
                 // override demo defaults if they ever collide.
                 const meta = tisMeta || g.packMeta || null;
-                const heading = meta?.name || (isPack ? `Pack (${g.files.length} files)` : g.files[0]?.name) || 'Gated file';
+                const heading = meta?.name
+                    || (isPack ? `Pack (${t('tokenDetail.fileCount', { count: g.files.length })})` : g.files[0]?.name)
+                    || 'Gated file';
                 return (
                     <GatedGroupCard
                         key={g.keyHash}

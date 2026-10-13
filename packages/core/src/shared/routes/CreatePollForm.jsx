@@ -27,6 +27,7 @@ import {
     Textarea,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -559,7 +560,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                                 {' '}#{callbackContract.trim()}
                                 {callbackOn === 'always' ? ', on every result.' : ', but only if the poll passes.'}
                                 {pollParams.callbackDelayBlocks
-                                    ? ` It runs ${pollParams.callbackDelayBlocks} blocks after the poll closes.`
+                                    ? t('governance.poll.callbackDelay', {
+                                        count: pollParams.callbackDelayBlocks,
+                                    })
                                     : ' It runs in the same block the poll closes in.'}
                             </dd>
                             {callbackParams.trim() ? (
@@ -576,7 +579,10 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                             ) : null}
                             <dt className={styles.detailsLabel}>Turnout needed</dt>
                             <dd className={styles.detailsValue}>
-                                {quorum.trim()} of supply and at least {minVoters.trim()} voter(s).
+                                {t('governance.poll.turnout', {
+                                    quorum: quorum.trim(),
+                                    count: Number(minVoters),
+                                })}
                             </dd>
                         </>
                     ) : null}

@@ -655,7 +655,7 @@ export function ImportWallet({
                         : lane === 'backup'
                             ? (isFull
                                 ? (mode === 'add'
-                                    ? 'Restore an encrypted backup as a new wallet alongside your existing one(s). The wallet record gets a fresh id at decode time so the two wallets don\'t collide.'
+                                    ? 'Restore an encrypted backup as a new wallet alongside any existing wallets. The wallet record gets a fresh id at decode time so the wallets don\'t collide.'
                                     // It used to say "the password",
                                     // singular, one line above three password
                                     // boxes.
