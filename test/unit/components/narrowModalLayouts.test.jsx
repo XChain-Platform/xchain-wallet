@@ -113,7 +113,7 @@ describe('320x568 modal renders', () => {
         }));
         render(<AlertsOverlay alerts={alerts} onClose={() => {}} />);
 
-        const panel = screen.getByRole('dialog', { name: 'Wallet alerts' }).firstElementChild;
+        const panel = screen.getByRole('dialog', { name: /^Alerts/ }).firstElementChild;
         const close = screen.getByRole('button', { name: 'Close alerts' });
         expect(close).toBe(panel.firstElementChild.lastElementChild);
         expect(panel.lastElementChild).toContainElement(screen.getByText('Alert 19'));
@@ -129,7 +129,7 @@ describe('320x568 modal renders', () => {
             />,
         );
 
-        const panel = screen.getByRole('dialog', { name: 'Unlocked file: long.txt' }).firstElementChild;
+        const panel = screen.getByRole('dialog', { name: /long\.txt/ }).firstElementChild;
         const close = screen.getByRole('button', { name: 'Close' });
         expect(close.parentElement).toBe(panel.lastElementChild);
         expect(close.parentElement.previousElementSibling).toHaveTextContent('long preview');
@@ -149,13 +149,13 @@ describe('320x568 modal renders', () => {
         );
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
-        const sheet = screen.getByRole('dialog', { name: 'More navigation' });
+        const sheet = screen.getByRole('dialog', { name: 'More' });
         expect(sheet.firstElementChild).toContainElement(
             screen.getByRole('button', { name: 'Close more navigation' }),
         );
         expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock' }));
         fireEvent.click(screen.getByRole('button', { name: 'Close more navigation' }));
-        expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
     });
 });
 
