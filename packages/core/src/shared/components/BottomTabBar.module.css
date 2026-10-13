@@ -122,6 +122,7 @@
     border-start-end-radius: var(--xc-radius-lg, 12px);
     z-index: var(--xc-z-modal);
     max-height: 70vh;
+    max-height: min(70vh, var(--xc-viewport-h, 100vh));
     min-height: 0;
     overflow: hidden;
     display: flex;
