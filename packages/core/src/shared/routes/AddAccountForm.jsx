@@ -9,10 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, Button, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Screen, Button, FormPage, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignerSelectForm } from './SignerSelectForm.jsx';
-import styles from './CreateWallet.module.css';
 
 /**
  * Add a new BIP44 account under the active wallet (§11.3.2). Derives
@@ -43,7 +42,6 @@ import styles from './CreateWallet.module.css';
 export function AddAccountForm({ walletId, onBack, onCreated }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [name, setName] = useState('Account');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -103,52 +101,16 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
         }
     }
 
-    const headClass = isFull ? styles.headFull : styles.headPopup;
-    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
-    const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
-    const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
-
-    const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
-            <header className={headClass}>
-                <h1 className={titleClass}>
-                    {isFull ? 'Add a new account' : 'Add account'}
-                </h1>
-                <p className={subtitleClass}>
-                    A new set of derived addresses under the same recovery phrase.
-                </p>
-            </header>
-            <SignerSelectForm
-                walletId={walletId}
-                value={signerId}
-                onChange={onPickSigner}
-                disabled={busy}
-            />
-            <Input
-                ref={nameRef}
-                label="Account name"
-                value={name}
-                onChange={(e) => {
-                    userEditedRef.current = true;
-                    setName(e.target.value);
-                    if (error) setError(null);
-                }}
-                autoComplete="off"
-                error={error || undefined}
-            />
-            <div className={actionsClass}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={busy}
-                    disabled={busy}
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.PlusIcon />}
-                >
-                    Add account
-                </Button>
-            </div>
-        </form>
+    const actions = (
+        <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            disabled={busy}
+            icon={<Icon.PlusIcon />}
+        >
+            Add account
+        </Button>
     );
 
     return (
@@ -156,7 +118,31 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
             variant={variant}
             header={<PageHeader onBack={onBack} backDisabled={busy} title="Add account" />}
         >
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            <FormPage
+                label="Add account"
+                onSubmit={handleSubmit}
+                intro="A new set of derived addresses under the same recovery phrase."
+                actions={actions}
+            >
+                <SignerSelectForm
+                    walletId={walletId}
+                    value={signerId}
+                    onChange={onPickSigner}
+                    disabled={busy}
+                />
+                <Input
+                    ref={nameRef}
+                    label="Account name"
+                    value={name}
+                    onChange={(e) => {
+                        userEditedRef.current = true;
+                        setName(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    autoComplete="off"
+                    error={error || undefined}
+                />
+            </FormPage>
         </Screen>
     );
 }
