@@ -55,6 +55,9 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
+const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
+    && Number(String(value).trim()) > 0;
+
 /**
  * §41.5 SWAP authoring surface.
  *
@@ -230,8 +233,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (giveTick.toUpperCase() === getTick.toUpperCase()) {
             return 'Give and get tickers must differ.';
         }
+        if (!giveOwnership && giveAmount && !isPlainPositive(giveAmount)) {
+            return 'Give amount must be a positive decimal number.';
+        }
+        if (!getOwnership && getAmount && !isPlainPositive(getAmount)) {
+            return 'Get amount must be a positive decimal number.';
+        }
+        if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
+        if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         return null;
-    }, [giveTick, getTick, coinTicker]);
+    }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount, getAddress, memo]);
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
@@ -585,11 +596,19 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}
                 <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => { setStage('form'); setSubmitError(null); }}
+                        disabled={stage === 'submitting'}
+                    >
+                        Edit
+                    </Button>
                     <Button
                         type="submit"
                         variant="primary"
@@ -828,7 +847,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent, #6ea8fe)', cursor: 'pointer', font: 'inherit' }}
+                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-primary)', cursor: 'pointer', font: 'inherit' }}
             >
                 {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
             </button>

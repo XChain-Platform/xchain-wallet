@@ -54,6 +54,9 @@ const PROTOCOL_COIN_TICKER = {
 // estimate on the review screen.
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
+const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
+    && Number(String(value).trim()) > 0;
+
 /**
  * §42.8.3 Cross-chain SWAP authoring surface.
  *
@@ -248,13 +251,22 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (getTick && getTick.toUpperCase() === getCoinTicker) {
             return `${actionDisplayLabel('SWAP')} cannot get ${getCoinTicker}. Use ${actionDisplayLabel('DISPENSER')} for token to native coin.`;
         }
+        if (!giveOwnership && giveAmount && !isPlainPositive(giveAmount)) {
+            return 'Give amount must be a positive decimal number.';
+        }
+        if (!getOwnership && getAmount && !isPlainPositive(getAmount)) {
+            return 'Get amount must be a positive decimal number.';
+        }
+        if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
+        if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         if (expMode === 'custom' && expInput.trim()) {
             const ms = Date.parse(expInput.trim());
             if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
             if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
         }
         return null;
-    }, [giveCoinTicker, getCoinTicker, giveTick, getTick, expMode, expInput]);
+    }, [giveCoinTicker, getCoinTicker, giveTick, getTick, giveOwnership, giveAmount,
+        getOwnership, getAmount, getAddress, memo, expMode, expInput]);
 
     // Network fee for the give chain (the chain that pays the on-chain fee):
     // Low / Normal / Fast / Custom, editable via FeeSelector on the form
@@ -552,11 +564,17 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // all swap terms before the user signs. The real broadcast only fires
     // from here, keeping the form stage completely read-only.
     if (stage === 'review' || stage === 'submitting') {
+        const giveSide = giveOwnership
+            ? `ownership of ${giveTick}`
+            : `${giveAmount} ${giveTick}`;
+        const getSide = getOwnership
+            ? `ownership of ${getTick}`
+            : `${getAmount} ${getTick}`;
         return wrap(
             <form onSubmit={handleSubmit} noValidate>
                 <p className={styles.summary}>
-                    Offer to give {giveAmount} {giveTick} on {giveDescriptor?.displayName || giveChainId} in exchange
-                    for {getAmount} {getTick} on {getDescriptor?.displayName || getChainId}.
+                    Offer to give {giveSide} on {giveDescriptor?.displayName || giveChainId} in exchange
+                    for {getSide} on {getDescriptor?.displayName || getChainId}.
                 </p>
                 <dl className={styles.detailsList}>
                     <DetailRow
@@ -565,7 +583,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                     <DetailRow
                         label="Give"
-                        value={`${giveAmount} ${giveTick}`}
+                        value={giveSide}
                     />
                     <DetailRow
                         label="From"
@@ -577,7 +595,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     />
                     <DetailRow
                         label="Get"
-                        value={`${getAmount} ${getTick}`}
+                        value={getSide}
                     />
                     <DetailRow
                         label="Receive at"
@@ -622,6 +640,14 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => { setStage('form'); setSubmitError(null); }}
+                        disabled={stage === 'submitting'}
+                    >
+                        Edit
+                    </Button>
                     <Button
                         type="submit"
                         variant="primary"

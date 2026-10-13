@@ -343,12 +343,22 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             + ' A bridge move cannot be partly funded: reduce the amount or move a different token.';
     }, [amount, balance, shown.label, sourceDescriptor, sourceChainId]);
 
+    const amountError = useMemo(() => {
+        const value = String(amount).trim();
+        if (!value) return null;
+        return compareDecimal(value, '0') === 1 ? null : 'Enter a positive amount to move.';
+    }, [amount]);
+
+    const memoError = memo.includes('|') || memo.includes(';')
+        ? 'Memo cannot contain "|" or ";".'
+        : null;
+
     const feeWarning = useMemo(
         () => belowFeeWarning({ amount, fee: feeQuote, tick: shown.label }),
         [amount, feeQuote, shown.label],
     );
 
-    const blockingError = leg.reason || destinationError || overBalanceError || null;
+    const blockingError = leg.reason || destinationError || amountError || overBalanceError || memoError || null;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
