@@ -63,6 +63,10 @@ function matchesParams(address, params) {
     // Segwit (bech32 / bech32m) when the coin has an HRP and the address looks
     // like a bech32 string for this network.
     if (params.hrp && address.toLowerCase().startsWith(`${params.hrp}1`)) {
+        // BIP173 permits either case but rejects a mixture of both. Decode the
+        // normalized form only after enforcing that rule so case folding does
+        // not turn a malformed address into a valid destination.
+        if (address !== address.toLowerCase() && address !== address.toUpperCase()) return false;
         const lower = address.toLowerCase();
         for (const codec of [bech32, bech32m]) {
             try {
