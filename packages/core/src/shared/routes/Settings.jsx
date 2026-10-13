@@ -386,7 +386,7 @@ export function Settings({
                 )}
             >
                 {filtered.length === 0 ? (
-                    <EmptyState title={`No settings match "${query}".`} />
+                    <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
                 ) : null}
                 {filtered.map((section) => {
                     if (section.kind === 'external-drill') {

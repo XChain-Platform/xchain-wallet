@@ -837,7 +837,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         <Sparkline series={sparkline} height={40} />
                     </div>
                 ) : !hint ? (
-                    <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
                 ) : null}
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
@@ -921,7 +921,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                     <Sparkline series={sparkline} height={40} />
                 </div>
             ) : !hint ? (
-                <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
+                <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
             ) : null}
             {sparkline && isDemo ? (
                 <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
@@ -1091,7 +1091,8 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
     if (!hasAbout) {
         return (
             <EmptyState
-                title="No additional information published for this token yet."
+                title="No additional information"
+                body="Information published by the token issuer appears here."
                 titleAs="p"
             />
         );
@@ -1201,7 +1202,8 @@ function MediaPanel({ isNative, assetInfo }) {
     if (subtabs.length === 0) {
         return (
             <EmptyState
-                title="No images, audio, video, or files published for this token yet."
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
                 titleAs="p"
             />
         );
@@ -1657,7 +1659,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     if (!groups || groups.length === 0) {
         return (
             <EmptyState
-                title={`No token-gated content published for ${tick}.`}
+                title="No token-gated content"
                 body="Holders unlock creator drops, packs, and sealed bundles here when the issuer publishes locked content for this token."
                 titleAs="p"
             />

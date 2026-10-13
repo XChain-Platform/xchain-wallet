@@ -468,7 +468,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     if (sweepAddrs.length === 0) {
         return wrap(
             <ListPage>
-                <EmptyState title="This account has no addresses that can receive messages yet. Use Receive to generate one first." />
+                <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
             </ListPage>,
         );
     }
@@ -528,7 +528,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
-                <EmptyState title="No messages in this conversation." />
+                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
             ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {threadItems.map((item) => {
@@ -689,7 +689,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     onAction={onCompose ? () => onCompose() : undefined}
                 />
             ) : visibleConversations.length === 0 ? (
-                <EmptyState title="No conversations match the current filter." />
+                <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
                 <div className={local.convCard}>
                     <ul className={local.convList} aria-label="Conversations">

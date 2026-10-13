@@ -15,7 +15,7 @@ import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 
 const CHAIN = 'litecoin-regtest';
 
-function mount() {
+function mount(props = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi' }] }),
         getAddressHistory: vi.fn().mockResolvedValue([]),
@@ -28,7 +28,7 @@ function mount() {
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <History walletId="w1" accountId="a1" />
+            <History walletId="w1" accountId="a1" {...props} />
         </MessagingProvider>,
     );
 }
@@ -37,11 +37,12 @@ afterEach(() => cleanup());
 
 describe('History empty state', () => {
     it('says there is no activity yet when the wallet has no history', async () => {
-        mount();
+        mount({ onReceive: vi.fn() });
         // History re-renders once the per-chain loads settle; wait on the
         // settled screen rather than the first node that matched.
         await waitFor(() => expect(screen.getByText('No activity yet')).toBeInTheDocument());
         expect(screen.queryByText(/No matches/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 
     it('keeps saying so when a search is typed on a wallet with no history', async () => {

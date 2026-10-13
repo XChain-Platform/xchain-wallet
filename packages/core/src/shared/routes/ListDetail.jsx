@@ -281,7 +281,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
  */
 function MemberList({ items, isTick, messaging, chainId }) {
     if (items.length === 0) {
-        return <EmptyState title="This list has no members." titleAs="h3" />;
+        return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
     }
     return (
         <ul className={styles.detailsList} style={{ display: 'block' }}>

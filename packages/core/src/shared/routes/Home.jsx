@@ -1168,7 +1168,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
                 {balances && Object.keys(balances).length === 0 ? (
                     <EmptyState
-                        title="No addresses yet. Generate one to start receiving."
+                        title="No addresses yet"
+                        body="Generate an address to start receiving."
                         titleAs="p"
                         actionLabel="Generate an address"
                         onAction={() => setAddAddressOpen(true)}

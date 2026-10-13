@@ -350,7 +350,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     <SectionHeader title="Open" />
                     <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
                 </section>
-            ) : <EmptyState title="No open swaps." titleAs="p" />}
+            ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Closed" />

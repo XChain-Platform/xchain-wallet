@@ -55,7 +55,7 @@ export function BalanceList({
     multisig,
     multisigChainId,
     emptyTitle = 'No balances yet',
-    emptyBody,
+    emptyBody = 'Balances appear here after this wallet receives funds.',
     onReceive,
     emptyActionLabel,
     onEmptyAction,

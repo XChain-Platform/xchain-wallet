@@ -206,10 +206,8 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         <Screen variant={variant} header={header}>
             {coinOptions.length === 0 ? (
                 <EmptyState
-                    title="No coins are available yet."
-                    body="Unlock the wallet, or turn on a network under Settings."
-                    actionLabel="Close"
-                    onAction={onClose}
+                    title="No coins available"
+                    body="Coins become available when the wallet is unlocked and a supported network is enabled."
                 />
             ) : (
                 <FormPage

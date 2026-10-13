@@ -256,7 +256,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {offers.length === 0 ? (
-                            <EmptyState title={<>No open dispensers selling {tick}.</>} titleAs="p" />
+                            <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
                                 {offers.map(({ chainId, row }) => {
@@ -311,7 +311,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexOrders.length === 0 ? (
-                            <EmptyState title={<>No open DEX orders involving {tick}.</>} titleAs="p" />
+                            <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
                                 {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
@@ -354,7 +354,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {sales.length === 0 ? (
-                            <EmptyState title={<>No recent dispenses of {tick}.</>} titleAs="p" />
+                            <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
                                 {sales.slice(0, 50).map(({ chainId, row }, i) => {
@@ -401,7 +401,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexSwaps.length === 0 ? (
-                            <EmptyState title={<>No recent DEX swaps involving {tick}.</>} titleAs="p" />
+                            <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
                         ) : (
                             <ul className={styles.list} role="list">
                                 {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {

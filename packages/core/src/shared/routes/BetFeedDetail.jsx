@@ -480,7 +480,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             </div>
 
             <SectionHeader as="h3" title={live ? 'Current split' : 'Final split'} />
-            {outcomes.length === 0 ? <EmptyState title="No outcomes recorded." titleAs="p" /> : (
+            {outcomes.length === 0 ? <EmptyState title="No outcomes recorded" body="Settled market outcomes appear here." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {outcomes.map((label, i) => {
                         const p = byOutcome[i] || { pool: 0, bet_count: 0 };
@@ -679,7 +679,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             ) : null}
 
             <SectionHeader as="h3" title="History" />
-            {timeline.length === 0 ? <EmptyState title="No history yet." titleAs="p" /> : (
+            {timeline.length === 0 ? <EmptyState title="No history yet" body="Market updates appear here as they happen." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     {timeline.map((t, i) => (
                         <div key={i} className={styles.hint}>

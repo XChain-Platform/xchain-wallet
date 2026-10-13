@@ -946,7 +946,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<EmptyState title="No matching contact addresses on this chain." />);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
     }
 
     return wrap(

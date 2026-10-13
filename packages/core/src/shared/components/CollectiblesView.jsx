@@ -45,7 +45,7 @@ import styles from './CollectiblesView.module.css';
 export function CollectiblesView({
     rows,
     emptyTitle = 'No collectibles yet',
-    emptyBody,
+    emptyBody = 'Collectibles appear here after this wallet receives them.',
     onReceive,
     onSelectToken,
     pinnedKeys,

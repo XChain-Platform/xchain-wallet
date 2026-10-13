@@ -220,7 +220,8 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
             <EmptyState
-                title="No addresses on any chain yet. Use Receive to generate one first, or Create list to publish your first."
+                title="No supported address"
+                body="Publishing a list requires an address on a supported chain."
                 titleAs="p"
             />,
         );
@@ -263,7 +264,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                         onAction={onCreateList ? () => onCreateList() : undefined}
                     />
                 ) : (
-                    <EmptyState title="No lists match the current filter." titleAs="p" />
+                    <EmptyState title="No matching lists" body="Try a different search or network filter." titleAs="p" />
                 )
             ) : (
                 <div className={local.list} role="list">

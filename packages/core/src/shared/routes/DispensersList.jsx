@@ -314,7 +314,10 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
             <ListPage>
-                <EmptyState title="No addresses on any chain yet. Use Receive to generate one first, or Create dispenser to open your first." />
+                <EmptyState
+                    title="No supported address"
+                    body="A supported address is required before dispensers can be created or viewed."
+                />
             </ListPage>,
         );
     }
@@ -354,7 +357,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
                     />
                 ) : (
-                    <EmptyState title="No dispensers match the current filter." />
+                    <EmptyState title="No matching dispensers" body="Try a different search or network filter." />
                 )
             ) : (
                 <div className={local.list} role="list">

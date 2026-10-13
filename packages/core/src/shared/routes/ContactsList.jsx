@@ -880,11 +880,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             ) : null}
             {contacts.length === 0 ? (
                 <EmptyState
-                    title="No contacts yet."
-                    body="Tap + to add one and label addresses across the inbox and history."
+                    title="No contacts yet"
+                    body="Saved contacts label addresses across the inbox and history."
                 />
             ) : filteredContacts.length === 0 ? (
-                <EmptyState title="No contacts match your filters." />
+                <EmptyState title="No matching contacts" body="Try a different search or network filter." />
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {

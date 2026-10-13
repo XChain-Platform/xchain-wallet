@@ -248,7 +248,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
     }
     const entries = Object.entries(rowsByChain);
     if (entries.length === 0) {
-        return <EmptyState title="No results." />;
+        return <EmptyState title="No results yet" body="Search results appear here after a query finishes." />;
     }
     // Surface an overall-error row when the precondition failed (e.g.,
     // invalid token regex). That uses the sentinel "_error" key.
@@ -269,7 +269,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor }
     // The raw-404 complaint only ever became visible because ONE chain
     // happened to return rows; the total-failure case was silently worse.
     if (!anyRow && !anyError) {
-        return <EmptyState title="No open dispensers matched." />;
+        return <EmptyState title="No matching dispensers" body="Try a different ticker or address." />;
     }
     return (
         <>

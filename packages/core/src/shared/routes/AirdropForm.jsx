@@ -1991,8 +1991,8 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
     if (rows.length === 0) {
         return wrap(
             <EmptyState
-                title="No lists published from this chain's addresses yet."
-                body="Switch to Paste addresses or Token holders to publish one here, or use My Lists from Home once you have."
+                title="No published lists yet"
+                body="Address and token lists published from this chain appear here."
             />,
         );
     }
