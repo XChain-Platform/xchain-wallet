@@ -12,9 +12,8 @@
 // useMessaging is a React hook; tests via renderHook (React Testing Library).
 
 import { describe, it, expect } from 'vitest';
-import { createContext } from 'react';
+import React, { createContext } from 'react';
 import { renderHook } from '@testing-library/react';
-import React from 'react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useMessaging, screenVariantFor } from '../../../packages/core/src/shared/useMessaging.js';
 

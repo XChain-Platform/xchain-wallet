@@ -8,18 +8,21 @@ import { render } from '@testing-library/react';
 
 import { ChevronIcon } from '../../../packages/core/src/ui/ChainPicker.icons.jsx';
 
-describe('ChevronIcon', () => {
-    it('renders a decorative compact chevron and rotates with the open state', () => {
-        const { container, rerender } = render(<ChevronIcon open={false} />);
+describe('<ChevronIcon>', () => {
+    it('renders a decorative, unfocusable closed-state icon', () => {
+        const { container } = render(<ChevronIcon open={false} />);
         const icon = container.querySelector('svg');
 
         expect(icon).toHaveAttribute('aria-hidden', 'true');
         expect(icon).toHaveAttribute('focusable', 'false');
+        expect(icon).toHaveAttribute('data-xc-icon');
+        expect(icon).toHaveStyle({ transform: 'none' });
         expect(icon.style.getPropertyValue('--xc-icon-size')).toBe('var(--xc-icon-xs)');
-        expect(icon.style.transform).toBe('none');
+    });
 
-        rerender(<ChevronIcon open />);
+    it('rotates the same icon for the open state', () => {
+        const { container } = render(<ChevronIcon open />);
 
-        expect(icon.style.transform).toBe('rotate(180deg)');
+        expect(container.querySelector('svg')).toHaveStyle({ transform: 'rotate(180deg)' });
     });
 });

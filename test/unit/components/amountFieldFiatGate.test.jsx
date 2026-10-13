@@ -123,16 +123,45 @@ describe('AmountField input contract', () => {
         expect(u.getByRole('textbox', { name: 'Amount (BTC)' })).toHaveValue('2');
     });
 
-    it('normalizes commas and spaces from pasted amounts', () => {
+    it.each([
+        ['grouped amount', '1 234,567.89', {}, '1234567.89'],
+        ['trailing ticker', '0.5 BTC', {}, '0.5'],
+        ['fiat sign', '$1,234.56', {
+            amountInputMode: 'fiat',
+            fiatAmount: '',
+            fiatRate: RATE,
+        }, '1234.56'],
+    ])('normalizes a pasted %s', (_label, pasted, props, expected) => {
         const onAmountFieldChange = vi.fn();
-        const u = mount({ amount: '', onAmountFieldChange });
-        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+        const u = mount({ amount: '', onAmountFieldChange, ...props });
+        const input = u.getByRole('textbox');
 
         fireEvent.change(input, {
-            target: { value: '1 234,567.89', selectionStart: 12 },
+            target: { value: pasted, selectionStart: pasted.length },
         });
 
-        expect(onAmountFieldChange).toHaveBeenCalledWith('1234567.89', 10);
+        expect(onAmountFieldChange).toHaveBeenCalledWith(expected, expected.length);
+    });
+
+    it.each([
+        ['malformed spaced grouping', '1 23', {}],
+        ['another ticker', '0.5 ETH', {}],
+        ['fiat sign in coin mode', '$10', {}],
+        ['wrong fiat sign', '€10', {
+            amountInputMode: 'fiat',
+            fiatAmount: '',
+            fiatRate: RATE,
+        }],
+    ])('refuses a pasted %s with a plain message', (_label, pasted, props) => {
+        const onAmountFieldChange = vi.fn();
+        const u = mount({ amount: '', onAmountFieldChange, ...props });
+
+        fireEvent.change(u.getByRole('textbox'), {
+            target: { value: pasted, selectionStart: pasted.length },
+        });
+
+        expect(onAmountFieldChange).not.toHaveBeenCalled();
+        expect(u.getByRole('alert')).toHaveTextContent('Enter a valid decimal amount');
     });
 
     it.each([

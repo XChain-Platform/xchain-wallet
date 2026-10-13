@@ -9,17 +9,19 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import {
     DEMO_EXIT_MESSAGE,
     DemoExitConfirm,
 } from '../../../packages/core/src/shared/components/DemoExitConfirm.jsx';
 
-function mount(props = {}) {
+afterEach(cleanup);
+
+function setup(props = {}) {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    const view = render(
+    render(
         <DemoExitConfirm
             busy={false}
             error={null}
@@ -28,63 +30,57 @@ function mount(props = {}) {
             {...props}
         />,
     );
-    return { onConfirm, onCancel, ...view };
+    return { onConfirm, onCancel };
 }
 
-afterEach(() => cleanup());
-
 describe('DemoExitConfirm', () => {
-    it('renders the destructive demo-exit contract', () => {
-        mount();
+    it('renders the shared destructive warning as an accessible danger dialog', () => {
+        setup();
 
-        const dialog = screen.getByRole('dialog', {
-            name: 'Exit demo and delete its data?',
-        });
-        expect(dialog).toHaveTextContent(DEMO_EXIT_MESSAGE);
-        expect(screen.getByRole('button', { name: 'Exit demo & wipe' }).className)
+        const dialog = screen.getByRole('dialog', { name: 'Exit demo and delete its data?' });
+        expect(dialog).toHaveAccessibleDescription(DEMO_EXIT_MESSAGE);
+        expect(dialog).toHaveTextContent('sample accounts, addresses, balances, and history');
+        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).className)
             .toMatch(/danger/);
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
     });
 
-    it('renders a caller-specific deletion warning instead of the default', () => {
-        const message = 'This deletes every wallet saved on this device.';
-        mount({ message });
-
-        expect(screen.getByRole('dialog')).toHaveTextContent(message);
-        expect(screen.getByRole('dialog')).not.toHaveTextContent(DEMO_EXIT_MESSAGE);
-    });
-
-    it('confirms the exit without cancelling it', () => {
-        const { onConfirm, onCancel } = mount();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
-
-        expect(onConfirm).toHaveBeenCalledTimes(1);
-        expect(onCancel).not.toHaveBeenCalled();
-    });
-
-    it('cancels without confirming from the cancel button', () => {
-        const { onConfirm, onCancel } = mount();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-        expect(onCancel).toHaveBeenCalledTimes(1);
-        expect(onConfirm).not.toHaveBeenCalled();
-    });
-
-    it('shows failures and prevents every exit while busy', () => {
-        const { onConfirm, onCancel } = mount({ busy: true, error: 'Wipe failed' });
+    it('delegates confirm and cancel actions to their respective callbacks', () => {
+        const { onConfirm, onCancel } = setup();
         const dialog = screen.getByRole('dialog');
 
-        expect(dialog).toHaveAttribute('aria-busy', 'true');
-        expect(screen.getByRole('alert')).toHaveTextContent('Wipe failed');
-        expect(screen.getByRole('button', { name: 'Exit demo & wipe' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+        expect(onCancel).not.toHaveBeenCalled();
 
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(onCancel).toHaveBeenCalledTimes(1);
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('locks every exit while busy and displays the failure reason', () => {
+        const { onConfirm, onCancel } = setup({ busy: true, error: 'Could not clear local data' });
+        const dialog = screen.getByRole('dialog');
+        const confirm = within(dialog).getByRole('button', { name: 'Exit demo & wipe' });
+        const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+
+        expect(dialog).toHaveAttribute('aria-busy', 'true');
+        expect(within(dialog).getByRole('alert')).toHaveTextContent('Could not clear local data');
+        expect(confirm).toBeDisabled();
+        expect(cancel).toBeDisabled();
+
+        fireEvent.click(confirm);
+        fireEvent.click(cancel);
         fireEvent.click(dialog);
         fireEvent.keyDown(window, { key: 'Escape' });
-
         expect(onConfirm).not.toHaveBeenCalled();
         expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('uses a caller-specific warning in place of the default message', () => {
+        setup({ message: 'Delete every wallet saved on this device?' });
+
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toHaveAccessibleDescription('Delete every wallet saved on this device?');
+        expect(dialog).not.toHaveTextContent(DEMO_EXIT_MESSAGE);
     });
 });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Component } from 'react';
-import { Button, FormPage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, StatusMessage } from '@xchain-wallet/core/ui';
 import styles from './RouteErrorBoundary.module.css';
 
 /**
@@ -53,6 +53,14 @@ export class RouteErrorBoundary extends Component {
 
     render() {
         if (!this.state.failed) return this.props.children;
+
+        if (this.props.variant === 'compact') {
+            return (
+                <StatusMessage variant="error" recovery={{ label: 'Retry', onAction: this.retry }}>
+                    Could not load this section.
+                </StatusMessage>
+            );
+        }
 
         const actions = (
             <>

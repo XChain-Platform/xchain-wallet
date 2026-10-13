@@ -79,7 +79,7 @@ export function ExampleSectionedFormScreen() {
                     </label>
                 </FormSection>
                 <FormSection title="Description">
-                    <Textarea label="Description" rows={2} placeholder="Optional, shown on explorers" />
+                    <Textarea label="Description" optional rows={2} placeholder="Shown on explorers" />
                 </FormSection>
             </FormPage>
         </Screen>
