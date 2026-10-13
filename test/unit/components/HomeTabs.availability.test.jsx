@@ -38,6 +38,7 @@ vi.mock('@xchain-wallet/core/flows', () => ({
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
 
 const chainRegistry = {
     byCoin: () => [],
@@ -49,22 +50,57 @@ const chainRegistry = {
 
 function mount(walletId, overrides = {}) {
     return render(
-        <HomeTabs
-            chainRegistry={chainRegistry}
-            balances={{}}
-            walletId={walletId}
-            networkFilter="all"
-            coinFamilies={[]}
-            onNetworkFilterChange={() => {}}
-            onTokenQueryChange={() => {}}
-            {...overrides}
-        />,
+        <TablistKeyboard>
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{}}
+                walletId={walletId}
+                networkFilter="all"
+                coinFamilies={[]}
+                onNetworkFilterChange={() => {}}
+                onTokenQueryChange={() => {}}
+                {...overrides}
+            />
+        </TablistKeyboard>,
     );
+}
+
+function TablistKeyboard({ children }) {
+    useTablistKeys();
+    return children;
 }
 
 afterEach(() => cleanup());
 
 describe('HomeTabs empty states', () => {
+    it('wires the selected wallet tab to the only visible panel', () => {
+        mount('real-wallet');
+
+        const coins = screen.getByRole('tab', { name: 'Coins' });
+        const nfts = screen.getByRole('tab', { name: 'NFTs' });
+        const panel = screen.getByRole('tabpanel', { name: 'Coins' });
+        expect(coins).toHaveAttribute('aria-selected', 'true');
+        expect(coins).toHaveAttribute('tabindex', '0');
+        expect(coins).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', coins.id);
+        expect(nfts).toHaveAttribute('tabindex', '-1');
+
+        coins.focus();
+        fireEvent.keyDown(coins, { key: 'ArrowRight' });
+        const tokens = screen.getByRole('tab', { name: 'Tokens' });
+        expect(document.activeElement).toBe(tokens);
+        expect(tokens).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tabpanel', { name: 'Tokens' })).toBe(panel);
+
+        fireEvent.click(nfts);
+
+        expect(screen.getByRole('tabpanel', { name: 'NFTs' })).toBe(panel);
+        expect(panel).toHaveAttribute('aria-labelledby', nfts.id);
+        expect(nfts).toHaveAttribute('tabindex', '0');
+        expect(coins).toHaveAttribute('tabindex', '-1');
+        expect(screen.queryByText('Fund your wallet')).toBeNull();
+    });
+
     it('shows one actionable first-funding state for an empty wallet', () => {
         const onReceive = vi.fn();
         const onBuy = vi.fn();

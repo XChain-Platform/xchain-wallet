@@ -105,6 +105,7 @@ export function TokenDetail({
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const variant = screenVariantFor(shell);
+    const tabsId = useId();
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
@@ -661,9 +662,12 @@ export function TokenDetail({
                             {tabs.map((t) => (
                                 <button
                                     key={t.id}
+                                    id={`${tabsId}-tab-${t.id}`}
                                     type="button"
                                     role="tab"
                                     aria-selected={activeTab === t.id ? 'true' : 'false'}
+                                    aria-controls={`${tabsId}-panel`}
+                                    tabIndex={activeTab === t.id ? 0 : -1}
                                     className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
                                     onClick={() => setActiveTab(t.id)}
                                 >
@@ -672,7 +676,12 @@ export function TokenDetail({
                             ))}
                         </div>
 
-                        <div className={styles.tabPanel} role="tabpanel">
+                        <div
+                            id={`${tabsId}-panel`}
+                            className={styles.tabPanel}
+                            role="tabpanel"
+                            aria-labelledby={`${tabsId}-tab-${activeTab}`}
+                        >
                             {activeTab === 'details' ? (
                                 <div className={styles.infoCard}>
                                     <DetailsPanel
@@ -867,6 +876,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
 const NO_PRICE_HISTORY = 'No price history yet';
 
 function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency }) {
+    const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
@@ -931,24 +941,33 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                     <StatCell label="Market cap" value={marketCapCell} />
                     <StatCell label="24h" value={pct24h} tone={pctTone24h} />
                 </section>
-                {sparkline ? (
-                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                        <Sparkline series={sparkline} height={40} />
-                    </div>
-                ) : !hint ? (
-                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
-                ) : null}
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
                 {sparkline || (showSparkline && !hint) ? (
                     <>
+                        <div
+                            id={`${tabsId}-panel`}
+                            role="tabpanel"
+                            aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                        >
+                            {sparkline ? (
+                                <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                    <Sparkline series={sparkline} height={40} />
+                                </div>
+                            ) : (
+                                <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                            )}
+                        </div>
                         <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                             {CHART_RANGES.map((r) => (
                                 <button
                                     key={r.id}
+                                    id={`${tabsId}-tab-${r.id}`}
                                     type="button"
                                     role="tab"
                                     aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                    aria-controls={`${tabsId}-panel`}
+                                    tabIndex={r.id === rangeId ? 0 : -1}
                                     className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
                                     onClick={() => setRangeId(r.id)}
                                 >
@@ -957,6 +976,8 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                             ))}
                         </div>
                     </>
+                ) : !hint ? (
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
                 ) : null}
                 {hint ? <p className={styles.muted}>{hint}</p> : null}
             </>
@@ -1016,8 +1037,14 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <StatCell label="24h" value={pct24h} tone={pctTone24h} />
             </section>
             {sparkline ? (
-                <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                    <Sparkline series={sparkline} height={40} />
+                <div
+                    id={`${tabsId}-panel`}
+                    role="tabpanel"
+                    aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                >
+                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                        <Sparkline series={sparkline} height={40} />
+                    </div>
                 </div>
             ) : !hint ? (
                 <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
@@ -1027,9 +1054,12 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                     {CHART_RANGES.map((r) => (
                         <button
                             key={r.id}
+                            id={`${tabsId}-tab-${r.id}`}
                             type="button"
                             role="tab"
                             aria-selected={r.id === rangeId ? 'true' : 'false'}
+                            aria-controls={`${tabsId}-panel`}
+                            tabIndex={r.id === rangeId ? 0 : -1}
                             className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
                             onClick={() => setRangeId(r.id)}
                         >
@@ -1278,6 +1308,7 @@ function DnsBlock({ dns }) {
 // About tab so a user can browse the artwork without being asked to
 // also read prose.
 function MediaPanel({ isNative, assetInfo, loading }) {
+    const tabsId = useId();
     // Only large + hires images count toward the Image surface (icon
     // and standard buckets render in the page header instead). We
     // derive the buckets unconditionally so the React hook below can
@@ -1311,6 +1342,9 @@ function MediaPanel({ isNative, assetInfo, loading }) {
             setActiveSubtab(subtabs[0].id);
         }
     }, [subtabs, activeSubtab]);
+    const selectedSubtab = subtabs.some((t) => t.id === activeSubtab)
+        ? activeSubtab
+        : subtabs[0]?.id;
 
     if (isNative) {
         return (
@@ -1356,18 +1390,25 @@ function MediaPanel({ isNative, assetInfo, loading }) {
                 {subtabs.map((t) => (
                     <button
                         key={t.id}
+                        id={`${tabsId}-tab-${t.id}`}
                         type="button"
                         role="tab"
-                        aria-selected={activeSubtab === t.id ? 'true' : 'false'}
-                        className={`${styles.subtab} ${activeSubtab === t.id ? styles.subtabActive : ''}`}
+                        aria-selected={selectedSubtab === t.id ? 'true' : 'false'}
+                        aria-controls={`${tabsId}-panel`}
+                        tabIndex={selectedSubtab === t.id ? 0 : -1}
+                        className={`${styles.subtab} ${selectedSubtab === t.id ? styles.subtabActive : ''}`}
                         onClick={() => setActiveSubtab(t.id)}
                     >
                         {t.label}
                     </button>
                 ))}
             </div>
-            <div role="tabpanel">
-                <MediaSubpanel kind={activeSubtab} images={images} audio={audio} video={video} files={files} />
+            <div
+                id={`${tabsId}-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${selectedSubtab}`}
+            >
+                <MediaSubpanel kind={selectedSubtab} images={images} audio={audio} video={video} files={files} />
             </div>
         </div>
     );

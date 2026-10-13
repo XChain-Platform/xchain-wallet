@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -66,6 +66,7 @@ import receivePickerStyles from './TokenPicker.module.css';
 export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const tabsId = useId();
     // Demo wallets get sample feeds so the trading surface is fully
     // populated without live liquidity. Real wallets show live data and
     // the panels' own empty states, never fabricated prices/trades.
@@ -255,9 +256,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     return (
                         <button
                             key={opt.id}
+                            id={`${tabsId}-tab-${opt.id}`}
                             type="button"
                             role="tab"
                             aria-selected={active}
+                            aria-controls={`${tabsId}-panel`}
+                            tabIndex={active ? 0 : -1}
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
                             onClick={() => setTab(opt.id)}
@@ -268,47 +272,53 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 })}
             </div>
 
-            {tab === 'book' ? (
-                <OrderbookPanel
-                    key={marketKey}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                    demo={demo}
-                    onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
-                />
-            ) : null}
-            {tab === 'trades' ? (
-                <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
-            ) : null}
-            {tab === 'place' ? (
-                <PlaceOrderPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                    prefillPrice={prefillPrice}
-                />
-            ) : null}
-            {tab === 'orders' ? (
-                <OpenOrdersPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                />
-            ) : null}
-            {tab === 'history' ? (
-                <TradeHistoryPanel
-                    key={marketKey}
-                    walletId={walletId}
-                    chainId={chainId}
-                    tick1={tick1}
-                    tick2={tick2}
-                />
-            ) : null}
+            <div
+                id={`${tabsId}-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${tab}`}
+            >
+                {tab === 'book' ? (
+                    <OrderbookPanel
+                        key={marketKey}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                        demo={demo}
+                        onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
+                    />
+                ) : null}
+                {tab === 'trades' ? (
+                    <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                ) : null}
+                {tab === 'place' ? (
+                    <PlaceOrderPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                        prefillPrice={prefillPrice}
+                    />
+                ) : null}
+                {tab === 'orders' ? (
+                    <OpenOrdersPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                    />
+                ) : null}
+                {tab === 'history' ? (
+                    <TradeHistoryPanel
+                        key={marketKey}
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick1={tick1}
+                        tick2={tick2}
+                    />
+                ) : null}
+            </div>
         </>,
     );
 }

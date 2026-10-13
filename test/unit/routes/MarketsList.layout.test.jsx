@@ -138,10 +138,20 @@ describe('MarketsList narrow layout', () => {
 
         await screen.findByText('AAA');
         expect(screen.queryByText('FFF')).toBeNull();
+        const popular = screen.getByRole('tab', { name: 'Popular' });
         const all = screen.getByRole('tab', { name: 'All' });
+        const panel = screen.getByRole('tabpanel', { name: 'Popular' });
+        expect(popular).toHaveAttribute('tabindex', '0');
+        expect(popular).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', popular.id);
+        expect(all).toHaveAttribute('tabindex', '-1');
         expect(all).toHaveAttribute('aria-selected', 'false');
         fireEvent.click(all);
         expect(all).toHaveAttribute('aria-selected', 'true');
+        expect(all).toHaveAttribute('tabindex', '0');
+        expect(popular).toHaveAttribute('tabindex', '-1');
+        expect(screen.getByRole('tabpanel', { name: 'All' })).toBe(panel);
+        expect(panel).toHaveAttribute('aria-labelledby', all.id);
         expect(await screen.findByText('FFF')).toBeInTheDocument();
     });
 
