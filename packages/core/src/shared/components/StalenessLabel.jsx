@@ -19,12 +19,13 @@
 // `lastSyncedAt = null` when they have no fetch history yet, and the
 // component renders nothing rather than misleading copy.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { formatElapsedTime, formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './StalenessLabel.module.css';
 
 const TICK_MS = 30_000;
+const EXACT_VISIBLE_MS = 2_500;
 
 /**
  * @param {object} props
@@ -34,6 +35,8 @@ const TICK_MS = 30_000;
  */
 export function StalenessLabel({ lastSyncedAt, warnAfterMs, className }) {
     const [, setTick] = useState(0);
+    const [showExact, setShowExact] = useState(false);
+    const revealTimer = useRef(null);
     const online = useOnlineStatus();
 
     useEffect(() => {
@@ -42,20 +45,39 @@ export function StalenessLabel({ lastSyncedAt, warnAfterMs, className }) {
         return () => clearInterval(id);
     }, [lastSyncedAt, online]);
 
+    useEffect(() => () => clearTimeout(revealTimer.current), []);
+
     if (lastSyncedAt === null || lastSyncedAt === undefined) return null;
 
     const diffMs = Math.max(0, Date.now() - lastSyncedAt);
     const stale = !online || (typeof warnAfterMs === 'number' && diffMs >= warnAfterMs);
     const text = online ? `Updated ${formatAgo(diffMs)}` : 'Offline, showing saved data';
+    const exact = formatLocalDateTime(lastSyncedAt);
+    const visibleText = showExact && exact ? `Last updated ${exact}` : text;
+
+    const revealForTouch = (event) => {
+        if (event.pointerType === 'mouse') return;
+        clearTimeout(revealTimer.current);
+        setShowExact(true);
+        revealTimer.current = setTimeout(() => setShowExact(false), EXACT_VISIBLE_MS);
+    };
 
     return (
         <span
             className={`${styles.label} ${stale ? styles.stale : ''} ${className || ''}`}
             role="status"
             aria-live="off"
-            title={formatLocalDateTime(lastSyncedAt) || undefined}
+            aria-label={exact ? `${text}. Last synced: ${exact}` : text}
+            title={exact || undefined}
+            tabIndex={0}
+            onFocus={() => setShowExact(true)}
+            onBlur={() => setShowExact(false)}
+            onKeyDown={(event) => {
+                if (event.key === 'Escape') event.currentTarget.blur();
+            }}
+            onPointerUp={revealForTouch}
         >
-            {text}
+            {visibleText}
         </span>
     );
 }

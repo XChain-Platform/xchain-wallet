@@ -44,17 +44,16 @@ export function BridgeOriginTick({ tick, localCoin, className }) {
     if (!origin) return <>{label}</>;
     return (
         <span className={className}>
-            {label}
+            <span>{label}</span>
             {' '}
             <span
                 style={badgeStyle}
-                // The wire name is what the explorer, the indexer and any
-                // support conversation use, so it stays reachable on hover
-                // rather than being hidden behind the friendlier rendering.
                 title={t('bridgeOrigin.onChainName', { tick })}
             >
                 {t('bridgeOrigin.from', { origin: coinDisplay(origin) })}
             </span>
+            {' '}
+            <span>{t('bridgeOrigin.onChainName', { tick })}</span>
         </span>
     );
 }

@@ -408,7 +408,12 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         {balancesHidden
                             ? '•••••'
                             : row.unavailable === 'all'
-                                ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
+                                ? (
+                                    <span className={styles.unavailable}>
+                                        <span>Unavailable</span>
+                                        {row.unavailableReason ? `: ${row.unavailableReason}` : ''}
+                                    </span>
+                                )
                                 : (
                                     <FitAmount title={quantityLabel}>
                                         {quantityLabel}
@@ -443,9 +448,16 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         {balancesHidden
                             ? '•••'
                             : row.unavailable === 'all'
-                                ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
+                                ? (
+                                    <span>Balance couldn&apos;t be loaded</span>
+                                )
                                 : row.unavailable === 'partial'
-                                    ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
+                                    ? (
+                                        <>
+                                            <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>
+                                            {row.unavailableReason ? `: ${row.unavailableReason}` : ''}
+                                        </>
+                                    )
                                     : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
                     </div>
                 </div>

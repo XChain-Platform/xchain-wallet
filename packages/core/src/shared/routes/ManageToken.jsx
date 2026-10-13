@@ -174,6 +174,11 @@ export function ManageToken({
         return () => { cancelled = true; };
     }, [chainId, tick, messaging]);
     const sleepState = flowsLib.interpretSleep(sleepRow ? sleepRow.resumeBlock : null, sleepHeight);
+    const sleepLabel = sleepState.indefinite
+        ? 'Paused indefinitely'
+        : sleepState.resumeBlock
+            ? `Paused until block ${sleepState.resumeBlock}`
+            : 'Paused';
     const maxSupply = assetInfo?.maxSupply ?? null;
     const description = assetInfo?.description || null;
     const owner = assetInfo?.creator || null;
@@ -583,8 +588,8 @@ export function ManageToken({
                         </span>
                     )}
                     {sleepState.paused ? (
-                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`} title={sleepState.indefinite ? 'Paused indefinitely' : (sleepState.resumeBlock ? `Paused until block ${sleepState.resumeBlock}` : 'Paused')}>
-                            <Icon.LockIcon />Paused
+                        <span className={`${styles.lockBadge} ${styles.lockBadgeLocked}`}>
+                            <Icon.LockIcon />{sleepLabel}
                         </span>
                     ) : null}
                     <div className={styles.heroIconWrap}>
@@ -746,17 +751,15 @@ export function ManageToken({
                             key={a.id}
                             type="button"
                             className={`${styles.manageBtn} ${a.danger ? styles.manageBtnDanger : ''}`}
-                            // A row the protocol has frozen stays on screen and
-                            // says why on hover, instead of being filtered out
-                            // like an action this wallet simply cannot sign.
                             disabled={!!a.disabled}
-                            title={a.disabled ? a.disabledReason : undefined}
                             onClick={a.onSelect}
                         >
                             <span className={styles.manageIcon} aria-hidden="true">
                                 <a.Icon />
                             </span>
-                            <span className={styles.manageLabel}>{a.label}</span>
+                            <span className={styles.manageLabel}>
+                                {a.label}{a.disabledReason ? `: ${a.disabledReason}` : ''}
+                            </span>
                         </button>
                     ))}
                     {overflowActions.length > 0 ? (
@@ -782,13 +785,12 @@ export function ManageToken({
                                             role="menuitem"
                                             className={`${styles.manageMoreItem} ${a.danger ? styles.manageMoreItemDanger : ''}`}
                                             disabled={!!a.disabled}
-                                            title={a.disabled ? a.disabledReason : undefined}
                                             onClick={() => { setMoreOpen(false); a.onSelect(); }}
                                         >
                                             <span className={styles.manageMoreItemIcon} aria-hidden="true">
                                                 <a.Icon />
                                             </span>
-                                            <span>{a.label}</span>
+                                            <span>{a.label}{a.disabledReason ? `: ${a.disabledReason}` : ''}</span>
                                         </button>
                                     ))}
                                 </div>
