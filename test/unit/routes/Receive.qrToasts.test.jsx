@@ -12,7 +12,7 @@
 // the log and the toast says what failed in the user's terms.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -54,7 +54,7 @@ const ADDRESS = {
 const MOBILE_ADDRESS = 'bcrt1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 const BROWSER_TEXT = "Failed to execute 'write' on 'Clipboard': Document is not focused.";
 
-function renderReceive(overrides = {}) {
+function renderReceive(overrides = {}, props = {}) {
     const messaging = {
         getSettings: async () => REGTEST_SETTINGS,
         getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS] }),
@@ -63,7 +63,7 @@ function renderReceive(overrides = {}) {
     };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <Receive walletId="w1" accountId="acct-1" />
+            <Receive walletId="w1" accountId="acct-1" {...props} />
         </MessagingProvider>,
     );
 }
@@ -415,6 +415,163 @@ describe('Receive QR copy and share toasts', () => {
 });
 
 describe('Receive address handling', () => {
+    it('ignores a generated address that resolves after the wallet changes', async () => {
+        let resolveGeneration;
+        const oldGeneration = new Promise((resolve) => { resolveGeneration = resolve; });
+        const nextAddress = {
+            ...ADDRESS,
+            id: 'b1',
+            address: 'bcrt1qnextwallet',
+            label: 'Next wallet',
+        };
+        const messaging = {
+            getSettings: async () => REGTEST_SETTINGS,
+            getAddressesByChain: async (walletId) => ({
+                'bitcoin-regtest': [walletId === 'w1' ? ADDRESS : nextAddress],
+            }),
+            getNewestAddress: async (walletId) => (walletId === 'w1' ? ADDRESS : nextAddress),
+            generateReceiveAddress: vi.fn(() => oldGeneration),
+        };
+        const view = renderReceive(messaging);
+
+        fireEvent.click(await screen.findByRole('button', { name: /Generate new address/ }));
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Receive walletId="w2" accountId="acct-2" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByDisplayValue(nextAddress.address)).toBeInTheDocument();
+        await act(async () => {
+            resolveGeneration({
+                ...ADDRESS,
+                id: 'stale-generated',
+                address: 'bcrt1qstalewallet',
+            });
+        });
+
+        expect(screen.getByDisplayValue(nextAddress.address)).toBeInTheDocument();
+        expect(screen.queryByDisplayValue('bcrt1qstalewallet')).toBeNull();
+        expect(qrToDataURL.mock.calls.some(([value]) => value.includes('bcrt1qstalewallet')))
+            .toBe(false);
+    });
+
+    it('updates the QR token when Receive is reused for another asset', async () => {
+        const messaging = {
+            getSettings: async () => REGTEST_SETTINGS,
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS] }),
+            getNewestAddress: async () => ADDRESS,
+        };
+        const view = renderReceive(messaging, {
+            prefill: { chainId: 'bitcoin-regtest', tick: 'XCP' },
+        });
+
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('tick=XCP'),
+        )).toBe(true));
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Receive
+                    walletId="w1"
+                    accountId="acct-1"
+                    prefill={{ chainId: 'bitcoin-regtest', tick: 'PEPE' }}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('button', { name: /Token:.*PEPE/i })).toBeInTheDocument();
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('tick=PEPE'),
+        )).toBe(true));
+        expect(qrToDataURL.mock.calls.at(-1)[0]).toContain('tick=PEPE');
+    });
+
+    it('keeps concurrent label saves bound to the address that launched them', async () => {
+        let resolveFirstSave;
+        const firstSave = new Promise((resolve) => { resolveFirstSave = resolve; });
+        const generated = {
+            ...ADDRESS,
+            id: 'a2',
+            address: 'bcrt1qgenerated',
+            label: '',
+            derivationPath: "m/84'/0'/0'/0/1",
+        };
+        const setAddressLabel = vi.fn()
+            .mockImplementationOnce(() => firstSave)
+            .mockResolvedValue({ ok: true });
+        renderReceive({
+            setAddressLabel,
+            generateReceiveAddress: vi.fn(async () => generated),
+        });
+
+        const label = await screen.findByRole('textbox', { name: 'Address label' });
+        fireEvent.change(label, { target: { value: 'First address' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save label' }));
+        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a1', 'First address'));
+
+        fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        expect(await screen.findByDisplayValue(generated.address)).toBeInTheDocument();
+        const generatedLabel = screen.getByRole('textbox', { name: 'Address label' });
+        fireEvent.change(generatedLabel, { target: { value: 'Second address' } });
+        const saveGenerated = screen.getByRole('button', { name: 'Save label' });
+        expect(saveGenerated).not.toBeDisabled();
+        fireEvent.click(saveGenerated);
+
+        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith('a2', 'Second address'));
+        await act(async () => { resolveFirstSave({ ok: true }); });
+        expect(screen.getByDisplayValue(generated.address)).toBeInTheDocument();
+        expect(generatedLabel).toHaveValue('Second address');
+    });
+
+    it('handles an invalid multisig address without an unhandled rejection', async () => {
+        renderReceive({
+            listMultisigReceiveAddresses: async () => [{
+                multisigConfigId: 'bad-config',
+                address: '',
+                schemeLabel: '2-of-3',
+                threshold: 2,
+                cosignerCount: 3,
+                cosignerNames: [],
+                scheme: 'p2wsh-multisig',
+            }],
+        });
+
+        expect(await screen.findByRole('group', { name: 'Multisig receive address' }))
+            .toBeInTheDocument();
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByText('Rendering multisig QR…')).toBeInTheDocument();
+    });
+
+    it('ignores hardware verification that completes for a previous address', async () => {
+        let resolveVerification;
+        const verification = new Promise((resolve) => { resolveVerification = resolve; });
+        const hardwareAddress = {
+            ...ADDRESS,
+            source: 'ledger',
+            signerId: 'ledger-1',
+        };
+        const nextHardwareAddress = {
+            ...hardwareAddress,
+            id: 'ledger-address-2',
+            address: 'bcrt1qledgernext',
+            derivationPath: "m/84'/0'/0'/0/1",
+        };
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [hardwareAddress] }),
+            getNewestAddress: async () => hardwareAddress,
+            verifyReceiveAddress: vi.fn(() => verification),
+            generateReceiveAddress: vi.fn(async () => nextHardwareAddress),
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Verify on your Ledger' }));
+        fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        expect(await screen.findByDisplayValue(nextHardwareAddress.address)).toBeInTheDocument();
+
+        await act(async () => { resolveVerification({ confirmed: true }); });
+        expect(screen.queryByText(/Confirmed on your Ledger/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Verify on your Ledger' })).toBeInTheDocument();
+    });
+
     it('switches supported address types, generates that type, shows its label, and copies its request', async () => {
         const legacy = {
             id: 'a2',
