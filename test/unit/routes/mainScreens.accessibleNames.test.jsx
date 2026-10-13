@@ -4,15 +4,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { computeAccessibleName } from 'dom-accessibility-api';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import { AlertsRoute } from '../../../packages/core/src/shared/routes/AlertsRoute.jsx';
+import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -72,6 +76,7 @@ describe('main screen rendering', () => {
     });
 
     it('names every button and resolves visible copy on History', async () => {
+        const onReceive = vi.fn();
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: ADDRESS }] }),
             getAddressHistory: vi.fn().mockResolvedValue([]),
@@ -84,11 +89,80 @@ describe('main screen rendering', () => {
         };
         const view = render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <History walletId="wallet" accountId="account" onBack={() => {}} />
+                <History
+                    walletId="wallet"
+                    accountId="account"
+                    onBack={() => {}}
+                    onReceive={onReceive}
+                />
             </MessagingProvider>,
         );
 
         await screen.findByText('No activity yet');
+        expect(screen.getByText('Activity appears here after you send or receive on a selected chain.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Start receiving' }));
+        expect(onReceive).toHaveBeenCalledOnce();
+        expectEveryButtonNamed(view.container);
+        expectVisibleCopyResolved(view.container);
+    });
+
+    it('offers the first action from an empty Markets screen', async () => {
+        const onChangeAsset = vi.fn();
+        const messaging = {
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="wallet"
+                    selectedAsset={null}
+                    onChangeAsset={onChangeAsset}
+                    onOpenMarket={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByText('Choose a coin or token to view its markets.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Choose an asset' }));
+        expect(onChangeAsset).toHaveBeenCalledOnce();
+        expectEveryButtonNamed(view.container);
+        expectVisibleCopyResolved(view.container);
+    });
+
+    it('offers the first action from an empty Contacts screen', async () => {
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <ContactsList walletId="wallet" onBack={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Saved contacts label addresses across the inbox and history.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        expect(screen.getByRole('heading', { name: 'New contact' })).toBeTruthy();
+        expectEveryButtonNamed(view.container);
+        expectVisibleCopyResolved(view.container);
+    });
+
+    it('explains empty Alerts and opens notification settings', () => {
+        const view = render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <AlertsRoute
+                    onBack={() => {}}
+                    walletId="wallet"
+                    alerts={[]}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByText('Wallet activity, security, and price changes appear here.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Manage notifications' }));
+        expect(screen.getByRole('heading', { name: 'Notifications' })).toBeTruthy();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);
     });

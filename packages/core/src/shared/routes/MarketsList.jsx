@@ -412,6 +412,9 @@ export function MarketsList({
                             <EmptyState
                                 title="No asset selected"
                                 body="Choose a coin or token to view its markets."
+                                actionLabel="Choose an asset"
+                                onAction={onChangeAsset}
+                                actionIcon={<Icon.MarketIcon />}
                             />
                         ) : marketsLoading && !hasCachedMarkets ? (
                             <div role="status" aria-label="Loading markets">

@@ -974,6 +974,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <EmptyState
                     title="No contacts yet"
                     body="Saved contacts label addresses across the inbox and history."
+                    actionLabel="Create first contact"
+                    onAction={() => { setActiveId(null); startEdit(null); }}
+                    actionIcon={<Icon.PlusIcon />}
                 />
             ) : filteredContacts.length === 0 ? (
                 <EmptyState
