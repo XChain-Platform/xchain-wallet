@@ -69,4 +69,13 @@ describe('token issuance mobile layout', () => {
         const css = readCss(routeStyles[0]);
         expect(ruleBody(css, '.actions')).toMatch(/flex-wrap:\s*wrap/);
     });
+
+    it('keeps the token item editor inside a 320px viewport', () => {
+        const css = readCss(routeStyles[1]);
+        expect(ruleBody(css, '.picker')).toMatch(/width:\s*100%/);
+        expect(ruleBody(css, '.picker')).toMatch(/box-sizing:\s*border-box/);
+        expect(ruleBody(css, '.tickItem')).toMatch(/flex-wrap:\s*wrap/);
+        expect(ruleBody(css, '.tickItemName')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(css, '.tickItemName')).toMatch(/overflow-wrap:\s*anywhere/);
+    });
 });
