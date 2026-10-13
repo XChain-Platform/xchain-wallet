@@ -21,6 +21,8 @@ import {
     FEE_STRATEGIES,
     REDUCED_MOTION_MODES,
     BACKUP_REMINDER_CADENCES,
+    NUMBER_FORMATS,
+    SMALL_BALANCE_THRESHOLDS,
     WALLET_MODES,
     ADS_DEFAULT_ENABLED,
     CLIPBOARD_AUTO_CLEAR_DEFAULT,
@@ -90,6 +92,8 @@ describe('createDefaultSettings', () => {
         expect(s.walletMode).toBe('full');
         expect(s.activeNetwork).toBe('mainnet');
         expect(s.privacy.clipboardAutoClearSeconds).toBe(CLIPBOARD_AUTO_CLEAR_DEFAULT);
+        expect(s.smallBalanceThreshold).toBe('dust');
+        expect(s.numberFormat).toBe('full');
     });
 
     it('passes validation immediately', () => {
@@ -550,6 +554,18 @@ describe('validateSettings', () => {
         const s = createDefaultSettings();
         const { showHideAffordance, ...without } = s;
         expect(validateSettings(without).ok).toBe(true);
+    });
+
+    it('accepts the display choices and rejects unknown values', () => {
+        const s = createDefaultSettings();
+        for (const smallBalanceThreshold of SMALL_BALANCE_THRESHOLDS) {
+            expect(validateSettings({ ...s, smallBalanceThreshold }).ok).toBe(true);
+        }
+        for (const numberFormat of NUMBER_FORMATS) {
+            expect(validateSettings({ ...s, numberFormat }).ok).toBe(true);
+        }
+        expect(validateSettings({ ...s, smallBalanceThreshold: 'everything' }).ok).toBe(false);
+        expect(validateSettings({ ...s, numberFormat: 'rounded' }).ok).toBe(false);
     });
 
     it('rejects non-boolean autoApproveLocalhost when present', () => {

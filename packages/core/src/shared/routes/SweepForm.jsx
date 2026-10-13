@@ -152,6 +152,7 @@ export function SweepForm({
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    const [destinationPickerOpen, setDestinationPickerOpen] = useState(false);
 
     // Typed-confirmation gate: SWEEP moves everything at once, so it
     // rides the same typed-word rail as DESTROY.
@@ -215,10 +216,10 @@ export function SweepForm({
         setPreviewLoading(true);
         messaging.sweepPreview({ chainId, address })
             .then((p) => { if (!cancelled) { setPreview(p); setPreviewError(null); } })
-            .catch((err) => {
+            .catch(() => {
                 // Preview failure NEVER blocks the sweep; the typed
                 // confirm already covers unlisted holdings.
-                if (!cancelled) setPreviewError(err?.message || 'Preview unavailable.');
+                if (!cancelled) setPreviewError('Preview unavailable.');
             })
             .finally(() => { if (!cancelled) setPreviewLoading(false); });
         return () => { cancelled = true; };
@@ -340,6 +341,12 @@ export function SweepForm({
         && !destFormatError && !destinationIsOwn;
 
     const selectedCount = CATEGORY_META.filter((c) => flags[c.key]).length;
+    const selectedPreviewEmpty = preview != null && selectedCount > 0
+        && CATEGORY_META.filter((c) => flags[c.key]).every((c) => {
+            const category = preview[c.key];
+            return category && !category.error && Array.isArray(category.rows)
+                && category.rows.length === 0;
+        });
 
     useEffect(() => {
         if (stage === 'review') {
@@ -561,7 +568,8 @@ export function SweepForm({
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review sweep'
                 : (migrateLane ? 'Sweep to new wallet' : 'Sweep address')}
@@ -822,6 +830,23 @@ export function SweepForm({
         );
     }
 
+    if (destinationPickerOpen) {
+        return (
+            <OwnAddressPickerScreen
+                variant={variant}
+                title="Destination address"
+                walletId={walletId}
+                chainId={chainId}
+                onPick={(a) => {
+                    setDestination(a.address);
+                    clearFormError();
+                    setDestinationPickerOpen(false);
+                }}
+                onBack={() => setDestinationPickerOpen(false)}
+            />
+        );
+    }
+
     return wrap(
         <FormPage
             label={migrateLane ? 'Sweep to new wallet' : 'Sweep address'}
@@ -895,19 +920,30 @@ export function SweepForm({
                 </StatusMessage>
             )}
 
-            <Input
-                label="Destination address"
-                hint={migrateLane
-                    ? `The matching address in ${migrateTo.name || 'the new wallet'}.`
-                    : 'Where every selected holding (and released escrow) is credited.'}
-                value={destination}
-                onChange={(e) => { setDestination(e.target.value); clearFormError(); }}
-                readOnly={migrateLane}
-                error={destTrimmed && destFormatError ? destFormatError : undefined}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-            />
+            {migrateLane ? (
+                <Input
+                    label="Destination address"
+                    hint={`The matching address in ${migrateTo.name || 'the new wallet'}.`}
+                    value={destination}
+                    onChange={() => {}}
+                    readOnly
+                    error={destTrimmed && destFormatError ? destFormatError : undefined}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                />
+            ) : (
+                <AddressField
+                    label="Destination address"
+                    hint="Where every selected holding (and released escrow) is credited."
+                    icon="addresses"
+                    iconLabel="Choose destination address"
+                    onIconClick={() => setDestinationPickerOpen(true)}
+                    value={destination}
+                    onChange={(e) => { setDestination(e.target.value); clearFormError(); }}
+                    error={destTrimmed && destFormatError ? destFormatError : undefined}
+                />
+            )}
             {thirdPartyDestination ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
@@ -941,8 +977,15 @@ export function SweepForm({
             {previewLoading ? <p className={styles.hint}>Loading preview…</p> : null}
             {previewError ? (
                 <p className={styles.hint}>
-                    Preview unavailable ({previewError}). The sweep still moves
+                    {previewError} The sweep still moves
                     everything in the selected categories.
+                </p>
+            ) : null}
+            {selectedPreviewEmpty ? (
+                <p className={styles.hint}>
+                    Nothing is currently shown in the selected categories. The
+                    preview is indicative, so holdings that arrive before
+                    confirmation are still included.
                 </p>
             ) : null}
             </FormSection>

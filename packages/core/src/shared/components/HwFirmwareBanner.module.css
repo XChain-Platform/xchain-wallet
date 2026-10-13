@@ -44,7 +44,7 @@
     align-self: flex-start;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     text-decoration: none;
     margin-top: var(--xc-space-1);
 }

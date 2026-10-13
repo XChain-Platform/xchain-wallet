@@ -239,7 +239,7 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         });
         // The card element itself, not an ancestor that happens to contain both.
         const cards = Array.from(utils.container.querySelectorAll('div'))
-            .filter((d) => /card/i.test(String(d.className)) && /^#\d+/.test(d.textContent || ''));
+            .filter((d) => /card/i.test(String(d.className)) && /^Market number: #\d+/.test(d.textContent || ''));
         const cancelled = cards.find((d) => /#1268/.test(d.textContent));
         const closed = cards.find((d) => /#1193/.test(d.textContent));
 

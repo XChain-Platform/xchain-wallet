@@ -127,6 +127,7 @@ import { VerifySignatureForm } from '@xchain-wallet/core/shared/routes/VerifySig
 import { PsbtSignForm } from '@xchain-wallet/core/shared/routes/PsbtSignForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
+import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
@@ -135,14 +136,18 @@ import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/Comman
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
@@ -195,7 +200,9 @@ const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 export function App() {
     return (
         <MessagingProvider shell="desktop" messaging={messaging}>
-            <AppInner />
+            <ToastHost>
+                <AppInner />
+            </ToastHost>
         </MessagingProvider>
     );
 }
@@ -246,6 +253,9 @@ function AppInner() {
     );
     const [accountRenameTarget, setAccountRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
+    );
+    const [accountPickerBackTo, setAccountPickerBackTo] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
     );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
     // PC-34: SweepForm context. Free-entry sweeps leave it null (form
@@ -305,6 +315,7 @@ function AppInner() {
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
     // Unread-message count for the active wallet + account, surfaced as a badge
     // on the Messaging nav entries (see useMessagingUnread / msgReadMemory).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
@@ -333,7 +344,9 @@ function AppInner() {
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
-        messaging.getWalletBalances(activeWalletId, activeAccountId)
+        // The balances Home shows, so a coin opened from here matches
+        // Home's figure (a demo wallet's are synthesized, not read).
+        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
             .then((balances) => {
                 if (cancelled) return;
                 setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
@@ -353,6 +366,14 @@ function AppInner() {
     const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
     );
+    const [walletPickerReturnView, setWalletPickerReturnView] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
+    );
+    const openWalletPicker = (returnView = /** @type {'home' | 'settings'} */ ('home')) => {
+        setWalletPickerReturnView(returnView);
+        if (returnView === 'settings') setSettingsInitialSection('this-wallet');
+        setUnlockedView('wallet-picker');
+    };
     useKeyboardShortcuts({
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
         overrides: settings?.keyboard?.bindings,
@@ -369,7 +390,7 @@ function AppInner() {
     // {chainId, actionIndex, type, items} handed from ListDetail's
     // "Fork & edit" button into ListForkForm.
     const [listRef, setListRef] = useState(
-        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, actionIndex: string, origin?: 'shared', directoryChainId?: string } | null} */ (null),
     );
     const [listForkRef, setListForkRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, type: string, items: string[] } | null} */ (null),
@@ -497,6 +518,22 @@ function AppInner() {
     useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => {
+        const bridge = globalThis.xchainWalletWindow;
+        if (!bridge || typeof bridge.onStateChange !== 'function') return undefined;
+        return bridge.onStateChange((change) => {
+            if (change?.kind === 'session') {
+                refresh();
+                return;
+            }
+            if (change?.kind !== 'active-wallet' || status.state !== 'unlocked') return;
+            const walletId = change.walletId;
+            if (typeof walletId !== 'string' || !walletList.some((wallet) => wallet.id === walletId)) return;
+            setActiveWalletId(walletId);
+            writeActiveWallet(walletId);
+        });
+    }, [refresh, status.state, walletList]);
+
+    useEffect(() => {
         if (status.state !== 'unlocked') {
             setActiveWalletId(null);
             setActiveAccountId(null);
@@ -600,8 +637,10 @@ function AppInner() {
     // to it instead of snapping back to the first wallet. Twin of the account
     // handler above, one level up.
     const handleSwitchWallet = (id) => {
+        const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveWalletId(id);
         if (id) writeActiveWallet(id);
+        if (changed) messaging.setActiveWallet(id).catch(() => { /* best-effort sibling-window notice */ });
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
@@ -1021,11 +1060,11 @@ function AppInner() {
                     <ListDetail
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
-                        onBack={() => setUnlockedView('lists')}
+                        onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
-                        onShare={(ref) => { setListRef(ref); setUnlockedView('list-share'); }}
-                        onTransfer={(ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
-                        onRename={(ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
+                        onShare={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-share'); }}
+                        onTransfer={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
+                        onRename={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
                     />
                 );
             }
@@ -1097,8 +1136,17 @@ function AppInner() {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
                         mode="browse"
+                        onOpenList={(chainId, actionIndex) => {
+                            setListRef({
+                                chainId,
+                                actionIndex,
+                                origin: 'shared',
+                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                            });
+                            setUnlockedView('list-detail');
+                        }}
                         onBack={() => setUnlockedView('lists')}
                     />
                 );
@@ -1113,7 +1161,10 @@ function AppInner() {
                             setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
                         }}
-                        onCreateDispenser={() => setUnlockedView('dispenser')}
+                        onCreateDispenser={() => {
+                            setFormReturnView('dispensers-list');
+                            setUnlockedView('dispenser');
+                        }}
                         onBack={() => setUnlockedView(dispensersBackTo || 'home')}
                     />
                 );
@@ -2236,7 +2287,7 @@ function AppInner() {
                             setWalletDetailsId(id);
                             setUnlockedView('wallet-details');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(walletPickerReturnView)}
                     />
                 );
             }
@@ -2256,10 +2307,13 @@ function AppInner() {
                         key={settingsSubpage || 'root'}
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
-                        activeAccount={null}
-                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
+                        onOpenWalletPicker={() => openWalletPicker('settings')}
                         onOpenAccountPicker={
-                            activeWalletId ? () => setUnlockedView('account-picker') : undefined
+                            activeWalletId ? () => {
+                                setAccountPickerBackTo('settings');
+                                setUnlockedView('account-picker');
+                            } : undefined
                         }
                         initialSubpageId={settingsSubpage}
                     />
@@ -2273,10 +2327,11 @@ function AppInner() {
                             setWalletDetailsId(null);
                             setUnlockedView('wallet-picker');
                         }}
-                        onRename={() => {
-                            setWalletRenameTarget({ id: walletDetailsId, name: '' });
+                        onRename={(wallet) => {
+                            setWalletRenameTarget({ id: wallet.id, name: wallet.name });
                             setUnlockedView('wallet-rename');
                         }}
+                        onExited={refresh}
                         onMigrateToBip39={() => {
                             setMigrateLegacyWalletId(walletDetailsId);
                             setUnlockedView('migrate-bip39');
@@ -2291,11 +2346,11 @@ function AppInner() {
                         initialName={walletRenameTarget.name}
                         onBack={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                         onRenamed={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                     />
                 );
@@ -2307,11 +2362,11 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitch={handleSwitchAccount}
                         onAddAccount={() => setUnlockedView('add-account')}
-                        onRenameAccount={(id) => {
-                            setAccountRenameTarget({ id, name: '' });
+                        onRenameAccount={(account) => {
+                            setAccountRenameTarget(account);
                             setUnlockedView('account-rename');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(accountPickerBackTo)}
                     />
                 );
             }
@@ -2319,6 +2374,7 @@ function AppInner() {
                 return (
                     <RenameAccountForm
                         accountId={accountRenameTarget.id}
+                        walletId={activeWalletId}
                         initialName={accountRenameTarget.name}
                         onBack={() => {
                             setAccountRenameTarget(null);
@@ -2335,8 +2391,11 @@ function AppInner() {
                 return (
                     <AddAccountForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
-                        onCreated={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('account-picker')}
+                        onCreated={(account) => {
+                            if (account?.id) handleSwitchAccount(account.id);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -2441,8 +2500,11 @@ function AppInner() {
                     // its Cmd/Ctrl+K palette (`nav-my-tokens`). The one route
                     // with no desktop caller either way is 'market-activity';
                     // giving it one is a product decision, not a rename.
-                    onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
-                    onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                    onOpenWalletPicker={() => openWalletPicker()}
+                    onOpenAccountPicker={activeWalletId ? () => {
+                        setAccountPickerBackTo('home');
+                        setUnlockedView('account-picker');
+                    } : undefined}
                     onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
                     onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
                     onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
@@ -2456,7 +2518,7 @@ function AppInner() {
                     .then(refresh)
                     .catch(() => refresh());
             };
-            const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
+            const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
@@ -2560,6 +2622,7 @@ function AppInner() {
                                         unlocked view via the shared layout header slot. */}
                                     <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                     <QueuedBroadcastBanner walletId={activeWalletId} />
+                                    {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                                 </>
                             ) : null}
                         </>

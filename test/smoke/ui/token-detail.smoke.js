@@ -80,8 +80,11 @@ assert.ok(
 const blSrc = readFileSync(join(components, 'BalanceList.jsx'), 'utf8');
 assert.ok(/onSelectToken\b/.test(blSrc), 'BalanceList accepts onSelectToken');
 assert.ok(/clickable/.test(blSrc), 'BalanceList row has clickable variant');
-assert.ok(/Tag\s*=\s*clickable\s*\?\s*'button'/.test(blSrc),
-    'BalanceList row tag becomes <button> when clickable');
+assert.ok(/ContentTag\s*=\s*clickable\s*\?\s*'button'/.test(blSrc),
+    'BalanceList row primary action becomes <button> when clickable');
+assert.ok(/<button[\s\S]*?onTogglePin\(pinKey, !pinned\)/.test(blSrc)
+    && /<button[\s\S]*?onToggleHide\(pinKey, !hidden\)/.test(blSrc),
+    'BalanceList pin and hide actions use native buttons outside the primary action');
 
 const blCss = readFileSync(join(components, 'BalanceList.module.css'), 'utf8');
 assert.ok(/\.rowClickable\b/.test(blCss),

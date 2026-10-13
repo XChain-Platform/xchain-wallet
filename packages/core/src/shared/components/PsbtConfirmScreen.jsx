@@ -65,6 +65,7 @@ export function psbtRefusalReason({
  * @param {object|null} props.decomposed              decomposePsbt output
  * @param {Set<string>} [props.ownAddresses]
  * @param {string} [props.signingAddress]
+ * @param {string} [props.requestOrigin]         browser-verified requesting site
  * @param {object|null} [props.decodedAction]         { summary } for the action carried inside
  * @param {string|null} [props.decodeError]
  * @param {boolean} [props.spendsOwnInputs]
@@ -81,6 +82,7 @@ export function PsbtConfirmScreen({
     decomposed,
     ownAddresses,
     signingAddress,
+    requestOrigin = '',
     decodedAction = null,
     decodeError = null,
     spendsOwnInputs = false,
@@ -102,6 +104,7 @@ export function PsbtConfirmScreen({
         <ConfirmActionModal
             variant="psbt"
             screenVariant={screenVariant}
+            headline="Sign transaction"
             phase={confirmAction.phase}
             composed={confirmAction.composed}
             report={confirmAction.report}
@@ -116,6 +119,7 @@ export function PsbtConfirmScreen({
             decoded={decodedAction}
             error={confirmAction.error}
             chainLabel={chainLabel}
+            requestOrigin={requestOrigin}
             refusal={refusal}
             psbtPanel={(
                 <PsbtIntentPanel
