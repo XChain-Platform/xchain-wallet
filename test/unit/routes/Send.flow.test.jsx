@@ -359,6 +359,23 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
     });
 
+    it('keeps a checksum typo on the form with the shared address copy', async () => {
+        const messaging = mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.change(toField, {
+            target: { value: 'bc1qtestrecipient00000000000000000000000000' },
+        });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.01' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        await waitFor(() => expect(document.getElementById('send-destination-error')).toHaveTextContent(
+            'This address has a typo. Check it and try again.',
+        ));
+        expect(screen.queryByTestId('confirm-modal')).not.toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('searches contacts and immediately explains a wrong-chain pick', async () => {
         const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
         const messaging = mount({

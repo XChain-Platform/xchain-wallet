@@ -49,7 +49,9 @@ const press = (init) => act(() => {
 describe('KeyboardSection', () => {
     it('lists rebindable rows with Rebind buttons and fixed context rows without', () => {
         return setup().then(() => {
-            expect(screen.getByText(/Select Rebind, then press the new key combination\./)).toBeTruthy();
+            expect(screen.getByText(
+                'Select Rebind, then press the new key combination. Screen-specific shortcuts are fixed and only work on their screen.',
+            )).toBeTruthy();
             expect(screen.queryByText(/Click Rebind/)).toBeNull();
             expect(screen.getByText('Export history')).toBeTruthy();
             expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
