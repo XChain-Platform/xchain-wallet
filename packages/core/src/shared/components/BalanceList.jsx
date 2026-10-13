@@ -140,6 +140,7 @@ export function BalanceList({
                     </button>
                     {hiddenExpanded ? hidden.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;
+                        const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
                         return (
                             <BalanceRowEl
                                 key={`hidden:${key}`}
@@ -147,7 +148,7 @@ export function BalanceList({
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
-                                pinned={false}
+                                pinned={pinned}
                                 onTogglePin={onTogglePin}
                                 hidden
                                 onToggleHide={onToggleHide}
@@ -249,104 +250,107 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
         : undefined;
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
-    const Tag = clickable ? 'button' : 'div';
+    const ContentTag = clickable ? 'button' : 'div';
     return (
-        <Tag
-            className={`${styles.row} ${clickable ? styles.rowClickable : ''} ${pinned ? styles.rowPinned : ''}`}
+        <div
+            className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
-            type={clickable ? 'button' : undefined}
             data-balance-key={pinKey}
-            onClick={handleClick}
-            aria-label={clickable
-                ? `Open ${row.displayName || row.tick} details`
-                : undefined}
         >
-            <div className={styles.iconWrap}>
-                {isNative && chainIconUrl ? (
-                    <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
-                ) : row.imageUrl ? (
-                    <img
-                        src={row.imageUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.iconImg}
-                        onError={(e) => {
-                            // If the published image 404s, fall back to
-                            // the letter chip by hiding the broken img;
-                            // the next render still has imageUrl set, so
-                            // we can't swap to <span>, so just hide.
-                            e.currentTarget.style.display = 'none';
-                        }}
-                    />
-                ) : (
-                    <span
-                        className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 1)}
-                    </span>
-                )}
-                {!isNative && chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={row.chainDisplayName}
-                        className={styles.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={styles.body}>
-                <div className={styles.title}>
-                    <span className={styles.name} title={row.displayName}>{row.displayName}</span>
-                    {multisig ? (
-                        <MultisigBadge
-                            threshold={multisig.threshold}
-                            cosignerCount={multisig.cosignerCount}
-                            scheme={multisig.scheme}
-                            size="sm"
+            <ContentTag
+                className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
+                type={clickable ? 'button' : undefined}
+                onClick={handleClick}
+                aria-label={clickable
+                    ? `Open ${row.displayName || row.tick} details`
+                    : undefined}
+            >
+                <div className={styles.iconWrap}>
+                    {isNative && chainIconUrl ? (
+                        <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
+                    ) : row.imageUrl ? (
+                        <img
+                            src={row.imageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.iconImg}
+                            onError={(e) => {
+                                // If the published image 404s, fall back to
+                                // the letter chip by hiding the broken img;
+                                // the next render still has imageUrl set, so
+                                // we can't swap to <span>, so just hide.
+                                e.currentTarget.style.display = 'none';
+                            }}
+                        />
+                    ) : (
+                        <span
+                            className={styles.iconLetter}
+                            style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
+                            aria-hidden="true"
+                        >
+                            {row.tick.slice(0, 1)}
+                        </span>
+                    )}
+                    {!isNative && chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={row.chainDisplayName}
+                            className={styles.chainOverlay}
                         />
                     ) : null}
-                    {!isNative && verify ? (
-                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
-                    ) : null}
                 </div>
-                <div className={styles.subtitle}>{subtitle}</div>
-            </div>
-            <div className={styles.amounts}>
-                <div className={styles.qty}>
-                    {/* Q-1 residual: an unread balance is not a zero, and a
-                        fiat figure derived from one is not a value. When
-                        nothing answered, say so instead of printing 0; when
-                        only part answered, show the figure but mark it as less
-                        than the whole. The privacy toggle still wins, since it
-                        exists to keep numbers off the screen entirely. */}
-                    {balancesHidden
-                        ? '•••••'
-                        : row.unavailable === 'all'
-                            ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                            : formatAmount(row.quantity, row.divisibility)}
-                </div>
-                {row.escrowed ? (
-                    <div className={styles.fiat} data-testid="balance-escrowed">
-                        {balancesHidden ? '•••' : escrowLine(row)}
+                <div className={styles.body}>
+                    <div className={styles.title}>
+                        <span className={styles.name} title={row.displayName}>{row.displayName}</span>
+                        {multisig ? (
+                            <MultisigBadge
+                                threshold={multisig.threshold}
+                                cosignerCount={multisig.cosignerCount}
+                                scheme={multisig.scheme}
+                                size="sm"
+                            />
+                        ) : null}
+                        {!isNative && verify ? (
+                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                        ) : null}
                     </div>
-                ) : null}
-                <div className={styles.fiat}>
-                    {balancesHidden
-                        ? '•••'
-                        : row.unavailable === 'all'
-                            ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
-                            : row.unavailable === 'partial'
-                                ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
-                                : formatFiat(fiat, fiatCurrency)}
+                    <div className={styles.subtitle}>{subtitle}</div>
                 </div>
-            </div>
+                <div className={styles.amounts}>
+                    <div className={styles.qty}>
+                        {/* Q-1 residual: an unread balance is not a zero, and a
+                            fiat figure derived from one is not a value. When
+                            nothing answered, say so instead of printing 0; when
+                            only part answered, show the figure but mark it as less
+                            than the whole. The privacy toggle still wins, since it
+                            exists to keep numbers off the screen entirely. */}
+                        {balancesHidden
+                            ? '•••••'
+                            : row.unavailable === 'all'
+                                ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
+                                : formatAmount(row.quantity, row.divisibility)}
+                    </div>
+                    {row.escrowed ? (
+                        <div className={styles.fiat} data-testid="balance-escrowed">
+                            {balancesHidden ? '•••' : escrowLine(row)}
+                        </div>
+                    ) : null}
+                    <div className={styles.fiat}>
+                        {balancesHidden
+                            ? '•••'
+                            : row.unavailable === 'all'
+                                ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
+                                : row.unavailable === 'partial'
+                                    ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
+                                    : formatFiat(fiat, fiatCurrency)}
+                    </div>
+                </div>
+            </ContentTag>
             {showPin ? (
-                <span
-                    role="button"
-                    tabIndex={0}
+                <button
+                    type="button"
                     className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
@@ -356,21 +360,13 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                         e.preventDefault();
                         onTogglePin(pinKey, !pinned);
                     }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onTogglePin(pinKey, !pinned);
-                        }
-                    }}
                 >
                     {pinned ? '★' : '☆'}
-                </span>
+                </button>
             ) : null}
             {typeof onToggleHide === 'function' ? (
-                <span
-                    role="button"
-                    tabIndex={0}
+                <button
+                    type="button"
                     className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
@@ -380,18 +376,11 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                         e.preventDefault();
                         onToggleHide(pinKey, !hidden);
                     }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onToggleHide(pinKey, !hidden);
-                        }
-                    }}
                 >
                     {hidden ? '⊕' : '⊘'}
-                </span>
+                </button>
             ) : null}
-        </Tag>
+        </div>
     );
 }
 
@@ -453,12 +442,12 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  */
 export function isSmallBalanceRow(row) {
     if (!row) return false;
-    if (row.escrowed) return false;
+    if (row.escrowed || row.unavailable) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
     if (row.kind === 'native') {
-        const threshold = SMALL_BALANCE_BASE_UNITS[coinFromChainId(row.chainId)]
+        const threshold = SMALL_BALANCE_BASE_UNITS[row.coin || coinFromChainId(row.chainId)]
             ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
         return q < threshold;
     }
@@ -698,6 +687,7 @@ function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fia
     return {
         kind,
         chainId,
+        coin: descriptor.coin,
         chainShort: shortLabelForCoin(descriptor.coin),
         chainDisplayName: descriptor.displayName,
         chainColor: descriptor.color,
@@ -719,8 +709,8 @@ function shortLabelForCoin(coin) {
 const CHAIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
 export function sortByChainThenAsset(rows) {
     return rows.slice().sort((a, b) => {
-        const ax = CHAIN_ORDER[coinFromChainId(a.chainId)] ?? 99;
-        const bx = CHAIN_ORDER[coinFromChainId(b.chainId)] ?? 99;
+        const ax = CHAIN_ORDER[a.coin || coinFromChainId(a.chainId)] ?? 99;
+        const bx = CHAIN_ORDER[b.coin || coinFromChainId(b.chainId)] ?? 99;
         return (ax - bx) || a.tick.localeCompare(b.tick);
     });
 }
