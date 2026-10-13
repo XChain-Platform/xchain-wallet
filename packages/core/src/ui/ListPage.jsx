@@ -13,9 +13,10 @@ import styles from './ListPage.module.css';
 /**
  * Page template for every screen whose job is to show things: a list, a
  * table, a grid of cards, or a detail view made of read-only rows. The
- * content fills compact layouts and grows to a readable desktop ceiling.
- * There is no narrow/wide switch: a list is never boxed into the form
- * template's 560px column.
+ * content fills compact and split-view layouts, then stays in a centred
+ * 48rem column so rows remain easy to scan. Screen reserves the scrollbar
+ * gutter, so the column never runs underneath it. Lists remain wider than
+ * the 560px form column because tables and card grids need more room.
  *
  * The toolbar slot holds search, filter and sort controls. Its first item
  * takes the spare room; the rest keep their natural width and wrap onto a

@@ -71,6 +71,24 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ResumeConfirm transaction result details', () => {
+    it('returns to home from the page header', async () => {
+        const onDone = vi.fn();
+        mocks.confirm.mockResolvedValue({ txid: TXID });
+        const messaging = {
+            clearConfirmSession: vi.fn().mockResolvedValue(undefined),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ResumeConfirm session={session()} onDone={onDone} onCancel={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        await screen.findByRole('heading', { name: 'Broadcast pending' });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to home' }));
+
+        expect(onDone).toHaveBeenCalledWith({ txid: TXID });
+    });
+
     it('labels a broadcast as pending and exposes readable, copyable identifiers', async () => {
         mocks.confirm.mockResolvedValue({ txid: TXID });
         mount();
