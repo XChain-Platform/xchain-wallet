@@ -72,6 +72,7 @@ const {
     renameAccount,
     importMnemonic,
     restoreLabelSyncAfterImport,
+    rekeyWalletRecord,
     labelSyncSearchChainIds,
     unlockWallet,
     receiveAddress,
@@ -1408,6 +1409,10 @@ export function createBackgroundHost(deps) {
         signer.lock();
         return { ok: true };
     });
+
+    host.register('wallet.changePassword', async (req, flowDeps) => (
+        changeWalletPassword(req, flowDeps)
+    ));
 
     // Can this wallet sign WITHOUT a password right now? True iff the
     // unlocked session has a pre-unlocked SoftwareSigner for it in the
@@ -3162,6 +3167,18 @@ export function createBackgroundHost(deps) {
             feeRate: req?.feeRate,
             transactionBytes,
         });
+        const coinAmount = (value) => {
+            const amount = BigInt(value);
+            const whole = amount / 100000000n;
+            const fraction = String(amount % 100000000n).padStart(8, '0').replace(/0+$/, '');
+            return fraction ? `${whole}.${fraction}` : String(whole);
+        };
+        const feeQuote = {
+            originalFee: coinAmount(plan.originalFeeSats),
+            replacementFee: coinAmount(plan.replacementFeeSats),
+            feeIncrease: coinAmount(plan.feeIncreaseSats),
+        };
+        if (req?.preview === true) return feeQuote;
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3288,13 +3305,10 @@ export function createBackgroundHost(deps) {
             status: 'rbf-replaced',
             rbfReplacement: replacementTxHash,
         });
-        const feeIncreaseSats = BigInt(plan.feeIncreaseSats);
-        const whole = feeIncreaseSats / 100000000n;
-        const fraction = String(feeIncreaseSats % 100000000n).padStart(8, '0').replace(/0+$/, '');
         return {
             replacementTxHash,
             broadcastedAt,
-            feeIncrease: fraction ? `${whole}.${fraction}` : String(whole),
+            ...feeQuote,
         };
     });
     // The two node answers that mean "these exact bytes are already on the
@@ -5374,4 +5388,67 @@ export function createBackgroundHost(deps) {
     host.sealBroadcastQueue = sealBroadcastQueue;
 
     return host;
+}
+
+/**
+ * Verify the current password before preparing a detached, re-encrypted wallet record.
+ * Keeping the candidate detached means an authentication or encryption failure cannot
+ * alter the live vault record.
+ */
+export async function changeWalletPassword(req, deps, operations = {}) {
+    const walletId = req?.walletId;
+    const currentPassword = req?.currentPassword;
+    const newPassword = req?.newPassword;
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('wallet.changePassword: walletId is required');
+    }
+    if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+        throw new Error('wallet.changePassword: currentPassword is required');
+    }
+    if (typeof newPassword !== 'string' || newPassword.length === 0) {
+        throw new Error('wallet.changePassword: newPassword is required');
+    }
+    if (newPassword.length < 8) {
+        throw new Error('New password must be at least 8 characters.');
+    }
+    if (newPassword === currentPassword) {
+        throw new Error('Choose a new password that differs from the current password.');
+    }
+
+    const unlock = operations.unlockWallet ?? unlockWallet;
+    const rekey = operations.rekeyWalletRecord ?? rekeyWalletRecord;
+    const wallet = await deps.vault.wallets.get(walletId);
+    if (!wallet) throw new Error(`Wallet not found: ${walletId}`);
+
+    const signer = await unlock({
+        walletId,
+        password: currentPassword,
+        vault: deps.vault,
+        chainRegistry: deps.chainRegistry,
+        sdkRegistry: deps.sdkRegistry,
+    });
+    try {
+        signer.lock();
+    } catch {
+        // Verification has completed; signer cleanup is best-effort.
+    }
+
+    const candidate = {
+        ...wallet,
+        kdfParams: { ...wallet.kdfParams },
+        importedKeys: Array.isArray(wallet.importedKeys)
+            ? wallet.importedKeys.map((key) => ({ ...key }))
+            : wallet.importedKeys,
+    };
+    const rekeyed = await rekey(candidate, {
+        walletPassword: currentPassword,
+        devicePassword: newPassword,
+        kdfParams: candidate.kdfParams,
+    });
+    if (!rekeyed) {
+        throw new Error('This wallet has no password-protected key material.');
+    }
+    await deps.vault.wallets.put(candidate);
+    deps.signerPool?.evict?.(walletId);
+    return { changed: true };
 }

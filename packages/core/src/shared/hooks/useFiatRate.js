@@ -326,10 +326,16 @@ export function priceNativeRows(rows, ratesByCoin) {
         const id = String(row.chainId || '');
         const dash = id.indexOf('-');
         const coin = dash > 0 ? id.slice(0, dash) : id;
-        const rate = ratesByCoin[coin]?.rate;
+        const fiatRate = ratesByCoin[coin];
+        const rate = fiatRate?.rate;
         if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) return row;
         changed = true;
-        return { ...row, fiatRate: rate };
+        return {
+            ...row,
+            fiatRate: rate,
+            fiatRateSource: fiatRate.source,
+            fiatRateFetchedAt: fiatRate.fetchedAt,
+        };
     });
     return changed ? out : rows;
 }
@@ -361,7 +367,13 @@ export function priceTokenRows(rows, ratesByToken) {
             return row;
         }
         changed = true;
-        return { ...row, fiatRate: rate.rate, fiatRateSource: rate.source };
+        return {
+            ...row,
+            fiatRate: rate.rate,
+            fiatRateSource: rate.source,
+            fiatRateFetchedAt: rate.fetchedAt,
+            change24hPct: Number.isFinite(rate.change24hPct) ? rate.change24hPct : null,
+        };
     });
     return changed ? out : rows;
 }

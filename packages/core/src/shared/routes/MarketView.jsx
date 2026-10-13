@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
@@ -219,13 +219,20 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     return wrap(
         <>
-            {summaryLoading ? (
-                <StatusMessage variant="status">Loading market…</StatusMessage>
-            ) : null}
-            {summaryError ? (
-                <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
-            ) : null}
-            {headerCard}
+            <div role="region" aria-label="Market summary" aria-busy={summaryLoading || undefined}>
+                {summaryLoading ? (
+                    <div role="status" aria-label="Loading market">
+                        <Skeleton height={159} />
+                    </div>
+                ) : (
+                    <>
+                        {summaryError ? (
+                            <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
+                        ) : null}
+                        {headerCard}
+                    </>
+                )}
+            </div>
 
             <div style={{ marginTop: 'var(--xc-space-3)' }}>
                 <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />

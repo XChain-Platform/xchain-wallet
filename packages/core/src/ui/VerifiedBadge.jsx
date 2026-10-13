@@ -23,9 +23,13 @@
  * an XChain state-tree balance and so is not provable). Mirrors the inline
  * span pattern of `MultisigBadge` and the History `StatusPill`.
  *
+ */
+import { InfoTip } from './InfoTip.jsx';
+
+/**
  * @param {object} props
  * @param {'verified' | 'failed' | 'unavailable' | 'pending'} props.status
- * @param {string | null} [props.reason]   light-client reason code, shown in the tooltip
+ * @param {string | null} [props.reason]   light-client reason code, shown in the info tip
  * @param {'sm' | 'md'} [props.size]        default 'sm'
  */
 export function VerifiedBadge({ status, reason, size = 'sm' }) {
@@ -38,34 +42,36 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
     const padY = size === 'sm' ? '0.05rem' : '0.1rem';
     const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
     return (
-        <span
-            role="img"
-            aria-label={title}
-            data-testid="verified-badge"
-            data-status={status}
-            title={title}
-            style={{
-                display: 'inline-flex',
-                gap: '0.2rem',
-                alignItems: 'center',
-                padding: `${padY} ${padX}`,
-                fontSize,
-                fontWeight: 600,
-                borderRadius: 4,
-                background: spec.bg,
-                color: spec.fg,
-                border: `1px solid ${spec.border}`,
-                lineHeight: 1.2,
-                whiteSpace: 'nowrap',
-            }}
-        >
-            <span aria-hidden="true">{spec.glyph}</span>
-            <span>{spec.label}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <span
+                role="img"
+                aria-label={title}
+                data-testid="verified-badge"
+                data-status={status}
+                style={{
+                    display: 'inline-flex',
+                    gap: '0.2rem',
+                    alignItems: 'center',
+                    padding: `${padY} ${padX}`,
+                    fontSize,
+                    fontWeight: 600,
+                    borderRadius: 4,
+                    background: spec.bg,
+                    color: spec.fg,
+                    border: `1px solid ${spec.border}`,
+                    lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                <span aria-hidden="true">{spec.glyph}</span>
+                <span>{spec.label}</span>
+            </span>
+            <InfoTip aria={`${spec.label} details`} label={title} />
         </span>
     );
 }
 
-// Tooltip copy describes the GUARANTEE, never the mechanism: "quorum-signed
+// Info-tip copy describes the GUARANTEE, never the mechanism: "quorum-signed
 // checkpoint" and friends are consensus internals a non-technical user cannot
 // interpret (house voice: no jargon without translation).
 const BADGE_SPEC = {
@@ -96,11 +102,11 @@ const BADGE_SPEC = {
 };
 
 // Turn a few common light-client reason codes into a short plain phrase for
-// the tooltip. An unmapped reason (including a raw transport/RPC message that
+// the info tip. An unmapped reason (including a raw transport/RPC message that
 // useProofVerification synthesizes from a thrown error) returns null so no
 // parenthetical is shown: the badge label already carries the verdict, and the
 // raw code stays for the log path only rather than leaking SCREAMING_SNAKE
-// jargon into the user-facing tooltip.
+// jargon into the user-facing info tip.
 const REASON_TEXT = {
     NOT_YET_CHECKPOINTED: 'this transaction is too new to verify yet',
     CHECKPOINT_PRE_COMMITMENT: 'the network does not publish proofs for this block yet',

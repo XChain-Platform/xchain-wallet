@@ -211,7 +211,7 @@ assert.match(historySrc, /<RecipientsBlock entry=\{entry\} \/>/, 'RecipientsBloc
 assert.match(historySrc, /function RecipientsBlock\(/, 'RecipientsBlock component declared');
 assert.match(historySrc, /messaging\.getDividendRecipients/, 'consumes getDividendRecipients');
 assert.match(historySrc, /messaging\.getAirdropRecipients/, 'consumes getAirdropRecipients');
-assert.match(historySrc, /Save \{recipients\.length\} as one contact/,
+assert.match(historySrc, /t\('history\.recipients\.saveAsContact', \{ count: recipients\.length \}\)/,
     'Save N as one contact button');
 
 console.log('OK: DIVIDEND / AIRDROP recipient flow + host + shells + History UI');
