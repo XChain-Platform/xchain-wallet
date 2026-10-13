@@ -6,13 +6,39 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Blob as NodeBlob } from 'node:buffer';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import historyStyles from '../../../packages/core/src/shared/routes/History.module.css';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
+const historyCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/History.module.css'),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function mediaBlock(text, query) {
+    const start = text.indexOf(`@media ${query}`);
+    if (start < 0) return '';
+    const open = text.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < text.length; index += 1) {
+        if (text[index] === '{') depth += 1;
+        if (text[index] === '}') depth -= 1;
+        if (depth === 0) return text.slice(open + 1, index);
+    }
+    return '';
+}
 
 function mountHistory(rows) {
     const messaging = {
@@ -97,12 +123,44 @@ describe('History export button', () => {
         expect(button).toHaveAttribute('aria-describedby', 'history-export-disabled-reason');
     });
 
-    it('is disabled with an explanation when there is no history', async () => {
+    it('hides export controls when there is no history', async () => {
         mountHistory([]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        expect(button).toBeDisabled();
-        expect(screen.getByText('There are no history rows to export.')).toBeInTheDocument();
+        await screen.findByText('No activity yet');
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        expect(screen.queryByText('There are no history rows to export.')).toBeNull();
+    });
+
+    it('stacks the rendered footer and reserves the bottom bar at 360px', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+
+        try {
+            mountHistory([historyRow()]);
+            const trigger = await screen.findByRole('button', { name: 'Export…' });
+            const footer = trigger.closest(`.${historyStyles.resultsHeader}`);
+            const exportControls = trigger.closest(`.${historyStyles.exportControls}`);
+            const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
+
+            expect(window.innerWidth).toBe(360);
+            expect(footer).not.toBeNull();
+            expect(exportControls).not.toBeNull();
+            expect(ruleBody(phone, '.resultsHeader')).toMatch(
+                /flex-direction:\s*column[\s\S]*align-items:\s*stretch/,
+            );
+            expect(ruleBody(phone, '.exportControls')).toMatch(
+                /flex-direction:\s*column[\s\S]*align-items:\s*stretch/,
+            );
+            expect(ruleBody(phone, '.exportTrigger')).toMatch(
+                /width:\s*100%[\s\S]*box-sizing:\s*border-box/,
+            );
+            expect(ruleBody(phone, '.body')).toMatch(
+                /padding-bottom:\s*calc\(3\.5rem \+ env\(safe-area-inset-bottom, 0px\)\)/,
+            );
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            else Reflect.deleteProperty(window, 'innerWidth');
+        }
     });
 });
 
@@ -121,8 +179,8 @@ describe('History export shortcut (§34.2)', () => {
     it('leaves the export dialog closed on e when there is no history', async () => {
         mountHistory([]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        expect(button).toBeDisabled();
+        await screen.findByText('No activity yet');
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
         fireEvent.keyDown(document.body, { key: 'e' });
 
         expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();

@@ -833,7 +833,6 @@ export const en = {
     'history.status.failed': 'Failed',
     'history.status.pending': 'Pending',
     'history.export.noMatchingRows': 'No rows match the current filters.',
-    'history.export.noRows': 'There are no history rows to export.',
     'history.export.open': 'Export…',
     'history.export.title': 'Export history',
     'history.export.format': 'Format',

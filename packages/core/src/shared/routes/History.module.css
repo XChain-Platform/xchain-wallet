@@ -1047,6 +1047,18 @@
     margin-bottom: var(--xc-space-2);
 }
 
+.exportControls {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.exportDisabledReason {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
 .exportTrigger {
     font-size: var(--xc-text-sm);
     font-weight: 500;
@@ -1426,5 +1438,29 @@
 
     .detailsTable tr + tr > td {
         border-top: 0;
+    }
+}
+
+/* Phone History content clears the bottom navigation and gives each footer
+   item its own row. The shell bar is 3.5rem tall and grows by the device's
+   bottom safe-area inset. */
+@media not all and (min-width: 480px) {
+    .body {
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .resultsHeader {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .exportControls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .exportTrigger {
+        width: 100%;
+        box-sizing: border-box;
     }
 }
