@@ -117,6 +117,8 @@ export function AboutSection() {
             setDiagnosticMeta({
                 platform,
                 buildHash: typeof buildHash === 'string' ? buildHash : null,
+                buildProfile: prepared.build?.profile || null,
+                network: prepared.settings?.activeNetwork || null,
             });
             setPreview(JSON.stringify(prepared, null, 2));
         }).catch(() => {});
@@ -208,9 +210,19 @@ export function AboutSection() {
                     {diagnosticMeta?.buildHash || 'not available'}
                 </span>
             </Row>
+            <Row label="Build profile">
+                <span style={diagnosticMeta?.buildProfile ? ROW_VALUE : ROW_VALUE_MUTED}>
+                    {diagnosticMeta?.buildProfile || 'not available'}
+                </span>
+            </Row>
             <Row label="Platform">
                 <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || (shell === 'popup' ? 'extension' : shell)}
+                    {diagnosticMeta?.platform || runtimeNativePlatform() || (shell === 'popup' ? 'extension' : shell)}
+                </span>
+            </Row>
+            <Row label="Network">
+                <span style={diagnosticMeta?.network ? ROW_VALUE : ROW_VALUE_MUTED}>
+                    {diagnosticMeta?.network || 'not available'}
                 </span>
             </Row>
             <Row label="Update channel">
@@ -425,21 +437,39 @@ function prepareDiagnosticDump(dump, shell) {
     const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
         ? sanitized
         : {};
-    const platform = shell === 'popup' ? 'extension' : shell;
+    const fallbackPlatform = shell === 'popup' ? 'extension' : shell;
     const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
     const build = report.build && typeof report.build === 'object' ? report.build : {};
     const buildId = build.buildId || runtimeBuildHash();
+    const buildProfile = runtimeBuildProfile() || build.profile || 'default';
+    const platform = runtimeNativePlatform() || wallet.platform || fallbackPlatform;
     return {
         ...report,
         wallet: {
             ...wallet,
-            version: wallet.version || WALLET_VERSION,
-            platform: wallet.platform || platform,
+            version: WALLET_VERSION,
+            platform,
         },
-        build: Object.keys(build).length > 0 || buildId
-            ? { ...build, ...(buildId ? { buildId } : {}) }
+        build: Object.keys(build).length > 0 || buildId || buildProfile
+            ? {
+                ...build,
+                ...(buildId ? { buildId } : {}),
+                ...(buildProfile ? { profile: buildProfile } : {}),
+            }
             : null,
     };
+}
+
+function runtimeNativePlatform() {
+    const capacitor = globalThis.Capacitor;
+    if (capacitor?.isNativePlatform?.() !== true) return null;
+    const platform = capacitor.getPlatform?.();
+    return platform === 'android' || platform === 'ios' ? platform : 'native';
+}
+
+function runtimeBuildProfile() {
+    if (typeof document === 'undefined') return null;
+    return document.querySelector('meta[name="xchain-build-profile"]')?.content || null;
 }
 
 function runtimeBuildHash() {

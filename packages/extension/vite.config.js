@@ -121,6 +121,13 @@ function stampBuildProfilePlugin() {
     const profile = resolveBuildProfile();
     return {
         name: 'xchain-stamp-build-profile',
+        transformIndexHtml() {
+            return [{
+                tag: 'meta',
+                attrs: { name: 'xchain-build-profile', content: profile },
+                injectTo: 'head-prepend',
+            }];
+        },
         generateBundle() {
             this.emitFile({
                 type: 'asset',
