@@ -84,6 +84,25 @@ function newestAddressOfType(addresses, addressType) {
     return newest;
 }
 
+function addressUsageKey(chainId, address) {
+    return `${chainId}:${String(address || '').toLowerCase()}`;
+}
+
+function historyRows(response) {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.rows)) return response.rows;
+    return [];
+}
+
+function preferredAddressOfType(addresses, addressType, chainId, usageByKey) {
+    const unused = (addresses || []).filter((candidate) => (
+        usageByKey[addressUsageKey(chainId, candidate?.address)] === false
+    ));
+    return newestAddressOfType(unused, addressType)
+        || newestAddressOfType(addresses, addressType);
+}
+
 /**
  * Receive view: pick a chain, show the newest persisted HD address as
  * a BIP21-encoded QR, copy-to-clipboard, and optionally derive a fresh
@@ -129,6 +148,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // newest-address effect and resets the pick, which is the right
     // default for a new chain.
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
+    const [addressUsageByKey, setAddressUsageByKey] = useState(
+        /** @type {Record<string, boolean>} */ ({}),
+    );
+    const chainsByWalletRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
+    chainsByWalletRef.current = chainsByWallet;
+    const addressUsageRef = useRef(/** @type {Record<string, boolean>} */ ({}));
+    const addressTypeRef = useRef('');
+    const addressManuallySelectedRef = useRef(false);
     const [labelDraft, setLabelDraft] = useState('');
     const [labelSaving, setLabelSaving] = useState(false);
     const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
@@ -181,6 +208,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setActiveChainId(prefill?.chainId || null);
         setAddress(null);
         setAddressType('');
+        addressTypeRef.current = '';
         setRenderedQr(null);
         setLoadError(null);
         setGenerateError(null);
@@ -188,6 +216,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setMultisigs([]);
         setMultisigQrs({});
         setAddressPickerOpen(false);
+        setAddressUsageByKey({});
+        addressUsageRef.current = {};
+        addressManuallySelectedRef.current = false;
         setAddAddressOpen(false);
     }, [walletId, accountId, prefill?.chainId]);
 
@@ -233,7 +264,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         let cancelled = false;
         setAddress(null);
         setAddressType('');
+        addressTypeRef.current = '';
         setLoadError(null);
+        setAddressUsageByKey({});
+        addressUsageRef.current = {};
+        addressManuallySelectedRef.current = false;
         (async () => {
             try {
                 const newest = await messaging.getNewestAddress(
@@ -242,9 +277,23 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     accountId,
                 );
                 if (!cancelled) {
-                    setAddress(newest);
                     const nextDescriptor = chainRegistry.get(activeChainId);
-                    setAddressType(newest?.addressType || nextDescriptor?.defaultAddressType || '');
+                    const nextType = newest?.addressType || nextDescriptor?.defaultAddressType || '';
+                    addressTypeRef.current = nextType;
+                    const chainAddresses = chainsByWalletRef.current?.[activeChainId] || [];
+                    const includesNewest = newest && chainAddresses.some((candidate) => (
+                        candidate?.id === newest.id
+                    ));
+                    const preferred = includesNewest
+                        ? preferredAddressOfType(
+                            chainAddresses,
+                            nextType,
+                            activeChainId,
+                            addressUsageRef.current,
+                        )
+                        : null;
+                    setAddress(preferred || newest);
+                    setAddressType(nextType);
                 }
             } catch (err) {
                 if (!cancelled) {
@@ -257,6 +306,44 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         // chain already selected, which the chain-list effect alone would
         // not pick up.
     }, [walletId, accountId, activeChainId, messaging, reloadKey]);
+
+    useEffect(() => {
+        if (!activeChainId || !chainsByWallet || typeof messaging.getAddressHistory !== 'function') {
+            return undefined;
+        }
+        const candidates = chainsByWallet[activeChainId] || [];
+        let cancelled = false;
+        Promise.allSettled(candidates.map(async (candidate) => {
+            const response = await messaging.getAddressHistory({
+                chainId: activeChainId,
+                address: candidate.address,
+            });
+            return [
+                addressUsageKey(activeChainId, candidate.address),
+                historyRows(response).length > 0,
+            ];
+        })).then((results) => {
+            if (cancelled) return;
+            const next = {};
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    const [key, used] = result.value;
+                    next[key] = used;
+                }
+            }
+            addressUsageRef.current = next;
+            setAddressUsageByKey(next);
+            if (!addressManuallySelectedRef.current) {
+                setAddress(preferredAddressOfType(
+                    candidates,
+                    addressTypeRef.current,
+                    activeChainId,
+                    next,
+                ));
+            }
+        });
+        return () => { cancelled = true; };
+    }, [activeChainId, chainsByWallet, messaging]);
 
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
@@ -549,9 +636,16 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const qrDataUrl = renderedQr?.uri === qrUri ? renderedQr.dataUrl : null;
 
     const changeAddressType = useCallback((nextType) => {
+        addressManuallySelectedRef.current = false;
+        addressTypeRef.current = nextType;
         setAddressType(nextType);
         setGenerateError(null);
-        setAddress(newestAddressOfType(chainsByWallet?.[activeChainId] || [], nextType));
+        setAddress(preferredAddressOfType(
+            chainsByWallet?.[activeChainId] || [],
+            nextType,
+            activeChainId,
+            addressUsageRef.current,
+        ));
     }, [chainsByWallet, activeChainId]);
 
     const generateNewAddress = useCallback(async () => {
@@ -569,6 +663,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 chainId: activeChainId,
                 addressType,
             });
+            addressManuallySelectedRef.current = true;
+            addressTypeRef.current = generated?.addressType || addressType;
             setAddress(generated);
             setAddressType(generated?.addressType || addressType);
             setChainsByWallet((current) => {
@@ -782,10 +878,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 accountId={accountId}
                 chainId={activeChainId}
                 onPick={(a) => {
+                    addressManuallySelectedRef.current = true;
+                    addressTypeRef.current = a?.addressType || addressType;
                     setAddress(a);
                     setAddressType(a?.addressType || addressType);
                     setAddressPickerOpen(false);
                 }}
+                addressUsageByKey={addressUsageByKey}
                 onBack={() => setAddressPickerOpen(false)}
             />
         );

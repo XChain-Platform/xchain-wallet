@@ -200,6 +200,41 @@ describe('Receive QR copy and share toasts', () => {
         expect(setAddressLabel).toHaveBeenCalledTimes(2);
     });
 
+    it('offers the newest unused address and marks used addresses in the picker', async () => {
+        const unused = {
+            ...ADDRESS,
+            id: 'a1-unused',
+            address: 'bcrt1qunused',
+            label: 'Unused deposits',
+            derivationPath: "m/84'/0'/0'/0/4",
+        };
+        const used = {
+            ...ADDRESS,
+            id: 'a1-used',
+            address: 'bcrt1qused',
+            label: 'Used deposits',
+            derivationPath: "m/84'/0'/0'/0/5",
+        };
+        const getAddressHistory = vi.fn(async ({ chainId, address }) => {
+            expect(chainId).toBe('bitcoin-regtest');
+            return address === used.address ? [{ action_index: 1 }] : [];
+        });
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [unused, used] }),
+            getNewestAddress: async () => used,
+            getAddressHistory,
+            getWalletBalances: async () => ({}),
+        });
+
+        await waitFor(() => expect(screen.getByDisplayValue(unused.address)).toBeInTheDocument());
+        expect(getAddressHistory).toHaveBeenCalledTimes(2);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Choose receive address' }));
+        expect(await screen.findByText('Used')).toBeInTheDocument();
+        expect(screen.getByText('Used deposits')).toBeInTheDocument();
+        expect(screen.getByText('Unused deposits')).toBeInTheDocument();
+    });
+
     it('renders a four-module quiet zone at the measured device-pixel width', async () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         const originalDevicePixelRatio = window.devicePixelRatio;
