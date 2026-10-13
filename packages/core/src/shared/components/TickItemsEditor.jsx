@@ -83,7 +83,7 @@ export function TickItemsEditor({
 
     useEffect(() => {
         if (!chainId || memberTicks.length === 0) {
-            onStatusChange({});
+            onStatusChangeRef.current({});
             setChecking(false);
             return undefined;
         }
@@ -99,11 +99,17 @@ export function TickItemsEditor({
                     chainId: coinQualified ? chainIdForCoin(coin, chainId) || chainId : chainId,
                 };
             }).filter(({ rest }) => !rest.startsWith('^')).slice(0, MAX_TICK_LOOKUPS);
-            Promise.all(toCheck.map((entry) => fetchTokenInfo(messaging, entry.chainId, entry.rest)
-                .then((info) => [entry.item, tickLookupVerdict(info)])))
+            Promise.all(toCheck.map(async (entry) => {
+                try {
+                    const info = await fetchTokenInfo(messaging, entry.chainId, entry.rest);
+                    return [entry.item, tickLookupVerdict(info)];
+                } catch {
+                    return [entry.item, null];
+                }
+            }))
                 .then((pairs) => {
                     if (cancelled) return;
-                    onStatusChange(Object.fromEntries(pairs));
+                    onStatusChangeRef.current(Object.fromEntries(pairs));
                     setChecking(false);
                 });
         }, 350);

@@ -142,6 +142,35 @@ describe('TickItemsEditor', () => {
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
+    it('delivers a pending lookup to the latest status callback', async () => {
+        const messaging = fakeMessaging({ GOODTOK: FOUND });
+        const firstOnStatus = vi.fn();
+        const latestOnStatus = vi.fn();
+        const view = render(
+            <Harness initial="GOODTOK" messaging={messaging} onStatus={firstOnStatus} />,
+        );
+
+        view.rerender(
+            <Harness initial="GOODTOK" messaging={messaging} onStatus={latestOnStatus} />,
+        );
+        await settle();
+
+        expect(firstOnStatus).not.toHaveBeenCalled();
+        expect(latestOnStatus).toHaveBeenLastCalledWith({ GOODTOK: 'found' });
+    });
+
+    it('finishes checking when messaging throws synchronously', async () => {
+        const messaging = { getTokenInfo: vi.fn(() => { throw new Error('not connected'); }) };
+        const onStatus = vi.fn();
+        render(<Harness initial="GOODTOK" messaging={messaging} onStatus={onStatus} />);
+
+        await settle();
+
+        expect(screen.getByText('1 valid token name')).toBeInTheDocument();
+        expect(screen.queryByText(/checking…/)).toBeNull();
+        expect(onStatus).toHaveBeenLastCalledWith({ GOODTOK: null });
+    });
+
     it('skips a ^ reference and shows it as not checked', async () => {
         const messaging = fakeMessaging({ GOODTOK: FOUND });
         render(<Harness initial={'GOODTOK\n^123'} messaging={messaging} />);
