@@ -31,7 +31,7 @@
 // is harsh enough that the pulses are more annoying than informative,
 // can flip it in Settings → Privacy.
 
-import { useCallback } from 'react';
+import { createContext, createElement, useCallback, useContext, useMemo } from 'react';
 import { useReducedMotion } from '../../ui/reducedMotion.js';
 import { useSettings } from './useSettings.js';
 
@@ -41,6 +41,18 @@ const PATTERNS = Object.freeze({
     warn: [20, 60, 20],
     error: [40, 80, 40, 80, 40],
 });
+
+const NOOP_HAPTIC = Object.freeze({
+    tap: () => {},
+    success: () => {},
+    warn: () => {},
+    error: () => {},
+    vibrate: () => {},
+    supported: false,
+    reducedMotion: false,
+});
+
+const HapticContext = createContext(NOOP_HAPTIC);
 
 function canVibrate() {
     if (typeof navigator === 'undefined') return false;
@@ -90,15 +102,24 @@ export function useHaptic() {
     const error = useCallback(() => fire(PATTERNS.error), [fire]);
     const vibrate = useCallback((pattern) => fire(pattern), [fire]);
 
-    return {
+    const supported = canVibrate();
+    return useMemo(() => ({
         tap,
         success,
         warn,
         error,
         vibrate,
-        supported: canVibrate(),
+        supported,
         reducedMotion,
-    };
+    }), [error, reducedMotion, success, supported, tap, vibrate, warn]);
+}
+
+export function HapticProvider({ value, children }) {
+    return createElement(HapticContext.Provider, { value }, children);
+}
+
+export function useHapticFeedback() {
+    return useContext(HapticContext);
 }
 
 export const HAPTIC_PATTERNS = PATTERNS;

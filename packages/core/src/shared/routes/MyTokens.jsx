@@ -238,13 +238,13 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
                 {isEmpty ? (
                     <EmptyState
-                        title="You don't own any tokens yet."
-                        body="Tap “Issue new token” to create one, or have someone transfer one to you."
+                        title="No owned tokens yet"
+                        body="Tokens issued to or received by this wallet appear here."
                     />
                 ) : null}
 
                 {isFilteredEmpty ? (
-                    <EmptyState title="No tokens match your filter." />
+                    <EmptyState title="No matching tokens" body="Try a different search or network filter." />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (

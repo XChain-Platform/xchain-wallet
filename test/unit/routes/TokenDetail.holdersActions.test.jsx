@@ -77,14 +77,14 @@ describe('TokenDetail holders', () => {
     it('distinguishes an empty list from a failed holder lookup', async () => {
         mount();
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
-        expect(await screen.findByText('No holders yet.')).toBeTruthy();
+        expect(await screen.findByText('No holders yet')).toBeTruthy();
 
         cleanup();
         __clearTokenInfoCache();
         mount({ holdersError: new Error('explorer offline') });
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
-        expect(screen.queryByText('No holders yet.')).toBeNull();
+        expect(screen.queryByText('No holders yet')).toBeNull();
     });
 
     it('copies the complete creator address from Details', async () => {

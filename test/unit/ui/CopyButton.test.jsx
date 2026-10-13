@@ -8,18 +8,33 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+
+const haptic = vi.hoisted(() => ({
+    tap: vi.fn(),
+    error: vi.fn(),
+}));
+
+vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
+    useHapticFeedback: () => haptic,
+}));
+
 import { CopyButton } from '../../../packages/core/src/ui/CopyButton.jsx';
 
 describe('<CopyButton>', () => {
     let clipboard;
     beforeEach(() => {
+        vi.clearAllMocks();
         clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
         Object.defineProperty(globalThis.navigator, 'clipboard', {
             value: clipboard,
             configurable: true,
         });
+    });
+
+    afterEach(() => {
+        delete globalThis.Capacitor;
     });
 
     it('renders its label and calls clipboard.writeText on click', async () => {
@@ -44,10 +59,12 @@ describe('<CopyButton>', () => {
             await waitFor(() => {
                 expect(screen.getByRole('button')).toHaveTextContent('Copied');
             });
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
             act(() => {
                 vi.advanceTimersByTime(101);
             });
-            expect(screen.getByRole('button')).toHaveTextContent('Copy');
+            expect(screen.getByRole('button')).toHaveTextContent('Copy value');
         } finally {
             vi.useRealTimers();
         }
@@ -61,12 +78,34 @@ describe('<CopyButton>', () => {
             expect(screen.getByRole('button')).toHaveTextContent('Copy failed: the clipboard is unavailable.');
         });
         expect(clipboard.writeText).toHaveBeenCalled();
+        expect(haptic.error).toHaveBeenCalledOnce();
+        expect(haptic.tap).not.toHaveBeenCalled();
     });
 
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {
         const { rerender } = render(<CopyButton value="x" ariaLabel="Copy wallet address" />);
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Copy wallet address');
-        rerender(<CopyButton value="x" label="Copy" />);
-        expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Copy');
+        rerender(<CopyButton value="x" />);
+        expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Copy value');
+    });
+
+    it('routes sensitive values through the native secure clipboard', async () => {
+        const write = vi.fn().mockResolvedValue({ marked: true });
+        globalThis.Capacitor = {
+            isNativePlatform: () => true,
+            Plugins: { XChainClipboard: { write } },
+        };
+        render(<CopyButton value="secret" label="Copy secret" sensitive />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }));
+
+        await waitFor(() => {
+            expect(write).toHaveBeenCalledWith({
+                value: 'secret',
+                sensitive: true,
+                ttlSeconds: 60,
+            });
+        });
+        expect(clipboard.writeText).not.toHaveBeenCalled();
     });
 });

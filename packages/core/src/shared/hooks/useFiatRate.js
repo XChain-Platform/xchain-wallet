@@ -227,6 +227,77 @@ export function useNativeFiatRates({
 }
 
 /**
+ * Live fiat rates for token rows, keyed by coin family and tick.
+ *
+ * Home cannot call `useTickFiatRate` once per row because its token set changes
+ * between balance polls. This hook subscribes once, refreshes each requested
+ * token through the same per-tick lookup, and returns only rates that actually
+ * exist. Missing token markets therefore remain missing instead of inheriting
+ * the chain coin's rate.
+ *
+ * @param {object} opts
+ * @param {Array<{chainCoin: string, tick: string, nativeTicker: string}>} opts.tokens
+ * @param {string} [opts.fiatCurrency]
+ * @param {boolean} [opts.allowCoingeckoFallback]
+ * @param {unknown} [opts.refreshKey]
+ * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
+ */
+export function useTokenFiatRates({
+    tokens,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    refreshKey,
+} = {}) {
+    const wanted = Array.isArray(tokens)
+        ? Array.from(new Map(tokens
+            .filter((t) => t?.chainCoin && t?.tick && t?.nativeTicker)
+            .map((t) => [`${t.chainCoin}|${String(t.tick).toUpperCase()}`, {
+                chainCoin: t.chainCoin,
+                tick: String(t.tick).toUpperCase(),
+                nativeTicker: String(t.nativeTicker).toUpperCase(),
+            }])).values())
+            .sort((a, b) => `${a.chainCoin}|${a.tick}`.localeCompare(`${b.chainCoin}|${b.tick}`))
+        : [];
+    const tokenKey = wanted.map((t) => `${t.chainCoin}|${t.tick}|${t.nativeTicker}`).join(',');
+
+    const snapshot = useSyncExternalStore(
+        subscribeFiatRates,
+        () => wanted.map((t) => {
+            const rate = getTokenFiatRate({
+                chainCoin: t.chainCoin,
+                tick: t.tick,
+                fiatCurrency,
+            });
+            return rate
+                ? `${t.chainCoin}|${t.tick}=${rate.rate}@${rate.fetchedAt}`
+                : `${t.chainCoin}|${t.tick}=`;
+        }).join(','),
+    );
+
+    useEffect(() => {
+        if (wanted.length === 0) return;
+        Promise.all(wanted.map((t) => refreshTokenFiatRate({
+            ...t,
+            fiatCurrency,
+            allowCoingeckoFallback,
+        }))).catch(() => { /* individual misses leave their rows unpriced */ });
+    }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return useMemo(() => {
+        const out = {};
+        for (const token of wanted) {
+            const rate = getTokenFiatRate({
+                chainCoin: token.chainCoin,
+                tick: token.tick,
+                fiatCurrency,
+            });
+            if (rate) out[`${token.chainCoin}|${token.tick}`] = rate;
+        }
+        return out;
+    }, [snapshot, tokenKey, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
  * Attach live coin rates to native balance rows that have none.
  *
  * Real balance reads (flows/balances.js) carry no price, so every native
@@ -259,6 +330,38 @@ export function priceNativeRows(rows, ratesByCoin) {
         if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) return row;
         changed = true;
         return { ...row, fiatRate: rate };
+    });
+    return changed ? out : rows;
+}
+
+/**
+ * Attach per-token rates to unpriced token rows.
+ *
+ * Existing numeric rates belong to demo fixtures and remain authoritative.
+ * Native rows are never considered, and a missing per-token rate leaves the
+ * row untouched so neither its fiat display nor the portfolio total can fall
+ * back to a coin-family price.
+ *
+ * @template {{ kind: string, chainId: string, tick: string, fiatRate: number | null }} R
+ * @param {R[]} rows
+ * @param {Record<string, import('../../flows/priceLookup.js').FiatRate>} ratesByToken
+ * @returns {R[]}
+ */
+export function priceTokenRows(rows, ratesByToken) {
+    if (!Array.isArray(rows) || !ratesByToken) return rows;
+    let changed = false;
+    const out = rows.map((row) => {
+        if (!row || row.kind === 'native') return row;
+        if (typeof row.fiatRate === 'number') return row;
+        const id = String(row.chainId || '');
+        const dash = id.indexOf('-');
+        const coin = dash > 0 ? id.slice(0, dash) : id;
+        const rate = ratesByToken[`${coin}|${String(row.tick || '').toUpperCase()}`];
+        if (!rate || typeof rate.rate !== 'number' || !Number.isFinite(rate.rate) || rate.rate <= 0) {
+            return row;
+        }
+        changed = true;
+        return { ...row, fiatRate: rate.rate, fiatRateSource: rate.source };
     });
     return changed ? out : rows;
 }

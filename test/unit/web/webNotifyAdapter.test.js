@@ -64,7 +64,7 @@ describe('webNotifyAdapter', () => {
         window.addEventListener(NOTIFICATION_EVENT, onEvent);
         stubVisibility('visible');
         stubNotification('granted');
-        createWebNotifyAdapter()(payload);
+        expect(createWebNotifyAdapter()(payload)).toBe(true);
         window.removeEventListener(NOTIFICATION_EVENT, onEvent);
         expect(seen).toEqual([payload]);
     });
@@ -72,7 +72,7 @@ describe('webNotifyAdapter', () => {
     it('raises an OS notification when the tab is hidden and permission is granted', () => {
         stubVisibility('hidden');
         const ctor = stubNotification('granted');
-        createWebNotifyAdapter()(payload);
+        expect(createWebNotifyAdapter()(payload)).toBe(true);
         expect(ctor).toHaveBeenCalledTimes(1);
         expect(ctor.mock.calls[0][0]).toBe(payload.title);
         expect(ctor.mock.calls[0][1]).toEqual({ body: payload.body });
@@ -167,7 +167,7 @@ describe('webNotifyAdapter', () => {
     it('raises no OS notification without permission, and does not throw', () => {
         stubVisibility('hidden');
         const ctor = stubNotification('default');
-        expect(() => createWebNotifyAdapter()(payload)).not.toThrow();
+        expect(createWebNotifyAdapter()(payload)).toBe(false);
         expect(ctor).not.toHaveBeenCalled();
     });
 });

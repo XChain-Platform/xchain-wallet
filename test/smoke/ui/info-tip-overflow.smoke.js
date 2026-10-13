@@ -40,21 +40,29 @@ assert.ok(/useLayoutEffect/.test(tipSrc),
 assert.ok(/setAlign\] = useState\(\/\*\* @type \{'start' \| 'center' \| 'end'\} \*\/ \('center'\)\)/.test(tipSrc),
     'InfoTip declares an align state with three values defaulting to center');
 
-// 3. The component tags the FOLLOWUP id and computes alignment via
-//    getBoundingClientRect against documentElement.clientWidth.
-assert.ok(/Cluster P FOLLOWUP 3/.test(tipSrc),
-    'InfoTip tags the FOLLOWUP id');
-assert.ok(/getBoundingClientRect/.test(tipSrc),
-    'InfoTip measures the trigger via getBoundingClientRect');
+// 3. The component measures both the trigger and rendered bubble against
+//    the viewport so wrapped content uses its actual dimensions.
+assert.ok(/bubbleRef/.test(tipSrc),
+    'InfoTip keeps a ref to the rendered bubble');
+assert.ok(/bubble\.getBoundingClientRect/.test(tipSrc),
+    'InfoTip measures the rendered bubble');
 assert.ok(/document\.documentElement\?\.clientWidth/.test(tipSrc),
     'InfoTip reads viewport width from document.documentElement.clientWidth');
+assert.ok(/document\.documentElement\?\.clientHeight/.test(tipSrc),
+    'InfoTip reads viewport height from document.documentElement.clientHeight');
 
-// 4. Re-anchor branches: start when center - half < 0; end when
-//    center + half > viewport; center otherwise.
-assert.ok(/center - BUBBLE_HALF_WIDTH < 0/.test(tipSrc),
+// 4. Re-anchor branches use half of the rendered width and retain a viewport
+//    margin on either side.
+assert.ok(/bubbleRect\.width \|\| Math\.min\(260, viewportWidth - 2 \* VIEWPORT_MARGIN\)/.test(tipSrc),
+    'InfoTip uses the measured width with a viewport-bounded fallback');
+assert.ok(/center - halfWidth < VIEWPORT_MARGIN/.test(tipSrc),
     'InfoTip swaps to start when the bubble would clip the left edge');
-assert.ok(/center \+ BUBBLE_HALF_WIDTH > viewportWidth/.test(tipSrc),
+assert.ok(/center \+ halfWidth > viewportWidth - VIEWPORT_MARGIN/.test(tipSrc),
     'InfoTip swaps to end when the bubble would clip the right edge');
+assert.ok(/bubbleRect\.height > preferredSpace && oppositeSpace > preferredSpace/.test(tipSrc),
+    'InfoTip flips sides when the preferred side lacks vertical room');
+assert.ok(/setMaxHeight/.test(tipSrc),
+    'InfoTip caps long content to the available vertical room');
 
 // 5. Resize listener so a viewport rotation / window-resize doesn't
 //    leave the bubble mis-aligned while it's still open.
@@ -75,7 +83,12 @@ assert.ok(/\.alignEnd\s*\{[^}]*inset-inline-end:\s*0;[^}]*inset-inline-start:\s*
 
 // 7. The bubble JSX appends the alignment class alongside the
 //    existing top/bottom placement class.
-assert.ok(/className=\{`\$\{styles\.bubble\} \$\{placement === 'bottom' \? styles\.placementBottom : styles\.placementTop\} \$\{alignClass\}`\}/.test(tipSrc),
+assert.ok(/className=\{`\$\{styles\.bubble\} \$\{side === 'bottom' \? styles\.placementBottom : styles\.placementTop\} \$\{alignClass\}`\}/.test(tipSrc),
     'InfoTip composes bubble + placement + alignment classes on the bubble element');
+
+assert.ok(/max-width:\s*min\(260px, calc\(100vw - 2 \* var\(--xc-space-2\)\)\)/.test(cssSrc),
+    'InfoTip bubble width stays within narrow viewports');
+assert.ok(/overflow-wrap:\s*anywhere/.test(cssSrc),
+    'InfoTip wraps unbroken content');
 
 console.log('OK: InfoTip placement-aware overflow re-anchor');

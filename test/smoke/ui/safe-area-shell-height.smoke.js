@@ -123,7 +123,35 @@ for (const [name, css] of [['Screen.module.css', screen], ['LeftNav.module.css',
     }
 }
 
-// --- 4. Android uses the native WebView's visible height -----------------
+// --- 4. the bottom inset is paid exactly once ------------------------------
+//
+// Without a bottom tab bar (onboarding, the iPad side rail) nothing paid the
+// home-indicator inset, so the license's Accept button and the rail's Lock
+// sat inside it (iPad Pro 11-inch simulator). With the bar, the bar pays it
+// and the Screen above must not pay it again.
+
+assert.match(
+    screen,
+    /\.body:last-child\s*\{[^}]*padding-bottom:[^;]*var\(--xc-screen-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)/,
+    'a Screen whose body ends it pads the body by the bottom inset',
+);
+assert.match(
+    screen,
+    /\.footer\s*\{[^}]*padding-bottom:[^;]*var\(--xc-screen-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)/,
+    'a Screen footer pads by the bottom inset',
+);
+assert.match(
+    leftNav,
+    /\.layoutWithBottomBar > \.main\s*\{[^}]*--xc-screen-safe-bottom:\s*0px/,
+    'the bottom tab bar layout zeroes the Screen inset the bar already pays',
+);
+assert.match(
+    leftNav,
+    /\.nav\s*\{[^}]*padding-bottom:[^;]*env\(safe-area-inset-bottom,\s*0px\)/,
+    'the side rail keeps its footer clear of the home indicator',
+);
+
+// --- 5. Android uses the native WebView's visible height -----------------
 
 assert.match(
     keyboardViewport,
