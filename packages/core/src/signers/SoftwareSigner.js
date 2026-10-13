@@ -16,7 +16,7 @@
 
 import { decryptWalletPassphrase, decryptWalletSeed } from '../crypto/walletBlob.js';
 import { decrypt } from '../crypto/aead.js';
-import { base64ToBytes, deriveMasterKey } from '../crypto/kdf.js';
+import { base64ToBytes, copyMasterKey, deriveMasterKey } from '../crypto/kdf.js';
 import {
     bip39MnemonicToSeed,
     isValidBip39Mnemonic,
@@ -115,8 +115,9 @@ export class SoftwareSigner extends Signer {
      * @param {Object} opts
      * @param {string} opts.password
      * @param {string} [opts.bip39Passphrase]   required iff format='bip39', passphraseEnabled, and no passphrase is stored yet; ignored when one is
+     * @param {Uint8Array} [opts.masterKey]     already-derived key for this wallet's kdfParams, used instead of deriving from the password. Copied before use (here on the wif-only path, inside decryptWalletSeed on the seed path) and never zeroed here; the caller zeroes its own buffer. A wrong key fails exactly as a wrong password does.
      */
-    async unlock({ password, bip39Passphrase = '' }) {
+    async unlock({ password, bip39Passphrase = '', masterKey: suppliedMasterKey }) {
         if (typeof password !== 'string' || password.length === 0) {
             throw new Error('SoftwareSigner.unlock: password is required');
         }
@@ -155,7 +156,9 @@ export class SoftwareSigner extends Signer {
                     'SoftwareSigner.unlock: wif-only wallet has no importedKeys to validate against',
                 );
             }
-            const masterKey = deriveMasterKey(password, enc.kdfParams);
+            const masterKey = suppliedMasterKey === undefined
+                ? deriveMasterKey(password, enc.kdfParams)
+                : copyMasterKey(suppliedMasterKey);
             let importedWifs;
             try {
                 importedWifs = await decryptImportedKeys(masterKey, imported);
@@ -178,11 +181,14 @@ export class SoftwareSigner extends Signer {
         }
 
         let sessionMasterKey = null;
+        // decryptWalletSeed copies a supplied key itself and hands back a
+        // separate session copy through retainMasterKey.
         const plaintext = await decryptWalletSeed({
             password,
             encryptedSeed: enc.encryptedSeed,
             kdfParams: enc.kdfParams,
             aad: enc.aad,
+            masterKey: suppliedMasterKey,
             retainMasterKey: (k) => { sessionMasterKey = k; },
         });
 
