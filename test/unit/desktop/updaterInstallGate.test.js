@@ -138,7 +138,7 @@ describe('the install gate', () => {
         };
 
         const updater = await attach(mod);
-        await updater.downloadAndInstall();
+        await updater.downloadUpdate();
 
         expect(flagsWhenDownloadRan).toEqual({
             autoDownload: false, autoInstallOnAppQuit: false,
@@ -152,7 +152,7 @@ describe('the install gate', () => {
             fetchImpl: async () => ({ ok: false, status: 404 }),
         });
 
-        const result = await updater.downloadAndInstall();
+        const result = await updater.downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(calls).toContain('downloadUpdate');
@@ -169,7 +169,7 @@ describe('the install gate', () => {
             fetchImpl: async () => ({ ok: false, status: 404 }),
         });
 
-        await updater.downloadAndInstall();
+        await updater.downloadUpdate();
 
         expect(events).toContain('rejected');
     });

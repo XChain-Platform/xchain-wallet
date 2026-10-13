@@ -22,7 +22,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MySwapsView, deriveStatus } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import {
+    MySwapsView,
+    deriveStatus,
+    swapExpiryLabel,
+} from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
 import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'dogecoin-testnet';
@@ -156,7 +160,36 @@ describe('MySwapsView: settled status', () => {
 
         const row = rowFor(section(utils, 'Open swaps'), 702);
         expect(within(row).getByText('Open')).toBeTruthy();
-        expect(within(row).getByText(`Expires ${formatLocalDateTime(FUTURE)}`)).toBeTruthy();
+        expect(within(row).getByText(/^Expires .* \(.+ left\)$/)).toBeTruthy();
+    });
+
+    it('lets fresh detail lifecycle close an offer whose list row is stale', async () => {
+        const { messaging } = harness({
+            swaps: [swapRow(703, { swap_status: 'open' })],
+            details: { 703: swapDetail(703, 'complete', FUTURE) },
+        });
+        const utils = await open(messaging);
+
+        expect(section(utils, 'Open swaps')).toBeNull();
+        const row = rowFor(section(utils, 'Closed swaps'), 703);
+        expect(within(row).getByText('Settled')).toBeTruthy();
+        expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
+        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('labels an expired offer in the past tense and removes its actions', async () => {
+        const past = Math.floor(Date.now() / 1000) - 60;
+        const { messaging } = harness({
+            swaps: [swapRow(704, { swap_status: 'open' })],
+            details: { 704: swapDetail(704, 'open', past) },
+        });
+        const utils = await open(messaging);
+
+        const row = rowFor(section(utils, 'Closed swaps'), 704);
+        expect(within(row).getByText('Expired')).toBeTruthy();
+        expect(within(row).getByText(`Expired ${formatLocalDateTime(past)}`)).toBeTruthy();
+        expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
+        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
     });
 
     it('treats a missing swap_status as no information (older explorer compatibility)', async () => {
@@ -205,6 +238,17 @@ describe('deriveStatus with swap_status', () => {
 });
 
 describe('MySwapsView expiration display', () => {
+    it('formats a deterministic countdown without changing the absolute deadline', () => {
+        const now = 2_000_000_000;
+        const expiration = now + 3661;
+        expect(swapExpiryLabel(expiration, now)).toBe(
+            `Expires ${formatLocalDateTime(expiration)} (1h 01m left)`,
+        );
+        expect(swapExpiryLabel(now + 2 * 86400 + 3 * 3600, now)).toBe(
+            `Expires ${formatLocalDateTime(now + 2 * 86400 + 3 * 3600)} (2d 3h left)`,
+        );
+    });
+
     it('does not render a millisecond value as an expiration thousands of years away', async () => {
         const { messaging } = harness({
             swaps: [swapRow(730)],

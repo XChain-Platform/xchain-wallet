@@ -817,7 +817,7 @@ function MessageContent({ content }) {
                             rel="noopener noreferrer"
                             className={local.messageLink}
                         >
-                            {part}
+                            {part} <span aria-hidden="true">↗</span>
                         </a>
                     ) : <Fragment key={`${index}-${part}`}>{part}</Fragment>)}
                 </span>

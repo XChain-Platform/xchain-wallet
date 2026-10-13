@@ -29,7 +29,7 @@ function setup(overrides = {}) {
 const press = (init) => fireEvent.keyDown(document.body, init);
 
 describe('useKeyboardShortcuts', () => {
-    it('fires modifier combos anywhere: Cmd/Ctrl+L locks, Cmd/Ctrl+, opens settings', () => {
+    it('fires modifier combos outside editable fields: Cmd/Ctrl+L locks, Cmd/Ctrl+, opens settings', () => {
         const h = setup();
         press({ key: 'l', ctrlKey: true });
         expect(h.lock).toHaveBeenCalledOnce();
@@ -105,12 +105,14 @@ describe('useKeyboardShortcuts', () => {
         expect(h.navigate).not.toHaveBeenCalled();
     });
 
-    it('still fires modifier combos even while typing in an input', () => {
+    it('suppresses modifier combos while typing in an input', () => {
         const h = setup();
         const input = screen.getByLabelText('field');
         input.focus();
         fireEvent.keyDown(input, { key: 'l', metaKey: true });
-        expect(h.lock).toHaveBeenCalledOnce();
+        fireEvent.keyDown(input, { key: ',', ctrlKey: true });
+        expect(h.lock).not.toHaveBeenCalled();
+        expect(h.navigate).not.toHaveBeenCalled();
     });
 
     it('honors §34.1 overrides: the rebound key fires, the default goes dead', () => {
