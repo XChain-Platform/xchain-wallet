@@ -29,6 +29,7 @@ import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -240,7 +241,11 @@ export function ListPickerScreen({
                             const description = typeof rawDescription === 'string' && rawDescription.length > 0
                                 ? neutralizeControlText(rawDescription)
                                 : '';
-                            const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
+                            const countText = count === undefined
+                                ? 'counting…'
+                                : count == null
+                                    ? 'members unavailable'
+                                    : `${formatDecimalAmount(count)} member${count === 1 ? '' : 's'}`;
                             return (
                                 <li key={idx}>
                                     <button

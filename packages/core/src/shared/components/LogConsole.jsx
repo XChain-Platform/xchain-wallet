@@ -26,6 +26,7 @@ import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
 const MAX_VISIBLE_ENTRIES = 200;
@@ -266,7 +267,8 @@ export function LogConsole() {
                 )}
             </div>
             <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                Showing {visible.length} of {filtered.length} matching entries ({allEntries.length} total).
+                Showing {formatDecimalAmount(visible.length)} of {formatDecimalAmount(filtered.length)} matching entries{' '}
+                ({formatDecimalAmount(allEntries.length)} total).
             </div>
         </div>
     );

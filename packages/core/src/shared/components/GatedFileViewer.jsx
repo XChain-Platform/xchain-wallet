@@ -37,6 +37,7 @@ import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const MAX_TEXT_CHARS = 200_000;
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -250,7 +251,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <p className={styles.title}>{name || 'Unlocked file'}</p>
                 <p className={styles.meta}>
-                    {bytes ? `${bytes.length.toLocaleString()} bytes · ` : ''}
+                    {bytes ? `${formatDecimalAmount(bytes.length)} bytes · ` : ''}
                     detected: {kindLabel(sniffed.kind, sniffed.mime)}
                     {declared ? ` · published as: ${declared}` : ''}
                 </p>
