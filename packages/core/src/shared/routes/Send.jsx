@@ -47,12 +47,13 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
-import { createUndoSendRequest } from '../../flows/undoSend.js';
+import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
@@ -136,6 +137,7 @@ import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useUndoSend } from '../hooks/useUndoSend.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
@@ -250,6 +252,38 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const { settings } = useSettings();
     const { showToast } = useToast();
     const haptic = useHaptic();
+    const [undoHoldActive, setUndoHoldActive] = useState(false);
+    const undoHoldIdRef = useRef(/** @type {string | null} */ (null));
+    const clearUndoHold = useCallback(() => {
+        undoHoldIdRef.current = null;
+        setUndoHoldActive(false);
+    }, []);
+    const cancelUndoHold = useCallback(() => {
+        const holdId = undoHoldIdRef.current;
+        if (!holdId) return;
+        const reportFailure = (err) => {
+            console.error('Undo send cancellation failed:', err); // eslint-disable-line no-console
+            showToast({
+                message: 'Could not cancel this send. It may still be broadcast.',
+                variant: 'error',
+                durationMs: 12_000,
+            });
+        };
+        try {
+            Promise.resolve(messaging.sendHoldCancel(holdId)).catch(reportFailure);
+        } catch (err) {
+            reportFailure(err);
+        }
+    }, [messaging, showToast]);
+    const {
+        status: undoSendStatus,
+        remaining: undoSendRemaining,
+        start: startUndoSend,
+        cancel: cancelUndoSend,
+    } = useUndoSend({
+        onElapsed: clearUndoHold,
+        onCancelHold: cancelUndoHold,
+    });
 
     // §5.6 slice 1: the single-encode confirm modal. Flag-gated
     // (read with code defaults, never vault-stamped). brought
@@ -1620,6 +1654,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
+                    if (sendBase.holdId && sendBase.undoSeconds) {
+                        undoHoldIdRef.current = sendBase.holdId;
+                        setUndoHoldActive(true);
+                        startUndoSend(sendBase.undoSeconds);
+                    }
                     return isHwSource
                         ? messaging.sendAssetHw({
                             ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
@@ -1630,6 +1669,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 },
             });
             setResult(res);
+            clearUndoHold();
             setPassword('');
             draft.clear();
             setDraftPending(false);
@@ -1637,6 +1677,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             haptic.success();
             recordLastUsedChain(messaging, chainId);
         } catch (err) {
+            if (isUndoSendCancellation(err)) {
+                clearUndoHold();
+                setFormError(null);
+                setPassword('');
+                setStage('form');
+                showToast({ message: 'Transaction cancelled.' });
+                return;
+            }
             // User rejection is a calm no-op: stay on the form untouched.
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
                 return;
@@ -1653,7 +1701,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }, [
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, password, settings, messaging, confirmAction, draft, haptic,
-        isHwSource, isMultiSend, sendLegs, sendTotals,
+        isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
+        clearUndoHold, showToast,
     ]);
 
     async function handleSubmit(event) {
@@ -1866,7 +1915,16 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
-                extraCredentials={dispenserNoticeBlock}
+                extraCredentials={(
+                    <>
+                        {dispenserNoticeBlock}
+                        <UndoSendToast
+                            status={undoHoldActive ? undoSendStatus : 'idle'}
+                            remaining={undoSendRemaining}
+                            onCancel={cancelUndoSend}
+                        />
+                    </>
+                )}
                 onHwConfirmedChange={setHwExplicitConfirmed}
                 hwExplicitConfirmed={hwExplicitConfirmed}
             />

@@ -17,6 +17,10 @@ export function createUndoSendRequest(settings, createId = randomUUID) {
     return { holdId: `undo-send:${createId()}`, undoSeconds: seconds };
 }
 
+export function isUndoSendCancellation(error) {
+    return error?.name === 'SendHoldCancelledError';
+}
+
 function assertFinite(value, name) {
     if (!Number.isFinite(value)) {
         throw new TypeError(`${name} must be finite`);
