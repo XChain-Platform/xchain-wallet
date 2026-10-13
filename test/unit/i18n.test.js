@@ -66,6 +66,24 @@ afterAll(async () => {
 });
 
 describe('translations', () => {
+    it('keeps English copy platform-neutral and typographically consistent', () => {
+        const values = Object.values(en);
+
+        expect(values.filter((value) => /\.\.\.| {2,}|\bclick\b/i.test(value))).toEqual([]);
+        expect(values.filter((value) => (
+            /\b(cannot|does not|do not|will not|could not|has not|is not|are not|it is)\b/i.test(value)
+        ))).toEqual([]);
+        const narrativeValues = Object.entries(en)
+            .filter(([key]) => (
+                (/(?:Body|Hint|Help)$|\.error\./.test(key))
+                && key !== 'history.filters.fiatHelp'
+            ))
+            .map(([, value]) => value);
+        expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
+        expect(en['send.memoCount']).toBe('{used} / {max} characters');
+        expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
+    });
+
     it('looks up English keys and exposes unknown keys', () => {
         expect(t('scan.title')).toBe('Scan');
         expect(t('missing.unit.key')).toBe('missing.unit.key');

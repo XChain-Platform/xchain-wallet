@@ -345,7 +345,7 @@ export function FeeSelector({
                                                 onClick={beginFeeEdit}
                                                 disabled={disabled}
                                                 aria-label="Edit exact fee amount"
-                                                title="Click to edit the exact fee"
+                                                title="Select to edit the exact fee"
                                             >
                                                 {formatWithThousands(activeEstimate.coinAmount)}
                                             </button>
@@ -388,7 +388,7 @@ export function FeeSelector({
                                     onClick={beginRateEdit}
                                     disabled={disabled}
                                     aria-label={`Edit fee rate (${tiers.unit})`}
-                                    title="Click to edit the fee rate"
+                                    title="Select to edit the fee rate"
                                 >
                                     {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
                                 </button>

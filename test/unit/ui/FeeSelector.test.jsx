@@ -44,6 +44,10 @@ describe('<FeeSelector>', () => {
         expect(screen.getByRole('status')).toHaveTextContent('0.00000200 BTC');
         expect(screen.getByRole('status')).toHaveTextContent('$0.12');
         expect(screen.getByRole('button', { name: 'Fee priority help' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Edit exact fee amount' }))
+            .toHaveAttribute('title', 'Select to edit the exact fee');
+        expect(screen.getByRole('button', { name: 'Edit fee rate (sat/vB)' }))
+            .toHaveAttribute('title', 'Select to edit the fee rate');
     });
 
     it('emits preset and custom selections', () => {
