@@ -158,8 +158,13 @@ export const nativeBiometricProvider = {
         if (!hasNativeVault()) return false;
         try {
             const reply = await callNativeVault('biometricStatus');
+            // Locked.jsx reads registration synchronously, then awaits this
+            // probe. Refreshing the cache here lets its post-probe check see
+            // an enrollment removed or invalidated while the app was away.
+            enrolledCache = Boolean(reply?.enrolled);
             return Boolean(reply?.available);
         } catch (_err) {
+            enrolledCache = false;
             return false;
         }
     },
