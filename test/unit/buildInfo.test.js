@@ -85,6 +85,19 @@ describe('buildInfo', () => {
         expect(VERIFY_RELEASE_DOC.length).toBeGreaterThan(0);
     });
 
+    it('uses the canonical hosted documentation routes', () => {
+        expect(REPRODUCIBLE_BUILD_DOC).toBe(
+            'https://docs.xchain.io/components/wallet/reproducible-builds',
+        );
+        expect(REPRODUCIBLE_BUILD_DOC_DESKTOP).toBe(
+            'https://docs.xchain.io/components/wallet/reproducible-builds#desktop-xchain-walletdesktop',
+        );
+        expect(VERIFY_RELEASE_DOC).toBe(
+            'https://docs.xchain.io/components/wallet/release/verify-release',
+        );
+        expect(RELEASE_SIGNATURES_DOC).toBe('https://xchain.io/security');
+    });
+
     it('UPDATE_CHANNEL is a non-empty string', () => {
         expect(typeof UPDATE_CHANNEL).toBe('string');
         expect(UPDATE_CHANNEL.length).toBeGreaterThan(0);

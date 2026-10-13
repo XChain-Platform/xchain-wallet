@@ -45,8 +45,11 @@
 
 .mnemonicHeader {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    min-width: 0;
     margin-bottom: var(--xc-space-1);
 }
 
@@ -232,6 +235,7 @@
 
 .laneTab {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -239,6 +243,7 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     cursor: pointer;
+    overflow-wrap: anywhere;
 }
 
 .laneTab[disabled] {
@@ -296,5 +301,12 @@
     .mnemonicFull:focus {
         outline: 2px solid Highlight;
         outline-offset: 2px;
+    }
+}
+
+@media (max-height: 520px) {
+    .headPopup,
+    .headFull {
+        margin-bottom: var(--xc-space-2);
     }
 }

@@ -126,3 +126,113 @@ it.each([0, 201, 1.5])('rejects invalid gap limit %s before deriving a seed', as
         .rejects.toThrow('gapLimit must be an integer in [1, 200]');
     expect(cryptoMocks.bip39MnemonicToSeed).not.toHaveBeenCalled();
 });
+
+function chainHarness(chainIds) {
+    const descriptors = new Map(chainIds.map((id) => [id, {
+        id,
+        defaultAddressType: 'p2wpkh',
+        addressTypes: ['p2wpkh'],
+    }]));
+    return {
+        chainRegistry: {
+            supportedChains: () => [...descriptors.values()],
+            get: (id) => descriptors.get(id),
+            derivationPathFor: (id, type, account, change, index) => (
+                `${id}/${type}/${account}/${change}/${index}`
+            ),
+        },
+        sdkRegistry: {
+            get: (id) => ({ wallet: { deriveAddress: (key) => `${id}:${key}` } }),
+        },
+    };
+}
+
+it('continues through the gap after a used address, honours account and change, and clears the seed', async () => {
+    const used = [false, true, false, false];
+    const onProgress = vi.fn();
+
+    const result = await discover({
+        ...chainHarness(['bitcoin-mainnet']),
+        gapLimit: 2,
+        accountIndex: 3,
+        change: 1,
+        isUsedProbe: vi.fn(async () => ({ used: used.shift() })),
+        onProgress,
+    });
+
+    expect(result.totalUsedFound).toBe(1);
+    expect(result.perChain[0]).toMatchObject({
+        highestUsedIndex: 1,
+        scannedCount: 4,
+        incomplete: false,
+        error: null,
+    });
+    expect(result.perChain[0].addresses.map(({ index, path, used: wasUsed }) => ({
+        index,
+        path,
+        used: wasUsed,
+    }))).toEqual([
+        { index: 0, path: 'bitcoin-mainnet/p2wpkh/3/1/0', used: false },
+        { index: 1, path: 'bitcoin-mainnet/p2wpkh/3/1/1', used: true },
+        { index: 2, path: 'bitcoin-mainnet/p2wpkh/3/1/2', used: false },
+        { index: 3, path: 'bitcoin-mainnet/p2wpkh/3/1/3', used: false },
+    ]);
+    expect(cryptoMocks.zeroDerivedKey).toHaveBeenCalledTimes(4);
+    expect(seed).toEqual(new Uint8Array(3));
+    expect(onProgress.mock.calls.map(([event]) => event.phase)).toEqual([
+        'chain-start',
+        'scan-progress',
+        'scan-progress',
+        'scan-progress',
+        'scan-progress',
+        'chain-complete',
+    ]);
+});
+
+it('records a failed probe as unknown without letting it satisfy the gap', async () => {
+    const probe = vi.fn()
+        .mockRejectedValueOnce(new Error('explorer unavailable'))
+        .mockResolvedValue({ used: false });
+
+    const result = await discover({
+        ...chainHarness(['bitcoin-mainnet']),
+        gapLimit: 2,
+        isUsedProbe: probe,
+    });
+
+    expect(result.perChain[0]).toMatchObject({
+        scannedCount: 3,
+        incomplete: false,
+        error: 'probe failed for index 0: explorer unavailable',
+    });
+    expect(result.perChain[0].addresses.map(({ unknown }) => unknown))
+        .toEqual([true, false, false]);
+});
+
+it('isolates a chain failure and scans the remaining chain', async () => {
+    const deps = chainHarness(['broken-mainnet', 'bitcoin-mainnet']);
+    deps.sdkRegistry.get = (id) => {
+        if (id === 'broken-mainnet') throw new Error('SDK unavailable');
+        return { wallet: { deriveAddress: (key) => `address:${key}` } };
+    };
+
+    const result = await discover({
+        ...deps,
+        gapLimit: 1,
+        isUsedProbe: async () => ({ used: false }),
+    });
+
+    expect(result.perChain).toHaveLength(2);
+    expect(result.perChain[0]).toMatchObject({
+        chainId: 'broken-mainnet',
+        incomplete: true,
+        scannedCount: 0,
+        error: 'SDK unavailable',
+    });
+    expect(result.perChain[1]).toMatchObject({
+        chainId: 'bitcoin-mainnet',
+        incomplete: false,
+        scannedCount: 1,
+    });
+    expect(seed).toEqual(new Uint8Array(3));
+});

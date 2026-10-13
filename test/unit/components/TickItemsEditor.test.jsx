@@ -53,7 +53,10 @@ describe('TickItemsEditor', () => {
         const messaging = fakeMessaging({});
         render(<Harness initial={'AAA\naaa\nBBB\nbad name!'} messaging={messaging} />);
         expect(screen.getByText(/2 valid token names · 1 duplicate removed · 1 invalid/)).toBeInTheDocument();
-        expect(screen.getByText('Not a token name: bad name!')).toBeInTheDocument();
+        const input = screen.getByLabelText('Tokens (one per line)');
+        const invalid = screen.getByText('Not a token name: bad name!');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(invalid.id);
         await settle();
     });
 
@@ -67,7 +70,11 @@ describe('TickItemsEditor', () => {
         expect(messaging.getTokenInfo).toHaveBeenCalledTimes(2);
         expect(onStatus).toHaveBeenLastCalledWith({ GOODTOK: 'found', NOSUCH: 'missing' });
         expect(screen.getByText(/1 found · 1 not found/)).toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent('Not found on Bitcoin: NOSUCH.');
+        const input = screen.getByLabelText('Tokens (one per line)');
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent('Not found on Bitcoin: NOSUCH.');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
     it('skips a ^ reference and shows it as not checked', async () => {

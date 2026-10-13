@@ -53,6 +53,7 @@ import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -531,7 +532,7 @@ function AppInner() {
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { lockWallet().then(refresh).catch(() => refresh()); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -661,6 +662,39 @@ function AppInner() {
                 }),
             );
     }, []);
+
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setContactScanPrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+        setGlobalScannerOpen(false);
+        pendingUriView.current = null;
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
 
     useEffect(() => { refresh(); }, [refresh]);
 
@@ -849,7 +883,7 @@ function AppInner() {
     // can name the active one. The per-wallet effect above owns SELECTION;
     // this owns the label, and keeping them separate stops the header from
     // reaching into that effect's control flow.
-    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
+    const headerAccounts = useAccountList(activeWalletId, accountRenameTarget);
 
     // Build the pancake menu's Alerts panel from the shared list in core
     // (walletAlerts.js); the menu lives at the App level here, not in Home.
@@ -983,7 +1017,7 @@ function AppInner() {
                         onStaking={hasBtcAddress ? () => setUnlockedView('staking-dashboard') : undefined}
                         onMultisig={hasBtcAddress ? () => setUnlockedView('multisig-create') : undefined}
                         onSwitchWallet={() => openWalletPicker()}
-                        onLock={() => { lockWallet().then(refresh).catch(() => refresh()); }}
+                        onLock={handleLock}
                         onSettings={() => setUnlockedView('settings')}
                     />
                 );
@@ -2558,7 +2592,12 @@ function AppInner() {
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
-                        onRenamed={() => {
+                        onRenamed={(wallet) => {
+                            if (wallet?.id) {
+                                setWalletList((list) => list.map((entry) => (
+                                    entry.id === wallet.id ? { ...entry, ...wallet } : entry
+                                )));
+                            }
                             setWalletRenameTarget(null);
                             setUnlockedView('wallet-details');
                         }}
@@ -2730,11 +2769,7 @@ function AppInner() {
                 </Fragment>
             );
             })();
-            const handleNavLock = () => {
-                lockWallet()
-                    .then(refresh)
-                    .catch(() => refresh());
-            };
+            const handleNavLock = handleLock;
             const handleOpenWalletPicker = () => openWalletPicker();
             const handleOpenAccountPicker = () => {
                 setAccountPickerBackTo('home');
@@ -2896,6 +2931,7 @@ function AppInner() {
                                     activeNetwork={activeNetwork}
                                     developerMode={developerMode}
                                     onActiveNetworkChange={handleActiveNetworkChange}
+                                    onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.
