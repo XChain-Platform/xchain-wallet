@@ -129,14 +129,14 @@ describe('desktop window bounds memory', () => {
         )).toEqual({ x: 0, y: 100, width: 900, height: 700 });
     });
 
-    it('shrinks an oversized saved window to the display that contains it', () => {
+    it('shrinks an oversized saved window without moving its in-area origin', () => {
         expect(restoreWindowBounds(
             { x: 2100, y: 100, width: 2500, height: 1400 },
             [
                 { workArea: { x: 0, y: 0, width: 1920, height: 1080 } },
                 { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } },
             ],
-        )).toEqual({ x: 1920, y: 0, width: 1280, height: 1024 });
+        )).toEqual({ x: 2100, y: 100, width: 1280, height: 1024 });
     });
 
     it('cascades an additional window without changing its remembered size', () => {

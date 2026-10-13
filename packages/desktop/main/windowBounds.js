@@ -57,8 +57,8 @@ export function normalizeWindowBounds(value) {
 }
 
 /**
- * Fit remembered bounds to one current display. Monitor removal and display
- * resolution changes otherwise leave all or part of the restored window lost.
+ * Keep an origin that belongs to any current work area, fitting only the size
+ * to that display. Recover other partially visible bounds onto one display.
  *
  * @param {unknown} value
  * @param {Array<{ workArea?: { x?: number, y?: number, width?: number, height?: number } }>} displays
@@ -71,6 +71,17 @@ export function restoreWindowBounds(value, displays = []) {
     if (areas.length === 0) return bounds.x === undefined || bounds.y === undefined
         ? bounds
         : { width: bounds.width, height: bounds.height };
+
+    const containingArea = bounds.x === undefined || bounds.y === undefined
+        ? null
+        : areas.find((area) => containsPoint(bounds.x, bounds.y, area));
+    if (containingArea) {
+        return {
+            ...bounds,
+            width: Math.min(bounds.width, containingArea.width),
+            height: Math.min(bounds.height, containingArea.height),
+        };
+    }
 
     const target = bounds.x === undefined || bounds.y === undefined
         ? largestDisplayArea(areas)
@@ -129,6 +140,11 @@ function overlapSize(bounds, area) {
 function hasUsefulOverlap(bounds, area) {
     const overlap = overlapSize(bounds, area);
     return overlap.width >= MIN_VISIBLE_EDGE && overlap.height >= MIN_VISIBLE_EDGE;
+}
+
+function containsPoint(x, y, area) {
+    return x >= area.x && x < area.x + area.width
+        && y >= area.y && y < area.y + area.height;
 }
 
 function bestVisibleDisplay(bounds, areas) {
