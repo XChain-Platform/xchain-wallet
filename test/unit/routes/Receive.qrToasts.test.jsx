@@ -50,6 +50,7 @@ const ADDRESS = {
     source: 'hd',
     label: 'Daily deposits',
 };
+const MOBILE_ADDRESS = 'bcrt1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 const BROWSER_TEXT = "Failed to execute 'write' on 'Clipboard': Document is not focused.";
 
 function renderReceive(overrides = {}) {
@@ -105,6 +106,48 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it.each([320, 360])('keeps the receive request usable at %ipx', async (viewportWidth) => {
+        const originalInnerWidth = window.innerWidth;
+        const originalResizeObserver = globalThis.ResizeObserver;
+        const measuredQrWidth = viewportWidth - 42;
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        globalThis.ResizeObserver = class ResizeObserver {
+            constructor(callback) { this.callback = callback; }
+            observe(target) {
+                this.callback([{ target, contentRect: { width: measuredQrWidth } }]);
+            }
+            disconnect() {}
+        };
+
+        try {
+            renderReceive({
+                getAddressesByChain: async () => ({
+                    'bitcoin-regtest': [{ ...ADDRESS, address: MOBILE_ADDRESS }],
+                }),
+                getNewestAddress: async () => ({ ...ADDRESS, address: MOBILE_ADDRESS }),
+            });
+
+            expect(await screen.findByText(MOBILE_ADDRESS)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Token:/ })).toBeInTheDocument();
+            expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Copy payment request' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Share QR' })).toBeInTheDocument();
+            await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    margin: 4,
+                    width: measuredQrWidth,
+                }),
+            ));
+        } finally {
+            globalThis.ResizeObserver = originalResizeObserver;
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                value: originalInnerWidth,
+            });
+        }
+    });
+
     it('renders a four-module quiet zone at the measured device-pixel width', async () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         const originalDevicePixelRatio = window.devicePixelRatio;

@@ -834,6 +834,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     title="Tap to copy payment request"
                     hint="Tap the address to copy its payment request."
                     style={{ cursor: 'text', userSelect: 'text' }}
+                    wrapReadOnlyAddress
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"
                 />
