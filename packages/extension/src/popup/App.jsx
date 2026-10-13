@@ -70,6 +70,7 @@ import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/Comman
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -662,7 +663,9 @@ function AppInner() {
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
-        messaging.getWalletBalances(activeWalletId, activeAccountId)
+        // The balances Home shows, so a coin opened from here matches
+        // Home's figure (a demo wallet's are synthesized, not read).
+        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
             .then((balances) => {
                 if (cancelled) return;
                 setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
@@ -688,7 +691,7 @@ function AppInner() {
 
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
-    // popup locks via messaging.lockWallet (Home owns the visible Lock button).
+    // popup locks via messaging.lockWallet, the same call as Home's lock button.
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
@@ -2580,6 +2583,9 @@ function AppInner() {
                         // reach Settings from the nav rail, and a second entry
                         // in the hero would be duplicate chrome.
                         onOpenSettings={() => openSettingsSection(null)}
+                        // No header here either, so Home shows the lock
+                        // button that web and desktop keep in their header.
+                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
                     />
                 </>
             );

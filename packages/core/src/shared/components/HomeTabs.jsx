@@ -70,7 +70,7 @@ import styles from './HomeTabs.module.css';
  * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const [active, setActive] = useState('coins');
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
@@ -182,6 +182,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
                 onCommandPalette={onCommandPalette}
                 onOpenSettings={onOpenSettings}
+                onLockWallet={onLockWallet}
             />
 
             <PortfolioChart
