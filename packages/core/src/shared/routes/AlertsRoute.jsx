@@ -15,25 +15,87 @@
 // destination (Decentralized Exchange, Marketplace, ...). Reuses
 // AlertsOverlay.module.css for the alert-row styling.
 
+import { useState } from 'react';
 import { Button, EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
 import { alertSeverityPresentation } from '../components/alertSeverity.js';
 
 /**
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, action?: { label: string, onSelect: () => void } }>} [props.alerts]
+ * @param {string} [props.walletId]
+ * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void } }>} [props.alerts]
  */
-export function AlertsRoute({ onBack, alerts = [] }) {
+export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const header = <PageHeader onBack={onBack} title="Alerts" />;
-    const visibleAlerts = Array.isArray(alerts) ? alerts : [];
+    const sourceAlerts = Array.isArray(alerts) ? alerts : [];
+    const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
+    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alertVersion(alert)));
+    const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
+
+    const commitState = (next) => {
+        writeAlertCenter(walletId, next);
+        setCenterState(next);
+    };
+
+    const markRead = (alert) => {
+        const key = alertVersion(alert);
+        if (centerState.read.has(key)) return;
+        commitState({
+            ...centerState,
+            read: new Set([...centerState.read, key]),
+        });
+    };
+
+    const openAlert = (alert) => {
+        markRead(alert);
+        alert.action?.onSelect();
+    };
+
+    const toolbar = visibleAlerts.length > 0 ? (
+        <div className={styles.controls}>
+            <span className={styles.unreadCount} aria-live="polite">
+                {unreadAlerts.length} unread
+            </span>
+            <Button
+                variant="secondary"
+                size="sm"
+                icon={null}
+                disabled={unreadAlerts.length === 0}
+                onClick={() => commitState({
+                    ...centerState,
+                    read: new Set([
+                        ...centerState.read,
+                        ...visibleAlerts.map(alertVersion),
+                    ]),
+                })}
+            >
+                Mark all read
+            </Button>
+            <Button
+                variant="ghost"
+                size="sm"
+                icon={null}
+                onClick={() => commitState({
+                    ...centerState,
+                    cleared: new Set([
+                        ...centerState.cleared,
+                        ...visibleAlerts.map(alertVersion),
+                    ]),
+                })}
+            >
+                Clear alerts
+            </Button>
+        </div>
+    ) : null;
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage>
+            <ListPage toolbar={toolbar}>
                 {visibleAlerts.length === 0 ? (
                     <EmptyState title="No alerts" body="You're all caught up." />
                 ) : (
@@ -41,22 +103,40 @@ export function AlertsRoute({ onBack, alerts = [] }) {
                     <ul className={styles.list} role="list">
                         {visibleAlerts.map((a) => {
                             const severity = alertSeverityPresentation(a.severity);
+                            const isUnread = !a.read && !centerState.read.has(alertVersion(a));
                             return (
-                                <li key={a.id} className={`${styles.alert} ${styles[severity.kind]}`}>
+                                <li
+                                    key={a.id}
+                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
+                                >
                                     <div className={styles.alertHead}>
                                         <span className={styles.severity}>{severity.label}</span>
                                         <span className={styles.alertTitle}>{a.title}</span>
+                                        <span className={styles.readStatus}>{isUnread ? 'Unread' : 'Read'}</span>
                                     </div>
                                     <div className={styles.alertMessage}>{a.message}</div>
                                     {a.action ? (
+                                        // Opening an alert's screen also marks it read.
                                         <Button
                                             variant="primary"
                                             size="sm"
                                             icon={null}
-                                            onClick={() => a.action.onSelect()}
+                                            onClick={() => openAlert(a)}
                                             style={{ alignSelf: 'flex-start' }}
                                         >
                                             {a.action.label}
+                                        </Button>
+                                    ) : null}
+                                    {isUnread ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={null}
+                                            aria-label={`Mark ${a.title} read`}
+                                            onClick={() => markRead(a)}
+                                            style={{ alignSelf: 'flex-start' }}
+                                        >
+                                            Mark read
                                         </Button>
                                     ) : null}
                                 </li>

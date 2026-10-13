@@ -9,12 +9,12 @@
 // contact legal@dankest.llc.
 
 // Popup and side-panel pages are separate JavaScript realms. The background
-// publishes committed session, wallet and network changes through
+// publishes committed session, wallet, settings and network changes through
 // chrome.storage.session so every open trusted extension surface sees them.
 
 export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
-const KINDS = new Set(['session', 'wallet', 'network']);
+const KINDS = new Set(['session', 'wallet', 'settings', 'network']);
 
 /**
  * @param {{
@@ -33,7 +33,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 
     return {
         /**
-         * @param {'session' | 'wallet' | 'network'} kind
+         * @param {'session' | 'wallet' | 'settings' | 'network'} kind
          * @param {Record<string, unknown>} [payload]
          * @returns {Promise<boolean>}
          */
@@ -65,7 +65,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 }
 
 /**
- * @param {(event: { kind: 'session' | 'wallet' | 'network', payload: Record<string, unknown>, revision: string }) => void} onEvent
+ * @param {(event: { kind: 'session' | 'wallet' | 'settings' | 'network', payload: Record<string, unknown>, revision: string }) => void} onEvent
  * @param {{ addListener: Function, removeListener: Function }} [storageChanges]
  * @returns {() => void}
  */
@@ -110,11 +110,11 @@ export function applySurfaceStateEvent(event, handlers) {
         }
         return undefined;
     }
-    if (event?.kind === 'network') {
+    if (event?.kind === 'settings' || event?.kind === 'network') {
         const settings = event.payload?.settings;
         if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return undefined;
         handlers.settingsChanged?.(settings);
-        return handlers.remountNetworkState?.();
+        if (event.kind === 'network') return handlers.remountNetworkState?.();
     }
     return undefined;
 }

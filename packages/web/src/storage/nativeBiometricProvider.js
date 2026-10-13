@@ -55,6 +55,10 @@ const { bytesToBase64, base64ToBytes } = coreCrypto;
 /** Cached enrollment flag: `isRegistered()` is synchronous by contract. */
 let enrolledCache = false;
 
+const RETRY_EXHAUSTED_DETAIL = 'biometric authentication failed repeatedly';
+const RETRY_EXHAUSTED_MESSAGE = 'Biometrics did not recognize you after several attempts.'
+    + ' Try again or unlock with your wallet password.';
+
 /**
  * Plain-language reasons, keyed on the stable `reasonCode` the native halves
  * emit. The native `detail` beside it is a developer string
@@ -222,6 +226,9 @@ export const nativeBiometricProvider = {
                 throw new BiometricNotRegisteredError();
             default:
                 if (reply?.detail === BIOMETRIC_CANCELLED_DETAIL) throw new BiometricCancelledError();
+                if (reply?.detail === RETRY_EXHAUSTED_DETAIL) {
+                    throw new Error(RETRY_EXHAUSTED_MESSAGE);
+                }
                 throw new BiometricUnsupportedError('biometric unlock failed');
         }
     },

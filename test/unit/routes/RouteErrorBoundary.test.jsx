@@ -97,4 +97,17 @@ describe('RouteErrorBoundary', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Recovered route' })).toBeTruthy());
     });
+
+    it('renders compact failures without full-screen recovery actions', () => {
+        render(
+            <RouteErrorBoundary variant="compact">
+                <ThrowingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'This screen could not be shown' })).toBeNull();
+    });
 });

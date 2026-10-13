@@ -139,6 +139,7 @@ import { installNativeQrScanner } from './storage/nativeQrScanner.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 
 const chainRegistry = defaultRegistry();
 
@@ -729,6 +730,7 @@ let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
 let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
+let cancelNotificationStart = null;
 
 const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
 
@@ -872,12 +874,21 @@ const DEADLINE_SEEN_KEY = 'xchain.deadlines.seen';
 // PC-46: chain -> announced `actionIndex:bucket` keys.
 const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 
-// §46: start the live notification watcher once a vault + host exist. All
-// three host-creation paths (create / import / unlock) call this; lock stops
-// it. Idempotent: a second call while already running is a no-op. `getFlows`
-// is hoisted (a function declaration below), so referencing it here is safe.
+// §46: queue the live notification watchers once a vault + host exist. The
+// idle boundary gives the home transition a paint before the initial price and
+// history reads. Lock cancels work that has not started.
 function startNotifications() {
-    if (notificationService || !vault) return;
+    if (notificationService || cancelNotificationStart || !vault) return;
+    const scheduledVault = vault;
+    cancelNotificationStart = deferNonCriticalWork(() => {
+        cancelNotificationStart = null;
+        if (!vault || vault !== scheduledVault || notificationService) return;
+        startNotificationsNow();
+    });
+}
+
+// `getFlows` is hoisted below, so every watcher can resolve it lazily here.
+function startNotificationsNow() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
@@ -1050,6 +1061,10 @@ function startNotifications() {
 }
 
 function stopNotifications() {
+    if (cancelNotificationStart) {
+        cancelNotificationStart();
+        cancelNotificationStart = null;
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -1428,28 +1443,34 @@ export async function createWalletLocal(req) {
 }
 
 /**
- * Import a pre-existing mnemonic (BIP39 12/24-word or Counterwallet
- * legacy 12-word). Same persistence path as `createWalletLocal`: fresh
- * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
+ * Import a pre-existing mnemonic or a single WIF private key. Same persistence
+ * path as `createWalletLocal`: fresh kdfParams, open vault, run the matching
+ * core import flow, save meta.
  *
- * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
- * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string, walletId: string, labelSyncToken: string | null }>}
+ * @param {{ password: string, mnemonic?: string, wif?: string, chainId?: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy' | 'wif-only', walletName: string, walletId: string, labelSyncToken: string | null }>}
  */
 export async function importMnemonicLocal(req) {
     const password = req?.password;
     const mnemonic = req?.mnemonic;
+    const wif = req?.wif;
+    const importingWif = typeof wif === 'string' && wif.trim().length > 0;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.import: password is required');
     }
-    if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
-        throw new Error('wallet.import: mnemonic is required');
+    if (!importingWif && (typeof mnemonic !== 'string' || mnemonic.trim().length === 0)) {
+        throw new Error('wallet.import: recovery phrase or WIF private key is required');
     }
     const {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        chainId,
     } = req;
+    if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
+        throw new Error('wallet.import: chainId is required for a WIF private key');
+    }
 
     const meta = createMetaBackend();
 
@@ -1460,7 +1481,7 @@ export async function importMnemonicLocal(req) {
     // not valid". The format check is microseconds and importMnemonic
     // re-validates anyway, so this is a fast path, not a second gate.
     const flowsNs = await getFlows();
-    if (!flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
+    if (!importingWif && !flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
         throw new Error(
             'That recovery phrase is not valid. Check for typos, missing words, or a phrase from a different wallet.',
         );
@@ -1481,21 +1502,33 @@ export async function importMnemonicLocal(req) {
         const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
-        const result = await flowsNs.importMnemonic({
-            password,
-            mnemonic,
-            vault: v,
-            chainRegistry,
-            sdkRegistry,
-            activeChainIds,
-            name,
-            bip39Passphrase,
-            origin,
-            kdfParams,
-            // Same password, same params: the wallet seal reuses the vault
-            // key instead of paying a second Argon2id round.
-            masterKey,
-        });
+        await sdkBound();
+        const result = importingWif
+            ? await flowsNs.importSingleWif({
+                password,
+                wif: wif.trim(),
+                chainId,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                name,
+                kdfParams,
+            })
+            : await flowsNs.importMnemonic({
+                password,
+                mnemonic,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                activeChainIds,
+                name,
+                bip39Passphrase,
+                origin,
+                kdfParams,
+                // Same password, same params: the wallet seal reuses the vault
+                // key instead of paying a second Argon2id round.
+                masterKey,
+            });
         await v.save();
         vault = v;
         await sdkBound();
@@ -1526,7 +1559,7 @@ export async function importMnemonicLocal(req) {
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
         // explorer can only cost the restore, never the import.
-        const labelSyncToken = origin === 'created'
+        const labelSyncToken = importingWif || origin === 'created'
             ? null
             : startLabelSyncRestoreTask({
                 walletId: result.wallet.id,
@@ -1548,7 +1581,7 @@ export async function importMnemonicLocal(req) {
         // lane imported the phrase and then dead-ended on "the shell returned
         // no wallet id" - a hard stop after the wallet already existed.
         return {
-            format: result.format,
+            format: result.format ?? result.wallet.format,
             walletName: result.wallet.name,
             walletId: result.wallet.id,
             labelSyncToken,

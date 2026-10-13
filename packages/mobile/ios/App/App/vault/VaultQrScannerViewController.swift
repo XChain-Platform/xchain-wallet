@@ -233,17 +233,25 @@ final class VaultQrScannerViewController: UIViewController, QrScanSurface, AVCap
         sessionObservers.forEach { NotificationCenter.default.removeObserver($0) }
         sessionObservers = []
         output.setMetadataObjectsDelegate(nil, queue: nil)
-        sessionQueue.async { self.session.stopRunning() }
-        let finished = {
+
+        // Closing settles only after the screen is gone and the capture device is released.
+        let teardown = DispatchGroup()
+        teardown.enter()
+        sessionQueue.async {
+            self.session.stopRunning()
+            teardown.leave()
+        }
+        teardown.enter()
+        if let presenter = presentingViewController {
+            presenter.dismiss(animated: true) { teardown.leave() }
+        } else {
+            teardown.leave()
+        }
+        teardown.notify(queue: .main) {
             self.phase = .closed
             let waiters = self.closeWaiters
             self.closeWaiters = []
             waiters.forEach { $0() }
-        }
-        if let presenter = presentingViewController {
-            presenter.dismiss(animated: true, completion: finished)
-        } else {
-            finished()
         }
     }
 

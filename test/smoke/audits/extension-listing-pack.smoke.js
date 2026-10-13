@@ -262,11 +262,11 @@ assert.equal(nameLine[1].trim(), manifest.name,
     + `"${manifest.name}". The store takes the listing title from the package, so these cannot differ.`);
 
 const platformLead = 'The wallet for the XChain Platform';
-const currentSupport = 'Currently supports BTC, DOGE &amp; LTC';
+const currentSupport = 'Current chains: Bitcoin, Litecoin &amp; Dogecoin';
 assert.ok(captureScript.includes(platformLead),
     `${CAPTURE_SCRIPT_PATH} promo tile must lead with "${platformLead}"`);
 assert.ok(captureScript.includes(currentSupport),
-    `${CAPTURE_SCRIPT_PATH} promo tile must describe BTC, DOGE, and LTC as current support`);
+    `${CAPTURE_SCRIPT_PATH} promo tile must name Bitcoin, Litecoin, and Dogecoin as current chain support`);
 assert.ok(!/Bitcoin, Dogecoin &(?:amp;)? Litecoin wallet/.test(captureScript),
     `${CAPTURE_SCRIPT_PATH} promo tile must not define the product as a three-coin wallet`);
 

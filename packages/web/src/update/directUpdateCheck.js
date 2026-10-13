@@ -36,8 +36,11 @@
 // The endpoint is on the §5 wire-audit list, which the Play Data safety
 // answers are derived from. It is a static file: no query string, no
 // identifiers, no headers we control beyond the request itself.
+// Production feed: https://downloads.xchain.io/wallet/android/latest.json
 
-const FEED_URL = 'https://downloads.xchain.io/wallet/android/latest.json';
+import { ANDROID_UPDATE_FEED_URL } from '../../../core/src/branding/branding.js';
+
+const FEED_URL = ANDROID_UPDATE_FEED_URL;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PREF_KEY = 'xchain-wallet:update-check';
 const MAX_FEED_BYTES = 4096;

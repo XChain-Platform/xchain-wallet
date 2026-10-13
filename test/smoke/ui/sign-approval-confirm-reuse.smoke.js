@@ -78,7 +78,7 @@ assert.doesNotMatch(
 );
 assert.match(
     signSrc,
-    /<Screen\s+variant="popup"/,
+    /<Screen\s+variant="small"/,
     'keeps its own popup Screen + approval chrome',
 );
 

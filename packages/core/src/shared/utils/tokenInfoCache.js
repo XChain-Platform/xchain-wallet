@@ -39,6 +39,7 @@
  * Detail -> back -> Detail still costs no network.
  */
 export const TOKEN_INFO_TTL_MS = 60_000;
+export const TOKEN_INFO_CACHE_MAX = 256;
 
 /** @type {Map<string, { value: any, at: number }>} */
 const cache = new Map();
@@ -74,6 +75,8 @@ export function readTokenInfoCache(key, now = Date.now()) {
         cache.delete(key);
         return { hit: false, value: null };
     }
+    cache.delete(key);
+    cache.set(key, entry);
     return { hit: true, value: entry.value };
 }
 
@@ -84,7 +87,9 @@ export function readTokenInfoCache(key, now = Date.now()) {
  */
 export function writeTokenInfoCache(key, value, now = Date.now()) {
     if (!key) return;
+    cache.delete(key);
     cache.set(key, { value, at: now });
+    while (cache.size > TOKEN_INFO_CACHE_MAX) cache.delete(cache.keys().next().value);
 }
 
 /**
