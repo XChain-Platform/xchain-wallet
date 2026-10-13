@@ -325,6 +325,7 @@ const amountStyle = {
     minWidth: 0,
     overflowWrap: 'anywhere',
     wordBreak: 'normal',
+    fontVariantNumeric: 'tabular-nums',
 };
 
 const changeLineStyle = {
@@ -342,7 +343,7 @@ const balanceLineStyle = {
 
 function signedFee(tick, amount) {
     const value = String(amount ?? '').trim();
-    return value ? `− ${tick} ${value.replace(/^[+-]/, '')}` : `− unknown ${tick}`;
+    return value ? `−${value.replace(/^[+-]/, '')} ${tick}` : `− unknown ${tick}`;
 }
 
 function negativeValue(amount) {

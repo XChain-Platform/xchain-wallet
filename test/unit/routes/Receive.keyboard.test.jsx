@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -44,7 +44,7 @@ const SETTINGS = {
     fees: { 'bitcoin-regtest': { strategy: 'normal' } },
 };
 
-function renderReceive(overrides = {}) {
+function renderReceive(overrides = {}, props = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue(SETTINGS),
         getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-regtest': [ADDRESS] }),
@@ -53,7 +53,7 @@ function renderReceive(overrides = {}) {
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <Receive walletId="wallet-1" accountId="account-1" />
+            <Receive walletId="wallet-1" accountId="account-1" {...props} />
         </MessagingProvider>,
     );
     return messaging;
@@ -204,6 +204,36 @@ describe('Receive keyboard operation', () => {
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
             url: expect.stringContaining('amount=1.25'),
         })));
+    });
+
+    it('uses the selected asset divisibility without changing the request amount', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({ tick: 'WHOLE', divisibility: 0 });
+        renderReceive({ getTokenInfo }, {
+            prefill: {
+                chainId: 'bitcoin-regtest',
+                tick: 'WHOLE',
+                kind: 'token',
+            },
+        });
+
+        const amount = await screen.findByRole('textbox', { name: 'Amount (WHOLE)' });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith({
+            chainId: 'bitcoin-regtest',
+            tick: 'WHOLE',
+            demo: false,
+        }));
+        await act(async () => { await getTokenInfo.mock.results[0].value; });
+        fireEvent.change(amount, { target: { value: '1.5' } });
+
+        expect(amount).toHaveValue('');
+        expect(screen.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
+
+        fireEvent.change(amount, { target: { value: '15' } });
+        expect(amount).toHaveValue('15');
+        await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
+            expect.stringContaining('amount=15'),
+            expect.any(Object),
+        ));
     });
 
     it('saves a label with Enter and cancels a later draft with Escape', async () => {

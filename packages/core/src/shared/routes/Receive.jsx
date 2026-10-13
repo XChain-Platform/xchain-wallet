@@ -17,6 +17,7 @@ import {
 } from '@xchain-wallet/core';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -141,7 +142,7 @@ function newestAddressOfType(addresses, addressType) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
- * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null }} [props.prefill]
+ * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number, imageUrl?: string | null }} [props.prefill]
  *        Selection from ReceivePicker. `chainId` becomes the active
  *        chain; `tick` pre-fills the Token field unless it matches the
  *        chain's native ticker (no point encoding `?tick=BTC` on a
@@ -524,6 +525,26 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const native = nativeTickerFor(activeChainId ? chainRegistry.get(activeChainId) : null);
         return native ? t === native : false;
     }, [reqTick, activeChainId]);
+    const requestTokenInfo = useTokenInfo({
+        chainId: activeChainId,
+        tick: reqTick,
+        skip: isNativeRequest || !reqTick,
+    });
+    const selectedDivisibility = Number(
+        prefill?.divisibility ?? requestTokenInfo?.divisibility,
+    );
+    const requestDivisibility = isNativeRequest
+        ? NATIVE_COIN_DECIMALS
+        : Number.isInteger(selectedDivisibility) && selectedDivisibility >= 0
+            ? selectedDivisibility
+            : NATIVE_COIN_DECIMALS;
+    useEffect(() => {
+        if (!reqAmount.includes('.')) return;
+        const fraction = reqAmount.split('.')[1] || '';
+        if (fraction.length <= requestDivisibility) return;
+        setReqAmount('');
+        setAmountError(`Amount can have at most ${requestDivisibility} decimal places.`);
+    }, [reqAmount, requestDivisibility]);
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatRate = useFiatRate({
@@ -539,10 +560,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const validDecimal = /^\d+(?:\.\d*)?$/.test(stripped);
         const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
         const exceedsCoinPrecision = amountInputMode === 'coin'
-            && fraction.length > NATIVE_COIN_DECIMALS;
+            && fraction.length > requestDivisibility;
         if (stripped !== '' && (!validDecimal || exceedsCoinPrecision)) {
             setAmountError(exceedsCoinPrecision
-                ? `Amount can have at most ${NATIVE_COIN_DECIMALS} decimal places.`
+                ? `Amount can have at most ${requestDivisibility} decimal places.`
                 : 'Enter the amount using numbers and a decimal point only.');
             return;
         }
@@ -552,7 +573,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (!fiatRate) {
                 if (stripped === '') setReqAmount('');
             } else {
-                const derivedCoin = fiatToCoin(stripped, fiatRate, NATIVE_COIN_DECIMALS);
+                const derivedCoin = fiatToCoin(stripped, fiatRate, requestDivisibility);
                 setReqAmount(derivedCoin != null ? derivedCoin : '');
             }
         } else {
@@ -569,7 +590,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 }
             });
         }
-    }, [amountInputMode, fiatRate]);
+    }, [amountInputMode, fiatRate, requestDivisibility]);
 
     const toggleAmountInputMode = useCallback(() => {
         if (!fiatRate) return;
@@ -1109,6 +1130,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         fiatRate={fiatRate}
                         fiatCurrency={fiatCurrency}
                         amountInputMode={amountInputMode}
+                        divisibility={requestDivisibility}
                         onAmountFieldChange={onAmountFieldChange}
                         toggleAmountInputMode={toggleAmountInputMode}
                         inputRef={amountInputRef}

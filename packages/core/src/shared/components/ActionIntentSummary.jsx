@@ -54,7 +54,11 @@ export function ActionIntentSummary({ decoded, simulation }) {
             ) : null}
 
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
-                <div className={styles.deltas} data-testid="action-intent-deltas">
+                <div
+                    className={styles.deltas}
+                    data-testid="action-intent-deltas"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
                     {simulation.deltas.map((d, i) => {
                         // Label-only rows (empty before/after) are paired with
                         // the balance row that already carries the debit, so
@@ -88,7 +92,9 @@ export function ActionIntentSummary({ decoded, simulation }) {
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
                                     <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
-                                    <span className={styles.deltaValues}>{d.tick} {d.feeAmount}</span>
+                                    <span className={styles.deltaValues}>
+                                        {formatDisplayAmount(d.feeAmount)} {d.tick}
+                                    </span>
                                 </div>
                             );
                         }
