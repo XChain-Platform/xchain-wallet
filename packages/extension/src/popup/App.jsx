@@ -11,7 +11,7 @@
 // Popup top-level state machine.
 //
 // Primary state (from the background):
-//   loading      -> no-wallet | locked | unlocked | error
+//   loading      -> no-wallet | locked | unlocked | reconnecting | background-error | error
 //   locked       -> unlocked
 //   unlocked     -> locked
 //   no-wallet    -> locked  (onboarding → create/import → unlock)
@@ -169,6 +169,11 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import {
+    BackgroundConnectionState,
+    connectToBackground,
+    isBackgroundConnectionError,
+} from './backgroundConnection.jsx';
 import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
@@ -516,7 +521,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         setStatus({ state: 'loading' });
         if (extensionHandoff?.flow !== 'import') setOnboardingStep('welcome');
         setUnlockedView('home');
-        getSessionStatus()
+        connectToBackground(getSessionStatus, {
+            onRetry: () => setStatus({ state: 'reconnecting' }),
+        })
             .then((next) => {
                 setStatus(next);
                 const launchView = launchRouteState.current.takeForSession(next);
@@ -524,7 +531,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             })
             .catch((err) =>
                 setStatus({
-                    state: 'error',
+                    state: isBackgroundConnectionError(err) ? 'background-error' : 'error',
                     error: err?.message || String(err),
                     // A vault that EXISTS and will not open gets a
                     // screen of its own, and which of the three it is decides
@@ -878,6 +885,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     switch (status.state) {
         case 'loading':
             return <Loading />;
+        case 'reconnecting':
+            return <BackgroundConnectionState />;
+        case 'background-error':
+            return <BackgroundConnectionState failed />;
         case 'error':
             return status.errorKind
                 ? <VaultUnavailable kind={status.errorKind} detail={status.error} />
