@@ -45,6 +45,7 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NATIVE_COIN_DECIMALS = 8;
 const QR_FALLBACK_PIXEL_SIZE = 512;
 
 export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
@@ -438,10 +439,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
         const stripped = String(rawValue).replace(/,/g, '');
-        if (stripped !== '' && !/^\d+(?:\.\d{0,8})?$/.test(stripped)) {
-            const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
-            setAmountError(fraction.length > 8
-                ? 'Amount can have at most 8 decimal places.'
+        const validDecimal = /^\d+(?:\.\d*)?$/.test(stripped);
+        const fraction = stripped.includes('.') ? stripped.split('.')[1] : '';
+        const exceedsCoinPrecision = amountInputMode === 'coin'
+            && fraction.length > NATIVE_COIN_DECIMALS;
+        if (stripped !== '' && (!validDecimal || exceedsCoinPrecision)) {
+            setAmountError(exceedsCoinPrecision
+                ? `Amount can have at most ${NATIVE_COIN_DECIMALS} decimal places.`
                 : 'Enter the amount as a plain decimal number.');
             return;
         }
@@ -451,7 +455,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (!fiatRate) {
                 if (stripped === '') setReqAmount('');
             } else {
-                const derivedCoin = fiatToCoin(stripped, fiatRate);
+                const derivedCoin = fiatToCoin(stripped, fiatRate, NATIVE_COIN_DECIMALS);
                 setReqAmount(derivedCoin != null ? derivedCoin : '');
             }
         } else {
@@ -472,6 +476,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const toggleAmountInputMode = useCallback(() => {
         if (!fiatRate) return;
+        setAmountError(null);
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
                 const value = reqAmount ? coinToFiatExact(reqAmount, fiatRate) : null;
@@ -516,16 +521,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
         const feePriority = feePick?.mode || 'normal';
+        const hasRequestDetails = !!(amount || tick);
         return uriLib.encodeBip21Uri({
             scheme: descriptor.uriScheme,
             address: address.address,
             amount,
-            label: address.label || undefined,
-            params: {
+            label: hasRequestDetails ? (address.label || undefined) : undefined,
+            params: hasRequestDetails ? {
                 chain: activeChainId,
                 ...(tick ? { tick } : {}),
                 feePriority,
-            },
+            } : {},
         });
     }, [address, descriptor, activeChainId, reqAmount, reqTick, feePick]);
 
