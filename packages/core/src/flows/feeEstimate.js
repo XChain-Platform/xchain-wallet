@@ -103,6 +103,7 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
 });
 
 const DEFAULT_SPEED = 'normal';
+const DEFAULT_FETCH_TIMEOUT_MS = 4_000;
 
 /**
  * @typedef {'low' | 'normal' | 'fast'} FeeSpeed
@@ -336,9 +337,15 @@ export function displayRateToPerByte(unit, displayValue) {
  * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string } | null> }} [opts.messaging]
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @param {number} [opts.timeoutMs]
  * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null>}
  */
-export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistry } = {}) {
+export async function fetchNativeSendFeeTiers({
+    messaging,
+    chainId,
+    chainRegistry,
+    timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
+} = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
     const desc = chainRegistry.get(chainId);
     const coin = desc?.coin;
@@ -347,8 +354,20 @@ export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistr
     if (!table) return null;
 
     if (messaging && typeof messaging.estimateFee === 'function') {
+        let timeoutId;
         try {
-            const sdk = await messaging.estimateFee({ chainId });
+            // A shell or explorer request can remain pending while it retries a
+            // throttled endpoint. Bound the upgrade so callers always settle on
+            // the local table and never wait indefinitely for live rates.
+            const sdk = await Promise.race([
+                Promise.resolve().then(() => messaging.estimateFee({ chainId })),
+                new Promise((resolve) => {
+                    const delay = Number.isFinite(timeoutMs) && timeoutMs >= 0
+                        ? timeoutMs
+                        : DEFAULT_FETCH_TIMEOUT_MS;
+                    timeoutId = setTimeout(() => resolve(null), delay);
+                }),
+            ]);
             if (sdk && typeof sdk === 'object') {
                 const unit = typeof sdk.unit === 'string' ? sdk.unit : resolveFeeUnit(desc);
                 return {
@@ -359,7 +378,9 @@ export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistr
                 };
             }
         } catch {
-            // SDK refused or errored; silently fall through to the placeholder.
+            // A rejected estimator uses the same safe local fallback as a timeout.
+        } finally {
+            if (timeoutId !== undefined) clearTimeout(timeoutId);
         }
     }
 
@@ -367,7 +388,7 @@ export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistr
 }
 
 function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
-    const live = sdk && typeof sdk === 'object' && Number.isFinite(sdk.rate);
+    const live = sdk && typeof sdk === 'object' && Number.isFinite(sdk.rate) && sdk.rate > 0;
     const ratePerByte = live ? sdk.rate : fallback.rate;
     const sats = computeSats(table, ratePerByte);
     return {
