@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -19,7 +19,6 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './TokenPicker.module.css';
@@ -87,7 +86,6 @@ export function TokenPicker({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isReceive = purpose === 'receive';
 
     const [balances, setBalances] = useState(
@@ -380,54 +378,57 @@ export function TokenPicker({
         { id: 'tokens', label: 'Tokens' },
     ];
 
-    const body = (
+    const toolbar = (
         <>
+            <input
+                ref={searchRef}
+                type="search"
+                className={styles.search}
+                placeholder="Search"
+                value={tokenQuery}
+                onChange={(e) => setTokenQuery(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                aria-label="Search coins or tokens"
+            />
+            {/* A caller that pins `kindFilter` is stating a
+                protocol constraint, not a default. Rendering the segments
+                anyway would offer a choice the action cannot honour, and
+                the segments would appear dead because the pinned prop wins
+                over the local state they set. */}
+            <div
+                className={styles.kindSegments}
+                role="tablist"
+                aria-label="Asset kind"
+                hidden={kindLocked}
+                style={kindLocked ? { display: 'none' } : undefined}
+            >
+                {KIND_OPTIONS.map((opt) => {
+                    const active = (kindFilter || 'all') === opt.id;
+                    return (
+                        <button
+                            key={opt.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
+                            onClick={() => setKindFilter(opt.id)}
+                        >
+                            {opt.label}
+                        </button>
+                    );
+                })}
+            </div>
+        </>
+    );
+
+    const body = (
+        <ListPage toolbar={toolbar}>
             {loadError ? (
                 <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
             ) : null}
-            <div className={styles.toolbar}>
-                <input
-                    ref={searchRef}
-                    type="text"
-                    className={styles.search}
-                    placeholder="Search"
-                    value={tokenQuery}
-                    onChange={(e) => setTokenQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    aria-label="Search coins or tokens"
-                />
-                {/* A caller that pins `kindFilter` is stating a
-                    protocol constraint, not a default. Rendering the segments
-                    anyway would offer a choice the action cannot honour, and
-                    the segments would appear dead because the pinned prop wins
-                    over the local state they set. */}
-                <div
-                    className={styles.kindSegments}
-                    role="tablist"
-                    aria-label="Asset kind"
-                    hidden={kindLocked}
-                    style={kindLocked ? { display: 'none' } : undefined}
-                >
-                    {KIND_OPTIONS.map((opt) => {
-                        const active = (kindFilter || 'all') === opt.id;
-                        return (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
-                                onClick={() => setKindFilter(opt.id)}
-                            >
-                                {opt.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
             {balances === null && !loadError ? (
                 <div role="status" aria-label="Loading balances">
                     <Skeleton.List rows={5} />
@@ -451,14 +452,14 @@ export function TokenPicker({
                             showChain={networkFilter === 'all'}
                         />
                     ) : (platformResults.length === 0 && !platformBusy) ? (
-                        <EmptyStateNudge
+                        <EmptyState
                             title={emptyTitle}
                             body={emptyBody}
                         />
                     ) : null}
                     {(platformResults.length > 0 || platformBusy) ? (
                         <div className={styles.platformSection}>
-                            <div className={styles.platformHeading}>On the platform</div>
+                            <SectionHeader title="On the platform" />
                             {platformBusy && platformResults.length === 0 ? (
                                 <div role="status" aria-label="Searching platform">
                                     <Skeleton.List rows={1} />
@@ -481,12 +482,12 @@ export function TokenPicker({
                     ) : null}
                 </>
             ) : null}
-        </>
+        </ListPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{body}</div> : body}
+            {body}
         </Screen>
     );
 }

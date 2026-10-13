@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
@@ -173,7 +173,11 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
     }, [rows, messaging, labelsByMarket]);
 
     const header = <PageHeader onBack={onBack} title="My bets" />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
 
     if (error) {
         return wrap(
@@ -184,7 +188,11 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
     }
     if (!rows) return wrap(<p>Loading bets…</p>);
     if (rows.length === 0) {
-        return wrap(<p className={styles.hint}>You have not placed any bets yet.</p>);
+        return wrap(
+            <EmptyState
+                title="You have not placed any bets yet."
+            />,
+        );
     }
 
     const openCount = rows.filter((r) => r.bet_status === 'open').length;
@@ -229,13 +237,13 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                             key={`${b.chainId}:${b.action_index}`}
                             type="button"
                             onClick={() => onOpenMarket(b.chainId, b.feed_action_index)}
-                            className={styles.card}
+                            className={styles.listCard}
                             style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                         >
                             {body}
                         </button>
                     ) : (
-                        <div key={`${b.chainId}:${b.action_index}`} className={styles.card}>{body}</div>
+                        <div key={`${b.chainId}:${b.action_index}`} className={styles.listCard}>{body}</div>
                     );
                 })}
             </div>
