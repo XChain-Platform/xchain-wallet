@@ -698,7 +698,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
               * gates the deed rather than the balances - which reads as a
               * synonym for `transfer` and is not one.
               */}
-            <p className={styles.hint}>
+            <p className={styles.hintLeft}>
                 {actionClass === 'all'
                     ? 'all: every class, including ones added later. A class-specific binding still wins over this one.'
                     : actionClass === 'ownership'
@@ -706,13 +706,13 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         : 'The native actions this guard is asked about. One binding per class.'}
             </p>
 
-            <label className={styles.pickerLabel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label className={styles.checkRow}>
                 <input
                     type="checkbox"
                     checked={unbind}
                     onChange={(e) => setUnbind(e.target.checked)}
                 />
-                Unbind (remove the controller) instead of binding
+                <span>Unbind (remove the controller) instead of binding</span>
             </label>
 
             {!unbind ? (

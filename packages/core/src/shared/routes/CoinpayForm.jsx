@@ -347,7 +347,7 @@ export function CoinpayForm({
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {isFull ? <div className={styles.listCard}>{children}</div> : children}
         </Screen>
     );
 

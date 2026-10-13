@@ -17,6 +17,7 @@ import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import { isDemoWallet } from '../../flows/demoMode.js';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -451,6 +452,7 @@ export function TokenDetail({
                             nativePrice={nativePrice}
                             showNativeStats={showNativeStats}
                             showSparkline={showSparkline}
+                            isDemo={isDemoWallet(walletId)}
                             assetInfo={assetInfo}
                             tick={tick}
                             chainId={chainId}
@@ -737,7 +739,12 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
     );
 }
 
-function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
+// Chart placeholder for real wallets: a price line is drawn only from real
+// history (wallet rule: never fabricate a number), so an absent series gets
+// this message instead of a synthesized walk.
+const NO_PRICE_HISTORY = 'No price history yet';
+
+function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
@@ -779,11 +786,11 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                     ? e.sparkline.slice(-Math.min(range.points, e.sparkline.length))
                     : e.sparkline;
                 sparkline = resampleSeriesTo(src, range.points);
-            } else if (e.priceFiat != null) {
-                // No real series available for this range (or sparkline
-                // fetch failed); synthesize a walk seeded by chain +
-                // change so the chart always renders something. The line
-                // still ends at the actual current price.
+            } else if (e.priceFiat != null && isDemo) {
+                // Demo wallets only: no real series for this range, so
+                // synthesize a walk seeded by chain + change so the demo
+                // chart always renders. The line still ends at the current
+                // price. Real wallets fall through to the empty-state message.
                 const synth = synthesizeTokenChart(
                     `${chainId}|native|${range.id}|${(e.change24hPct ?? 0).toFixed(2)}`,
                     e.priceFiat,
@@ -802,10 +809,16 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                     <StatCell label="24h" value={pct24h} tone={pctTone24h} />
                 </section>
                 {sparkline ? (
+                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                        <Sparkline series={sparkline} height={40} />
+                    </div>
+                ) : !hint ? (
+                    <p className={styles.muted} role="status">{NO_PRICE_HISTORY}</p>
+                ) : null}
+                {/* Range tabs show only when some range can carry a line: a real
+                    series exists, or the wallet is a demo wallet. */}
+                {sparkline || (showSparkline && !hint) ? (
                     <>
-                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                            <Sparkline series={sparkline} height={40} />
-                        </div>
                         <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                             {CHART_RANGES.map((r) => (
                                 <button
@@ -846,21 +859,25 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 marketCapCell = `${formatted} ${nativeTick}`;
             }
         }
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
-        if (synth.change24hPct != null) {
-            pct24h = formatPct(synth.change24hPct);
-            pctTone24h = pctTone(synth.change24hPct);
+        if (isDemo) {
+            const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
+            if (synth.change24hPct != null) {
+                pct24h = formatPct(synth.change24hPct);
+                pctTone24h = pctTone(synth.change24hPct);
+            }
+            sparkline = synth.sparkline;
         }
-        sparkline = synth.sparkline;
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
         priceCell = formatFiat(fiatRate);
         void fiatCurrency;
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
-        if (synth.change24hPct != null) {
-            pct24h = formatPct(synth.change24hPct);
-            pctTone24h = pctTone(synth.change24hPct);
+        if (isDemo) {
+            const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
+            if (synth.change24hPct != null) {
+                pct24h = formatPct(synth.change24hPct);
+                pctTone24h = pctTone(synth.change24hPct);
+            }
+            sparkline = synth.sparkline;
         }
-        sparkline = synth.sparkline;
     } else if (!assetInfo) {
         hint = 'Loading market data…';
     }
@@ -876,6 +893,8 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 <div className={styles.chart} aria-label="7-day price chart">
                     <Sparkline series={sparkline} height={40} />
                 </div>
+            ) : !hint ? (
+                <p className={styles.muted} role="status">{NO_PRICE_HISTORY}</p>
             ) : null}
             {hint ? <p className={styles.muted}>{hint}</p> : null}
         </>
