@@ -62,6 +62,7 @@ import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
@@ -369,6 +370,26 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         draft.clear();
         setDraftPending(false);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [
+            ticker, giveAmount, escrow, getTick, getTokenAmount, triggerPrice,
+            oracleAddress, fiatCode, fiatAmount, expInput, allowListIdx,
+            blockListIdx, outsideAddress, password,
+        ].some((value) => String(value || '').trim().length > 0)
+        || payWith !== 'coin'
+        || expMode !== 'default'
+        || addressMode !== 'new'
+    ), [
+        ticker, giveAmount, escrow, getTick, getTokenAmount, triggerPrice,
+        oracleAddress, fiatCode, fiatAmount, expInput, allowListIdx,
+        blockListIdx, outsideAddress, password, payWith, expMode, addressMode,
+    ]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -1071,7 +1092,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={leaveGuard.guardedOnBack}
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
@@ -1081,6 +1102,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -1098,13 +1120,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={leaveGuard.guardedOnBack}
                 />,
             );
         }
         // Signed but not broadcast, so no dispenser is open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" unsaved={result.unsaved} />);
+            return wrap(<QueuedResultPanel onDone={leaveGuard.guardedOnBack} what="dispenser" unsaved={result.unsaved} />);
         }
         return wrap(
             <>
@@ -1118,7 +1140,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
                 </div>
             </>,
         );

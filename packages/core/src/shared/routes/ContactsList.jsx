@@ -18,6 +18,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
 import { ScanRoute } from './ScanRoute.jsx';
@@ -215,6 +216,32 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         if (!activeId || !contacts) return null;
         return contacts.find((c) => c.id === activeId) || null;
     }, [activeId, contacts]);
+
+    const contactFormDirty = useMemo(() => {
+        if (active) {
+            const originalEntries = Array.isArray(active.entries) ? active.entries : [];
+            return formName !== String(active.name || '')
+                || formNotes !== String(active.notes || '')
+                || JSON.stringify(formEntries) !== JSON.stringify(originalEntries.map((entry) => ({
+                    chain: entry.chain,
+                    address: entry.address,
+                    label: entry.label || '',
+                })));
+        }
+        return [formName, formNotes].some((value) => value.trim().length > 0)
+            || formEntries.some((entry) => (
+                String(entry.address || '').trim().length > 0
+                || String(entry.label || '').trim().length > 0
+            ));
+    }, [active, formName, formNotes, formEntries]);
+    const leaveEdit = useCallback(() => {
+        setMode(active ? 'detail' : 'list');
+        if (!active) setActiveId(null);
+    }, [active]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: (mode === 'edit' || (mode === 'scan' && scanFromEdit)) && contactFormDirty,
+        onLeave: leaveEdit,
+    });
 
     const filteredContacts = useMemo(() => {
         if (!contacts) return [];
@@ -542,8 +569,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         <PageHeader
             onBack={() => {
                 if (mode !== 'list') {
-                    setMode(mode === 'edit' && active ? 'detail' : 'list');
-                    if (mode === 'edit' && !active) setActiveId(null);
+                    if (mode === 'edit') leaveGuard.guardedOnBack();
+                    else setMode('list');
                 } else {
                     onBack();
                 }
@@ -582,6 +609,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
+            {leaveGuard.confirmation}
         </Screen>
     );
 

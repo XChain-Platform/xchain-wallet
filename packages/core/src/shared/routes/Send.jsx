@@ -155,6 +155,7 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
@@ -445,6 +446,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         draft.clear();
         setDraftPending(false);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [toAddress, amount, memo, fiatAmount, password]
+            .some((value) => String(value || '').trim().length > 0)
+        || (tick.trim().length > 0
+            && tick.trim().toUpperCase() !== nativeTickerFor(chainId ? chainRegistry.get(chainId) : null))
+        || extraLegs.some((leg) => [leg.to, leg.amount, leg.tick]
+            .some((value) => String(value || '').trim().length > 0))
+    ), [toAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The settings read rides the address load so the last-used chain is
     // known in the render that first shows the form. Best-effort: a host
@@ -2026,7 +2041,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         <PageHeader
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
-                : onBack}
+                : leaveGuard.guardedOnBack}
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
             title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
@@ -2038,6 +2053,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         <Screen variant={variant} header={header}>
             {children}
             {footer}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -2200,7 +2216,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveGuard.guardedOnBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -2226,7 +2242,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         </p>
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
+                        <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );
@@ -2312,7 +2328,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <Button variant="secondary" onClick={sendAnother}>
                         {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
