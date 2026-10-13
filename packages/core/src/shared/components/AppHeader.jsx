@@ -52,6 +52,9 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {string} [props.networkFilter]
  * @param {(coin: string) => void} [props.onNetworkFilterChange]
  * @param {boolean} [props.showNetworkFilter]                        set false on routes where a network filter is meaningless (Send / Receive)
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
+ * @param {boolean} [props.developerMode]
+ * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
  */
 export function AppHeader({
@@ -73,6 +76,9 @@ export function AppHeader({
     networkFilter,
     onNetworkFilterChange,
     showNetworkFilter = true,
+    activeNetwork,
+    developerMode = false,
+    onActiveNetworkChange,
     platformCurrent,
 }) {
     const networkWired = showNetworkFilter
@@ -82,7 +88,8 @@ export function AppHeader({
         && typeof onNetworkFilterChange === 'function';
     const showSettings = typeof onOpenWalletPicker === 'function'
         || typeof onOpenAccountPicker === 'function'
-        || networkWired;
+        || networkWired
+        || typeof onActiveNetworkChange === 'function';
 
     return (
         <header className={styles.bar} role="banner">
@@ -106,6 +113,9 @@ export function AppHeader({
                         coinFamilies={networkWired ? coinFamilies : undefined}
                         networkFilter={networkFilter}
                         onNetworkFilterChange={networkWired ? onNetworkFilterChange : undefined}
+                        activeNetwork={activeNetwork}
+                        developerMode={developerMode}
+                        onActiveNetworkChange={onActiveNetworkChange}
                     />
                 ) : null}
                 {onCommandPalette ? (

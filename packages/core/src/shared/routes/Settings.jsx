@@ -210,7 +210,7 @@ export function Settings({
             keywords: 'backup seed phrase restore encrypted file labels export',
             kind: 'internal-drill',
             Component: BackupSection,
-            props: { activeWallet },
+            props: { activeWallet, reload },
             summary: 'Encrypted file export',
         },
         {
@@ -302,7 +302,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
