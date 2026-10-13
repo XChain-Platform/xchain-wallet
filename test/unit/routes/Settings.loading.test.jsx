@@ -54,7 +54,7 @@ describe('Settings while settings are loading', () => {
         );
 
         expect(screen.getByText('Savings')).toBeTruthy();
-        fireEvent.click(screen.getByText('Accounts & Addresses').closest('button'));
+        fireEvent.click(screen.getByText('Accounts & addresses').closest('button'));
         expect(onOpenAccountPicker).toHaveBeenCalledOnce();
     });
 
