@@ -20,12 +20,13 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const issueSrc = read('packages/core/src/shared/routes/IssueTokenForm.jsx');
+const issueSrc = withEnglishCopy(read('packages/core/src/shared/routes/IssueTokenForm.jsx'));
 const dispSrc = read('packages/core/src/shared/routes/DispenserForm.jsx');
 const acctSrc = read('packages/core/src/shared/routes/AddAccountForm.jsx');
 

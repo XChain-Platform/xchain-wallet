@@ -32,6 +32,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -49,7 +50,7 @@ assert.ok(/From FreeWallet/.test(onboarding), 'Onboarding renders "From FreeWall
 
 // --- 2. ImportWallet freewallet variant ------------------------------
 
-const importWallet = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
+const importWallet = withEnglishCopy(readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8'));
 assert.ok(
     /variant:\s*importVariant\s*=\s*['"]default['"]/.test(importWallet),
     'ImportWallet accepts a variant prop defaulting to "default"',

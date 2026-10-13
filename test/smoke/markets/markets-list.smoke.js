@@ -19,6 +19,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -118,7 +119,7 @@ for (const [shell, msgPath] of [
 
 // --- 5. Home + App wiring (3 shells) ----------------------------
 
-const homeSrc = readFileSync(join(core, 'src', 'shared', 'routes', 'Home.jsx'), 'utf8');
+const homeSrc = withEnglishCopy(readFileSync(join(core, 'src', 'shared', 'routes', 'Home.jsx'), 'utf8'));
 assert.ok(/onMarkets/.test(homeSrc), 'Home accepts onMarkets prop');
 assert.ok(/>\s*Markets\s*</.test(homeSrc), 'Home renders a "Markets" button');
 

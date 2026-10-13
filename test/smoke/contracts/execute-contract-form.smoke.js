@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 import { flows } from '../../../packages/core/src/index.js';
 
@@ -28,7 +29,7 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const formPath = join(sharedRoutes, 'ExecuteContractForm.jsx');
 assert.ok(existsSync(formPath), 'ExecuteContractForm.jsx exists');
 
-const formSrc = readFileSync(formPath, 'utf8');
+const formSrc = withEnglishCopy(readFileSync(formPath, 'utf8'));
 
 assert.ok(/export function ExecuteContractForm\b/.test(formSrc),
     'ExecuteContractForm is a named export');
