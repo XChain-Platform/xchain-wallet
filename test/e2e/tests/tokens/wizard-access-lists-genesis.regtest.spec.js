@@ -118,7 +118,8 @@ test.describe(`wizard access-list fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await main.getByRole('button', { name: 'Advanced settings (optional)' }).click();
         await chooseList(page, 'allow', allowList);
         await chooseList(page, 'block', blockList);
-        await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+        await main.getByRole('button', { name: 'Review token', exact: true }).click();
+        await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
         const txid = await approveAndReadTxid(page, 'the token creation');
         const genesis = await waitForValidAction(txid);

@@ -59,7 +59,7 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await main.getByText('Lock this address', { exact: true }).first().click();
             // The screen title sits in the page banner, outside main.
-            await expect(page.getByRole('banner').getByText('Lock address', { exact: true }))
+            await expect(page.getByRole('banner').getByRole('heading', { name: 'Lock address' }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByLabel('Address to lock')).toHaveValue(source);
             await main.getByRole('radio', { name: /Lock indefinitely/ }).check();
