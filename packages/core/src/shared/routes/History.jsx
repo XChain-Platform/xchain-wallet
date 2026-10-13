@@ -11,6 +11,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    Checkbox,
     ChainBadge,
     Chip,
     CopyButton,
@@ -20,6 +21,7 @@ import {
     ListPage,
     ListRow,
     PageHeader,
+    RadioGroup,
     Screen,
     SegmentedControl,
     SectionHeader,
@@ -4560,12 +4562,6 @@ const MODAL_LEGEND = {
     fontSize: 'var(--xc-text-xs)',
     padding: '0 var(--xc-space-1)',
 };
-const MODAL_LABEL = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-};
 const MODAL_ACTIONS = {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -4618,33 +4614,18 @@ function ExportModal({
             >
                 <SectionHeader id="xc-history-export-title" title={t('history.export.title')} />
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
-                    <label style={MODAL_LABEL}>
-                        {/* The kit has no radio control, so the native input preserves selection semantics. */}
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="csv"
-                            checked={format === 'csv'}
-                            onChange={() => setFormat('csv')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.csv')}
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        {/* The kit has no radio control, so the native input preserves selection semantics. */}
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="json"
-                            checked={format === 'json'}
-                            onChange={() => setFormat('json')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.json')}
-                    </label>
-                </fieldset>
+                <RadioGroup
+                    style={MODAL_FIELDSET}
+                    legend={t('history.export.format')}
+                    name="export-format"
+                    value={format}
+                    onChange={setFormat}
+                    disabled={exporting}
+                    options={[
+                        { value: 'csv', label: t('history.export.csv') },
+                        { value: 'json', label: t('history.export.json') },
+                    ]}
+                />
 
                 <fieldset style={MODAL_FIELDSET}>
                     <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
@@ -4654,21 +4635,15 @@ function ExportModal({
                             ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
                             : detail.label;
                         return (
-                            <label key={col} style={MODAL_LABEL} title={detail.description}>
-                                {/* The kit has no checkbox control, so the native input preserves selection semantics. */}
-                                <input
-                                    type="checkbox"
-                                    checked={columns.has(col)}
-                                    onChange={() => toggleColumn(col)}
-                                    disabled={exporting}
-                                />
-                                <span>
-                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
-                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                                        {detail.description}
-                                    </span>
-                                </span>
-                            </label>
+                            <Checkbox
+                                key={col}
+                                label={label}
+                                description={detail.description}
+                                title={detail.description}
+                                checked={columns.has(col)}
+                                onChange={() => toggleColumn(col)}
+                                disabled={exporting}
+                            />
                         );
                     })}
                 </fieldset>

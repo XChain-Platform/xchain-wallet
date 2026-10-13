@@ -35,10 +35,16 @@ const styleGuideRoutes = {
     ListForkForm: ['Button', 'Checkbox', 'Input', 'Textarea'],
     MarketActivity: ['Button'],
     MarketView: ['Button'],
-    MultisigCreate: ['Button', 'Input', 'Select'],
+    MultisigCreate: ['Button', 'Input', 'RadioGroup', 'Select'],
     PairSignerForm: ['Button', 'Input'],
     PollDetail: ['Button', 'Checkbox', 'Input'],
     UnionListForm: ['Button', 'Checkbox', 'Input'],
+    Send: ['Button', 'Checkbox', 'Switch'],
+};
+const choiceControlRoutes = {
+    History: ['Checkbox', 'RadioGroup'],
+    MultisigCreate: ['RadioGroup'],
+    Send: ['Checkbox', 'Switch'],
 };
 const styleGuideRowRoutes = [
     'BetFeedDetail',
@@ -123,6 +129,19 @@ describe('shared route button usage', () => {
         expect(source).not.toMatch(/<(?:select|textarea)\b/);
     });
 
+    it.each(Object.entries(choiceControlRoutes))('%s uses kit choice controls', (routeName, controls) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const control of controls) {
+            expect(source).toMatch(new RegExp(`<${control}\\b`));
+        }
+        expect(source).not.toMatch(/<input\b[^>]*type="(?:checkbox|radio)"/s);
+        expect(source).not.toMatch(/The kit has no (?:checkbox|radio|switch)/);
+    });
+
     it.each([
         ['SellOwnershipForm', ['Button', 'Input'], 0],
         ['Settings', ['Button', 'Input'], 1],
@@ -174,7 +193,7 @@ describe('shared route button usage', () => {
     });
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
-        const expectedInputs = { MultisigCreate: 1 };
+        const expectedInputs = {};
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
