@@ -315,12 +315,23 @@ export function ConfirmActionModal({
     }, [exitsLocked, onReject, open]);
 
     // Approve disables SYNCHRONOUSLY in the click handler's tick, before any
-    // await (§5.1). The parent's onApprove runs the async signing.
+    // await (§5.1). The parent's onApprove runs the async signing. The ref is
+    // the guard: two clicks dispatched in one task both read the render's
+    // approveDisabled before React re-renders, so state alone let a double tap
+    // start two signing requests.
+    const approveInFlightRef = useRef(false);
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
+        if (approveInFlightRef.current) return;
         if (approveDisabled || !canApprove || !credentialsReady || refusal) return;
+        approveInFlightRef.current = true;
         setApproveDisabled(true);      // sync, this tick
-        Promise.resolve(onApprove({})).catch(() => {}).finally(() => setApproveDisabled(false));
+        Promise.resolve(onApprove({}))
+            .catch(() => {})
+            .finally(() => {
+                approveInFlightRef.current = false;
+                setApproveDisabled(false);
+            });
     }, [approveDisabled, canApprove, credentialsReady, refusal, onApprove]);
 
     if (!open) return null;

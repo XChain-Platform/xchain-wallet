@@ -566,6 +566,19 @@ describe('ConfirmActionModal', () => {
         expect(onApprove).toHaveBeenCalledOnce();
     });
 
+    it('starts one approval for two clicks dispatched before React re-renders', () => {
+        const onApprove = vi.fn(() => new Promise(() => {}));
+        render(<ConfirmActionModal {...base({ onApprove })} />);
+        const btn = screen.getByTestId('confirm-approve');
+        // One act batches both clicks, so the second still sees the first
+        // render's enabled state: only the synchronous guard can drop it.
+        act(() => {
+            btn.click();
+            btn.click();
+        });
+        expect(onApprove).toHaveBeenCalledOnce();
+    });
+
     it('shows the queued terminal copy in the signed-not-broadcast phase', () => {
         render(<ConfirmActionModal {...base({ phase: 'signed-not-broadcast' })} />);
         // "will retry" promised an auto-drain that does not exist.
