@@ -49,6 +49,26 @@ function setup(overrides = {}, messagingOverrides = {}) {
 }
 
 describe('DisplaySection', () => {
+    it('centres md actions beside watched-token fields', async () => {
+        setup({ pinnedTokens: ['bitcoin-mainnet:XCP'] });
+        const ticker = await screen.findByRole('textbox', { name: 'Token ticker' });
+        const tickerField = ticker.parentElement.parentElement;
+        const watchForm = ticker.closest('form');
+
+        expect(tickerField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(watchForm.style.alignItems).toBe('center');
+        expect(screen.getByRole('button', { name: 'Watch token' }).className).toMatch(/(?:^|\s)_?md_/);
+
+        const search = screen.getByRole('searchbox', { name: 'Search pinned and hidden tokens' });
+        fireEvent.change(search, { target: { value: 'X' } });
+        const clear = screen.getByRole('button', { name: 'Clear settings token search' });
+        const searchRow = clear.parentElement;
+
+        expect(search.parentElement.parentElement.className).toMatch(/(?:^|\s)_?md_/);
+        expect(searchRow.style.alignItems).toBe('center');
+        expect(clear.className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('persists every balance display control through settings updates', async () => {
         const messaging = setup();
         const hide = await screen.findByRole('switch', { name: 'Hide small balances' });

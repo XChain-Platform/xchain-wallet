@@ -45,6 +45,29 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ConnectedSitesSection settings controls', () => {
+    it('centres md controls in the throttle row', async () => {
+        render(<ConnectedSitesSection />);
+        const burstField = (await screen.findByRole('spinbutton', {
+            name: 'Sign-throttle burst (max requests per window)',
+        })).parentElement.parentElement;
+        const throttleForm = screen.getByRole('form', { name: 'Sign-request throttle controls' });
+
+        expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(throttleForm.style.alignItems).toBe('center');
+        expect(screen.getByRole('button', { name: 'Apply' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('centres the md manual block action beside its md field', async () => {
+        render(<ConnectedSitesSection />);
+        const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
+        const originField = origin.parentElement.parentElement;
+        const blockForm = origin.closest('form');
+
+        expect(originField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(blockForm.style.alignItems).toBe('center');
+        expect(screen.getByRole('button', { name: 'Block' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('marks destructive site actions as danger and disables repeat disconnects', async () => {
         let finishDelete;
         messaging.listConnectedSites.mockResolvedValue([{

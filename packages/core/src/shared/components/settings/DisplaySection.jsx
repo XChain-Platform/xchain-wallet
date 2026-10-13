@@ -390,6 +390,7 @@ export function DisplaySection() {
                     ))}
                 </Select>
                 <Input
+                    size="md"
                     aria-label="Token ticker"
                     value={watchTicker}
                     onChange={(event) => setWatchTicker(event.target.value)}
@@ -397,7 +398,7 @@ export function DisplaySection() {
                     autoComplete="off"
                     style={{ minWidth: 120 }}
                 />
-                <Button type="submit" size="sm" variant="secondary" icon={null} disabled={watching}>
+                <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
                     {watching ? 'Checking…' : 'Watch token'}
                 </Button>
             </form>
@@ -418,10 +419,11 @@ export function DisplaySection() {
             ))}
 
             {(pinned.length > 0 || hidden.length > 0) ? (
-                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <Input
                             ref={tokenSearchRef}
+                            size="md"
                             type="search"
                             value={tokenQuery}
                             onChange={(event) => setTokenQuery(event.target.value)}
@@ -434,7 +436,7 @@ export function DisplaySection() {
                         />
                     </div>
                     {tokenQuery ? (
-                        <Button size="sm" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
+                        <Button size="md" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
                             <Icon.XIcon />
                         </Button>
                     ) : null}
