@@ -42,6 +42,7 @@ import {
     clearQueuedResultHandoff,
     setQueuedResultHandoff,
 } from '../utils/submitFailureMessage.js';
+import { holdAutoLock } from './autoLockGuard.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -331,6 +332,8 @@ export function useConfirmAction() {
 
         approvalBeganRef.current = true;
         setPhase('signing');
+        const releaseAutoLock = holdAutoLock();
+        try {
 
         // §4.6 input liveness. Runs off the PSBT's OWN age, not the report's,
         // so a confirm that never got a report (pre-flight off, offline, timed
@@ -503,6 +506,9 @@ export function useConfirmAction() {
             setError(err);
             settleReject(err);
             return undefined;
+        }
+        } finally {
+            releaseAutoLock();
         }
     }, [report, acknowledged, instanceId, settleResolve, settleReject]);
 
