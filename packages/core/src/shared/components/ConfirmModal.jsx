@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
-import { useFocusTrap } from '../utils/focusTrap.js';
+import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -45,11 +45,14 @@ export function ConfirmModal({
     onCancel,
 }) {
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const messageId = useId();
+    useFocusTrap(panelRef, { active: true });
+    useInertBackground(rootRef, { active: true });
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(cancel);
-    // Tab stays inside the dialog and focus returns to whatever opened it.
-    const dialogRef = useRef(null);
-    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') cancel(); };
         window.addEventListener('keydown', onKey);
@@ -58,18 +61,19 @@ export function ConfirmModal({
 
     return (
         <div
-            ref={dialogRef}
+            ref={rootRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-labelledby={titleId}
+            aria-describedby={message ? messageId : undefined}
             aria-busy={busy ? 'true' : 'false'}
             onClick={cancel}
             tabIndex={-1}
         >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{title}</p>
-                {message ? <p className={styles.message}>{message}</p> : null}
+            <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
+                <p id={titleId} className={styles.title}>{title}</p>
+                {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
                 {error ? <p role="alert" className={styles.error}>{error}</p> : null}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>

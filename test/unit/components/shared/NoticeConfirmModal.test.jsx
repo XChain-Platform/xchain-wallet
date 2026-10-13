@@ -37,8 +37,16 @@ describe('NoticeModal', () => {
     it('exposes a modal dialog labelled by the title', () => {
         setup();
         const dialog = screen.getByRole('dialog');
+        const title = screen.getByText('Sent');
         expect(dialog.getAttribute('aria-modal')).toBe('true');
-        expect(dialog.getAttribute('aria-label')).toBe('Sent');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+        expect(dialog.getAttribute('aria-describedby')).toBeNull();
+    });
+
+    it('ties the optional detail to the dialog description', () => {
+        setup({ message: 'Message went out' });
+        expect(screen.getByRole('dialog').getAttribute('aria-describedby'))
+            .toBe(screen.getByText('Message went out').id);
     });
 
     it('renders the message paragraph only when given', () => {
@@ -80,6 +88,18 @@ describe('NoticeModal', () => {
         unmount();
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps background content inert while mounted', () => {
+        const onClose = vi.fn();
+        const view = render(
+            <>
+                <button type="button">Outside</button>
+                <NoticeModal title="Sent" onClose={onClose} />
+            </>,
+        );
+        expect(screen.getByText('Outside').hasAttribute('inert')).toBe(true);
+        view.unmount();
     });
 });
 
@@ -131,6 +151,24 @@ describe('ConfirmModal', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onCancel).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('cycles keyboard focus between its two actions', () => {
+        setup();
+        const cancel = screen.getByText('Cancel');
+        const confirm = screen.getByText('Confirm');
+        confirm.focus();
+        fireEvent.keyDown(confirm, { key: 'Tab' });
+        expect(document.activeElement).toBe(cancel);
+        fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(confirm);
+    });
+
+    it('uses visible content for its accessible name and description', () => {
+        setup({ message: 'This cannot be undone.' });
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(screen.getByText('Delete?').id);
+        expect(dialog.getAttribute('aria-describedby')).toBe(screen.getByText('This cannot be undone.').id);
     });
 
     it('styles cancel secondary and confirm primary', () => {
