@@ -12,6 +12,7 @@
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
     max-width: 380px;
     min-height: 0;

@@ -72,10 +72,12 @@ export function ConfirmModal({
             tabIndex={-1}
         >
             <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p id={titleId} className={styles.title}>{title}</p>
-                {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                {error ? <p role="alert" className={styles.error}>{error}</p> : null}
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                <div className={styles.content}>
+                    <p id={titleId} className={styles.title}>{title}</p>
+                    {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
+                    {error ? <p role="alert" className={styles.error}>{error}</p> : null}
+                </div>
+                <div className={styles.actions}>
                     <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>
                         {cancelLabel}
                     </Button>

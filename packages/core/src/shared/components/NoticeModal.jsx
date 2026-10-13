@@ -52,11 +52,15 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
             tabIndex={-1}
         >
             <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p id={titleId} className={styles.title}>{title}</p>
-                {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                <Button variant="primary" block onClick={onClose}>
-                    {confirmLabel}
-                </Button>
+                <div className={styles.content}>
+                    <p id={titleId} className={styles.title}>{title}</p>
+                    {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
+                </div>
+                <div className={styles.actions}>
+                    <Button variant="primary" block onClick={onClose}>
+                        {confirmLabel}
+                    </Button>
+                </div>
             </div>
         </div>
     );

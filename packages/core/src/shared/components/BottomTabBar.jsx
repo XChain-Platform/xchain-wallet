@@ -204,91 +204,103 @@ export function BottomTabBar({
                         aria-label="More navigation"
                         className={styles.sheet}
                     >
-                        <div className={styles.handle} aria-hidden="true" />
-                        {/* Safari needs an explicit list role because this class removes list styling. */}
-                        <ul className={styles.sheetList} role="list">
-                            {sheetRows.map((row) => {
-                                const active = isNavItemActive(row.id, currentView);
-                                return (
-                                    <li key={row.id}>
+                        <div className={styles.sheetHeader}>
+                            <div className={styles.handle} aria-hidden="true" />
+                            <button
+                                type="button"
+                                className={styles.sheetClose}
+                                onClick={() => setSheetOpen(false)}
+                                aria-label="Close more navigation"
+                            >
+                                <Icon.XIcon />
+                            </button>
+                        </div>
+                        <div className={styles.sheetBody}>
+                            {/* Safari needs an explicit list role because this class removes list styling. */}
+                            <ul className={styles.sheetList} role="list">
+                                {sheetRows.map((row) => {
+                                    const active = isNavItemActive(row.id, currentView);
+                                    return (
+                                        <li key={row.id}>
+                                            <button
+                                                type="button"
+                                                className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
+                                                aria-current={active ? 'page' : undefined}
+                                                onClick={() => {
+                                                    setSheetOpen(false);
+                                                    onSelect(row.id);
+                                                }}
+                                            >
+                                                <span className={styles.sheetIcon} aria-hidden="true">
+                                                    <row.Icon />
+                                                </span>
+                                                <span className={styles.sheetLabel}>{row.label}</span>
+                                                {badges[row.id] > 0 ? (
+                                                    <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
+                                                        {formatBadgeCount(badges[row.id])}
+                                                    </span>
+                                                ) : null}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                            <div className={styles.sheetDivider} />
+                            {/* Safari needs an explicit list role because this class removes list styling. */}
+                            <ul className={styles.sheetList} role="list">
+                                {onOpenWalletPicker ? (
+                                    <li>
                                         <button
                                             type="button"
-                                            className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
-                                            aria-current={active ? 'page' : undefined}
+                                            className={styles.sheetItem}
                                             onClick={() => {
                                                 setSheetOpen(false);
-                                                onSelect(row.id);
+                                                onOpenWalletPicker();
                                             }}
                                         >
                                             <span className={styles.sheetIcon} aria-hidden="true">
-                                                <row.Icon />
+                                                <Icon.MoreIcon />
                                             </span>
-                                            <span className={styles.sheetLabel}>{row.label}</span>
-                                            {badges[row.id] > 0 ? (
-                                                <span className={styles.sheetBadge} aria-label={`${badges[row.id]} unread`}>
-                                                    {formatBadgeCount(badges[row.id])}
-                                                </span>
-                                            ) : null}
+                                            <span>Switch wallet</span>
                                         </button>
                                     </li>
-                                );
-                            })}
-                        </ul>
-                        <div className={styles.sheetDivider} />
-                        {/* Safari needs an explicit list role because this class removes list styling. */}
-                        <ul className={styles.sheetList} role="list">
-                            {onOpenWalletPicker ? (
-                                <li>
-                                    <button
-                                        type="button"
-                                        className={styles.sheetItem}
-                                        onClick={() => {
-                                            setSheetOpen(false);
-                                            onOpenWalletPicker();
-                                        }}
-                                    >
-                                        <span className={styles.sheetIcon} aria-hidden="true">
-                                            <Icon.MoreIcon />
-                                        </span>
-                                        <span>Switch wallet</span>
-                                    </button>
-                                </li>
-                            ) : null}
-                            {onOpenSettings ? (
-                                <li>
-                                    <button
-                                        type="button"
-                                        className={styles.sheetItem}
-                                        onClick={() => {
-                                            setSheetOpen(false);
-                                            onOpenSettings();
-                                        }}
-                                    >
-                                        <span className={styles.sheetIcon} aria-hidden="true">
-                                            <Icon.GearIcon />
-                                        </span>
-                                        <span>Settings</span>
-                                    </button>
-                                </li>
-                            ) : null}
-                            {onLock ? (
-                                <li>
-                                    <button
-                                        type="button"
-                                        className={styles.sheetItem}
-                                        onClick={() => {
-                                            setSheetOpen(false);
-                                            onLock();
-                                        }}
-                                    >
-                                        <span className={styles.sheetIcon} aria-hidden="true">
-                                            <Icon.LockIcon />
-                                        </span>
-                                        <span>Lock</span>
-                                    </button>
-                                </li>
-                            ) : null}
-                        </ul>
+                                ) : null}
+                                {onOpenSettings ? (
+                                    <li>
+                                        <button
+                                            type="button"
+                                            className={styles.sheetItem}
+                                            onClick={() => {
+                                                setSheetOpen(false);
+                                                onOpenSettings();
+                                            }}
+                                        >
+                                            <span className={styles.sheetIcon} aria-hidden="true">
+                                                <Icon.GearIcon />
+                                            </span>
+                                            <span>Settings</span>
+                                        </button>
+                                    </li>
+                                ) : null}
+                                {onLock ? (
+                                    <li>
+                                        <button
+                                            type="button"
+                                            className={styles.sheetItem}
+                                            onClick={() => {
+                                                setSheetOpen(false);
+                                                onLock();
+                                            }}
+                                        >
+                                            <span className={styles.sheetIcon} aria-hidden="true">
+                                                <Icon.LockIcon />
+                                            </span>
+                                            <span>Lock</span>
+                                        </button>
+                                    </li>
+                                ) : null}
+                            </ul>
+                        </div>
                     </div>
                 </>
             ) : null}
