@@ -23,7 +23,6 @@
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import {
-    INPUT,
     ROW,
     ROW_HINT,
     ROW_VALUE,
@@ -49,46 +48,89 @@ function buildLanguageOptions() {
     }));
 }
 
-// Curated short list of widely-used quote currencies. The schema
-// stores any non-empty string, so a "Custom" entry is wired below for
-// users who want a less-common code. Keep the list short; long
-// dropdowns are noise for what is overwhelmingly USD / EUR / locale.
+// This list matches the quote currencies offered by the picker. Keeping it
+// explicit prevents a valid-looking ISO code from being saved when the price
+// source cannot return rates for it.
 const FIAT_CURRENCIES = /** @type {const} */ ([
-    { value: 'USD', label: 'US Dollar (USD)' },
-    { value: 'EUR', label: 'Euro (EUR)' },
-    { value: 'GBP', label: 'British Pound (GBP)' },
-    { value: 'JPY', label: 'Japanese Yen (JPY)' },
-    { value: 'CNY', label: 'Chinese Yuan (CNY)' },
-    { value: 'AUD', label: 'Australian Dollar (AUD)' },
-    { value: 'CAD', label: 'Canadian Dollar (CAD)' },
-    { value: 'CHF', label: 'Swiss Franc (CHF)' },
-    { value: 'INR', label: 'Indian Rupee (INR)' },
-    { value: 'BRL', label: 'Brazilian Real (BRL)' },
-    { value: 'MXN', label: 'Mexican Peso (MXN)' },
-    { value: 'ZAR', label: 'South African Rand (ZAR)' },
+    { code: 'USD', name: 'US Dollar' },
+    { code: 'EUR', name: 'Euro' },
+    { code: 'GBP', name: 'British Pound' },
+    { code: 'JPY', name: 'Japanese Yen' },
+    { code: 'CNY', name: 'Chinese Yuan' },
+    { code: 'AUD', name: 'Australian Dollar' },
+    { code: 'CAD', name: 'Canadian Dollar' },
+    { code: 'CHF', name: 'Swiss Franc' },
+    { code: 'INR', name: 'Indian Rupee' },
+    { code: 'BRL', name: 'Brazilian Real' },
+    { code: 'MXN', name: 'Mexican Peso' },
+    { code: 'ZAR', name: 'South African Rand' },
 ]);
-const CUSTOM_CURRENCY_VALUE = '__custom__';
+
+function currencySymbol(code) {
+    const parts = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: code,
+        currencyDisplay: 'symbol',
+    }).formatToParts(0);
+    return parts.find((part) => part.type === 'currency')?.value || code;
+}
+
+function currencyLabel(currency) {
+    return `${currency.name} (${currency.code}) · ${currencySymbol(currency.code)}`;
+}
 
 const CONTROLS = {
+    position: 'relative',
     display: 'flex',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 'var(--xc-space-2)',
+    width: 'min(100%, 280px)',
 };
+const CURRENCY_INPUT = {
+    ...SELECT,
+    width: '100%',
+};
+const CURRENCY_LIST = {
+    position: 'absolute',
+    zIndex: 2,
+    top: 'calc(100% + var(--xc-space-1))',
+    right: 0,
+    width: '100%',
+    maxHeight: 240,
+    overflowY: 'auto',
+    background: 'var(--xc-surface-raised)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-sm)',
+    boxShadow: 'var(--xc-shadow-md)',
+};
+const CURRENCY_OPTION = {
+    display: 'block',
+    width: '100%',
+    padding: 'var(--xc-space-2)',
+    color: 'var(--xc-text)',
+    background: 'transparent',
+    border: 0,
+    textAlign: 'left',
+    font: 'inherit',
+    cursor: 'pointer',
+};
+
 export function LanguageRegionSection() {
     const { settings, loading, error, update } = useSettings();
-    const [customCurrencyOpen, setCustomCurrencyOpen] = useState(false);
+    const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
+    const [currencyQuery, setCurrencyQuery] = useState('');
     const [currencyError, setCurrencyError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const knownCurrency = FIAT_CURRENCIES.some((c) => c.value === settings.fiatCurrency);
-    const selectorValue = knownCurrency && !customCurrencyOpen
-        ? settings.fiatCurrency
-        : CUSTOM_CURRENCY_VALUE;
+    const selectedCurrency = FIAT_CURRENCIES.find((currency) => currency.code === settings.fiatCurrency);
+    const normalizedQuery = currencyQuery.trim().toLocaleLowerCase();
+    const filteredCurrencies = FIAT_CURRENCIES.filter((currency) =>
+        !normalizedQuery
+        || currency.code.toLocaleLowerCase().includes(normalizedQuery)
+        || currency.name.toLocaleLowerCase().includes(normalizedQuery));
     const LANGUAGES = buildLanguageOptions();
 
     const onLanguageChange = async (next) => {
@@ -107,27 +149,11 @@ export function LanguageRegionSection() {
             console.error('language.update failed:', err);
         }
     };
-    const onCurrencyChange = async (next) => {
+    const onCurrencySelect = async (next) => {
         setCurrencyError(null);
-        if (next === CUSTOM_CURRENCY_VALUE) {
-            setCustomCurrencyOpen(true);
-            return;
-        }
-        setCustomCurrencyOpen(false);
+        setCurrencyPickerOpen(false);
+        setCurrencyQuery('');
         try { await update({ fiatCurrency: next }); } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('fiatCurrency.update failed:', err);
-            setCurrencyError('Could not save the currency. Try again.');
-        }
-    };
-    const onCustomCurrencyCommit = async (raw) => {
-        const code = String(raw || '').toUpperCase().trim();
-        if (!/^[A-Z]{3}$/.test(code)) {
-            setCurrencyError('Enter a three-letter ISO currency code, such as USD.');
-            return;
-        }
-        setCurrencyError(null);
-        try { await update({ fiatCurrency: code }); } catch (err) {
             // eslint-disable-next-line no-console
             console.error('fiatCurrency.update failed:', err);
             setCurrencyError('Could not save the currency. Try again.');
@@ -158,36 +184,58 @@ export function LanguageRegionSection() {
                     <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
                 </div>
                 <div style={CONTROLS}>
-                    <select
-                        value={selectorValue}
-                        onChange={(e) => onCurrencyChange(e.target.value)}
+                    <input
+                        type="search"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-controls="fiat-currency-options"
+                        aria-expanded={currencyPickerOpen}
                         aria-label="Fiat currency"
-                        style={SELECT}
-                    >
-                        {FIAT_CURRENCIES.map((c) => (
-                            <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
-                        <option value={CUSTOM_CURRENCY_VALUE}>Custom…</option>
-                    </select>
-                    {selectorValue === CUSTOM_CURRENCY_VALUE ? (
-                        <input
-                            type="text"
-                            enterKeyHint="done"
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                            defaultValue={knownCurrency ? '' : settings.fiatCurrency}
-                            onBlur={(e) => onCustomCurrencyCommit(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            placeholder="ISO code"
-                            aria-label="Custom currency code"
-                            maxLength={6}
-                            style={{ ...INPUT, width: 80, textTransform: 'uppercase' }}
-                        />
+                        placeholder="Search by code or name"
+                        value={currencyPickerOpen
+                            ? currencyQuery
+                            : selectedCurrency ? currencyLabel(selectedCurrency) : ''}
+                        onFocus={() => {
+                            setCurrencyPickerOpen(true);
+                            setCurrencyQuery('');
+                        }}
+                        onChange={(e) => {
+                            setCurrencyPickerOpen(true);
+                            setCurrencyQuery(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Escape') setCurrencyPickerOpen(false);
+                            if (e.key === 'Enter' && filteredCurrencies.length === 1) {
+                                e.preventDefault();
+                                onCurrencySelect(filteredCurrencies[0].code);
+                            }
+                        }}
+                        onBlur={(e) => {
+                            if (!e.currentTarget.parentElement?.contains(e.relatedTarget)) {
+                                setCurrencyPickerOpen(false);
+                            }
+                        }}
+                        style={CURRENCY_INPUT}
+                    />
+                    {currencyPickerOpen ? (
+                        <div id="fiat-currency-options" role="listbox" aria-label="Supported fiat currencies" style={CURRENCY_LIST}>
+                            {filteredCurrencies.map((currency) => (
+                                <button
+                                    key={currency.code}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={currency.code === selectedCurrency?.code}
+                                    onClick={() => onCurrencySelect(currency.code)}
+                                    title={currencyLabel(currency)}
+                                    style={CURRENCY_OPTION}
+                                >
+                                    {currencyLabel(currency)}
+                                </button>
+                            ))}
+                            {filteredCurrencies.length === 0 ? (
+                                <Status text="No supported currencies match." />
+                            ) : null}
+                        </div>
                     ) : null}
                 </div>
             </div>

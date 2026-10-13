@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TokenDetail draws a supply-over-time chart from getSupplyHistory and
-// offers "Sell on DEX", which reuses the Markets hop, only to a holder.
+// TokenDetail draws a supply-over-time chart from getSupplyHistory.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -37,6 +36,7 @@ const CHAIN = 'bitcoin-regtest';
 
 function renderDetail({ history, quantity = '100', onBuy = vi.fn(), withHistory = true } = {}) {
     const messaging = {
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
@@ -71,15 +71,21 @@ describe('TokenDetail supply chart', () => {
     });
 });
 
-describe('TokenDetail "Sell on DEX" action', () => {
-    it('opens Markets for a holder', () => {
+describe('TokenDetail Trade action', () => {
+    it('opens trading regardless of whether the current balance is zero', () => {
         const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Sell on DEX' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
         expect(onBuy).toHaveBeenCalledTimes(1);
+
+        cleanup();
+        const zero = renderDetail({ history: [], quantity: '0' });
+        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        expect(zero.onBuy).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
-    it('is absent with a zero balance', () => {
-        renderDetail({ history: [], quantity: '0' });
-        expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
+    it('is absent when the shell has no trading surface', () => {
+        renderDetail({ history: [], onBuy: null });
+        expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull();
     });
 });

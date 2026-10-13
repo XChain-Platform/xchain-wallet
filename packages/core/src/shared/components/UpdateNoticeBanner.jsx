@@ -23,10 +23,9 @@
 // phishing surface with our branding on it; the most a compromised feed can do
 // here is claim a version exists.
 //
-// Dismissal is per-session and not persisted. A user who dismisses it has seen
-// it; a user who wants it gone permanently has the Settings switch. Persisting
-// the dismissal would need to remember WHICH version was dismissed, and
-// getting that wrong silences the next notice too.
+// Dismissal lasts for the current tab session and is keyed by version. This
+// keeps route remounts from repeating the same notice without hiding the next
+// release. The Settings switch remains the permanent opt-out.
 
 import { useEffect, useState } from 'react';
 import {
@@ -34,9 +33,22 @@ import {
     hasDirectUpdateLane,
 } from '../../flows/directUpdate.js';
 
+const DISMISSED_VERSION_KEY = 'xc:update-notice:dismissed-version';
+
+function dismissedVersion() {
+    try {
+        return typeof sessionStorage === 'undefined'
+            ? null
+            : sessionStorage.getItem(DISMISSED_VERSION_KEY);
+    } catch (_err) {
+        return null;
+    }
+}
+
 export function UpdateNoticeBanner() {
-    const [notice, setNotice] = useState(/** @type {string | null} */ (null));
-    const [dismissed, setDismissed] = useState(false);
+    const [notice, setNotice] = useState(
+        /** @type {{ version: string, notice: string } | null} */ (null),
+    );
 
     useEffect(() => {
         if (!hasDirectUpdateLane()) return undefined;
@@ -46,13 +58,22 @@ export function UpdateNoticeBanner() {
         // cannot turn into a beacon.
         checkForUpdateNotice()
             .then((result) => {
-                if (live && result) setNotice(result.notice);
+                if (live && result && dismissedVersion() !== result.version) {
+                    setNotice(result);
+                }
             })
             .catch(() => { /* a failed check is never worth a dialog */ });
         return () => { live = false; };
     }, []);
 
-    if (!notice || dismissed) return null;
+    if (!notice) return null;
+
+    function dismiss() {
+        setNotice(null);
+        try {
+            sessionStorage?.setItem(DISMISSED_VERSION_KEY, notice.version);
+        } catch (_err) { /* private-mode Safari */ }
+    }
 
     return (
         <div
@@ -71,10 +92,10 @@ export function UpdateNoticeBanner() {
             }}
         >
             <span aria-hidden="true">⬆</span>
-            <div style={{ flex: 1 }}>{notice}</div>
+            <div style={{ flex: 1 }}>{notice.notice}</div>
             <button
                 type="button"
-                onClick={() => setDismissed(true)}
+                onClick={dismiss}
                 aria-label="Dismiss update notice"
                 style={{
                     background: 'none',

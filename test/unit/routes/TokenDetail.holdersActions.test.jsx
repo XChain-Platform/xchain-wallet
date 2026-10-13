@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -36,8 +36,9 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount({ holders = { data: [] }, holdersError = null, props = {} } = {}) {
+function mount({ holders = { data: [] }, holdersError = null, settings = { walletMode: 'full' }, props = {} } = {}) {
     const messaging = {
+        getSettings: vi.fn().mockResolvedValue(settings),
         getTokenInfo: vi.fn().mockResolvedValue({ creator: CREATOR }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
         getHoldersForToken: holdersError
@@ -98,18 +99,46 @@ describe('TokenDetail holders', () => {
 });
 
 describe('TokenDetail actions', () => {
-    it('renders only actions backed by handlers and invokes their destinations', async () => {
+    it('renders applicable actions in Send, Receive, Trade order and invokes them', async () => {
         const onSend = vi.fn();
-        const onViewActivity = vi.fn();
-        mount({ props: { onSend, onViewActivity } });
+        const onReceive = vi.fn();
+        const onBuy = vi.fn();
+        mount({ props: { onSend, onReceive, onBuy } });
+
+        await screen.findByRole('button', { name: 'Send' });
+        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+            .getAllByRole('button');
+        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
+            'Send',
+            'Receive',
+            'Trade',
+        ]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
         expect(onSend).toHaveBeenCalledTimes(1);
-        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Markets' })).toBeNull();
+        expect(onReceive).toHaveBeenCalledTimes(1);
+        expect(onBuy).toHaveBeenCalledTimes(1);
+    });
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(screen.getByRole('menuitem', { name: 'History' }));
-        expect(onViewActivity).toHaveBeenCalledTimes(1);
+    it('hides Send in watch-only mode while retaining non-signing actions', async () => {
+        mount({
+            settings: { walletMode: 'watcher' },
+            props: { onSend: vi.fn(), onReceive: vi.fn(), onBuy: vi.fn() },
+        });
+
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Send' })).toBeNull());
+        expect(screen.getByRole('button', { name: 'Receive' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Trade' })).toBeTruthy();
+    });
+
+    it('keeps a zero-balance Send visible and shows why it is disabled', async () => {
+        mount({ props: { quantity: '0', onSend: vi.fn() } });
+
+        const send = await screen.findByRole('button', { name: 'Send' });
+        expect(send.disabled).toBe(true);
+        expect(send.title).toBe('No balance to send.');
+        expect(screen.getByText('No balance to send.')).toBeTruthy();
     });
 });

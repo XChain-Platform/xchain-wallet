@@ -61,19 +61,17 @@ describe('DesktopUpdateBanner', () => {
         expect(container.textContent).toBe('');
     });
 
-    it('offers the update, and the offer calls the verified install path', async () => {
+    it('offers the update and starts the verified download without restarting', async () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));
 
         bridge.emit({ type: 'available', info: { version: '0.339.0' } });
         expect(screen.getByRole('status').textContent).toContain('0.339.0');
 
-        const button = screen.getByRole('button', { name: /install and restart/i });
+        const button = screen.getByRole('button', { name: /download update/i });
         await act(async () => { button.click(); });
-        // The whole point of the row: a user action reaches
-        // downloadAndInstall(), which is what runs the S5 manifest gate
-        // and then quitAndInstall().
-        expect(bridge.install).toHaveBeenCalledTimes(1);
+        expect(bridge.install).toHaveBeenCalledWith('download');
+        expect(screen.queryByRole('button', { name: /restart to update/i })).toBeNull();
     });
 
     it('shows no version at all rather than a version the feed made up', () => {
@@ -95,7 +93,7 @@ describe('DesktopUpdateBanner', () => {
         render(React.createElement(DesktopUpdateBanner));
         bridge.emit({ type: 'available', info: { version: '0.339.0' } });
 
-        await act(async () => { screen.getByRole('button', { name: /install and restart/i }).click(); });
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
 
         const text = screen.getByRole('status').textContent;
         expect(text).toContain('could not be downloaded or verified');
@@ -125,6 +123,51 @@ describe('DesktopUpdateBanner', () => {
         expect(text).toContain('Could not check for updates');
         expect(text).not.toContain('could not be verified');
         expect(text).not.toContain('feed unavailable');
+    });
+
+    it('retries a failed check through the updater bridge', async () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        bridge.emit({ type: 'error', userInitiated: true, info: { message: 'offline' } });
+        await act(async () => { screen.getByRole('button', { name: /retry/i }).click(); });
+
+        expect(bridge.install).toHaveBeenCalledWith('check');
+    });
+
+    it('shows download progress, verification, and a separate ready-to-restart action', async () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
+        bridge.emit({ type: 'progress', info: { percent: 42.4 } });
+        expect(screen.getByRole('status').textContent).toContain('42%');
+
+        bridge.emit({ type: 'verifying', info: { version: '0.339.0' } });
+        expect(screen.getByRole('status').textContent).toContain('Verifying');
+
+        bridge.emit({ type: 'ready', info: { version: '0.339.0' } });
+        expect(screen.getByRole('status').textContent).toContain('ready to restart');
+        await act(async () => { screen.getByRole('button', { name: /restart to update/i }).click(); });
+        expect(bridge.install).toHaveBeenLastCalledWith('restart');
+    });
+
+    it('keeps a prepared update ready when restart is blocked by wallet work', async () => {
+        const install = vi.fn(async (action) => (
+            action === 'restart'
+                ? { ok: false, reason: 'wallet operation in progress', retryable: true }
+                : { ok: true }
+        ));
+        const bridge = installBridge({ install });
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'ready', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /restart to update/i }).click(); });
+
+        expect(screen.getByRole('status').textContent).toContain('Finish the current wallet operation');
+        expect(screen.getByRole('button', { name: /restart to update/i })).toBeTruthy();
     });
 
     it('keeps automatic checks quiet unless they find an update', () => {
@@ -170,7 +213,7 @@ describe('DesktopUpdateBanner', () => {
 
         bridge.emit({ type: 'verifying' });
 
-        expect(screen.getByRole('status').textContent).toContain('Downloading');
+        expect(screen.getByRole('status').textContent).toContain('Verifying');
     });
 
     it('renders against a preload with no state channel rather than throwing', async () => {

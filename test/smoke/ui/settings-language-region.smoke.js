@@ -26,7 +26,6 @@ const src = readFileSync(sectionPath, 'utf8');
 assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(src, /update\(\{\s*language:\s*next\s*\}\)/, 'language write through update({ language })');
 assert.match(src, /update\(\{\s*fiatCurrency:\s*next\s*\}\)/, 'currency picker write through update({ fiatCurrency })');
-assert.match(src, /update\(\{\s*fiatCurrency:\s*code\s*\}\)/, 'custom currency input write through update');
 
 // Language picker (Cluster R FOLLOWUP 4): dynamic from availableLocales()
 assert.match(src, /import \{ availableLocales, setLocale as setI18nLocale \} from '\.\.\/\.\.\/\.\.\/i18n\/index\.js'/,
@@ -41,10 +40,12 @@ assert.match(src, /setI18nLocale\(next\)/, 'onLanguageChange flips the live i18n
 
 // Currency picker covers a sensible breadth of common codes
 for (const code of ['USD', 'EUR', 'GBP', 'JPY']) {
-    assert.ok(src.includes(`value: '${code}'`), `FIAT_CURRENCIES has '${code}'`);
+    assert.ok(src.includes(`code: '${code}'`), `FIAT_CURRENCIES has '${code}'`);
 }
-assert.match(src, /__custom__/, 'custom currency sentinel present');
-assert.match(src, /placeholder="ISO code"/, 'custom currency input has ISO-code placeholder');
+assert.match(src, /placeholder="Search by code or name"/, 'currency picker advertises both search fields');
+assert.match(src, /currencyDisplay:\s*'symbol'/, 'currency labels derive symbols from Intl');
+assert.match(src, /No supported currencies match\./, 'unsupported searches produce no selectable currency');
+assert.doesNotMatch(src, /__custom__|Custom currency code/, 'arbitrary unsupported currencies are not offered');
 
 // Loading / error guards
 assert.match(src, /loading\)\s*return\s*<Status/, 'loading state renders Status');

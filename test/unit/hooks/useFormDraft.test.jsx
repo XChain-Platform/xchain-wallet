@@ -56,4 +56,24 @@ describe('useFormDraft', () => {
         act(() => result.current.save({ amount: '5' }));
         expect(result.current.hasDraft()).toBe(false);
     });
+
+    it('disables draft persistence when accessing localStorage throws', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            get: () => { throw new Error('storage disabled'); },
+        });
+
+        try {
+            const { result } = renderHook(() => useFormDraft({
+                view: 'send', walletId: 'wallet-1', ttlMs: 60_000,
+            }));
+            expect(result.current.load()).toBeNull();
+            expect(() => result.current.save({ amount: '5' })).not.toThrow();
+            expect(() => result.current.clear()).not.toThrow();
+            expect(result.current.hasDraft()).toBe(false);
+        } finally {
+            Object.defineProperty(globalThis, 'localStorage', descriptor);
+        }
+    });
 });
