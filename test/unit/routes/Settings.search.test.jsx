@@ -70,6 +70,13 @@ describe('Settings search', () => {
         expect(screen.getByText('Export encrypted backup')).toBeTruthy();
     });
 
+    it('describes only the controls available in Appearance', () => {
+        mount();
+
+        expect(screen.getByText('Theme and reduced motion.')).toBeTruthy();
+        expect(screen.queryByText(/accent color/i)).toBeNull();
+    });
+
     it('shows a plain empty state for no match and clearing restores the list', () => {
         mount();
         searchFor('no setting has these words');
