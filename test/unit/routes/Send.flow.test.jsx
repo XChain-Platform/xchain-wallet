@@ -48,7 +48,12 @@ function composedSend() {
     };
 }
 
-function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
+function mount({
+    walletMode = 'full',
+    sendResult = { txid: TXID },
+    contacts = [],
+    history = [],
+} = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{
@@ -75,9 +80,17 @@ function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
         updateSettings: vi.fn().mockResolvedValue({}),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
-        listContacts: vi.fn().mockResolvedValue([]),
+        listContacts: vi.fn().mockResolvedValue(contacts),
+        saveContact: vi.fn().mockImplementation(async ({ input, record }) => record || {
+            ...input,
+            id: 'saved-contact',
+            schemaVersion: 1,
+            avatarSeed: input.entries[0].address,
+            createdAt: '2026-10-13T00:00:00.000Z',
+            updatedAt: '2026-10-13T00:00:00.000Z',
+        }),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
-        getAddressHistory: vi.fn().mockResolvedValue([]),
+        getAddressHistory: vi.fn().mockResolvedValue(history),
         gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
         composeForConfirm: vi.fn().mockResolvedValue(composedSend()),
         sendToken: vi.fn().mockImplementation(async () => {
@@ -140,6 +153,46 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('searches contacts and immediately explains a wrong-chain pick', async () => {
+        const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
+        const messaging = mount({
+            contacts: [{
+                id: 'shibe',
+                name: 'Shibe',
+                entries: [{ chain: 'dogecoin', address: doge, label: 'Tips' }],
+            }],
+        });
+
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.change(to, { target: { value: 'shi' } });
+        fireEvent.mouseDown(screen.getByRole('option', { name: /Shibe/ }));
+
+        expect(to).toHaveValue(doge);
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This looks like a Dogecoin address, not a Bitcoin address.',
+        );
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(screen.getByRole('form', { name: 'Send' })).toHaveTextContent(
+            'This looks like a Dogecoin address, not a Bitcoin address.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows recent recipients from a wrapped history response', async () => {
+        const recent = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
+        mount({
+            history: { data: [{ action: 'SEND', destination: recent, timestamp: 123 }] },
+        });
+
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.focus(to);
+        await waitFor(() => expect(screen.getByText('Previously sent')).toBeInTheDocument());
+        fireEvent.change(to, { target: { value: '1BvB' } });
+        fireEvent.mouseDown(screen.getByRole('option', { name: /Recent/ }));
+
+        expect(to).toHaveValue(recent);
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
         const messaging = mount();
         const confirm = await openPasswordConfirm(messaging);
@@ -157,7 +210,7 @@ describe('Send flow with mocked messaging', () => {
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Send ${AMOUNT} BTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`TokenBTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Amount${AMOUNT}`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Destination${TO}`);
+        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`To${TO}`);
         expect(within(confirm).getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
         expect(within(confirm).getByLabelText('Password')).toBeInTheDocument();
 
@@ -175,6 +228,27 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
         expect(screen.getByText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
+    });
+
+    it('saves a new recipient as a contact after broadcast', async () => {
+        const messaging = mount();
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+        await screen.findByRole('heading', { name: 'Broadcast pending' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save contact' }));
+
+        await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
+            input: {
+                name: 'Alice',
+                notes: '',
+                entries: [{ chain: 'bitcoin', address: TO, label: '' }],
+            },
+        }));
+        expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
     });
 
     it('ends on the signed-not-broadcast screen when the signed transaction is queued', async () => {
@@ -212,7 +286,7 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(within(review).getByRole('button', { name: /Create unsigned transaction/ }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
