@@ -635,8 +635,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         value={gateMinAmount}
                         onChange={(e) => setGateMinAmount(e.target.value)}
                         disabled={ownerMissing}
+                        aria-describedby="gated-publish-threshold-hint"
                     />
-                    <span className={styles.hint}>
+                    <span id="gated-publish-threshold-hint" className={styles.hint}>
                         Holders need at least this many {tick} after a send to
                         receive the unlock key. This is a first-access lock, not
                         copy protection: anyone who ever got the key keeps it,

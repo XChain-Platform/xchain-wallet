@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -1867,6 +1867,7 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
+    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2211,9 +2212,15 @@ function GatedGroupCard({
                         }}
                         autoComplete="current-password"
                         aria-invalid={unlockError ? true : undefined}
+                        aria-describedby={unlockError ? unlockErrorId : undefined}
                     />
                     {unlockError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
+                        <p
+                            id={unlockErrorId}
+                            role="alert"
+                            className={styles.error}
+                            style={{ marginTop: 'var(--xc-space-1)' }}
+                        >
                             {unlockError}
                         </p>
                     ) : null}

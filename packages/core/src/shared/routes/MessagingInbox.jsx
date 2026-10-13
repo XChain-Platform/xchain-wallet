@@ -526,7 +526,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 onSubmit={handleUnlock}
                 intro="Enter your wallet password to decrypt this account's messages."
                 status={unlockError ? (
-                    <StatusMessage variant="error" className={styles.error}>{unlockError}</StatusMessage>
+                    <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
+                        {unlockError}
+                    </StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -550,6 +552,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     }}
                     autoComplete="current-password"
                     aria-invalid={unlockError ? true : undefined}
+                    aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
                 />
             </FormPage>,
         );

@@ -97,7 +97,11 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/whole number of sats/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain('test-send-threshold-hint');
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
@@ -151,7 +155,10 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alert').textContent).toMatch(/non-negative decimal fee rate/);
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/non-negative decimal fee rate/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
     it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {

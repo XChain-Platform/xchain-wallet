@@ -716,6 +716,7 @@ export function ImportWallet({
                         {...backupDrop.pickerProps}
                         id="xc-backup-file"
                         aria-label="Backup file"
+                        aria-describedby="xc-backup-source-status"
                         disabled={busy}
                     />
                     <button
@@ -726,7 +727,9 @@ export function ImportWallet({
                     >
                         Choose backup file
                     </button>
-                    <p className={styles.backupHint} aria-live="polite">{backupSourceMessage}</p>
+                    <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
+                        {backupSourceMessage}
+                    </p>
                     <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
                         Backup file contents
                     </label>
@@ -747,6 +750,7 @@ export function ImportWallet({
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
+                        aria-describedby="xc-backup-source-status"
                     />
                         </>
                     )}
@@ -876,8 +880,9 @@ export function ImportWallet({
                     autoComplete="off"
                     rows={3}
                     disabled={busy}
+                    aria-describedby="xc-mnemonic-status"
                 />
-                <div className={styles.phraseMeta} aria-live="polite">
+                <div id="xc-mnemonic-status" className={styles.phraseMeta} aria-live="polite">
                     <span>
                         {isFreeWallet
                             ? `${mnemonicWordCount} / 12 words`

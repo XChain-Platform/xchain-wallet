@@ -118,11 +118,16 @@ export function SafetySection() {
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                     placeholder="0 = no warning"
                     aria-label="Test-send warning threshold (sats)"
-                    aria-describedby="test-send-threshold-hint"
+                    aria-invalid={thresholdError ? 'true' : undefined}
+                    aria-describedby={thresholdError
+                        ? 'test-send-threshold-hint test-send-threshold-error'
+                        : 'test-send-threshold-hint'}
                     style={{ ...INPUT, width: 140, textAlign: 'right' }}
                 />
             </div>
-            {thresholdError ? <Status text={thresholdError} tone="error" /> : null}
+            {thresholdError ? (
+                <Status id="test-send-threshold-error" text={thresholdError} tone="error" />
+            ) : null}
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Lookalike address warnings</span>
