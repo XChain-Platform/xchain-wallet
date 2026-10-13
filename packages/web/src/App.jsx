@@ -2896,6 +2896,7 @@ function AppInner() {
                                     activeAccount={headerAccountRow}
                                     onOpenWalletPicker={handleOpenWalletPicker}
                                     onOpenAccountPicker={handleOpenAccountPicker}
+                                    onOpenSettings={handleOpenSettings}
                                     walletNonDefault={headerWalletNonDefault}
                                     accountNonDefault={headerAccountNonDefault}
                                     chainRegistry={APP_CHAIN_REGISTRY}

@@ -49,6 +49,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                          host navigates to the wallet picker route
  * @param {() => void} [props.onOpenAccountPicker]                         host navigates to the account picker route
+ * @param {() => void} [props.onOpenSettings]                              host navigates to the full settings route
  * @param {boolean} [props.walletNonDefault]   used by the gear's status dot (caller knows whether the active wallet is the "first" one in the list)
  * @param {boolean} [props.accountNonDefault]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
@@ -64,6 +65,7 @@ export function HeaderSettingsButton({
     activeAccount,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    onOpenSettings,
     walletNonDefault = false,
     accountNonDefault = false,
     chainRegistry,
@@ -236,6 +238,20 @@ export function HeaderSettingsButton({
                                 onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
                             />
                         </Section>
+                    ) : null}
+
+                    {onOpenSettings ? (
+                        <div className={styles.section}>
+                            <button
+                                type="button"
+                                className={styles.summaryRow}
+                                onClick={() => { setOpen(false); onOpenSettings(); }}
+                                title="All settings"
+                            >
+                                <span className={styles.summaryName}>All settings</span>
+                                <span className={styles.summaryChevron} aria-hidden="true">›</span>
+                            </button>
+                        </div>
                     ) : null}
                 </div>
             ) : null}

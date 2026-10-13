@@ -47,6 +47,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {{ id: string, name?: string, index?: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                    gear popover: navigate to the wallet picker
  * @param {() => void} [props.onOpenAccountPicker]                   gear popover: navigate to the account picker
+ * @param {() => void} [props.onOpenSettings]                        gear popover: navigate to the full settings page
  * @param {boolean} [props.walletNonDefault]                         drives the gear's status dot
  * @param {boolean} [props.accountNonDefault]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
@@ -72,6 +73,7 @@ export function AppHeader({
     activeAccount = null,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    onOpenSettings,
     walletNonDefault = false,
     accountNonDefault = false,
     chainRegistry,
@@ -91,6 +93,7 @@ export function AppHeader({
         && typeof onNetworkFilterChange === 'function';
     const showSettings = typeof onOpenWalletPicker === 'function'
         || typeof onOpenAccountPicker === 'function'
+        || typeof onOpenSettings === 'function'
         || networkWired
         || typeof onActiveNetworkChange === 'function';
 
@@ -113,6 +116,7 @@ export function AppHeader({
                         activeAccount={activeAccount}
                         onOpenWalletPicker={onOpenWalletPicker}
                         onOpenAccountPicker={onOpenAccountPicker}
+                        onOpenSettings={onOpenSettings}
                         walletNonDefault={walletNonDefault}
                         accountNonDefault={accountNonDefault}
                         chainRegistry={networkWired ? chainRegistry : undefined}
