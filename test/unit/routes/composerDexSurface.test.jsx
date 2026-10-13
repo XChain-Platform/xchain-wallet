@@ -13,7 +13,7 @@
 // registry fallback alike, while every other build keeps them.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -67,13 +67,9 @@ function mount(element, listActions, extra) {
 }
 
 async function pickerValues() {
-    const select = await waitFor(() => {
-        const found = [...document.querySelectorAll('select')]
-            .find((s) => s.querySelector('option[value="SEND"]'));
-        expect(found).toBeTruthy();
-        return found;
-    });
-    return [...select.querySelectorAll('option')].map((o) => o.value).filter(Boolean);
+    await screen.findByRole('option', { name: /SEND/ });
+    const select = await screen.findByRole('combobox', { name: 'Action' });
+    return within(select).getAllByRole('option').map((option) => option.value).filter(Boolean);
 }
 
 const sdkList = () => vi.fn(async () => [...SDK_LIST]);
@@ -136,11 +132,8 @@ describe('AdvancedActionsForm raw BATCH', () => {
 
     async function submitBatch(props, host) {
         mount(<AdvancedActionsForm walletId="w" onBack={() => {}} {...props} />, vi.fn(async () => ['BATCH', 'SEND']), host);
-        const select = await waitFor(() => {
-            const found = document.querySelector('option[value="BATCH"]')?.closest('select');
-            expect(found).toBeTruthy();
-            return found;
-        });
+        await screen.findByRole('option', { name: /BATCH/ });
+        const select = await screen.findByRole('combobox', { name: 'Action' });
         fireEvent.change(select, { target: { value: 'BATCH' } });
         const command = await screen.findByLabelText('COMMAND');
         fireEvent.change(command, { target: { value: 'SEND|0|XCP|1|bc1qdest;ORDER|0|XCP|1|BTC|1' } });

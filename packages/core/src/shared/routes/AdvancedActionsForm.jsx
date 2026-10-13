@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -795,24 +795,22 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </StatusMessage>
             )}
 
-            <label className={styles.pickerLabel}>
-                Action
-                <select
-                    className={styles.picker}
-                    value={action}
-                    onChange={(e) => handleActionChange(e.target.value)}
-                >
-                    <option value="">Pick an action</option>
-                    {(actions || []).map((a) => (
-                        <option key={a} value={a}>
-                            {actionDisplayLabel(a)} ({a})
-                            {ACTIONS_WITH_DEDICATED_FORMS.has(a)
-                                ? ' (dedicated form available)'
-                                : ''}
-                        </option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="Action"
+                className={styles.picker}
+                value={action}
+                onChange={(e) => handleActionChange(e.target.value)}
+            >
+                <option value="">Pick an action</option>
+                {(actions || []).map((a) => (
+                    <option key={a} value={a}>
+                        {actionDisplayLabel(a)} ({a})
+                        {ACTIONS_WITH_DEDICATED_FORMS.has(a)
+                            ? ' (dedicated form available)'
+                            : ''}
+                    </option>
+                ))}
+            </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
                 <div role="alert" className={styles.warnings}>
@@ -834,21 +832,19 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
-                <label className={styles.pickerLabel}>
-                    Format version
-                    <select
-                        className={styles.picker}
-                        value={version}
-                        onChange={(e) => setVersion(e.target.value)}
-                    >
-                        <option value="">Auto-select (recommended)</option>
-                        {Object.keys(formats).map((v) => (
-                            <option key={v} value={v}>
-                                v{v}: {formats[v]}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <Select
+                    label="Format version"
+                    className={styles.picker}
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                >
+                    <option value="">Auto-select (recommended)</option>
+                    {Object.keys(formats).map((v) => (
+                        <option key={v} value={v}>
+                            v{v}: {formats[v]}
+                        </option>
+                    ))}
+                </Select>
             ) : null}
 
             {action && fields.length === 0 ? (
@@ -863,19 +859,18 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 const raw = values[base] ?? '';
                 if (isRest) {
                     return (
-                        <label key={fieldName} className={styles.pickerLabel}>
-                            {base} (one per line or comma-separated)
-                            <textarea
-                                className={styles.picker}
-                                value={raw}
-                                onChange={(e) => handleFieldChange(base, e.target.value)}
-                                rows={4}
-                                spellCheck={false}
-                                autoCapitalize="off"
-                                autoCorrect="off"
-                                aria-label={`${base}: list values, one per line or comma-separated`}
-                            />
-                        </label>
+                        <Textarea
+                            key={fieldName}
+                            label={`${base} (one per line or comma-separated)`}
+                            className={styles.picker}
+                            value={raw}
+                            onChange={(e) => handleFieldChange(base, e.target.value)}
+                            rows={4}
+                            spellCheck={false}
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            aria-label={`${base}: list values, one per line or comma-separated`}
+                        />
                     );
                 }
                 return (

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -184,7 +184,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             trailing={onCreateList ? (
                 <>
                     {onCreateList ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.addBtn}
                             onClick={() => onCreateList()}
@@ -192,7 +192,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
                             title="Create list"
                         >
                             <Icon.PlusIcon />
-                        </button>
+                        </Button>
                     ) : null}
                 </>
             ) : undefined}
@@ -257,19 +257,21 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
 
     const toolbar = (
         <>
-            <input
-                type="search"
-                enterKeyHint="search"
-                autoCapitalize="off"
-                className={local.search}
-                placeholder="Search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                aria-label="Search lists"
-            />
+            <div className={local.searchField}>
+                <Input
+                    type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    className={local.search}
+                    placeholder="Search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search lists"
+                />
+            </div>
             <NetworkFilterDropdown value={network} onChange={setNetwork} />
         </>
     );
@@ -337,6 +339,7 @@ function ListRow({ row, onSelect }) {
     const label = listLabel(index, row.name, kind);
     const ariaLabel = `Open ${listLabel(index, row.name, kind.toLowerCase())}`;
     return (
+        /* List entries stay native buttons because each control is the complete clickable row. */
         <button
             type="button"
             className={local.row}
