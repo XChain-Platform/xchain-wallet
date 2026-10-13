@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
@@ -14,6 +14,7 @@ import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.js
 import { StakeNew } from '../../../packages/core/src/shared/routes/StakeNew.jsx';
 import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
@@ -298,9 +299,14 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 }),
             );
 
-            const rewardWhen = await screen.findByText('block 98');
-            expect(rewardWhen.closest('div')?.className).toMatch(/eventRow/);
-            expect(rewardWhen.closest('div')).toHaveTextContent('987,654,321.12345678 XCHAIN');
+            const rewardList = await screen.findByRole('list', { name: 'Reward events' });
+            const rewardItem = within(rewardList).getByRole('listitem');
+            const rewardRow = rewardItem.querySelector(`.${listRowStyles.row}`);
+            expect(rewardRow).toBeInTheDocument();
+            expect(rewardItem).toHaveTextContent('987,654,321.12345678 XCHAIN');
+            expect(within(rewardItem).getByText('block 98')).toBeInTheDocument();
+            expect(within(rewardItem).queryByRole('button')).toBeNull();
+            expect(within(rewardItem).queryByRole('link')).toBeNull();
 
             cleanup();
             withMessaging(
@@ -337,11 +343,6 @@ describe.each([320, 360])('staking layout at %ipx', (width) => {
                 /grid-template-columns:\s*40px\s+minmax\(0, 1fr\)/,
             );
             expect(ruleBody(listNarrow, '.trailing')).toMatch(/grid-column:\s*2/);
-
-            const detailNarrow = mediaBlock(readCss(
-                'packages/core/src/shared/routes/StakeDetail.module.css',
-            ), 'not all and (min-width: 400px)');
-            expect(ruleBody(detailNarrow, '.eventRow')).toMatch(/flex-direction:\s*column/);
 
             const amountNarrow = mediaBlock(readCss(
                 'packages/core/src/shared/components/AmountField.module.css',

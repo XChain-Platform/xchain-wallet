@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
-    FormSection, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Select,
+    FormSection, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import {
@@ -2162,20 +2162,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             const refused = e.kind === 'dispense' && !e.row.valid;
                             return (
                                 <li key={`${e.kind}-${e.row.action_index}`}>
-                                    <div className={`${local.dispenseRow} ${refused ? local.dispenseInvalid : ''}`}>
-                                        <span className={local.dispenseAmount}>
+                                    <ListRow
+                                        className={refused ? local.dispenseInvalid : undefined}
+                                        title={<span className={local.dispenseAmount}>
                                             {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
-                                        </span>
-                                        <span className={local.dispensePaid}>
+                                        </span>}
+                                        subtitle={<span className={local.dispensePaid}>
                                             {e.kind === 'dispense'
                                                 ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
                                                 : (e.row.expiration ? `expires ${formatUnixDate(e.row.expiration)}` : `#${e.row.action_index}`)}
                                             {refused ? <InvalidMarker row={e.row} /> : null}
-                                        </span>
-                                        <span className={local.dispenseWhen}>
+                                        </span>}
+                                        trailing={<span className={local.dispenseWhen}>
                                             {e.row.block_index ? `block ${e.row.block_index}` : ''}
-                                        </span>
-                                    </div>
+                                        </span>}
+                                    />
                                 </li>
                             );
                         })}
@@ -2192,18 +2193,19 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
                             <li key={String(d.action_index)}>
-                                <div className={`${local.dispenseRow} ${d.valid ? '' : local.dispenseInvalid}`}>
-                                    <span className={local.dispenseAmount}>
+                                <ListRow
+                                    className={d.valid ? undefined : local.dispenseInvalid}
+                                    title={<span className={local.dispenseAmount}>
                                         {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
-                                    </span>
-                                    <span className={local.dispensePaid}>
+                                    </span>}
+                                    subtitle={<span className={local.dispensePaid}>
                                         {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
                                         {d.valid ? null : <InvalidMarker row={d} />}
-                                    </span>
-                                    <span className={local.dispenseWhen}>
+                                    </span>}
+                                    trailing={<span className={local.dispenseWhen}>
                                         {formatRelativeTime(d.timestamp || d.block_time)}
-                                    </span>
-                                </div>
+                                    </span>}
+                                />
                             </li>
                         );
                     })}

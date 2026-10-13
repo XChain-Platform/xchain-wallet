@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -527,15 +527,17 @@ export function StakeDetail({
                     <ul className={local.eventList} aria-label="Reward events">
                         {rewards.slice(0, 25).map((r, i) => (
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
                                     {fmt(r.amount ?? r.reward)} XCHAIN
-                                </span>
-                                <span className={local.eventMeta}>{detailText(r.status)}</span>
-                                <span className={local.eventWhen}>
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{detailText(r.status)}</span>}
+                                trailing={<span className={local.eventWhen}>
                                     {r.block_index ? `block ${fmt(r.block_index)}` : '-'}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>
@@ -549,15 +551,17 @@ export function StakeDetail({
                     <ul className={local.eventList} aria-label="Signing-key delegations">
                         {delegations.slice(0, 25).map((d, i) => (
                         <li key={`${String(d.delegation_id ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
                                     <code>{d.signing_pubkey || d.SIGNING_PUBKEY || '(none)'}</code>
-                                </span>
-                                <span className={local.eventMeta}>{stakingRowState(d, height)}</span>
-                                <span className={local.eventWhen}>
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{stakingRowState(d, height)}</span>}
+                                trailing={<span className={local.eventWhen}>
                                     {d.block_index ? `block ${fmt(d.block_index)}` : ''}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>
@@ -571,24 +575,24 @@ export function StakeDetail({
                     <ul className={local.eventList} aria-label="Contract positions">
                             {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>
-                                        <span className={local.eventMeta}>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
                                             key <code>{s.signing_pubkey || 'None'}</code>
-                                        </span>
-                                        <span className={local.eventWhen}>staked</span>
-                                    </div>
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>staked</span>}
+                                    />
                                 </li>
                             ))}
                             {pendingContractUnstakes.map((u, i) => (
                                 <li key={`u:${String(u.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>
-                                        <span className={local.eventMeta}>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
                                             releasing, slashable until block {fmt(u.cooldown_end_block)}
-                                        </span>
-                                        <span className={local.eventWhen}>cooldown</span>
-                                    </div>
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>cooldown</span>}
+                                    />
                                 </li>
                             ))}
                     </ul>
@@ -602,15 +606,15 @@ export function StakeDetail({
                     <ul className={local.eventList} aria-label="Slash events">
                         {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>
-                                <span className={local.eventMeta}>
+                            <ListRow
+                                title={<span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>}
+                                subtitle={<span className={local.eventMeta}>
                                     to <AddressText address={detailText(ev.destination_address || ev.destination)} truncate={false} />
-                                </span>
-                                <span className={local.eventWhen}>
+                                </span>}
+                                trailing={<span className={local.eventWhen}>
                                     {ev.block_index ? `block ${fmt(ev.block_index)}` : '-'}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
                         ))}
                     </ul>

@@ -138,19 +138,8 @@
     overflow: hidden;
 }
 
-.dispenseRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
+.dispenseList li + li {
     border-top: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
-}
-
-.dispenseList li:first-child .dispenseRow {
-    border-top: none;
 }
 
 .dispenseAmount {
@@ -284,13 +273,6 @@
 }
 
 @media not all and (min-width: 400px) {
-    .dispenseRow {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        align-items: start;
-        gap: var(--xc-space-1);
-    }
-
     .dispenseWhen {
         white-space: normal;
     }

@@ -100,19 +100,8 @@
     overflow: hidden;
 }
 
-.eventRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
+.eventList li + li {
     border-top: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
-}
-
-.eventList li:first-child .eventRow {
-    border-top: none;
 }
 
 .eventAmount {
@@ -175,12 +164,6 @@
     .tabBar {
         gap: var(--xc-space-3);
         overflow-x: auto;
-    }
-
-    .eventRow {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: var(--xc-space-1);
     }
 
     .eventAmount,
