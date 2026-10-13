@@ -2537,14 +2537,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
         return wrap(
-            <EmptyState
-                title={t('send.empty.title')}
-                body={t('send.empty.body')}
-                icon={<Icon.ReceiveIcon />}
-                actionLabel={onReceive ? t('home.receive') : undefined}
-                onAction={onReceive}
-                actionIcon={<Icon.ReceiveIcon />}
-            />,
+            <FormPage as="div" label={t('send.title')}>
+                <EmptyState
+                    title={t('send.empty.title')}
+                    body={t('send.empty.body')}
+                    icon={<Icon.ReceiveIcon />}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
+                    onAction={onReceive}
+                    actionIcon={<Icon.ReceiveIcon />}
+                />
+            </FormPage>,
         );
     }
 
