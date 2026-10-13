@@ -41,12 +41,17 @@ const chainRegistry = {
 };
 
 /** An SDK whose two balance endpoints fail independently, on demand. */
-function sdkWith({ tokensFail = false, nativeFail = false } = {}) {
+function sdkWith({ tokensFail = false, nativeFail = false, pending = null } = {}) {
     return {
         get: () => ({
             getAddress: async () => {
                 if (nativeFail) throw new Error('address endpoint 503');
-                return { balances: { confirmed: '1.50000000' } };
+                return {
+                    balances: {
+                        confirmed: '1.50000000',
+                        ...(pending == null ? {} : { pending }),
+                    },
+                };
             },
             getBalances: async () => {
                 if (tokensFail) throw new Error('balances endpoint 503');
@@ -87,6 +92,14 @@ const read = (sdkRegistry) => addressBalances({
 });
 
 describe('D-152: a half-failed balance read must not read as an empty wallet', () => {
+    it('keeps native pending separate from confirmed quantity', async () => {
+        const shape = await read(sdkWith({ pending: '0.25000000' }));
+        expect(shape.native).toMatchObject({
+            quantity: '150000000',
+            pendingQuantity: '25000000',
+        });
+    });
+
     it('marks the token half as unavailable when its endpoint fails', async () => {
         const shape = await read(sdkWith({ tokensFail: true }));
         // The empty list is still returned - callers keep rendering - but it is

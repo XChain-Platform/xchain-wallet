@@ -1035,6 +1035,10 @@ function startNotifications() {
             sdkRegistry,
             chainRegistry,
             getSigner: (walletId) => (signerPool ? signerPool.get(walletId) : null),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
             reservationLedger: host.reservationLedger,
             notify,
             shellKind: 'web',

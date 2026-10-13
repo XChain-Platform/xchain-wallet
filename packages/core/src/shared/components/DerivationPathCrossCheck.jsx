@@ -91,8 +91,12 @@ export function DerivationPathCrossCheck({
                 <dd className={styles.value}><AddressText address={address} /></dd>
             </dl>
             <p className={styles.instruction}>
-                Verify <strong>both</strong> the derivation path <strong>and</strong> the address shown on your <strong>{deviceLabel}</strong> match the values shown here.
-                If either differs, reject on the device.
+                Verify <strong>both</strong> the derivation path and address on your <strong>{deviceLabel}</strong> match the values above.
+                Approve only when both match.
+            </p>
+            <p className={styles.deviceHint}>
+                If either value is different, the device may be using a different account or signing address.
+                Reject on the device. Nothing is signed, and you can check the selected account before trying again.
             </p>
             <p className={styles.deviceHint}>
                 {signerKind === 'trezor'

@@ -361,6 +361,21 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setValues((prev) => ({ ...prev, [field]: rawValue }));
     }, []);
 
+    function handleActionChange(nextAction) {
+        setAction(nextAction);
+        setFormats(null);
+        setVersion('');
+        setFields([]);
+        setValues({});
+        setValidation(null);
+    }
+
+    function handleChainChange(nextChainId) {
+        handleActionChange('');
+        setActions(null);
+        setChainId(nextChainId);
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
@@ -391,7 +406,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     // The user-chosen `action` is passed straight into actionData.
-    const { isWatcherMode } = useWalletMode();
+    const { isWatcherMode, isSignerMode } = useWalletMode();
 
     // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
@@ -555,6 +570,15 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         </Screen>
     );
 
+    if (isSignerMode) {
+        return wrap(
+            <StatusMessage variant="status">
+                This wallet is in signer mode, so Advanced action is unavailable.
+                Use Sign transaction to sign an unsigned transaction from a watcher wallet,
+                or switch the mode under Settings, Wallet Mode.
+            </StatusMessage>,
+        );
+    }
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
@@ -753,7 +777,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <NetworkField value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
@@ -776,7 +800,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 <select
                     className={styles.picker}
                     value={action}
-                    onChange={(e) => setAction(e.target.value)}
+                    onChange={(e) => handleActionChange(e.target.value)}
                 >
                     <option value="">Pick an action</option>
                     {(actions || []).map((a) => (

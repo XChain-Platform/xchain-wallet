@@ -183,10 +183,11 @@ export function AppHeader({
  */
 function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     const [open, setOpen] = useState(false);
-    // The system Back gesture closes this before it leaves the screen.
-    useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    // The system Back gesture and Escape close this before it leaves the
+    // screen; the shared stack consumes Escape, so focus goes back here.
+    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
 
     useEffect(() => {
         if (!open) return undefined;

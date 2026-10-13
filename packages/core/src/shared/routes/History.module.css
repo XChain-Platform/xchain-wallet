@@ -113,7 +113,7 @@
     z-index: 20;
     list-style: none;
     margin: 0;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
@@ -161,7 +161,7 @@
     font-weight: 600;
     padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
-    margin-bottom: 4px;
+    margin-bottom: var(--xc-space-1);
     list-style: none;
 }
 
@@ -320,6 +320,49 @@
     flex: 0 0 auto;
 }
 
+.dateTools,
+.activeDateRange {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.datePresets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.dateZone,
+.activeDateRange {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.activeDateRange button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--xc-accent-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    padding: var(--xc-space-1);
+    min-height: var(--xc-tap-min);
+}
+
+.activeDateRange button:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.dateError {
+    color: var(--xc-danger-text, #b42318);
+    font-size: var(--xc-text-sm);
+}
+
 .chip {
     display: inline-flex;
     align-items: center;
@@ -410,17 +453,6 @@
     gap: var(--xc-space-2);
 }
 
-/* Plain chain icon for row headers: no pill, no tinted background.
-   Just the raw 16px logo so the row reads as icon + action label. */
-.rowChainIcon {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    display: block;
-}
-
 .actionBadge {
     font-weight: 600;
     font-size: var(--xc-text-sm);
@@ -439,8 +471,10 @@
 
 .rowMeta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -448,6 +482,7 @@
 .rowSummary {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -498,7 +533,17 @@
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    word-break: break-all;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowReceiveLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text);
+    word-break: break-word;
 }
 
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
@@ -1319,5 +1364,7 @@
 .pendingAmount {
     font-style: italic;
     color: var(--xc-text-muted);
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
 }

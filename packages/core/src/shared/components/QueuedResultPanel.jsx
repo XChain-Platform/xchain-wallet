@@ -60,6 +60,7 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
         <>
             <div className={styles.queuedCard} role="status" aria-live="polite">
                 <div className={styles.queuedIcon} aria-hidden="true">⏳</div>
+                <p className={styles.queuedStage}>Current stage: Waiting to broadcast</p>
                 <h2 className={styles.queuedTitle}>{title}</h2>
                 {showUnsaved ? (
                     <p className={styles.unsavedWarning} role="alert">
