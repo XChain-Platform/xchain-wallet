@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -38,6 +38,9 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { parseRawTx } from '../../signers/verifySignedTx.js';
+import { explorerCoinCode, tickerForCoin } from '../../registry/coinTicker.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -64,6 +67,240 @@ const RESERVED_DELIMITERS = /[|;]/;
 // indexer validates it under its own field-specific setting.
 const MAX_BROADCAST_MESSAGE_LENGTH = 250;
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+const HEX_ONLY = /^[0-9a-fA-F]+$/;
+
+function normalizeRawTransaction(raw) {
+    const compact = String(raw || '').replace(/\s+/g, '');
+    if (!compact) throw new Error('Paste a signed transaction first.');
+    if (!HEX_ONLY.test(compact)) throw new Error('Transaction data must contain hexadecimal characters only.');
+    if (compact.length % 2 !== 0) throw new Error('Transaction data must contain complete bytes (two hexadecimal characters per byte).');
+    try {
+        return { txHex: compact.toLowerCase(), decoded: parseRawTx(compact) };
+    } catch {
+        throw new Error('This is not a complete signed transaction. Check the pasted data and try again.');
+    }
+}
+
+function scriptType(script) {
+    if (/^76a914[0-9a-f]{40}88ac$/.test(script)) return 'P2PKH';
+    if (/^a914[0-9a-f]{40}87$/.test(script)) return 'P2SH';
+    if (/^0014[0-9a-f]{40}$/.test(script)) return 'SegWit';
+    if (/^0020[0-9a-f]{64}$/.test(script)) return 'SegWit';
+    if (/^5120[0-9a-f]{64}$/.test(script)) return 'Taproot';
+    if (script.startsWith('6a')) return 'data';
+    return 'unknown script';
+}
+
+function rawTransactionMismatch(decoded, descriptor) {
+    if (!decoded || !descriptor) return null;
+    const types = new Set((descriptor.addressTypes || []).map(String));
+    const hasTaproot = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'Taproot');
+    if (hasTaproot && !types.has('p2tr')) {
+        return `This transaction contains a Taproot output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+    }
+    const hasSegwit = decoded.outputs.some((output) => scriptType(output.scriptPubKeyHex) === 'SegWit');
+    if (hasSegwit && !types.has('p2wpkh')) {
+        return `This transaction contains a SegWit output, which ${descriptor.displayName} does not support here. Pick the network that created the transaction.`;
+    }
+    return null;
+}
+
+function formatCoinAmount(valueSat, ticker) {
+    const whole = valueSat / 100000000n;
+    const fraction = String(valueSat % 100000000n).padStart(8, '0').replace(/0+$/, '');
+    return `${fraction ? `${whole}.${fraction}` : whole} ${ticker}`;
+}
+
+function rawBroadcastFailure(err) {
+    const raw = err && typeof err === 'object'
+        ? String(/** @type {any} */ (err).message || '')
+        : String(err || '');
+    const lower = raw.toLowerCase();
+    if (/missingorspent|missing or spent/.test(lower)) {
+        return 'The node rejected this transaction because an input is missing or already spent.';
+    }
+    if (/mempool-conflict|mempool conflict/.test(lower)) {
+        return 'The node rejected this transaction because it conflicts with another transaction in the mempool.';
+    }
+    if (/already known|already in (?:the )?mempool|txn-already/.test(lower)) {
+        return 'The node says this transaction is already in its mempool.';
+    }
+    if (/mandatory-script-verify|script verify|script verification/.test(lower)) {
+        return 'The node rejected this transaction because a signature or spending condition is invalid.';
+    }
+    if (/min relay fee|mempool min fee|insufficient fee|fee.*too low/.test(lower)) {
+        return 'The node rejected this transaction because its network fee is too low.';
+    }
+    return readFailureMessage(err, 'broadcast this transaction');
+}
+
+function BroadcastKindPicker({ value, onChange }) {
+    return (
+        <fieldset className={styles.pickerLabel}>
+            <legend>What do you want to broadcast?</legend>
+            <label className={styles.radioOption}>
+                <input
+                    type="radio"
+                    name="broadcast-kind"
+                    checked={value === 'message'}
+                    onChange={() => onChange('message')}
+                />
+                Publish on-chain data
+            </label>
+            <label className={styles.radioOption}>
+                <input
+                    type="radio"
+                    name="broadcast-kind"
+                    checked={value === 'transaction'}
+                    onChange={() => onChange('transaction')}
+                />
+                Signed transaction
+            </label>
+        </fieldset>
+    );
+}
+
+function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange }) {
+    const [raw, setRaw] = useState('');
+    const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
+    const [state, setState] = useState(/** @type {'form' | 'preview' | 'submitting' | 'done'} */ ('form'));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const ticker = tickerForCoin(descriptor?.coin);
+    const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
+    const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
+
+    function review(event) {
+        event.preventDefault();
+        if (!chainId) {
+            setError('Pick the network that will receive this transaction.');
+            return;
+        }
+        try {
+            setPreview(normalizeRawTransaction(raw));
+            setError(null);
+            setState('preview');
+        } catch (err) {
+            setPreview(null);
+            setError(err instanceof Error ? err.message : 'This transaction could not be read.');
+        }
+    }
+
+    async function broadcast(event) {
+        event.preventDefault();
+        if (!preview || !chainId || mismatch || state === 'submitting') return;
+        setState('submitting');
+        setError(null);
+        try {
+            const response = await messaging.broadcastSignedTxRequest({
+                walletId,
+                chainId,
+                txHex: preview.txHex,
+            });
+            setResult(response);
+            setState('done');
+        } catch (err) {
+            setError(rawBroadcastFailure(err));
+            setState('preview');
+        }
+    }
+
+    if (state === 'done') {
+        const txid = result?.txid || result?.broadcast?.txid || '';
+        const base = descriptor?.explorer?.defaultUrl || '';
+        const code = explorerCoinCode(descriptor);
+        const explorerUrl = txid && base
+            ? `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`
+            : null;
+        return (
+            <div role="status" aria-live="polite">
+                <h2 className={styles.successTitle}>{txid ? 'Transaction broadcast' : 'Transaction queued'}</h2>
+                {txid ? (
+                    <>
+                        <p className={styles.successLabel}>Transaction ID</p>
+                        <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
+                        {explorerUrl ? (
+                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                                View on explorer
+                            </a>
+                        ) : null}
+                    </>
+                ) : (
+                    <p>The signed transaction is saved in the broadcast queue. Send it from there when the network is available.</p>
+                )}
+            </div>
+        );
+    }
+
+    if (state === 'preview' || state === 'submitting') {
+        return (
+            <FormPage
+                label="Review signed transaction"
+                onSubmit={broadcast}
+                status={error || mismatch ? (
+                    <StatusMessage variant="error" className={styles.error}>{error || mismatch}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button type="button" onClick={() => setState('form')}>Back</Button>
+                        <Button type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
+                            Broadcast transaction
+                        </Button>
+                    </>
+                )}
+            >
+                <ChainBadge descriptor={descriptor} size="sm" />
+                <p>
+                    This signed transaction spends {preview.decoded.inputs.length} input{preview.decoded.inputs.length === 1 ? '' : 's'}
+                    {' '}and creates {preview.decoded.outputs.length} output{preview.decoded.outputs.length === 1 ? '' : 's'}.
+                </p>
+                <dl className={styles.detailsList}>
+                    {preview.decoded.outputs.map((output, index) => (
+                        <DetailRow
+                            key={`${output.scriptPubKeyHex}-${index}`}
+                            label={`Output ${index + 1}`}
+                            value={`${formatCoinAmount(output.valueSat, ticker)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
+                        />
+                    ))}
+                    <DetailRow
+                        label="Network fee"
+                        value="Cannot be calculated from raw transaction data because it does not include the amounts of the spent inputs."
+                    />
+                </dl>
+                <p className={styles.hint}>
+                    Raw transaction data does not identify mainnet, testnet, or regtest. Confirm that the selected network is the one that created it.
+                </p>
+            </FormPage>
+        );
+    }
+
+    return (
+        <FormPage
+            label="Broadcast signed transaction"
+            onSubmit={review}
+            status={error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            actions={<Button type="submit" variant="primary">Preview transaction</Button>}
+        >
+            <BroadcastKindPicker value="transaction" onChange={onKindChange} />
+            <NetworkField value={chainId} onChange={setChainId} chainIds={chainIds} chainRegistry={chainRegistry} />
+            <Textarea
+                label="Signed transaction hex"
+                hint="Spaces and line breaks are ignored. Only complete hexadecimal bytes are accepted."
+                value={raw}
+                onChange={(event) => {
+                    setRaw(event.target.value);
+                    if (error) setError(null);
+                }}
+                rows={8}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+            />
+        </FormPage>
+    );
+}
 
 /**
  * BROADCAST form (§40.6).
@@ -121,6 +358,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [value, setValue] = useState('');
     const [feedFee, setFeedFee] = useState('');
     const [includeTimestamp, setIncludeTimestamp] = useState(false);
+    const [broadcastKind, setBroadcastKind] = useState('message');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -490,7 +728,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             onBack={onBack}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review broadcast'
-                    : `Broadcast`}
+                    : (broadcastKind === 'transaction' ? 'Broadcast transaction' : 'Broadcast')}
         />
     );
     const wrap = (children) => (
@@ -499,8 +737,26 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         </Screen>
     );
 
+    if (!lockedToken && broadcastKind === 'transaction') {
+        return wrap(
+            <RawTransactionBroadcast
+                walletId={walletId}
+                chainId={chainId}
+                setChainId={setChainId}
+                messaging={messaging}
+                onKindChange={setBroadcastKind}
+            />,
+        );
+    }
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <>
+                {!lockedToken ? (
+                    <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
+                ) : null}
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+            </>,
+        );
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>Loading…</p>);
@@ -691,6 +947,9 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 </Button>
             )}
         >
+            {!lockedToken ? (
+                <BroadcastKindPicker value={broadcastKind} onChange={setBroadcastKind} />
+            ) : null}
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={initialTick.toUpperCase()} />
             ) : (
