@@ -17,6 +17,7 @@
 // `window.xchainWalletBridge.sendMessage` → main-process
 // `ipcMain.handle(IPC_CHANNEL, …)` → MessageHost.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import { sendMessage } from './bridgeMessaging.js';
 
 export { sendMessage };
@@ -125,7 +126,7 @@ export function removeWallet(req) {
 
 /** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**

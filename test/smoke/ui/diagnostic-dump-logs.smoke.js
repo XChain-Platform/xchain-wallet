@@ -91,6 +91,11 @@ for (const m of ['packages/web/src/main.jsx', 'packages/desktop/renderer/main.js
     assert.ok(read(m).includes('installShellErrorCapture()'), `${m} installs the crash hook`);
 }
 assert.ok(/installShellErrorCapture\(globalThis/.test(hostSrc), 'background installs the crash hook');
-assert.ok(/recentErrors: errorBuffer\.list\(\)/.test(hostSrc), 'diagnostic.dump passes recentErrors');
+assert.ok(/recentErrors: \[[\s\S]{0,200}req\?\.recentErrors[\s\S]{0,100}errorBuffer\.list\(\)/.test(hostSrc),
+    'diagnostic.dump passes recentErrors from the request and the background buffer');
+for (const m of ['packages/web/src/messaging.js', 'packages/desktop/renderer/messaging.js', 'packages/extension/src/popup/messaging.js']) {
+    assert.ok(/sendMessage\('diagnostic\.dump', \{ recentErrors: getRecentShellErrors\(\) \}\)/.test(read(m)),
+        `${m} sends the shell error buffer with diagnostic.dump`);
+}
 
 console.log('OK: logConsole.snapshot + diagnostic-dump integration');

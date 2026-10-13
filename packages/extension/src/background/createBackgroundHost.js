@@ -1695,7 +1695,7 @@ export function createBackgroundHost(deps) {
     // button on About panel, etc.) so users can paste it into a bug
     // report. No secrets included: this passes the diagnosticDump flow's
     // own redaction.
-    host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+    host.register('diagnostic.dump', async (req, { vault, chainRegistry }) => {
         // §50 / Cluster L FOLLOWUP 4: fill env / build / signers so the
         // dump tells support which shell + build + paired devices were
         // running. The shell-supplied callback contributes env + build
@@ -1747,7 +1747,12 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
-            recentErrors: errorBuffer.list(),
+            // Shell-side crashes arrive with the request; merge them with the
+            // background's own buffer, oldest first (the dump keeps the tail).
+            recentErrors: [
+                ...(Array.isArray(req?.recentErrors) ? req.recentErrors : []),
+                ...errorBuffer.list(),
+            ],
             recentLogs,
         });
     });
