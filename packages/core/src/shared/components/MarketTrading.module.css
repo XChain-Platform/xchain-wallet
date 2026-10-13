@@ -6,6 +6,7 @@
 }
 
 .levelsScroller {
+    composes: scrollArea from '../../ui/Screen.module.css';
     min-width: 0;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
