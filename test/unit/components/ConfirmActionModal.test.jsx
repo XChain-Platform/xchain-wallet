@@ -4,7 +4,7 @@
 // ConfirmActionModal render + interaction contract (§5.1-5.2).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
@@ -13,6 +13,7 @@ const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth')
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
 });
 
@@ -336,6 +337,19 @@ describe('ConfirmActionModal', () => {
     it('Reject is disabled during signing (post-signature exit lockout)', () => {
         render(<ConfirmActionModal {...base({ phase: 'signing' })} />);
         expect(screen.getByTestId('confirm-reject').disabled).toBe(true);
+    });
+
+    it('shows elapsed signing time and a safe next step after the timeout', () => {
+        vi.useFakeTimers();
+        render(<ConfirmActionModal {...base({ phase: 'signing' })} />);
+
+        expect(screen.queryByTestId('confirm-signing-elapsed')).toBeNull();
+        act(() => vi.advanceTimersByTime(3_000));
+        expect(screen.getByTestId('confirm-signing-elapsed')).toHaveTextContent('3 seconds');
+
+        act(() => vi.advanceTimersByTime(57_000));
+        expect(screen.getByTestId('confirm-signing-timeout')).toHaveTextContent(/check History/i);
+        expect(screen.getByTestId('confirm-reject')).toBeDisabled();
     });
 
     it('a non-overridable error keeps Approve disabled with no ack checkbox', () => {

@@ -27,7 +27,7 @@
 // broadcast action.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
@@ -151,7 +151,10 @@ beforeEach(() => {
     composeForConfirm = undefined;
     broadcastSignedTxRequest = undefined;
 });
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 describe('BroadcastForm keeps the typed body on the wire', () => {
     it('picks a MEMO-carrying version for a feed broadcast with no feed fee', async () => {
@@ -321,6 +324,25 @@ describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
         expect(await screen.findByText(
             'The node rejected this transaction because an input is missing or already spent.',
         )).toBeTruthy();
+    });
+
+    it('locks unsafe navigation and gives a next step when the relay does not answer', async () => {
+        mountForm();
+        broadcastSignedTxRequest.mockImplementationOnce(() => new Promise(() => {}));
+        await openRawTransaction(LEGACY_TX);
+        await screen.findByText(/spends 1 input/);
+        vi.useFakeTimers();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
+        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+        expect(screen.getByLabelText('Back to previous screen')).toBeDisabled();
+
+        act(() => vi.advanceTimersByTime(3_000));
+        expect(screen.getByTestId('raw-broadcast-elapsed')).toHaveTextContent('3 seconds');
+        act(() => vi.advanceTimersByTime(27_000));
+        expect(screen.getByText(/The relay has not responded/)).toHaveTextContent(/block explorer/i);
+        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+        expect(screen.getByLabelText('Back to previous screen')).toBeDisabled();
     });
 });
 

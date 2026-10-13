@@ -81,6 +81,7 @@ import {
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -511,6 +512,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [exportColumns, setExportColumns] = useState(
         /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
     );
+    const [exporting, setExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState({ completed: 0, total: 0 });
+    const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
+    const exportAbortRef = useRef(/** @type {AbortController | null} */ (null));
+    const exportTime = useLongOperationStatus(exporting);
+    useEffect(() => () => exportAbortRef.current?.abort(), []);
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     // M2.3: the open row is remembered by TRANSACTION as well as by key.
     // A pending entry is keyed on its hash and a confirmed one on its
@@ -1086,6 +1093,45 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             },
         },
     });
+    const closeExport = () => {
+        exportAbortRef.current?.abort();
+        exportAbortRef.current = null;
+        setExporting(false);
+        setExportError(null);
+        setExportModalOpen(false);
+    };
+    const startExport = async () => {
+        if (exporting) return;
+        const controller = new AbortController();
+        exportAbortRef.current = controller;
+        setExporting(true);
+        setExportError(null);
+        setExportProgress({ completed: 0, total: visibleEntries.length });
+        try {
+            const completed = await runExport({
+                entries: visibleEntries,
+                scope: chainScopeLabel(enabledChains, activeChainIds),
+                format: exportFormat,
+                columns: Array.from(exportColumns),
+                fiatCurrency,
+                signal: controller.signal,
+                onProgress: (count) => setExportProgress({
+                    completed: count,
+                    total: visibleEntries.length,
+                }),
+            });
+            if (completed && !controller.signal.aborted) setExportModalOpen(false);
+        } catch (err) {
+            if (!controller.signal.aborted) {
+                setExportError(humanizeError(err, 'export history').message);
+            }
+        } finally {
+            if (exportAbortRef.current === controller) {
+                exportAbortRef.current = null;
+                setExporting(false);
+            }
+        }
+    };
     const toggleShowFiatInHistory = async () => {
         if (fiatToggleBusy) return;
         setFiatToggleBusy(true);
@@ -1651,23 +1697,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
             {exportModalOpen ? (
                 <ExportModal
-                    onClose={() => setExportModalOpen(false)}
+                    onClose={closeExport}
                     format={exportFormat}
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
                     fiatCurrency={fiatCurrency}
                     visibleCount={visibleEntries.length}
-                    onConfirm={() => {
-                        runExport({
-                            entries: visibleEntries,
-                            scope: chainScopeLabel(enabledChains, activeChainIds),
-                            format: exportFormat,
-                            columns: Array.from(exportColumns),
-                            fiatCurrency,
-                        });
-                        setExportModalOpen(false);
-                    }}
+                    exporting={exporting}
+                    progress={exportProgress}
+                    operationTime={exportTime}
+                    error={exportError}
+                    onConfirm={startExport}
                 />
             ) : null}
 
@@ -4066,12 +4107,56 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
     );
 }
 
-function runExport({ entries, scope, format, columns, fiatCurrency }) {
-    if (!Array.isArray(entries) || entries.length === 0) return;
+const EXPORT_CHUNK_SIZE = 250;
+
+function exportTurn() {
+    return new Promise((resolve) => setTimeout(resolve, 16));
+}
+
+async function runExport({
+    entries, scope, format, columns, fiatCurrency, signal, onProgress,
+}) {
+    if (!Array.isArray(entries) || entries.length === 0) return false;
     const filename = flowsLib.buildExportFilename({ scope, format });
-    const fileContent = format === 'csv'
-        ? flowsLib.entriesToCsv(entries, { columns, fiatCurrency })
-        : flowsLib.entriesToJson(entries, { scope, columns, fiatCurrency });
+    const exportedAt = new Date().toISOString();
+    const chunks = [];
+    let jsonMetadata = null;
+    for (let offset = 0; offset < entries.length; offset += EXPORT_CHUNK_SIZE) {
+        await exportTurn();
+        if (signal?.aborted) return false;
+        const slice = entries.slice(offset, offset + EXPORT_CHUNK_SIZE);
+        if (format === 'csv') {
+            const text = flowsLib.entriesToCsv(slice, { columns, fiatCurrency });
+            const firstBreak = text.indexOf('\n');
+            chunks.push(offset === 0 ? text : text.slice(firstBreak + 1));
+        } else {
+            const payload = JSON.parse(flowsLib.entriesToJson(slice, {
+                scope,
+                columns,
+                fiatCurrency,
+                exportedAt,
+            }));
+            if (!jsonMetadata) {
+                jsonMetadata = { ...payload };
+                delete jsonMetadata.entries;
+            }
+            chunks.push(...payload.entries.map((entry) => (
+                JSON.stringify(entry, null, 2)
+                    .split('\n')
+                    .map((line) => `    ${line}`)
+                    .join('\n')
+            )));
+        }
+        if (onProgress) onProgress(Math.min(offset + slice.length, entries.length));
+    }
+    if (signal?.aborted) return false;
+    let fileContent;
+    if (format === 'csv') {
+        fileContent = chunks.join('');
+    } else {
+        const metadataText = JSON.stringify(jsonMetadata, null, 2);
+        fileContent = `${metadataText.slice(0, -2)},\n  "entries": [\n${chunks.join(',\n')}\n  ]\n}`;
+    }
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
     const blob = new Blob([fileContent], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -4083,6 +4168,7 @@ function runExport({ entries, scope, format, columns, fiatCurrency }) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
 }
 
 /* ───── Cluster I FOLLOWUP 5 - export modal ───────────────────────── */
@@ -4144,6 +4230,10 @@ function ExportModal({
     columns, setColumns,
     fiatCurrency,
     visibleCount,
+    exporting,
+    progress,
+    operationTime,
+    error,
     onConfirm,
 }) {
     // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
@@ -4189,6 +4279,7 @@ function ExportModal({
                             value="csv"
                             checked={format === 'csv'}
                             onChange={() => setFormat('csv')}
+                            disabled={exporting}
                         />
                         {t('history.export.csv')}
                     </label>
@@ -4199,6 +4290,7 @@ function ExportModal({
                             value="json"
                             checked={format === 'json'}
                             onChange={() => setFormat('json')}
+                            disabled={exporting}
                         />
                         {t('history.export.json')}
                     </label>
@@ -4217,6 +4309,7 @@ function ExportModal({
                                     type="checkbox"
                                     checked={columns.has(col)}
                                     onChange={() => toggleColumn(col)}
+                                    disabled={exporting}
                                 />
                                 <span>
                                     <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
@@ -4233,15 +4326,30 @@ function ExportModal({
                     {t('history.export.rowCount', { count: visibleCount })}
                 </p>
 
+                {exporting ? (
+                    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        Preparing {progress.completed} of {progress.total} rows…
+                        {operationTime.showElapsed
+                            ? ` ${operationTime.elapsedSeconds} seconds elapsed.`
+                            : ''}
+                    </p>
+                ) : null}
+                {operationTime.timedOut ? (
+                    <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
+                        Export is taking longer than expected. Cancel, narrow the history filters, and try again.
+                    </p>
+                ) : null}
+                {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+
                 <div style={MODAL_ACTIONS}>
                     <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
                     <button
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
-                        disabled={visibleCount === 0 || columns.size === 0}
+                        disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >
-                        {t('history.export.confirm')}
+                        {exporting ? 'Preparing…' : t('history.export.confirm')}
                     </button>
                 </div>
             </div>
