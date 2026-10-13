@@ -41,7 +41,9 @@ export function readHistoryCache(walletId, accountId) {
 export function writeHistoryCache(walletId, accountId, snapshot) {
     if (!walletId) return false;
     try {
-        globalThis.localStorage?.setItem(
+        const storage = globalThis.localStorage;
+        if (!storage) return false;
+        storage.setItem(
             historyCacheKey(walletId, accountId),
             JSON.stringify(snapshot),
         );
@@ -64,4 +66,3 @@ export function clearHistoryCacheForWallet(walletId) {
         }
     } catch { /* best-effort */ }
 }
-

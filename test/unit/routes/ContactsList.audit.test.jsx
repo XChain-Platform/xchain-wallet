@@ -240,6 +240,48 @@ describe('ContactsList audited behavior', () => {
         });
     });
 
+    it('keeps the form usable and hides storage internals when a save is refused', async () => {
+        const messaging = makeMessaging([]);
+        messaging.saveContact.mockRejectedValue(
+            new DOMException('Private storage payload detail', 'QuotaExceededError'),
+        );
+        mount(messaging);
+        await screen.findByText('No contacts yet');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice' } });
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not save this contact. Try again.',
+        );
+        expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
+        expect(screen.getByLabelText('Name')).toHaveValue('Alice');
+        expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    });
+
+    it('keeps a contact visible and hides storage internals when deletion is refused', async () => {
+        const alice = contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z');
+        const messaging = makeMessaging([alice]);
+        messaging.deleteContact.mockRejectedValue(
+            new DOMException('Private storage payload detail', 'QuotaExceededError'),
+        );
+        mount(messaging);
+
+        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not delete this contact. Try again.',
+        );
+        expect(screen.queryByText(/Private storage payload detail|QuotaExceededError/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByText('Alice')).toBeTruthy();
+    });
+
     it('restores a deleted contact from the Undo toast', async () => {
         const alice = contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z');
         const messaging = makeMessaging([alice]);

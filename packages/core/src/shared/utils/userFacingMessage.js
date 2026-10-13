@@ -111,6 +111,7 @@ export function isDeveloperMessage(err) {
     if (err && typeof err === 'object') {
         const e = /** @type {any} */ (err);
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
+        if (INTERNAL_NAME.test(String(e.name || ''))) return true;
         if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)

@@ -297,20 +297,34 @@ function makeCollection(vault, collection, migrate, validate) {
             if (!result.ok) {
                 throw new VaultValidationError(collection, result.errors);
             }
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === record.id);
-            if (idx >= 0) arr[idx] = record;
-            else arr.push(record);
-            await vault._maybeAutoSave();
+            const previous = vault._doc[collection];
+            const next = [...previous];
+            const idx = next.findIndex((r) => r.id === record.id);
+            if (idx >= 0) next[idx] = record;
+            else next.push(record);
+            vault._doc[collection] = next;
+            try {
+                await vault._maybeAutoSave();
+            } catch (err) {
+                if (vault._doc?.[collection] === next) vault._doc[collection] = previous;
+                throw err;
+            }
         },
 
         async delete(id) {
             vault._assertOpen();
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === id);
+            const previous = vault._doc[collection];
+            const idx = previous.findIndex((r) => r.id === id);
             if (idx < 0) return false;
-            arr.splice(idx, 1);
-            await vault._maybeAutoSave();
+            const next = [...previous];
+            next.splice(idx, 1);
+            vault._doc[collection] = next;
+            try {
+                await vault._maybeAutoSave();
+            } catch (err) {
+                if (vault._doc?.[collection] === next) vault._doc[collection] = previous;
+                throw err;
+            }
             return true;
         },
 
@@ -354,14 +368,27 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
             if (!result.ok) {
                 throw new VaultValidationError(key, result.errors);
             }
-            vault._doc[key] = deflate ? deflate(record) : record;
-            await vault._maybeAutoSave();
+            const previous = vault._doc[key];
+            const next = deflate ? deflate(record) : record;
+            vault._doc[key] = next;
+            try {
+                await vault._maybeAutoSave();
+            } catch (err) {
+                if (vault._doc?.[key] === next) vault._doc[key] = previous;
+                throw err;
+            }
         },
 
         async clear() {
             vault._assertOpen();
+            const previous = vault._doc[key];
             vault._doc[key] = null;
-            await vault._maybeAutoSave();
+            try {
+                await vault._maybeAutoSave();
+            } catch (err) {
+                if (vault._doc?.[key] === null) vault._doc[key] = previous;
+                throw err;
+            }
         },
     };
 }
