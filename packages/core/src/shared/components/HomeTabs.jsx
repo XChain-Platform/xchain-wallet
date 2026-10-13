@@ -104,17 +104,18 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
     const nativeCoins = useMemo(() => {
-        if (settingsLoading || isDemo) return [];
+        if (isDemo) return [];
         return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
-    }, [builtRows, settingsLoading, isDemo]);
+    }, [builtRows, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const tokenRequests = useMemo(() => {
-        if (settingsLoading || isDemoWallet(walletId)) return [];
+        if (isDemoWallet(walletId)) return [];
         return builtRows
             .filter((r) => r.kind !== 'native' && typeof r.fiatRate !== 'number')
             .map((r) => {
@@ -125,11 +126,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [builtRows, chainRegistry, settingsLoading, walletId]);
+    }, [builtRows, chainRegistry, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(

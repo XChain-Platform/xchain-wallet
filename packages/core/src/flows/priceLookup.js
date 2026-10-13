@@ -20,8 +20,8 @@
 // Split contract:
 //   - `refreshFiatRates(...)` is async and does the network work,
 //     populating an in-process rate cache.
-//   - `getFiatRate(...)` stays synchronous and reads the cache, so
-//     existing render-path callers keep their shape.
+//   - `getFiatRate(...)` stays synchronous and reads the memory cache,
+//     hydrating the last persisted observation on its first read.
 //   - `subscribeFiatRates(fn)` notifies UI code when the cache
 //     changes (used by the `useFiatRate` hook).
 //
@@ -65,7 +65,10 @@ const COINGECKO_ID_BY_COIN = {
  * @property {string} fiatCurrency   ISO-style currency code (USD, EUR, …)
  * @property {'oracle' | 'coingecko' | 'market'} source
  * @property {string} fetchedAt      ISO timestamp of when the rate was obtained
+ * @property {boolean} stale         true only for a persisted rate awaiting a live refresh
  */
+
+const PERSISTED_RATES_KEY = 'xchain-wallet:fiat-rates:v1';
 
 // Each entry holds a frozen public FiatRate object plus its ms
 // timestamp. The public object is created once per refresh so
@@ -73,6 +76,11 @@ const COINGECKO_ID_BY_COIN = {
 // useSyncExternalStore's Object.is snapshot comparison).
 /** @type {Map<string, { rate: FiatRate, fetchedAtMs: number }>} */
 const rateCache = new Map();
+
+// Browser-backed shells retain public price observations across process
+// starts. Hydration stays lazy so importing this module remains safe in Node
+// and service-worker contexts without localStorage.
+let persistedRatesHydrated = false;
 
 // When each coin's last refresh resolved nothing (a 429 or outage on the
 // explorer with the fallback off or failing too). Home re-asks on every
@@ -96,6 +104,81 @@ let deps = {
 
 function cacheKey(chainCoin, fiatCurrency) {
     return `${chainCoin}|${fiatCurrency}`;
+}
+
+function localRateStorage() {
+    try {
+        const storage = globalThis.localStorage;
+        return storage && typeof storage.getItem === 'function' ? storage : null;
+    } catch {
+        return null;
+    }
+}
+
+function persistedRate(value) {
+    if (!value || typeof value !== 'object') return null;
+    const rate = Number(value.rate);
+    const chainCoin = typeof value.chainCoin === 'string' ? value.chainCoin : '';
+    const fiatCurrency = typeof value.fiatCurrency === 'string' ? value.fiatCurrency : '';
+    const fetchedAtMs = Date.parse(value.fetchedAt);
+    const source = value.source;
+    if (!Number.isFinite(rate) || rate <= 0 || !chainCoin || !fiatCurrency) return null;
+    if (!Number.isFinite(fetchedAtMs) || fetchedAtMs <= 0) return null;
+    if (!['oracle', 'coingecko', 'market'].includes(source)) return null;
+    const tick = value.tick == null ? null : normalizeTick(value.tick);
+    if (value.tick != null && !tick) return null;
+    return {
+        rate: Object.freeze({
+            rate,
+            chainCoin,
+            ...(tick ? { tick } : {}),
+            fiatCurrency,
+            source,
+            fetchedAt: new Date(fetchedAtMs).toISOString(),
+            stale: true,
+        }),
+        fetchedAtMs,
+    };
+}
+
+function hydratePersistedRates() {
+    if (persistedRatesHydrated) return;
+    persistedRatesHydrated = true;
+    const storage = localRateStorage();
+    if (!storage) return;
+    try {
+        const parsed = JSON.parse(storage.getItem(PERSISTED_RATES_KEY) || 'null');
+        if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.rates)) return;
+        for (const value of parsed.rates) {
+            const entry = persistedRate(value);
+            if (!entry) continue;
+            if (entry.rate.tick) {
+                tokenRateCache.set(tokenCacheKey(
+                    entry.rate.chainCoin,
+                    entry.rate.tick,
+                    entry.rate.fiatCurrency,
+                ), entry);
+            } else {
+                rateCache.set(cacheKey(entry.rate.chainCoin, entry.rate.fiatCurrency), entry);
+            }
+        }
+    } catch {
+        // A corrupt or unavailable convenience cache never blocks pricing.
+    }
+}
+
+function persistRates() {
+    const storage = localRateStorage();
+    if (!storage) return;
+    const rates = [
+        ...Array.from(rateCache.values(), (entry) => entry.rate),
+        ...Array.from(tokenRateCache.values(), (entry) => entry.rate).filter(Boolean),
+    ];
+    try {
+        storage.setItem(PERSISTED_RATES_KEY, JSON.stringify({ version: 1, rates }));
+    } catch {
+        // Storage quota and private-mode failures do not affect the live cache.
+    }
 }
 
 function notifyListeners() {
@@ -287,6 +370,7 @@ export async function refreshFiatRates({
     force = false,
 } = {}) {
     if (!Array.isArray(chainCoins) || chainCoins.length === 0) return { updated: [] };
+    hydratePersistedRates();
     const fetchImpl = resolveFetch();
     if (!fetchImpl) return { updated: [] };
     const nowMs = deps.now();
@@ -297,7 +381,7 @@ export async function refreshFiatRates({
         const missAt = coinMissAt.get(cacheKey(coin, fiatCurrency));
         if (missAt != null && nowMs - missAt <= MISS_TTL_MS) return false;
         const hit = rateCache.get(cacheKey(coin, fiatCurrency));
-        return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
+        return !hit || hit.rate.stale || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
     });
     if (wanted.length === 0) return { updated: [] };
 
@@ -311,6 +395,7 @@ export async function refreshFiatRates({
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                stale: false,
             }),
             fetchedAtMs: nowMs,
         });
@@ -345,15 +430,18 @@ export async function refreshFiatRates({
         if (!updated.includes(coin)) coinMissAt.set(cacheKey(coin, fiatCurrency), nowMs);
     }
 
-    if (updated.length > 0) notifyListeners();
+    if (updated.length > 0) {
+        persistRates();
+        notifyListeners();
+    }
     return { updated };
 }
 
 /**
- * Look up a fiat rate for the chain's native coin from the in-process
- * cache. Synchronous; returns null until `refreshFiatRates` has
- * populated a rate for the coin/currency (§45.4: no data means no
- * number, never a fabricated one).
+ * Look up a fiat rate for the chain's native coin. Synchronously hydrates
+ * a persisted observation when available and marks it stale until
+ * `refreshFiatRates` replaces it. Returns null when neither memory nor
+ * persisted storage has a valid rate (§45.4: no data means no number).
  *
  * @param {object} opts
  * @param {string} opts.chainCoin
@@ -362,6 +450,7 @@ export async function refreshFiatRates({
  */
 export function getFiatRate({ chainCoin, fiatCurrency = 'USD' } = {}) {
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
+    hydratePersistedRates();
     const hit = rateCache.get(cacheKey(chainCoin, fiatCurrency));
     return hit ? hit.rate : null;
 }
@@ -492,13 +581,15 @@ export async function refreshTokenFiatRate({
     // explorer's path-segment routing.
     if (/[/?#\\]/.test(t)) return { updated: false };
 
+    hydratePersistedRates();
+
     const fetchImpl = resolveFetch();
     if (!fetchImpl) return { updated: false };
     const nowMs = deps.now();
 
     const key = tokenCacheKey(chainCoin, t, fiatCurrency);
     const hit = tokenRateCache.get(key);
-    if (!force && hit) {
+    if (!force && hit && !hit.rate?.stale) {
         const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
         if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
     }
@@ -520,9 +611,11 @@ export async function refreshTokenFiatRate({
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                stale: false,
             }),
             fetchedAtMs: nowMs,
         });
+        persistRates();
         notifyListeners();
         return { updated: true };
     };
@@ -551,10 +644,11 @@ export async function refreshTokenFiatRate({
 }
 
 /**
- * Look up a token's fiat rate from the in-process cache. Synchronous,
- * and null until `refreshTokenFiatRate` has landed one. The returned
- * object is reference-stable per refresh, so it can back a
- * useSyncExternalStore snapshot.
+ * Look up a token's fiat rate. Synchronously hydrates a persisted
+ * observation when available and otherwise returns null until
+ * `refreshTokenFiatRate` lands one. The returned object is
+ * reference-stable per refresh, so it can back a useSyncExternalStore
+ * snapshot.
  *
  * @param {object} opts
  * @param {string} opts.chainCoin
@@ -564,6 +658,7 @@ export async function refreshTokenFiatRate({
  */
 export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {}) {
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
+    hydratePersistedRates();
     const t = normalizeTick(tick);
     if (t.length === 0) return null;
     const hit = tokenRateCache.get(tokenCacheKey(chainCoin, t, fiatCurrency));
@@ -571,11 +666,15 @@ export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {})
 }
 
 /** Test-only: clear the cache and injected deps. */
-export function _resetPriceLookupForTests() {
+export function _resetPriceLookupForTests({ preservePersistent = false } = {}) {
     rateCache.clear();
     coinMissAt.clear();
     tokenRateCache.clear();
     listeners.clear();
+    persistedRatesHydrated = false;
+    if (!preservePersistent) {
+        try { localRateStorage()?.removeItem(PERSISTED_RATES_KEY); } catch { /* tolerate */ }
+    }
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
 }
 

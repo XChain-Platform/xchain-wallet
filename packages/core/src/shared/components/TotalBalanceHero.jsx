@@ -131,11 +131,12 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
+    const stalePriceAsOf = oldestStalePriceTimestamp(rows);
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync);
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || stalePriceAsOf !== null);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -265,10 +266,28 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             className={styles.metaRight}
                         />
                     ) : null}
+                    {stalePriceAsOf !== null ? (
+                        <StalenessLabel
+                            lastSyncedAt={stalePriceAsOf}
+                            prefix="Prices as of"
+                            warnAfterMs={0}
+                        />
+                    ) : null}
                 </div>
             ) : null}
         </section>
     );
+}
+
+function oldestStalePriceTimestamp(rows) {
+    let oldest = null;
+    for (const row of rows || []) {
+        if (row?.fiatRateStale !== true || typeof row.fiatRate !== 'number') continue;
+        const timestamp = Date.parse(row.fiatRateFetchedAt);
+        if (!Number.isFinite(timestamp)) continue;
+        if (oldest === null || timestamp < oldest) oldest = timestamp;
+    }
+    return oldest;
 }
 
 // The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE
