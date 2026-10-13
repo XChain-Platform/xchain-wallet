@@ -17,7 +17,7 @@
 // positively: at EVERY width, exactly one nav surface is mounted.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -28,6 +28,8 @@ import {
     showsBottomBar,
 } from '../../../packages/core/src/shared/styles/breakpoints.js';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
+import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
 
 describe('layout tiers', () => {
     describe('tierForWidth()', () => {
@@ -184,14 +186,55 @@ describe('layout tiers', () => {
             expect(save).toHaveFocus();
         });
 
-        it('caps a compact header stack so route content remains visible', () => {
+        it('caps a compact notice stack so route content remains visible', () => {
             const css = readFileSync(join(
                 process.cwd(),
                 'packages/core/src/shared/components/LeftNav.module.css',
             ), 'utf8');
-            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*max-height:\s*45%/s);
-            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*overflow-y:\s*auto/s);
+            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.notices\s*\{[^}]*max-height:\s*45%/s);
+            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.notices\s*\{[^}]*overflow-y:\s*auto/s);
             expect(css).toMatch(/\.routeFocusTarget:focus\s*\{[^}]*outline:\s*none/s);
+        });
+
+        it('never puts an overflow clip on the header row that anchors popovers', () => {
+            const css = readFileSync(join(
+                process.cwd(),
+                'packages/core/src/shared/components/LeftNav.module.css',
+            ), 'utf8');
+            // Every rule whose selector ends in .header, at any tier.
+            const headerRules = [...css.matchAll(/([^{}]*\.header)\s*\{([^}]*)\}/g)];
+            expect(headerRules.length).toBeGreaterThan(0);
+            for (const [, selector, body] of headerRules) {
+                expect(body, selector.trim()).not.toMatch(/overflow|max-height|contain:/);
+            }
+        });
+
+        it('renders the header settings popover outside the scrolling notice stack', () => {
+            window.innerWidth = 360;
+            const { container } = render(
+                <FullLayoutWithNav
+                    nav={<nav />}
+                    bottomBar={<div />}
+                    header={(
+                        <HeaderSettingsButton
+                            activeWallet={{ id: 'w1', name: 'Main' }}
+                            onOpenWalletPicker={() => {}}
+                        />
+                    )}
+                    notices={<div data-testid="notice">Queued broadcast</div>}
+                >
+                    <main />
+                </FullLayoutWithNav>,
+            );
+            expect(container.firstChild.getAttribute('data-xc-tier')).toBe('compact');
+            fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+            const popover = screen.getByRole('dialog', { name: 'Wallet settings' });
+
+            const ancestors = [];
+            for (let el = popover.parentElement; el; el = el.parentElement) ancestors.push(el);
+            expect(ancestors.some((el) => el.classList.contains(layoutStyles.header))).toBe(true);
+            expect(ancestors.some((el) => el.classList.contains(layoutStyles.notices))).toBe(false);
+            expect(screen.getByTestId('notice').closest(`.${layoutStyles.notices}`)).not.toBeNull();
         });
     });
 });

@@ -130,7 +130,9 @@ test.describe('send form', () => {
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
-        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
+        // The approve button reads "Approve <review headline>" since the
+        // action review screens were standardized.
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve \S/);
     });
 
     // §5.1: exactly two exits. Reject returns to the form with its values

@@ -323,3 +323,54 @@ describe('HeaderSettingsButton section gating', () => {
         expect(gear().className).toBe(plain);
     });
 });
+
+describe('header network badge width', () => {
+    const badgeCss = readFileSync(
+        join(process.cwd(), 'packages/core/src/shared/components/HeaderSettingsButton.module.css'),
+        'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const rulesFor = (selector) => [...badgeCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter(([, sel]) => sel.trim() === selector)
+        .map(([, , body]) => body);
+
+    it('never shrinks the badge below its text', () => {
+        const base = rulesFor('.networkBadge');
+        expect(base.length).toBeGreaterThan(0);
+        expect(base[0]).toMatch(/flex:\s*0 0 auto/);
+        expect(base[0]).toMatch(/white-space:\s*nowrap/);
+        // A fixed width with overflow hidden is what rendered "Ma" and "Re".
+        for (const body of base) {
+            expect(body).not.toMatch(/(^|[^-])width:/);
+            expect(body).not.toMatch(/overflow/);
+        }
+    });
+
+    it('falls back to a dot with a hidden name, not clipped letters, at phone width', () => {
+        const narrow = /@media \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/.exec(badgeCss);
+        expect(narrow).not.toBeNull();
+        expect(Number(narrow[1])).toBeGreaterThanOrEqual(400);
+        expect(narrow[2]).toMatch(/\.networkBadgeDot\s*\{[^}]*display:\s*inline-block/);
+        expect(narrow[2]).toMatch(/\.networkBadgeText\s*\{[^}]*clip:\s*rect\(0, 0, 0, 0\)/);
+        expect(rulesFor('.networkBadgeDot')[0]).toMatch(/display:\s*none/);
+    });
+
+    it.each([
+        ['mainnet', 'Mainnet'],
+        ['regtest', 'Regtest'],
+    ])('keeps the full %s name in the badge text and its accessible name', (network, label) => {
+        render(
+            <HeaderSettingsButton
+                activeNetwork={network}
+                developerMode
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+        const badge = screen.getByLabelText(`Active network: ${label}`);
+        expect(badge.getAttribute('title')).toBe(`Active network: ${label}`);
+        expect(badge.textContent).toBe(label);
+        const [dot, text] = badge.children;
+        expect(dot.getAttribute('aria-hidden')).toBe('true');
+        expect(dot.textContent).toBe('');
+        expect(text.textContent).toBe(label);
+    });
+});

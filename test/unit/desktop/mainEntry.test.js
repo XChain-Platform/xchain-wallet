@@ -8,7 +8,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,6 +20,7 @@ const electron = vi.hoisted(() => {
     const state = {
         userDataDir: '/tmp/xchain-main-entry-test',
         workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+        normalBounds: { x: 0, y: 0, width: 1024, height: 768 },
     };
     class BrowserWindow {
         static instances = [];
@@ -32,6 +33,9 @@ const electron = vi.hoisted(() => {
             this.once = vi.fn();
             this.on = vi.fn();
             this.isDestroyed = vi.fn(() => false);
+            this.isVisible = vi.fn(() => true);
+            this.hide = vi.fn();
+            this.getNormalBounds = vi.fn(() => state.normalBounds);
             BrowserWindow.instances.push(this);
         }
 
@@ -96,6 +100,18 @@ const runtime = vi.hoisted(() => ({
     tearDownHost: vi.fn(),
     wipeRuntimeStores: vi.fn(),
 }));
+
+// Pass-through fs whose synchronous write the bounds tests can watch and fail.
+const fsControl = vi.hoisted(() => ({ failSyncWrite: false, writeFileSync: null }));
+vi.mock('node:fs', async (importOriginal) => {
+    const actual = await importOriginal();
+    const writeFileSync = vi.fn((...args) => {
+        if (fsControl.failSyncWrite) throw new Error('disk full');
+        return actual.writeFileSync(...args);
+    });
+    fsControl.writeFileSync = writeFileSync;
+    return { ...actual, default: { ...actual, writeFileSync }, writeFileSync };
+});
 
 vi.mock('electron', () => electron);
 vi.mock('@xchain-wallet/core', () => ({
@@ -165,6 +181,8 @@ beforeEach(() => {
     electron.browserWindowOptions.length = 0;
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.workArea = { x: 0, y: 0, width: 1920, height: 1080 };
+    electron.state.normalBounds = { x: 0, y: 0, width: 1024, height: 768 };
+    fsControl.failSyncWrite = false;
     electron.BrowserWindow.instances.length = 0;
     electron.app.isPackaged = true;
     vi.clearAllMocks();
@@ -343,6 +361,80 @@ describe('desktop main entry point', () => {
         expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
+    });
+});
+
+describe('desktop window bounds on close and quit', () => {
+    const STALE = { x: 80, y: 60, width: 1180, height: 820 };
+    const MOVED = { x: 300, y: 200, width: 1300, height: 900 };
+
+    async function bootWithSavedBounds() {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-bounds-'));
+        tempDirs.push(userDataDir);
+        const boundsPath = join(userDataDir, 'window-bounds.json');
+        writeFileSync(boundsPath, JSON.stringify(STALE));
+        electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+        const win = electron.BrowserWindow.instances[0];
+        const handler = (name) => win.on.mock.calls.find(([event]) => event === name)[1];
+        const onDisk = () => JSON.parse(readFileSync(boundsPath, 'utf8'));
+        return { win, handler, onDisk };
+    }
+
+    it('writes the latest bounds before the close handler returns', async () => {
+        const { handler, onDisk } = await bootWithSavedBounds();
+        electron.state.normalBounds = MOVED;
+
+        handler('close')({ preventDefault: vi.fn() });
+
+        // No await between the handler and the read: the write has landed.
+        expect(onDisk()).toEqual(MOVED);
+    });
+
+    it('writes pending bounds before the before-quit handler returns', async () => {
+        const { handler, onDisk } = await bootWithSavedBounds();
+        electron.state.normalBounds = MOVED;
+        handler('resize')();
+        expect(onDisk()).toEqual(STALE);
+
+        electron.appListeners.get('before-quit')();
+
+        expect(onDisk()).toEqual(MOVED);
+    });
+
+    it('keeps moves and resizes on the debounced async save', async () => {
+        const { handler, onDisk } = await bootWithSavedBounds();
+        const syncWrite = fsControl.writeFileSync;
+        syncWrite.mockClear();
+        electron.state.normalBounds = MOVED;
+
+        handler('move')();
+        handler('resize')();
+
+        expect(onDisk()).toEqual(STALE);
+        await vi.waitFor(() => expect(onDisk()).toEqual(MOVED), { timeout: 2000 });
+        expect(syncWrite).not.toHaveBeenCalled();
+    });
+
+    it('logs and carries on when the quit-time write fails', async () => {
+        const { handler } = await bootWithSavedBounds();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const syncWrite = fsControl.writeFileSync;
+        syncWrite.mockClear();
+        fsControl.failSyncWrite = true;
+        electron.state.normalBounds = MOVED;
+
+        expect(() => handler('close')({ preventDefault: vi.fn() })).not.toThrow();
+        expect(() => electron.appListeners.get('before-quit')()).not.toThrow();
+        expect(syncWrite).toHaveBeenCalled();
+        expect(error).toHaveBeenCalledWith(
+            '[xchain] could not save desktop window bounds:',
+            expect.objectContaining({ message: 'disk full' }),
+        );
+        error.mockRestore();
     });
 });
 

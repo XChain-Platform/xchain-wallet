@@ -108,7 +108,7 @@ test.describe('onboarding', () => {
 
         // Import takes a known-good phrase to the Automatic Donation System
         // notice, and Continue from there to an unlocked wallet.
-        await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
+        await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name').fill('Imported E2E');
         await page.getByLabel('Password', { exact: true }).fill('importpassword1');
         await page.getByLabel('Confirm password').fill('importpassword1');
@@ -131,7 +131,7 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
         // 13 words: not a valid BIP39 count.
-        await page.getByLabel('Recovery phrase').fill('word '.repeat(13).trim());
+        await page.getByLabel('Recovery phrase', { exact: true }).fill('word '.repeat(13).trim());
         await page.getByLabel('Password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByLabel('Confirm password').fill('xxxxxxxxxx');
         await page.getByRole('button', { name: 'Import' }).click();
