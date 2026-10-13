@@ -49,6 +49,16 @@ function renderForm(Form, messaging) {
     );
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+
 function pickLitecoinMainnet() {
     const option = screen.getAllByRole('option', { name: /Litecoin/ })
         .find((item) => !/testnet|regtest/i.test(item.textContent || ''));
@@ -143,6 +153,32 @@ describe('signature verification inputs and results', () => {
 
         await waitFor(() => expect(screen.getByRole('status').textContent)
             .toBe("Invalid signature. Signature doesn't match this message and address."));
+    });
+
+    it('does not show a pending result after an input changes', async () => {
+        const pending = deferred();
+        const verifyMessageRequest = vi.fn()
+            .mockImplementationOnce(() => pending.promise)
+            .mockResolvedValueOnce({ valid: false });
+        renderForm(VerifySignatureForm, messagingFor({ verifyMessageRequest }));
+        await screen.findByRole('button', { name: /Chain: Bitcoin/ });
+        fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'bc1qcounterparty' } });
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'older message' } });
+        fireEvent.change(screen.getByLabelText('Signature'), { target: { value: 'c2lnbmF0dXJl' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'newer message' } });
+        pending.resolve({ valid: true });
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Verify signature' })).not.toBeDisabled());
+        expect(screen.queryByText(/Valid signature/)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
+        await waitFor(() => expect(screen.getByRole('status').textContent)
+            .toBe("Invalid signature. Signature doesn't match this message and address."));
+        expect(verifyMessageRequest).toHaveBeenLastCalledWith(expect.objectContaining({
+            message: 'newer message',
+        }));
     });
 
     it('normalizes valid base64 without accepting arbitrary text', () => {

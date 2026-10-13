@@ -21,7 +21,7 @@
 // from the registry rather than the wallet, since verification has no
 // dependency on what the wallet knows.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
@@ -76,10 +76,18 @@ export function VerifySignatureForm({ onBack }) {
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid' | 'malformed'} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const requestGenerationRef = useRef(0);
+    const requestPendingRef = useRef(false);
+
+    function clearSettledFeedback() {
+        requestGenerationRef.current += 1;
+        setResult(null);
+        setError(null);
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (requestPendingRef.current) return;
         setError(null);
         setResult(null);
         if (!chainId) { setError('Pick a chain.'); return; }
@@ -92,6 +100,9 @@ export function VerifySignatureForm({ onBack }) {
             setError('Signature verification is not available in this app.');
             return;
         }
+        const requestGeneration = requestGenerationRef.current + 1;
+        requestGenerationRef.current = requestGeneration;
+        requestPendingRef.current = true;
         setBusy(true);
         try {
             const r = await messaging.verifyMessageRequest({
@@ -100,10 +111,15 @@ export function VerifySignatureForm({ onBack }) {
                 message,
                 signature: normalizedSignature,
             });
-            setResult(r?.valid ? 'valid' : 'invalid');
+            if (requestGenerationRef.current === requestGeneration) {
+                setResult(r?.valid ? 'valid' : 'invalid');
+            }
         } catch {
-            setError('Could not verify this signature. Check the chain, address, message, and signature.');
+            if (requestGenerationRef.current === requestGeneration) {
+                setError('Could not verify this signature. Check the chain, address, message, and signature.');
+            }
         } finally {
+            requestPendingRef.current = false;
             setBusy(false);
         }
     }
@@ -165,8 +181,7 @@ export function VerifySignatureForm({ onBack }) {
                     value={chainId || ''}
                     onChange={(nextChainId) => {
                         setChainId(nextChainId);
-                        setResult(null);
-                        if (error) setError(null);
+                        clearSettledFeedback();
                     }}
                     label={t('send.fields.chain')}
                 />
@@ -174,7 +189,7 @@ export function VerifySignatureForm({ onBack }) {
             <Input
                 label={t('verifySignature.address')}
                 value={address}
-                onChange={(e) => { setAddress(e.target.value); setResult(null); if (error) setError(null); }}
+                onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
                 autoComplete="off"
                 placeholder={t('verifySignature.addressPlaceholder')}
             />
@@ -193,7 +208,7 @@ export function VerifySignatureForm({ onBack }) {
                 <textarea
                     id="verify-message"
                     value={message}
-                    onChange={(e) => { setMessage(e.target.value); setResult(null); if (error) setError(null); }}
+                    onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
                     placeholder={t('verifySignature.messagePlaceholder')}
                     rows={5}
                     aria-label={t('verifySignature.message')}
@@ -225,7 +240,7 @@ export function VerifySignatureForm({ onBack }) {
                 <textarea
                     id="verify-signature"
                     value={signature}
-                    onChange={(e) => { setSignature(e.target.value); setResult(null); if (error) setError(null); }}
+                    onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
                     placeholder={t('verifySignature.signaturePlaceholder')}
                     rows={3}
                     aria-label={t('verifySignature.signature')}
