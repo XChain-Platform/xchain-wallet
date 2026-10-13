@@ -508,7 +508,9 @@ export function createWindow(opts = {}) {
     win.on('resize', () => { rememberWindowBounds(win); });
     win.on('close', (event) => {
         rememberWindowBounds(win);
-        void flushWindowBounds();
+        // Synchronous: on quit the process can exit before an async write
+        // lands, which left window-bounds.json holding stale values.
+        flushWindowBoundsSync();
         if (applyWindowCloseConvention(win, event) && !hasVisibleWindow()) {
             startWindowlessIdleLock();
         }
@@ -536,6 +538,19 @@ async function flushWindowBounds() {
     if (!windowBoundsStore || !rememberedWindowBounds) return;
     try {
         await windowBoundsStore.save(rememberedWindowBounds);
+    } catch (err) {
+        console.error('[xchain] could not save desktop window bounds:', err);
+    }
+}
+
+// Close and quit write the bounds before returning; moves and resizes keep
+// the debounced async save above.
+function flushWindowBoundsSync() {
+    if (windowBoundsSaveTimer) clearTimeout(windowBoundsSaveTimer);
+    windowBoundsSaveTimer = null;
+    if (!windowBoundsStore || !rememberedWindowBounds) return;
+    try {
+        windowBoundsStore.saveSync(rememberedWindowBounds);
     } catch (err) {
         console.error('[xchain] could not save desktop window bounds:', err);
     }
@@ -1048,6 +1063,6 @@ app.on('before-quit', () => {
     // next launch reuses it via the keychain.
     isQuitting = true;
     stopWindowlessIdleLock();
-    void flushWindowBounds();
+    flushWindowBoundsSync();
     if (runtime) tearDownHost(runtime);
 });

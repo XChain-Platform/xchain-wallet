@@ -2707,19 +2707,17 @@ function AppInner() {
                             badges={{ messaging: messagingUnread }}
                         />
                     }
-                    header={
-                        <>
-                            <WatchOnlyBadge visible={isWatcherMode} />
-                            {activeWalletId ? (
-                                <>
-                                    {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                        unlocked view via the shared layout header slot. */}
-                                    <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
-                                    <QueuedBroadcastBanner walletId={activeWalletId} />
-                                    {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
-                                </>
-                            ) : null}
-                        </>
+                    header={<WatchOnlyBadge visible={isWatcherMode} />}
+                    notices={
+                        activeWalletId ? (
+                            <>
+                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
+                                    unlocked view via the shared layout notices slot. */}
+                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                                <QueuedBroadcastBanner walletId={activeWalletId} />
+                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                            </>
+                        ) : null
                     }
                 >
                     <ScrollRestoration routeKey={unlockedView}>

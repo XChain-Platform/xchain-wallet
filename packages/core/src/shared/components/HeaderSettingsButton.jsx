@@ -151,7 +151,11 @@ export function HeaderSettingsButton({
                     aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
                     title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
                 >
-                    {activeNetworkLabel(currentNetwork)}
+                    {/* Short form for phone widths: the dot shows and the
+                        name is visually hidden but still read out, so the
+                        badge never renders as clipped letters. */}
+                    <span className={styles.networkBadgeDot} aria-hidden="true" />
+                    <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
                 </span>
             ) : null}
             <button

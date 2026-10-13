@@ -15,15 +15,19 @@
 //
 // Asserts:
 //   1. FullLayoutWithNav grew a `header` slot rendered above the
-//      route content.
+//      route content, and a `notices` slot under it for the banners.
 //   2. CSS module declares `.header` (flex 0 0 auto) and `.mainBody`
 //      (flex 1 1 auto with --xc-screen-h reset) so the banner sits
 //      above a Screen child that still fills the remaining space.
 //   3. Web App.jsx no longer mounts QueuedBroadcastBanner above the
-//      Home fallback; it's now in the FullLayoutWithNav.header slot.
+//      Home fallback; it's now in the FullLayoutWithNav.notices slot.
 //   4. Desktop App.jsx imports QueuedBroadcastBanner and threads it
-//      through the same header slot (it never had the Home-only
+//      through the same notices slot (it never had the Home-only
 //      mount before this change).
+//
+// The banners left the header slot for their own notices slot because
+// the compact-tier scroll cap on a growing banner stack clipped the
+// settings popover anchored in the header row.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -39,11 +43,15 @@ const navJsx = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/FullLayoutWithNav\(\{ nav, bottomBar, header, children \}\)/.test(navJsx),
-    'FullLayoutWithNav exposes a header slot');
+assert.ok(/FullLayoutWithNav\(\{ nav, bottomBar, header, notices, children \}\)/.test(navJsx),
+    'FullLayoutWithNav exposes header and notices slots');
 assert.ok(
     /\{header \? <div className=\{styles\.header\}>\{header\}<\/div> : null\}/.test(navJsx),
     'FullLayoutWithNav renders the header above the route body when supplied',
+);
+assert.ok(
+    /\{notices \? <div className=\{styles\.notices\}>\{notices\}<\/div> : null\}/.test(navJsx),
+    'FullLayoutWithNav renders the notices above the route body when supplied',
 );
 assert.ok(/<div className=\{styles\.mainBody\}>\{children\}<\/div>/.test(navJsx),
     'route body wrapped in .mainBody so the header + body share the main flex column');
@@ -71,15 +79,15 @@ assert.ok(
     !/<>\s*\n?\s*\{activeWalletId \? <QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(webApp),
     'web App no longer mounts QueuedBroadcastBanner above the Home fallback',
 );
-// The header slot now holds a fragment with multiple children (AppHeader,
-// DemoBanner, QueuedBroadcastBanner, ReachabilityBanner); assert the banner
-// appears inside the activeWalletId-guarded header= prop.
+// The notices slot holds a fragment with the banners (DemoBanner,
+// QueuedBroadcastBanner, ReachabilityBanner, ...); assert the banner
+// appears inside the activeWalletId-guarded notices= prop.
 assert.ok(
-    /header=\{[\s\S]{0,2000}activeWalletId[\s\S]{0,3000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(webApp),
-    'web App routes the banner through FullLayoutWithNav.header',
+    /notices=\{\s*activeWalletId \? \([\s\S]{0,1000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(webApp),
+    'web App routes the banner through FullLayoutWithNav.notices',
 );
 
-// --- 4. Desktop App.jsx wires the banner through the header slot --------
+// --- 4. Desktop App.jsx wires the banner through the notices slot -------
 
 const desktopApp = readFileSync(
     join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
@@ -90,10 +98,10 @@ assert.ok(
     'desktop App imports QueuedBroadcastBanner',
 );
 assert.ok(
-    /header=\{[\s\S]{0,2000}activeWalletId[\s\S]{0,3000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(desktopApp),
-    'desktop App routes the banner through FullLayoutWithNav.header',
+    /notices=\{\s*activeWalletId \? \([\s\S]{0,1000}<QueuedBroadcastBanner walletId=\{activeWalletId\}/.test(desktopApp),
+    'desktop App routes the banner through FullLayoutWithNav.notices',
 );
 
 console.log(
-    'OK: queued-broadcast-banner-persistence smoke (§49 / Cluster G FOLLOWUP 4: FullLayoutWithNav.header slot mounts QueuedBroadcastBanner above every unlocked view; .mainBody flex column resets --xc-screen-h; web App drops the Home-only mount; desktop App gains the banner for the first time)',
+    'OK: queued-broadcast-banner-persistence smoke (§49 / Cluster G FOLLOWUP 4: FullLayoutWithNav.notices slot mounts QueuedBroadcastBanner above every unlocked view; .mainBody flex column resets --xc-screen-h; web App drops the Home-only mount; desktop App gains the banner for the first time)',
 );
