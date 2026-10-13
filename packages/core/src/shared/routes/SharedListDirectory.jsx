@@ -90,7 +90,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         let cancelled = false;
         setDirectory(null);
         setLoadError(null);
-        messaging.getSharedLists({ chainId })
+        Promise.resolve().then(() => messaging.getSharedLists({ chainId }))
             .then((response) => {
                 if (cancelled) return;
                 setDirectory({
@@ -132,7 +132,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
 
     useEffect(() => {
         setVisibleLimit(PAGE_SIZE);
-    }, [query, filterType, mode, directory]);
+    }, [filterType, mode, directory]);
 
     const pagedLists = matchingLists.slice(0, visibleLimit);
 
@@ -167,7 +167,10 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             className={listStyles.search}
             placeholder="Search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+                setQuery(event.target.value);
+                setVisibleLimit(PAGE_SIZE);
+            }}
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}

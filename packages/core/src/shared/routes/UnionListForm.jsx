@@ -162,12 +162,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     useEffect(() => {
         let cancelled = false;
         Promise.all([
-            messaging.getAddressesByChain(walletId, activeAccountId),
+            Promise.resolve().then(() => messaging.getAddressesByChain(walletId, activeAccountId)),
             typeof messaging.getActiveAddresses === 'function'
-                ? Promise.resolve(messaging.getActiveAddresses(walletId)).catch(() => ({}))
+                ? Promise.resolve().then(() => messaging.getActiveAddresses(walletId)).catch(() => ({}))
                 : Promise.resolve({}),
             typeof messaging.getSettings === 'function'
-                ? Promise.resolve(messaging.getSettings()).catch(() => null)
+                ? Promise.resolve().then(() => messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
         ]).then(([byChain, active, settings]) => {
             if (cancelled) return;
@@ -283,6 +283,12 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
     }
 
     const header = <PageHeader onBack={onBack} title="Create union list" />;
+    const buildAnother = () => {
+        setResult(null);
+        setPicked([]);
+        setMemo('');
+        setFormError(null);
+    };
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
@@ -309,7 +315,7 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             return wrap(
                 <WatcherResultPanel
                     result={result}
-                    onBuildAnother={() => setResult(null)}
+                    onBuildAnother={buildAnother}
                     onDone={onDone}
                 />,
             );
