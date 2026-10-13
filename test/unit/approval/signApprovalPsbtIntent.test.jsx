@@ -197,9 +197,12 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
-        await waitFor(() => expect(messaging.parsePsbt.mock.calls.length).toBeGreaterThanOrEqual(2));
         const actionIntent = await screen.findByTestId('psbt-action-intent');
         const panel = await screen.findByTestId('psbt-intent-panel');
+        // One decode, made after the wallet list answered: the panel never
+        // renders, drops back to "Decoding" and renders again when walletId
+        // lands (a second pass was what raced the missing-amount test).
+        expect(messaging.parsePsbt).toHaveBeenCalledTimes(1);
         expect(actionIntent.textContent).toBe('Carries an XChain Mint action');
         expect(panel.textContent).toContain('Recipient');
         expect(panel.textContent).toContain('100,000 sats');

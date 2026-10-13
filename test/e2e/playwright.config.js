@@ -35,6 +35,20 @@ import { defineConfig, devices } from '@playwright/test';
 
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
 
+export function desktopUserAgentForHost(
+    platform = process.platform,
+    desktopUserAgent = devices['Desktop Chrome'].userAgent,
+) {
+    const platformToken = {
+        darwin: 'Macintosh; Intel Mac OS X 10_15_7',
+        linux: 'X11; Linux x86_64',
+        win32: 'Windows NT 10.0; Win64; x64',
+    }[platform];
+    return platformToken
+        ? desktopUserAgent.replace(/\([^)]*\)/, `(${platformToken})`)
+        : desktopUserAgent;
+}
+
 const budget = timeoutBudget();
 // Named in the run's own output, so a red run is self-describing: the
 // budget it had is the first thing you need to know when deciding whether
@@ -85,7 +99,12 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
+            use: {
+                ...devices['Desktop Chrome'],
+                // Playwright derives navigator.platform from this user agent,
+                // keeping ControlOrMeta aligned with the app's host shortcut gate.
+                userAgent: desktopUserAgentForHost(),
+            },
         },
     ],
     webServer: {
