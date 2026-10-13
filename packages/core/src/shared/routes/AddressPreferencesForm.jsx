@@ -404,6 +404,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     </dl>
                 ) : null}
                 <label className={styles.checkRow}>
+                    {/* A native radio remains because the kit has no radio control. */}
                     <input
                         type="radio"
                         name="feePref"
@@ -413,6 +414,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     <span>Donate to protocol development (default)</span>
                 </label>
                 <label className={styles.checkRow}>
+                    {/* A native radio remains because the kit has no radio control. */}
                     <input
                         type="radio"
                         name="feePref"
@@ -425,6 +427,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
             <FormSection title="Incoming sends">
                 <label className={styles.checkRow}>
+                    {/* A native checkbox remains because the kit has no checkbox control. */}
                     <input
                         type="checkbox"
                         checked={requireMemo}
@@ -436,6 +439,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
             <FormSection title="Dispensers on this address">
                 <label className={styles.checkRow}>
+                    {/* A native radio remains because the kit has no radio control. */}
                     <input
                         type="radio"
                         name="dispPref"
@@ -445,6 +449,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     <span>Only this address may open dispensers (default)</span>
                 </label>
                 <label className={styles.checkRow}>
+                    {/* A native radio remains because the kit has no radio control. */}
                     <input
                         type="radio"
                         name="dispPref"

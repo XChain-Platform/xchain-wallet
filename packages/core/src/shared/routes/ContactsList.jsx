@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -680,7 +680,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 )}
             >
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-                <Input
+                <AddressField
                     label="Address"
                     value={entry0.address}
                     onChange={(e) => {
@@ -696,15 +696,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     onPick={(chain) => setFormEntries([{ ...entry0, chain }])}
                     style={{ margin: '0.25rem 0 0.75rem' }}
                 />
-                <div className={picker.notesField}>
-                    <label className={picker.notesLabel}>Notes</label>
-                    <textarea
-                        className={picker.notesTextarea}
-                        aria-label="Notes"
-                        value={formNotes}
-                        onChange={(e) => setFormNotes(e.target.value)}
-                    />
-                </div>
+                <Textarea
+                    label="Notes"
+                    aria-label="Notes"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                />
             </FormPage>,
         );
     }
@@ -727,15 +724,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 )}
             >
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-                <div className={picker.notesField}>
-                    <label className={picker.notesLabel}>Notes</label>
-                    <textarea
-                        className={picker.notesTextarea}
-                        aria-label="Notes"
-                        value={formNotes}
-                        onChange={(e) => setFormNotes(e.target.value)}
-                    />
-                </div>
+                <Textarea
+                    label="Notes"
+                    aria-label="Notes"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                />
             </FormPage>,
         );
     }
@@ -886,7 +880,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     >
                         <div className={picker.modalCard}>
                             <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
-                            <Input
+                            <AddressField
                                 label="Address"
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
@@ -919,33 +913,37 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         <ListPage
             toolbar={(
                 <>
-                <input
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    className={picker.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search contacts"
-                />
+                <div className={picker.search}>
+                    <Input
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search contacts"
+                    />
+                </div>
                 <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
-                <select
-                    className={picker.sort}
-                    value={sortBy}
-                    onChange={(e) => {
-                        const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                        setSortBy(value);
-                        persistContactsSort(walletId, value);
-                    }}
-                    aria-label="Sort contacts"
-                >
-                    <option value="name">A to Z</option>
-                    <option value="newest">Newest</option>
-                </select>
+                <div className={picker.sort}>
+                    <Select
+                        value={sortBy}
+                        onChange={(e) => {
+                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                            setSortBy(value);
+                            persistContactsSort(walletId, value);
+                        }}
+                        aria-label="Sort contacts"
+                    >
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="name">A to Z</option>
+                        {/* Native options remain because Select renders a native listbox. */}
+                        <option value="newest">Newest</option>
+                    </Select>
+                </div>
                 </>
             )}
         >
@@ -1010,6 +1008,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 role="listitem"
                                 className={picker.row}
                                 onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                aria-label={c.name}
                             >
                                 <span className={picker.rowName}>{c.name}</span>
                                 <span className={picker.rowChains}>
@@ -1124,15 +1123,17 @@ function NetworkReadout({ address, chain, onPick, style }) {
     return (
         <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
             <label htmlFor="contact-network-pick">Network: cannot be read from this address. Which is it?</label>
-            <select
+            <Select
                 id="contact-network-pick"
                 aria-label="Network for this address"
                 value=""
                 onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
             >
+                {/* A native option remains because Select renders a native listbox. */}
                 <option value="">Choose a network</option>
+                {/* Native options remain because Select renders a native listbox. */}
                 {choices.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-            </select>
+            </Select>
         </div>
     );
 }

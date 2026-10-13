@@ -81,7 +81,7 @@ function mount(messaging, walletId = 'w1') {
 function listedNames() {
     return within(screen.getByRole('list', { name: 'Contacts' }))
         .getAllByRole('listitem')
-        .map((row) => (row.querySelector('[class*="rowName"]') ?? row).textContent.trim());
+        .map((row) => row.getAttribute('aria-label'));
 }
 
 afterEach(() => {
@@ -98,7 +98,7 @@ describe('ContactsList audited behavior', () => {
         ]);
         mount(messaging);
 
-        const row = (await screen.findByText('Alice')).closest('button');
+        const row = await screen.findByRole('listitem', { name: 'Alice' });
         row.focus();
         await user.keyboard('{Enter}');
         const edit = screen.getByRole('button', { name: 'Edit' });
@@ -171,7 +171,7 @@ describe('ContactsList audited behavior', () => {
         ]);
         mount(messaging);
 
-        fireEvent.click((await screen.findByText('Bob')).closest('button'));
+        fireEvent.click(await screen.findByRole('listitem', { name: 'Bob' }));
         fireEvent.click(screen.getByRole('button', { name: 'Add address' }));
         fireEvent.change(screen.getByLabelText('Address'), { target: { value: BTC } });
         fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -268,7 +268,7 @@ describe('ContactsList audited behavior', () => {
         const messaging = makeMessaging([alice]);
         mount(messaging);
 
-        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        fireEvent.click(await screen.findByRole('listitem', { name: 'Alice' }));
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
         const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
         expect(within(dialog).getByText('Alice and all saved addresses will be removed. You can restore the contact with Undo.')).toBeTruthy();
@@ -289,7 +289,7 @@ describe('ContactsList audited behavior', () => {
         ]);
         mount(messaging);
 
-        fireEvent.click((await screen.findByText('Alice')).closest('button'));
+        fireEvent.click(await screen.findByRole('listitem', { name: 'Alice' }));
         confirmFailure.message = 'Confirmation failed.';
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 

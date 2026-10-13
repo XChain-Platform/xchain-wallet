@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -277,9 +277,10 @@ export function MarketsList({
             <ListPage
                 toolbar={(
                     <div style={{ width: '100%' }}>
-                        <button
+                        <Button
                             type="button"
-                            className={receiveStyles.assetCard}
+                            className={`${receiveStyles.assetCard} ${marketsStyles.assetButton}`}
+                            icon={null}
                             onClick={onChangeAsset}
                             aria-label={selectedAsset
                                 ? `Change asset (currently ${assetName})`
@@ -323,7 +324,7 @@ export function MarketsList({
                                 ) : null}
                             </span>
                             <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
-                        </button>
+                        </Button>
 
                         {selectedAsset ? (
                             <div style={{
@@ -333,33 +334,24 @@ export function MarketsList({
                                 gap: 'var(--xc-space-2)',
                                 marginBottom: 'var(--xc-space-3)',
                             }}>
-                                <input
-                                    ref={searchRef}
-                                    type="search"
-                                    enterKeyHint="search"
-                                    autoCapitalize="off"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    value={search}
-                                    onChange={(e) => {
-                                        setSearch(e.target.value);
-                                        setVisibleMarketCount(MARKETS_PAGE_SIZE);
-                                    }}
-                                    onKeyDown={handleSearchKeyDown}
-                                    placeholder="Search"
-                                    aria-label="Search markets"
-                                    style={{
-                                        flex: '1 1 140px',
-                                        minWidth: 0,
-                                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                                        border: '1px solid var(--xc-border)',
-                                        borderRadius: 999,
-                                        background: 'var(--xc-bg-muted)',
-                                        color: 'var(--xc-text)',
-                                        font: 'inherit',
-                                        fontSize: 'var(--xc-text-sm)',
-                                    }}
-                                />
+                                <div className={marketsStyles.searchField}>
+                                    <Input
+                                        ref={searchRef}
+                                        type="search"
+                                        enterKeyHint="search"
+                                        autoCapitalize="off"
+                                        autoCorrect="off"
+                                        spellCheck={false}
+                                        value={search}
+                                        onChange={(e) => {
+                                            setSearch(e.target.value);
+                                            setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                        }}
+                                        onKeyDown={handleSearchKeyDown}
+                                        placeholder="Search"
+                                        aria-label="Search markets"
+                                    />
+                                </div>
                                 {search ? (
                                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear market search">
                                         <Icon.XIcon />
@@ -378,6 +370,7 @@ export function MarketsList({
                                     ].map((opt) => {
                                         const active = tab === opt.id;
                                         return (
+                                            /* Raw buttons preserve the native tab role and roving tab stop behavior. */
                                             <button
                                                 key={opt.id}
                                                 id={`${tabsId}-tab-${opt.id}`}
@@ -453,7 +446,7 @@ export function MarketsList({
                             />
                         ) : (
                         <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
-                            <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            <ul ref={marketResultsRef} aria-label="Markets" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                 {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                     <MarketRow
                                         key={`${selectedAsset.chainId}::${m.tick1}::${m.tick2}::${idx}`}
@@ -538,52 +531,33 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
         : 0;
     return (
         <li className={marketsStyles.row}>
-            <button
+            <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                icon={null}
+                className={marketsStyles.starButton}
                 onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
                 aria-label={starred ? 'Remove from watchlist' : 'Add to watchlist'}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '1.1rem',
                     color: starred ? 'var(--xc-accent-primary)' : 'var(--xc-text-muted)',
-                    padding: 0,
-                    lineHeight: 1,
-                    // slice 2: the star glyph paints ~18px, under the
-                    // 24px pointer-target floor. Centre it in a target-sized
-                    // box so the row looks the same and the star is hittable.
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     minWidth: 'var(--xc-tap-min)',
                     minHeight: 'var(--xc-tap-min)',
                 }}
             >
                 {starred ? '★' : '☆'}
-            </button>
-            <button
+            </Button>
+            <Button
                 type="button"
+                variant="ghost"
+                icon={null}
+                className={marketsStyles.marketButton}
                 onClick={onOpen}
                 disabled={openDisabled}
                 title={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 aria-label={`Open ${otherName || otherTick} market`}
                 data-market-result="true"
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                    flex: 1,
-                    minWidth: 0,
-                    padding: 0,
-                    border: 0,
-                    background: 'none',
-                    color: 'inherit',
-                    font: 'inherit',
-                    textAlign: 'start',
-                    cursor: 'pointer',
-                }}
             >
             <TickerIcon chainId={chainId} tick={otherTick} />
             <div
@@ -648,7 +622,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                     </span>
                 ) : null}
             </div>
-            </button>
+            </Button>
         </li>
     );
 }
