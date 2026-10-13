@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
     buildReplyEnvelope,
     encodeMultisigEnvelope,
@@ -63,13 +63,20 @@ function signature(pubkey) {
     return { pubkey, sig: '30'.repeat(35), contributedAt: NOW };
 }
 
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
 async function mountAndOpen(activeSession) {
     messaging.listMultisigSigningSessions.mockResolvedValue([activeSession]);
     messaging.getMultisigSigningSession.mockResolvedValue(activeSession);
-    render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
+    const view = render(<MultisigSigningSession walletId="wallet-1" onBack={() => {}} />);
     const sessionList = await screen.findByRole('list', { name: 'Multisig sessions' });
     fireEvent.click(within(sessionList).getByRole('button'));
     await screen.findByLabelText('Multisig signing progress');
+    return view;
 }
 
 beforeEach(() => {
@@ -80,6 +87,7 @@ beforeEach(() => {
         contributeMultisigSignature: vi.fn().mockResolvedValue(undefined),
         aggregateMultisigSession: vi.fn().mockResolvedValue(undefined),
         cancelMultisigSigningSession: vi.fn().mockResolvedValue(undefined),
+        finalizeMultisigSigningSession: vi.fn().mockResolvedValue(undefined),
         signMultisigLocally: vi.fn().mockResolvedValue(undefined),
     };
 });
@@ -114,6 +122,20 @@ describe('MultisigSigningSession contribution display', () => {
             .getByText(PK_C)).toBeTruthy();
         expect(screen.queryByText('All cosigners have contributed.')).toBeNull();
         expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
+    });
+
+    it('lists a cosigner once when persisted configuration contains a duplicate key', async () => {
+        await mountAndOpen(session({
+            cosignerPubkeys: [PK_A, PK_A, PK_B],
+            signatures: [signature(PK_A)],
+        }));
+
+        const signed = within(screen.getByRole('list', { name: 'Signed cosigners' }));
+        expect(signed.getAllByText(PK_A)).toHaveLength(1);
+        expect(screen.getByLabelText('Signatures remaining')).toHaveTextContent(
+            '1 more signature required.',
+        );
+        expect(within(screen.getByRole('list', { name: 'Pending cosigners' })).getByText(PK_B)).toBeTruthy();
     });
 });
 
@@ -201,6 +223,42 @@ describe('MultisigSigningSession reply transport', () => {
 });
 
 describe('MultisigSigningSession broadcast readiness', () => {
+    it('keeps finalization disabled until distinct cosigners meet the threshold', async () => {
+        await mountAndOpen(session({
+            status: 'ready-to-finalize',
+            signatures: [signature(PK_A), signature(PK_A)],
+        }));
+
+        expect(screen.getByLabelText('Multisig signing progress')).toHaveTextContent('1 of 2');
+        expect(screen.getByLabelText('Signatures remaining')).toHaveTextContent(
+            '1 more signature required.',
+        );
+        const finalize = screen.getByRole('button', { name: 'Finalize transaction' });
+        expect(finalize).toBeDisabled();
+        fireEvent.click(finalize);
+        expect(messaging.finalizeMultisigSigningSession).not.toHaveBeenCalled();
+    });
+
+    it('does not refresh a finalized session after the tracker unmounts', async () => {
+        const finalizeRequest = deferred();
+        messaging.finalizeMultisigSigningSession.mockReturnValue(finalizeRequest.promise);
+        const view = await mountAndOpen(session({
+            status: 'ready-to-finalize',
+            signatures: [signature(PK_A), signature(PK_B)],
+        }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Finalize transaction' }));
+        expect(messaging.finalizeMultisigSigningSession).toHaveBeenCalledTimes(1);
+        view.unmount();
+        await act(async () => {
+            finalizeRequest.resolve(undefined);
+            await finalizeRequest.promise;
+        });
+
+        expect(messaging.getMultisigSigningSession).toHaveBeenCalledTimes(1);
+        expect(messaging.listMultisigSigningSessions).toHaveBeenCalledTimes(1);
+    });
+
     it('marks a finalized transaction ready and hides contribution actions', async () => {
         await mountAndOpen(session({
             status: 'finalized',
