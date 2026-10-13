@@ -13,7 +13,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
-import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import {
+    Send,
+    getUnusualSendWarnings,
+} from '../../../packages/core/src/shared/routes/Send.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -28,19 +31,19 @@ const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
 
-function composedSend() {
+function composedSend({ amount = AMOUNT, networkFeeSats = 1234 } = {}) {
     return {
         psbt: PSBT,
         encoding: 'P2SH',
-        actionString: `SEND|1|BTC|${AMOUNT}|${TO}`,
+        actionString: `SEND|1|BTC|${amount}|${TO}`,
         version: 1,
         chainId: CHAIN_ID,
-        networkFeeSats: 1234,
+        networkFeeSats,
         decoded: {
-            summary: `Send ${AMOUNT} BTC`,
+            summary: `Send ${amount} BTC`,
             details: [
                 { label: 'Token', value: 'BTC' },
-                { label: 'Amount', value: AMOUNT },
+                { label: 'Amount', value: amount },
                 { label: 'Destination', value: TO },
             ],
             warnings: [],
@@ -57,6 +60,7 @@ function mount({
     sendResult = { txid: TXID },
     contacts = [],
     history = [],
+    networkFeeSats = 1234,
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -96,7 +100,10 @@ function mount({
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         getAddressHistory: vi.fn().mockResolvedValue(history),
         gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
-        composeForConfirm: vi.fn().mockResolvedValue(composedSend()),
+        composeForConfirm: vi.fn().mockImplementation(async (request) => composedSend({
+            amount: request.amount,
+            networkFeeSats,
+        })),
         sendToken: vi.fn().mockImplementation(async () => {
             if (sendResult instanceof Error) throw sendResult;
             return sendResult;
@@ -130,9 +137,9 @@ function mount({
     return messaging;
 }
 
-async function fillSendForm() {
+async function fillSendForm(sendAmount = AMOUNT) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
-    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: sendAmount } });
     fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 }
 
@@ -157,6 +164,43 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('uses strict exact-decimal thresholds for unusual-send warnings', () => {
+        const boundary = getUnusualSendWarnings({
+            sendTotals: [{ tick: 'BTC', amount: '0.9' }],
+            balances: [{ tick: 'BTC', amount: '1' }],
+            feeAmount: '0.09',
+            nativeTicker: 'BTC',
+            isNativeSend: true,
+        });
+        expect(boundary).toEqual([]);
+
+        expect(getUnusualSendWarnings({
+            sendTotals: [{ tick: 'BTC', amount: '0.900000000000000001' }],
+            balances: [{ tick: 'BTC', amount: '1' }],
+            feeAmount: '0.090000000000000001',
+            nativeTicker: 'BTC',
+            isNativeSend: true,
+        })).toEqual([
+            'This sends more than 90% of your BTC balance.',
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        ]);
+    });
+
+    it('shows unusual-send warnings without blocking approval', async () => {
+        const messaging = mount({ networkFeeSats: 9_100_001 });
+        await fillSendForm('0.91');
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+
+        const warnings = await screen.findByTestId('send-unusual-warnings');
+        expect(warnings).toHaveTextContent('This sends more than 90% of your BTC balance.');
+        expect(warnings).toHaveTextContent(
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        );
+
+        await approveWithPassword(messaging);
+        expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ amount: '0.91' }));
+    });
+
     it('tabs through payment fields and reviews only a valid Enter submission', async () => {
         const user = userEvent.setup();
         const messaging = mount();

@@ -133,6 +133,44 @@ function isPositiveDecimalAmount(raw) {
     const value = String(raw ?? '').trim();
     return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value);
 }
+
+export function getUnusualSendWarnings({
+    sendTotals,
+    balances,
+    feeAmount,
+    nativeTicker,
+    isNativeSend,
+}) {
+    const warnings = [];
+    const balancesByTick = new Map((balances || []).map((balance) => [
+        String(balance?.tick || '').trim().toUpperCase(),
+        String(balance?.amount || '').trim(),
+    ]));
+
+    for (const total of sendTotals || []) {
+        const tick = String(total?.tick || '').trim().toUpperCase();
+        const balance = balancesByTick.get(tick);
+        if (!tick || compareDecimalStrings(balance, '0') !== 1) continue;
+        const threshold = multiplyDecimalStrings(balance, '0.9');
+        if (threshold !== null && compareDecimalStrings(total?.amount, threshold) === 1) {
+            warnings.push(`This sends more than 90% of your ${tick} balance.`);
+        }
+    }
+
+    if (isNativeSend && nativeTicker && feeAmount) {
+        const sent = (sendTotals || []).find(
+            (total) => String(total?.tick || '').trim().toUpperCase() === nativeTicker,
+        )?.amount;
+        const threshold = multiplyDecimalStrings(sent, '0.1');
+        if (threshold !== null && compareDecimalStrings(feeAmount, threshold) === 1) {
+            warnings.push(
+                `The network fee is more than 10% of the ${nativeTicker} amount you are sending.`,
+            );
+        }
+    }
+
+    return warnings;
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -164,6 +202,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
     compareDecimalStrings,
+    multiplyDecimalStrings,
     roundDecimalString,
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
@@ -1490,6 +1529,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         };
     }, [previewBalances.sdkShape, tick]);
 
+    const unusualSendWarnings = useMemo(() => {
+        const exactFeeSats = confirmAction.composed?.networkFeeSats;
+        const feeAmount = Number.isSafeInteger(exactFeeSats) && exactFeeSats >= 0
+            ? decimalStringFromSats(BigInt(exactFeeSats))
+            : feeEstimate?.coinAmount;
+        const balances = previewBalances.sdkShape
+            ? decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            : [];
+        return getUnusualSendWarnings({
+            sendTotals,
+            balances,
+            feeAmount,
+            nativeTicker: nativeTickerFor(descriptor),
+            isNativeSend,
+        });
+    }, [
+        confirmAction.composed?.networkFeeSats, feeEstimate?.coinAmount,
+        previewBalances.sdkShape, sendTotals, descriptor, isNativeSend,
+    ]);
     const nativeSourceBalance = useMemo(() => {
         if (!previewBalances.sdkShape) return null;
         const nativeTicker = String(previewBalances.sdkShape.native?.tick || '').toUpperCase();
@@ -2242,6 +2300,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             </div>
         </div>
     ) : null;
+    const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
+        <div role="alert" className={styles.warnings} data-testid="send-unusual-warnings">
+            {unusualSendWarnings.map((warning) => (
+                <p key={warning} className={styles.warning}>{warning}</p>
+            ))}
+        </div>
+    ) : null;
 
     // §20: signer mode does not spend. The Wallet Mode screen
     // promises "Send / receive screens are hidden; this wallet does not
@@ -2304,6 +2369,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 hwRequireExplicitConfirmReason={signRisk.reason}
                 extraCredentials={(
                     <>
+                        {unusualSendWarningBlock}
                         {dispenserNoticeBlock}
                         <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
                             <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
@@ -2653,6 +2719,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         ))}
                     </div>
                 ) : null}
+                {unusualSendWarningBlock}
                 {testSendGateBanner}
                 <RawPsbtViewer
                     developerMode={developerMode}
