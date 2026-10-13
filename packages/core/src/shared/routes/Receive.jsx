@@ -42,6 +42,15 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const QR_FALLBACK_PIXEL_SIZE = 512;
+
+export function qrPixelSizeFor(cssWidth, devicePixelRatio) {
+    const width = Number(cssWidth);
+    if (!Number.isFinite(width) || width <= 0) return QR_FALLBACK_PIXEL_SIZE;
+    const ratio = Number(devicePixelRatio);
+    const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+    return Math.ceil(width * safeRatio);
+}
 
 // descriptor.coin is the long coin name ('bitcoin' / 'litecoin' / 'dogecoin');
 // the user-facing native ticker is the short symbol ('BTC' / 'LTC' / 'DOGE').
@@ -97,6 +106,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // default for a new chain.
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
     const [qrDataUrl, setQrDataUrl] = useState(/** @type {string | null} */ (null));
+    const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
+    const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     // "the account holds no address anywhere" is a state, not an
@@ -204,6 +215,33 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setHwVerify({ status: 'idle', message: '' });
     }, [address?.id]);
 
+    useEffect(() => {
+        const surface = qrSurfaceRef.current;
+        if (!surface) return undefined;
+
+        const measure = (observedWidth) => {
+            const fallbackWidth = surface.getBoundingClientRect?.().width || 0;
+            const width = Number(observedWidth) > 0 ? Number(observedWidth) : fallbackWidth;
+            const nextSize = qrPixelSizeFor(width, window.devicePixelRatio);
+            setQrPixelSize((current) => (current === nextSize ? current : nextSize));
+        };
+        measure();
+
+        const onWindowResize = () => measure();
+        window.addEventListener('resize', onWindowResize);
+        let observer;
+        if (typeof ResizeObserver === 'function') {
+            observer = new ResizeObserver((entries) => {
+                measure(entries[0]?.contentRect?.width);
+            });
+            observer.observe(surface);
+        }
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', onWindowResize);
+        };
+    }, [address?.id]);
+
     const verifyOnDevice = useCallback(async () => {
         if (!address || !activeChainId) return;
         if (typeof messaging.verifyReceiveAddress !== 'function') {
@@ -278,8 +316,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             try {
                 const dataUrl = await QRCode.toDataURL(uri, {
                     errorCorrectionLevel: 'M',
-                    margin: 2,
-                    width: 512,
+                    margin: 4,
+                    width: qrPixelSize,
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 });
                 return [m.multisigConfigId, dataUrl];
@@ -293,7 +331,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             setMultisigQrs(next);
         });
         return () => { cancelled = true; };
-    }, [multisigs, activeChainId]);
+    }, [multisigs, activeChainId, qrPixelSize]);
 
     // Unified QR effect lives below; see the `qrUri` memo. Driven by
     // address + active chain + the optional amount/tick customization.
@@ -434,14 +472,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         let cancelled = false;
         QRCode.toDataURL(qrUri, {
             errorCorrectionLevel: 'M',
-            margin: 2,
-            width: 512,
+            margin: 4,
+            width: qrPixelSize,
             color: { dark: '#0F172A', light: '#FFFFFF' },
         })
             .then((dataUrl) => { if (!cancelled) setQrDataUrl(dataUrl); })
             .catch(() => { if (!cancelled) setQrDataUrl(null); });
         return () => { cancelled = true; };
-    }, [qrUri]);
+    }, [qrUri, qrPixelSize]);
 
     // QR image actions. The Copy button writes the rendered PNG to the
     // clipboard as an image (not as text) so the user can paste it into
@@ -616,19 +654,23 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 />
             ) : null}
 
-            {address && qrDataUrl ? (
+            {address ? (
                 <div className={styles.qrBox}>
-                    <img
-                        src={qrDataUrl}
-                        alt={`QR code for ${address.address}`}
-                        width={512}
-                        height={512}
-                        className={styles.qr}
-                    />
-                </div>
-            ) : address ? (
-                <div className={styles.qrBox} aria-hidden="true">
-                    <div className={styles.qrPlaceholder}>Rendering QR…</div>
+                    <div ref={qrSurfaceRef} className={styles.qrSurface}>
+                        {qrDataUrl ? (
+                            <img
+                                src={qrDataUrl}
+                                alt={`QR code for ${address.address}`}
+                                width={qrPixelSize}
+                                height={qrPixelSize}
+                                className={styles.qr}
+                            />
+                        ) : (
+                            <div className={styles.qrPlaceholder} aria-hidden="true">
+                                Rendering QR…
+                            </div>
+                        )}
+                    </div>
                 </div>
             ) : null}
 
@@ -643,7 +685,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onKeyDown={onAddressKeyDown}
                     title="Tap to copy payment request"
                     hint="Tap the address to copy its payment request."
-                    style={{ cursor: 'copy' }}
+                    style={{ cursor: 'text', userSelect: 'text' }}
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"
                 />
@@ -778,8 +820,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             <img
                                 src={multisigQrs[multisig.multisigConfigId]}
                                 alt={`Multisig QR code for ${multisig.address}`}
-                                width={512}
-                                height={512}
+                                width={qrPixelSize}
+                                height={qrPixelSize}
                                 className={styles.qr}
                             />
                         </div>

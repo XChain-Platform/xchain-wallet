@@ -30,7 +30,7 @@ vi.mock('qrcode', () => ({
     default: { toDataURL: qrToDataURL },
 }));
 
-const { Receive } = await import('../../../packages/core/src/shared/routes/Receive.jsx');
+const { Receive, qrPixelSizeFor } = await import('../../../packages/core/src/shared/routes/Receive.jsx');
 
 const REGTEST_SETTINGS = {
     schemaVersion: 1,
@@ -86,6 +86,47 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('renders a four-module quiet zone at the measured device-pixel width', async () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        const originalDevicePixelRatio = window.devicePixelRatio;
+        Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.5 });
+        globalThis.ResizeObserver = class ResizeObserver {
+            constructor(callback) { this.callback = callback; }
+            observe(target) {
+                this.callback([{ target, contentRect: { width: 320 } }]);
+            }
+            disconnect() {}
+        };
+
+        try {
+            renderReceive();
+
+            await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    margin: 4,
+                    width: 800,
+                    color: { dark: '#0F172A', light: '#FFFFFF' },
+                }),
+            ));
+            const address = await screen.findByRole('textbox', { name: 'Address' });
+            expect(address.readOnly).toBe(true);
+            expect(address.style.userSelect).toBe('text');
+        } finally {
+            globalThis.ResizeObserver = originalResizeObserver;
+            Object.defineProperty(window, 'devicePixelRatio', {
+                configurable: true,
+                value: originalDevicePixelRatio,
+            });
+        }
+    });
+
+    it('rounds fractional device pixels up and falls back before layout', () => {
+        expect(qrPixelSizeFor(319.5, 2)).toBe(639);
+        expect(qrPixelSizeFor(320, 3)).toBe(960);
+        expect(qrPixelSizeFor(0, 3)).toBe(512);
+    });
+
     it('copies the same BIP21 payment request that the QR encodes', async () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', {
