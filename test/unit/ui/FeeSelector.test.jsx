@@ -3,9 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { FeeSelector } from '../../../packages/core/src/ui/FeeSelector.jsx';
+import {
+    registerLocale,
+    setLocale,
+} from '../../../packages/core/src/i18n/index.js';
 
 const TIERS = {
     unit: 'sat/vB',
@@ -13,6 +17,15 @@ const TIERS = {
     normal: { rate: '2 sat/vB', rateValue: 2, coinAmount: '0.00000200', etaMinutes: 10, vsize: 100 },
     fast: { rate: '3 sat/vB', rateValue: 3, coinAmount: '0.00000300', etaMinutes: 2, vsize: 100 },
 };
+
+beforeAll(() => {
+    registerLocale('de-DE', {});
+    registerLocale('fr-FR', {});
+});
+
+afterEach(async () => {
+    await setLocale('en');
+});
 
 describe('<FeeSelector>', () => {
     it('renders an accessible preset slider and formatted estimate', () => {
@@ -51,7 +64,7 @@ describe('<FeeSelector>', () => {
                 onChange={onChange}
             />,
         );
-        fireEvent.change(screen.getByRole('spinbutton', { name: 'Custom fee rate (sat/vB)' }), {
+        fireEvent.change(screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' }), {
             target: { value: '5.5' },
         });
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5.5 });
@@ -68,9 +81,46 @@ describe('<FeeSelector>', () => {
             />,
         );
         fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
-        const amount = screen.getByRole('spinbutton', { name: 'Network fee amount (BTC)' });
-        expect(amount).toHaveValue(0.000002);
+        const amount = screen.getByRole('textbox', { name: 'Network fee amount (BTC)' });
+        expect(amount).toHaveValue('0.00000200');
         fireEvent.change(amount, { target: { value: '0.000005' } });
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5 });
+
+        fireEvent.change(amount, { target: { value: '1,2,3' } });
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0 });
+        expect(amount).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('valid non-negative network fee');
+    });
+
+    it.each([
+        ['de-DE', '2,75'],
+        ['fr-FR', '2,75'],
+    ])('parses a localized custom rate in %s without changing its numeric value', async (
+        locale,
+        localizedRate,
+    ) => {
+        await setLocale(locale);
+        const onChange = vi.fn();
+        render(
+            <FeeSelector
+                tiers={TIERS}
+                value={{ mode: 'custom', customRate: 2.5 }}
+                customEstimate={{ rateValue: 2.5, coinAmount: '0.00000250', vsize: 100 }}
+                onChange={onChange}
+            />,
+        );
+        const input = screen.getByRole('textbox', { name: 'Custom fee rate (sat/vB)' });
+        expect(input).toHaveValue('2,5');
+
+        fireEvent.change(input, { target: { value: localizedRate } });
+
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.75 });
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
+        const exactFee = screen.getByRole('textbox', { name: 'Network fee amount' });
+        expect(exactFee).toHaveValue('0,00000250');
+        fireEvent.change(exactFee, { target: { value: '0,000005' } });
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 5 });
     });
 
@@ -93,7 +143,7 @@ describe('<FeeSelector>', () => {
         expect(screen.getByRole('slider')).toBeDisabled();
         expect(screen.queryByRole('button', { name: 'Custom' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument();
-        for (const name of ['Low', 'Normal', 'Fast']) {
+        for (const name of ['Slow', 'Normal', 'Fast']) {
             expect(document.querySelector(`button[aria-label="${name}"]`)).toBeDisabled();
         }
     });

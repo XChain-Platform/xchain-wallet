@@ -34,7 +34,7 @@
 // measured 2026-08-02): the AppImage is replaced in place by the running
 // process, while the `.deb` is installed by `dpkg -i` run through
 // `pkexec`, so the user is asked for administrator rights. Both paths are
-// live on both arches today. `downloadAndInstall()` below proves the
+// live on both arches today. `downloadUpdate()` below proves the
 // bytes against K1 BEFORE either one runs, which is what makes the second
 // acceptable: nothing reaches a root install without a maintainer
 // signature over its hash.
@@ -54,16 +54,14 @@
 // (https://docs.xchain.io/components/wallet/reproducible-builds)
 // "Update trust chain" for the surrounding model.
 //
-// `downloadAndInstall()` is the ONLY path to an install, and it runs
-// that verification between the download and the install. This is
-// deliberate: there is no unverified install path to accidentally wire
-// up later, because there is no second path at all. The UI can only ask
-// for the checked one.
+// `downloadUpdate()` is the only path that prepares an update, and
+// `restartAndInstall()` is the only path that installs the prepared bytes.
+// The UI cannot ask for an unchecked install.
 //
 // The channel pointer is verified there too (the §7.2
 // fast-follow). Proving the downloaded bytes were signed said nothing
 // about the file that CHOSE those bytes, and that file is authored by
-// whoever controls the feed. `downloadAndInstall()` re-fetches this
+// whoever controls the feed. `downloadUpdate()` re-fetches this
 // build's own pointer and refuses unless every artifact it names appears
 // in the K1-signed manifest for the version being installed, which is
 // `feed-sweep.mjs`'s POINTER-UNCOVERED check moved to the one place that
@@ -76,7 +74,7 @@
 // accidentally trying to self-update against the prod URL.
 
 import { rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -378,7 +376,7 @@ export function selectUpdater(mod, {
 
 /**
  * @typedef {Object} UpdaterEvent
- * @property {'checking' | 'available' | 'not-available' | 'error' | 'downloaded' | 'progress' | 'verifying' | 'rejected'} type
+ * @property {'checking' | 'available' | 'not-available' | 'error' | 'downloaded' | 'progress' | 'verifying' | 'ready' | 'rejected'} type
  * @property {any} [info]
  */
 
@@ -390,23 +388,47 @@ export function selectUpdater(mod, {
  * @param {Object} opts
  * @param {() => Promise<any>} [opts.loader]  dynamic-import `electron-updater`; injectable for tests
  * @param {(event: UpdaterEvent) => void} opts.onEvent   forwards updater events (the caller typically relays to the renderer)
+ * @param {boolean} [opts.isPackaged]  whether Electron is running a packaged application
+ * @param {string|null} [opts.resourcesPath]  packaged Resources directory; null leaves config detection to the caller
+ * @param {(path: string) => boolean} [opts.updateConfigExists]  injectable filesystem check for tests
+ * @param {(message: string) => void} [opts.log]  informational logger
  * @param {Object} [opts.select]  overrides for `selectUpdater` (platform/env/resourcesPath/readFile); tests only
  * @param {string|null} [opts.pointerName]  the channel pointer to anchor against; tests only
  * @param {string|null} [opts.laneName]  the release lane this install belongs to; tests only
- * @returns {Promise<{ checkForUpdates: () => Promise<void>, isActive: boolean }>}
+ * @param {() => boolean} [opts.canRestart]  reports whether wallet work permits a restart
+ * @returns {Promise<{ checkForUpdates: () => Promise<void>, downloadUpdate: () => Promise<any>, downloadAndInstall: () => Promise<any>, restartAndInstall: () => Promise<any>, isActive: boolean }>}
  */
 export async function attachUpdater({
     loader = defaultLoader,
     onEvent,
+    isPackaged = true,
+    resourcesPath = null,
+    updateConfigExists = existsSync,
+    log = console.info,
     feedBaseUrl = resolveFeedBaseUrl(),
     fetchImpl,
     pinned,
     select,
     pointerName = resolvePointerName(),
     laneName = resolveLaneName(),
+    canRestart = () => true,
 }) {
     if (typeof onEvent !== 'function') {
         throw new Error('attachUpdater: onEvent must be a function');
+    }
+
+    // Source runs and unpacked bundles have no update metadata for
+    // electron-updater to read. Stop before loading it or registering its
+    // error listener, so a missing app-update.yml remains a build property
+    // rather than a user-facing update failure.
+    const configPath = resourcesPath ? join(resourcesPath, 'app-update.yml') : null;
+    if (!isPackaged || (configPath && !updateConfigExists(configPath))) {
+        log('[xchain] updater skipped: this build has no update configuration');
+        return {
+            isActive: false,
+            async checkForUpdates() { /* no update configuration */ },
+            async downloadAndInstall() { /* no update configuration */ },
+        };
     }
 
     // STORE BUILDS MUST NOT SELF-UPDATE (§13 macOS, §15 Windows).
@@ -442,7 +464,9 @@ export async function attachUpdater({
         return {
             isActive: false,
             async checkForUpdates() { /* the store owns updates */ },
-            async downloadAndInstall() { /* the store owns updates */ },
+            async downloadUpdate() { return { ok: false, reason: 'updates are store-managed' }; },
+            async downloadAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
+            async restartAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
         };
     }
 
@@ -455,7 +479,9 @@ export async function attachUpdater({
         return {
             isActive: false,
             async checkForUpdates() { /* snapd owns updates */ },
-            async downloadAndInstall() { /* snapd owns updates */ },
+            async downloadUpdate() { return { ok: false, reason: 'updates are store-managed' }; },
+            async downloadAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
+            async restartAndInstall() { return { ok: false, reason: 'updates are store-managed' }; },
         };
     }
     if (mislabelledAs) {
@@ -482,12 +508,14 @@ export async function attachUpdater({
         return {
             isActive: false,
             async checkForUpdates() { /* no-op in dev */ },
-            async downloadAndInstall() { /* no-op in dev */ },
+            async downloadUpdate() { return { ok: false, reason: 'updater is inactive' }; },
+            async downloadAndInstall() { return { ok: false, reason: 'updater is inactive' }; },
+            async restartAndInstall() { return { ok: false, reason: 'updater is inactive' }; },
         };
     }
 
-    // We don't auto-download; the user clicks "install" from the
-    // in-app notification, then autoUpdater.downloadUpdate() runs +
+    // We don't auto-download; the user starts the download from the
+    // in-app notification, then autoUpdater.downloadUpdate() runs and
     // we relay progress events back.
     autoUpdater.autoDownload = false;
 
@@ -507,7 +535,7 @@ export async function attachUpdater({
     // did not close it: deletion is best-effort, it only runs after a
     // verdict exists, and the dangerous case is the one with no verdict
     // yet. Turning the handler off makes the claim above true - the
-    // verified `quitAndInstall()` in `downloadAndInstall()` is the only
+    // verified `quitAndInstall()` in `restartAndInstall()` is the only
     // way an update is ever installed. `quitAndInstall()` is unaffected:
     // it calls `install()` itself and does not go through the quit hook.
     autoUpdater.autoInstallOnAppQuit = false;
@@ -542,6 +570,8 @@ export async function attachUpdater({
     // reports the file it wrote here and nowhere else, and the install
     // gate needs that path to hash it.
     let downloaded = null;
+    let prepared = false;
+    let downloadInFlight = null;
 
     autoUpdater.on('checking-for-update', () => onEvent({ type: 'checking' }));
     autoUpdater.on('update-available', (info) => onEvent({ type: 'available', info }));
@@ -570,6 +600,14 @@ export async function attachUpdater({
         return { path: path ? String(path) : null, version };
     }
 
+    function startDownload() {
+        if (downloadInFlight) return downloadInFlight;
+        downloadInFlight = prepareUpdate().finally(() => {
+            downloadInFlight = null;
+        });
+        return downloadInFlight;
+    }
+
     return {
         isActive: true,
 
@@ -582,78 +620,98 @@ export async function attachUpdater({
         },
 
         /**
-         * Download the pending update, prove it is the artifact the
-         * maintainer signed for that exact version, and only then
-         * install. Any failure deletes the download and returns without
-         * installing.
+         * Download the pending update and prove it is the artifact the
+         * maintainer signed for that exact version. A separate guarded
+         * restart performs the install. Any failure deletes the download.
          *
          * @returns {Promise<{ ok: boolean, reason?: string }>}
          */
-        async downloadAndInstall() {
-            let artifactPath = null;
+        downloadUpdate: startDownload,
+
+        // External callers retain this API name while preparation and
+        // restart stay separate operations.
+        downloadAndInstall: startDownload,
+
+        async restartAndInstall() {
+            if (!prepared) return { ok: false, reason: 'update is not ready' };
+            if (!canRestart()) {
+                return { ok: false, reason: 'wallet operation in progress', retryable: true };
+            }
             try {
-                const { path, version } = await runDownload();
-                artifactPath = path;
-                if (!artifactPath) {
-                    return reject('update downloaded but its path was not reported');
-                }
-                if (!version) {
-                    return reject('update downloaded but its version was not reported');
-                }
-
-                onEvent({ type: 'verifying', info: { version } });
-
-                const tag = version.startsWith('v') ? version : `v${version}`;
-                const fetched = await fetchReleaseManifest({
-                    feedBaseUrl, tag, fetch: fetchImpl,
-                });
-                if (!fetched.ok) return reject(fetched.reason);
-
-                // The pointer that chose this download, re-fetched so it
-                // can be anchored to the signed manifest. Fetched
-                // rather than remembered because electron-updater keeps its
-                // parsed UpdateInfo and not the bytes, and a paraphrase is
-                // not the thing that was served. A feed that answers with a
-                // DIFFERENT pointer here does not get a second opinion: the
-                // version check inside the gate refuses the mismatch.
-                const pointer = await fetchChannelPointer({
-                    feedBaseUrl, pointerName, fetch: fetchImpl,
-                });
-                if (!pointer.ok) return reject(pointer.reason);
-
-                const artifactSha256 = await sha256File(artifactPath);
-                const artifactSha512 = await sha512File(artifactPath);
-                const verdict = await verifyDownloadedUpdate({
-                    manifestBytes: fetched.manifestBytes,
-                    armoredSignature: fetched.armoredSignature,
-                    expectedTag: tag,
-                    artifactPath,
-                    artifactSha256,
-                    artifactSha512,
-                    pointerText: pointer.pointerText,
-                    lane: laneName,
-                    ...(pinned === undefined ? {} : { pinned }),
-                });
-                if (!verdict.ok) return reject(verdict.reason);
-
                 autoUpdater.quitAndInstall();
                 return { ok: true };
             } catch (err) {
-                return reject(String(err?.message || err));
-            }
-
-            // Refusing is not enough on its own: the rejected bytes are
-            // sitting in the updater's cache, where a later run can find
-            // them already downloaded. Delete them, then say why.
-            async function reject(reason) {
-                if (artifactPath) {
-                    await rm(artifactPath, { force: true }).catch(() => { /* best effort */ });
-                }
-                onEvent({ type: 'rejected', info: { reason } });
-                return { ok: false, reason };
+                return { ok: false, reason: String(err?.message || err), retryable: true };
             }
         },
     };
+
+    async function prepareUpdate() {
+        prepared = false;
+        let artifactPath = null;
+        try {
+            const { path, version } = await runDownload();
+            artifactPath = path;
+            if (!artifactPath) {
+                return reject('update downloaded but its path was not reported');
+            }
+            if (!version) {
+                return reject('update downloaded but its version was not reported');
+            }
+
+            onEvent({ type: 'verifying', info: { version } });
+
+            const tag = version.startsWith('v') ? version : `v${version}`;
+            const fetched = await fetchReleaseManifest({
+                feedBaseUrl, tag, fetch: fetchImpl,
+            });
+            if (!fetched.ok) return reject(fetched.reason);
+
+            // The pointer that chose this download, re-fetched so it
+            // can be anchored to the signed manifest. Fetched
+            // rather than remembered because electron-updater keeps its
+            // parsed UpdateInfo and not the bytes, and a paraphrase is
+            // not the thing that was served. A feed that answers with a
+            // DIFFERENT pointer here does not get a second opinion: the
+            // version check inside the gate refuses the mismatch.
+            const pointer = await fetchChannelPointer({
+                feedBaseUrl, pointerName, fetch: fetchImpl,
+            });
+            if (!pointer.ok) return reject(pointer.reason);
+
+            const artifactSha256 = await sha256File(artifactPath);
+            const artifactSha512 = await sha512File(artifactPath);
+            const verdict = await verifyDownloadedUpdate({
+                manifestBytes: fetched.manifestBytes,
+                armoredSignature: fetched.armoredSignature,
+                expectedTag: tag,
+                artifactPath,
+                artifactSha256,
+                artifactSha512,
+                pointerText: pointer.pointerText,
+                lane: laneName,
+                ...(pinned === undefined ? {} : { pinned }),
+            });
+            if (!verdict.ok) return reject(verdict.reason);
+
+            prepared = true;
+            onEvent({ type: 'ready', info: { version } });
+            return { ok: true };
+        } catch (err) {
+            return reject(String(err?.message || err));
+        }
+
+        // Refusing is not enough on its own: the rejected bytes are
+        // sitting in the updater's cache, where a later run can find
+        // them already downloaded. Delete them, then say why.
+        async function reject(reason) {
+            if (artifactPath) {
+                await rm(artifactPath, { force: true }).catch(() => { /* best effort */ });
+            }
+            onEvent({ type: 'rejected', info: { reason } });
+            return { ok: false, reason };
+        }
+    }
 }
 
 function defaultLoader() {

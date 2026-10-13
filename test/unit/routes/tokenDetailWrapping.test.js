@@ -15,10 +15,10 @@ const manageCss = readFileSync(
 );
 
 describe('token detail long labels', () => {
-    it('allows the TokenDetail header name to wrap', () => {
+    it('keeps the TokenDetail header name on one line and ellipsizes it', () => {
         const rule = tokenCss.match(/\.headerTitle\s*\{[^}]*\}/s)?.[0] || '';
-        expect(rule).toMatch(/white-space:\s*normal/);
-        expect(rule).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule).toMatch(/white-space:\s*nowrap/);
+        expect(rule).toMatch(/text-overflow:\s*ellipsis/);
     });
 
     it('allows ManageToken tickers and subasset names to wrap', () => {

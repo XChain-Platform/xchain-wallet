@@ -11,6 +11,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './AlertsOverlay.module.css';
+import { alertSeverityPresentation } from './alertSeverity.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 
@@ -74,24 +75,29 @@ export function AlertsOverlay({ alerts, onClose }) {
                     {alerts.length === 0 ? (
                         <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
                     ) : (
+                        /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={styles.list} role="list">
-                            {alerts.map((a) => (
-                                <li key={a.id} className={`${styles.alert} ${styles[a.severity] || styles.info}`}>
-                                    <div className={styles.alertHead}>
-                                        <span className={styles.alertTitle}>{a.title}</span>
-                                    </div>
-                                    <div className={styles.alertMessage}>{a.message}</div>
-                                    {a.action ? (
-                                        <button
-                                            type="button"
-                                            className={styles.alertAction}
-                                            onClick={() => { a.action.onSelect(); onClose(); }}
-                                        >
-                                            {a.action.label}
-                                        </button>
-                                    ) : null}
-                                </li>
-                            ))}
+                            {alerts.map((a) => {
+                                const severity = alertSeverityPresentation(a.severity);
+                                return (
+                                    <li key={a.id} className={`${styles.alert} ${styles[severity.kind]}`}>
+                                        <div className={styles.alertHead}>
+                                            <span className={styles.severity}>{severity.label}</span>
+                                            <span className={styles.alertTitle}>{a.title}</span>
+                                        </div>
+                                        <div className={styles.alertMessage}>{a.message}</div>
+                                        {a.action ? (
+                                            <button
+                                                type="button"
+                                                className={styles.alertAction}
+                                                onClick={() => { a.action.onSelect(); onClose(); }}
+                                            >
+                                                {a.action.label}
+                                            </button>
+                                        ) : null}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </div>

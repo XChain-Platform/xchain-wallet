@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import {
+    useFiatRate,
     useNativeFiatRates,
     priceNativeRows,
 } from '../../../packages/core/src/shared/hooks/useFiatRate.js';
@@ -75,6 +76,70 @@ describe('useNativeFiatRates', () => {
         await new Promise((r) => setTimeout(r, 20));
         expect(result.current).toEqual({});
         expect(calls).toEqual([]);
+    });
+
+    it('shares one request across mounted consumers and refetches once per currency switch', async () => {
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async (url) => {
+                calls.push(url);
+                if (url.includes('vs_currencies=eur')) {
+                    return { ok: true, json: async () => ({ bitcoin: { eur: 70000 } }) };
+                }
+                return {
+                    ok: true,
+                    json: async () => ({ data: [{ coin_pair: 'BTC/USD', price: '81756.12', block_timestamp: FRESH_TS }] }),
+                };
+            },
+        });
+        const { result, rerender } = renderHook(({ fiatCurrency }) => ({
+            home: useNativeFiatRates({ chainCoins: ['bitcoin'], fiatCurrency }).bitcoin,
+            detail: useFiatRate({ chainCoin: 'bitcoin', fiatCurrency }),
+        }), { initialProps: { fiatCurrency: 'USD' } });
+
+        await waitFor(() => expect(result.current.home?.rate).toBe(81756.12));
+        expect(result.current.detail?.rate).toBe(81756.12);
+        expect(calls.filter((url) => url.includes('/api/price_snapshots/'))).toHaveLength(1);
+
+        rerender({ fiatCurrency: 'EUR' });
+        await waitFor(() => expect(result.current.home?.rate).toBe(70000));
+        expect(result.current.detail?.rate).toBe(70000);
+        expect(calls.filter((url) => url.includes('vs_currencies=eur'))).toHaveLength(1);
+    });
+
+    it('keeps the stale rate visible while its revalidation is pending', async () => {
+        let now = NOW;
+        let release;
+        let nextPrice = '80000';
+        let hold = false;
+        configureFiatRateSource({
+            now: () => now,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async () => {
+                if (hold) await new Promise((resolve) => { release = resolve; });
+                return {
+                    ok: true,
+                    json: async () => ({ data: [{ coin_pair: 'BTC/USD', price: nextPrice, block_timestamp: FRESH_TS }] }),
+                };
+            },
+        });
+        const { result, rerender } = renderHook(({ refreshKey }) => useNativeFiatRates({
+            chainCoins: ['bitcoin'],
+            refreshKey,
+        }), { initialProps: { refreshKey: 0 } });
+
+        await waitFor(() => expect(result.current.bitcoin?.rate).toBe(80000));
+        now += 6 * 60 * 1000;
+        nextPrice = '81000';
+        hold = true;
+        rerender({ refreshKey: 1 });
+
+        expect(result.current.bitcoin?.rate).toBe(80000);
+        await waitFor(() => expect(release).toBeTypeOf('function'));
+        release();
+        await waitFor(() => expect(result.current.bitcoin?.rate).toBe(81000));
     });
 });
 

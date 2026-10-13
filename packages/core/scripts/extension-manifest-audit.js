@@ -20,34 +20,38 @@
 //   2. version-is-cws-valid          - 1–4 dot-separated integers, 0–65535
 //   3. version-matches-wallet        - equals deriveExtensionVersion(root)
 //   4. version-name-mirrors-wallet   - `version_name` === root package.json
-//   5. description-present-and-short - ≤ 132 chars (CWS listing limit)
-//   6. homepage-url-set              - listing requires a homepage
-//   7. icons-128-present             - CWS store tile requires 128×128
-//   8. action-icon-set               - toolbar icon entry points valid
-//   9. content-scripts-valid         - matches array well-formed
-//  10. permissions-minimal           - no broad/host permissions without
+//   5. extension-pkg-matches-wallet  - extension package version matches root
+//   6. description-present-and-short - ≤ 132 chars (CWS listing limit)
+//   7. homepage-url-set              - listing requires a homepage
+//   8. icons-all-sizes-declared      - every generated icon is declared
+//   9. icon-source-covers-sizes      - source PNG exists and is large enough
+//  10. action-icon-set               - toolbar icons match extension icons
+//  11. background-service-worker-mv3 - background uses a module service worker
+//  12. csp-mv3-safe                  - CSP has no executable-string tokens
+//  13. content-scripts-valid         - matches array well-formed
+//  14. permissions-minimal           - no broad/host permissions without
 //                                      justification file
-//  11. permissions-frozen            - manifest.permissions equals the
-// pinned allowlist (§6)
-//  12. host-permissions-frozen       - manifest.host_permissions equals
+//  15. permissions-frozen            - manifest.permissions equals the
+//                                      pinned allowlist (§6)
+//  16. host-permissions-frozen       - manifest.host_permissions equals
 //                                      the pinned allowlist
-//  13. content-script-matches-frozen - the (single) content_scripts
+//  17. content-script-matches-frozen - the (single) content_scripts
 //                                      entry's matches equals the pinned
 //                                      allowlist
-//  14. war-matches-match-content-script - every web_accessible_resources
+//  18. war-matches-match-content-script - every web_accessible_resources
 //                                      entry's matches equals the manifest's
 //                                      OWN content_scripts matches (spec
 //                                      §3.5: all three lists stay identical)
 //
-// Rule 10 treats host_permissions as the dangerous surface; matching-all
+// Rule 14 treats host_permissions as the dangerous surface; matching-all
 // (`<all_urls>`, `*://*/*`) without a recorded justification is flagged.
 // Content-script `matches` inherit wallet-bridge scope (§51) and are
 // considered justified.
 //
-// Rules 11-14 are the manifest-freeze gate (§6, stage S4). 11-13
+// Rules 15-18 are the manifest-freeze gate (§6, stage S4). 15-17
 // compare against packages/extension/docs/manifest-freeze.json, a pinned
 // allowlist checked into the same repo: any drift in permissions,
-// host_permissions, or content-script matches fails CI. Rule 14 does NOT
+// host_permissions, or content-script matches fails CI. Rule 18 does NOT
 // compare against a second frozen copy of the match list; it checks the
 // web_accessible_resources matches against manifest.json's own
 // content_scripts matches, so the two cannot drift apart from each other
@@ -64,9 +68,14 @@
 // Exits 0 with a per-rule summary when every rule passes; non-zero with
 // a failure report otherwise.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    EXTENSION_ICON_SIZES,
+    EXTENSION_ICON_SOURCE,
+    extensionIconPath,
+} from '../../extension/iconConfig.js';
 import { deriveExtensionVersion } from './derive-extension-version.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -99,12 +108,20 @@ function isCwsVersion(v) {
     return parts.every((s) => /^\d+$/.test(s) && Number(s) >= 0 && Number(s) <= 65535);
 }
 
+function pngDimensions(path) {
+    if (!existsSync(path)) return null;
+    const png = readFileSync(path);
+    const signature = '89504e470d0a1a0a';
+    if (png.length < 24 || png.subarray(0, 8).toString('hex') !== signature) return null;
+    return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
 /**
  * Run every rule and return a list of results.
  * @returns {{ rule: string, ok: boolean, detail: string }[]}
  */
-export function runExtensionManifestAudit() {
-    const manifest = readJSON(manifestPath);
+export function runExtensionManifestAudit(options = {}) {
+    const manifest = options.manifest ?? readJSON(manifestPath);
     const rootPkg = readJSON(rootPkgPath);
     const extPkg = readJSON(extensionPkgPath);
     const walletVersion = rootPkg.version;
@@ -157,18 +174,58 @@ export function runExtensionManifestAudit() {
         detail: `manifest.homepage_url = ${JSON.stringify(manifest.homepage_url)}`,
     });
 
+    const expectedIconPaths = Object.fromEntries(
+        EXTENSION_ICON_SIZES.map((size) => [String(size), extensionIconPath(size)]),
+    );
     const icons = manifest.icons || {};
     results.push({
-        rule: 'icons-128-present',
-        ok: typeof icons['128'] === 'string' && icons['128'].length > 0,
-        detail: `manifest.icons['128'] = ${JSON.stringify(icons['128'])}`,
+        rule: 'icons-all-sizes-declared',
+        ok: JSON.stringify(icons) === JSON.stringify(expectedIconPaths),
+        detail: `manifest.icons = ${JSON.stringify(icons)}, generated icons = ${JSON.stringify(expectedIconPaths)}`,
+    });
+
+    const iconSourcePath = join(repoRoot, 'packages/extension', EXTENSION_ICON_SOURCE);
+    const iconDimensions = pngDimensions(iconSourcePath);
+    const largestIcon = Math.max(...EXTENSION_ICON_SIZES);
+    results.push({
+        rule: 'icon-source-covers-sizes',
+        ok: iconDimensions !== null
+            && iconDimensions.width >= largestIcon
+            && iconDimensions.height >= largestIcon,
+        detail: `${iconSourcePath} dimensions = ${iconDimensions ? `${iconDimensions.width}x${iconDimensions.height}` : 'missing or invalid PNG'}, largest generated icon = ${largestIcon}x${largestIcon}`,
     });
 
     const actionIcon = manifest.action?.default_icon;
     results.push({
         rule: 'action-icon-set',
-        ok: actionIcon && typeof actionIcon === 'object' && typeof actionIcon['128'] === 'string',
-        detail: `manifest.action.default_icon['128'] = ${JSON.stringify(actionIcon?.['128'])}`,
+        ok: JSON.stringify(actionIcon) === JSON.stringify(expectedIconPaths),
+        detail: `manifest.action.default_icon = ${JSON.stringify(actionIcon)}, expected = ${JSON.stringify(expectedIconPaths)}`,
+    });
+
+    const background = manifest.background || {};
+    results.push({
+        rule: 'background-service-worker-mv3',
+        ok: typeof background.service_worker === 'string'
+            && background.service_worker.length > 0
+            && background.type === 'module'
+            && !('scripts' in background)
+            && !('page' in background)
+            && !('persistent' in background),
+        detail: `manifest.background = ${JSON.stringify(background)}`,
+    });
+
+    const extensionCsp = manifest.content_security_policy?.extension_pages;
+    const unsafeCspTokens = typeof extensionCsp === 'string'
+        ? extensionCsp.match(/'(?:unsafe-eval|wasm-unsafe-eval)'/g) || []
+        : [];
+    results.push({
+        rule: 'csp-mv3-safe',
+        ok: typeof extensionCsp === 'string'
+            && extensionCsp.length > 0
+            && unsafeCspTokens.length === 0,
+        detail: typeof extensionCsp === 'string'
+            ? `unsafe executable-string CSP tokens = ${JSON.stringify(unsafeCspTokens)}`
+            : 'manifest.content_security_policy.extension_pages is missing',
     });
 
     const cs = manifest.content_scripts;

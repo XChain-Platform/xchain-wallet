@@ -35,13 +35,21 @@ describe('FullLayoutWithNav skip link', () => {
         expect(document.activeElement).toBe(document.getElementById('xc-main'));
     });
 
-    it('is absent when the sidebar is withheld', () => {
+    it('keeps the compact popup route action first in tab order', () => {
         globalThis.__tier = 'compact';
-        render(
-            <FullLayoutWithNav nav={<nav aria-label="nav" />} bottomBar={<nav aria-label="bar" />}>
-                <main id="xc-main" tabIndex={-1}>content</main>
+        const { container } = render(
+            <FullLayoutWithNav
+                nav={<nav aria-label="nav"><button type="button">Sidebar home</button></nav>}
+                bottomBar={<nav aria-label="bar"><button type="button">Popup home</button></nav>}
+            >
+                <main id="xc-main" tabIndex={-1}>
+                    <button type="button">Unlock wallet</button>
+                </main>
             </FullLayoutWithNav>,
         );
+
         expect(screen.queryByRole('link', { name: 'Skip to main content' })).toBeNull();
+        expect(container.querySelector('button')).toHaveTextContent('Unlock wallet');
+        expect(screen.queryByRole('button', { name: 'Sidebar home' })).toBeNull();
     });
 });

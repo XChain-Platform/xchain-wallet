@@ -29,12 +29,11 @@
 // toggle on but no alerts set leaks nothing.
 
 import { isWithinQuietHours } from './quietHours.js';
+import { taggedLogger } from './taggedLogger.js';
 
 // Align with priceOracle's SPOT_TTL_MS so a poll usually hits the oracle's
 // in-memory cache rather than issuing a fresh CoinGecko request.
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 export class PriceAlertWatcher {
     /**
@@ -76,7 +75,7 @@ export class PriceAlertWatcher {
         this._markTriggered = markTriggered;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'price-alert');
 
         this._timer = null;
         /** @type {Set<string>} alert ids fired this session (guards re-fire before markTriggered persists) */

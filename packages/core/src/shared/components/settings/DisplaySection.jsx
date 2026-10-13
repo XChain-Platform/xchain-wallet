@@ -23,18 +23,24 @@
 // Token keys render as `chainId:tick`, sufficient to identify a row
 // without a separate `messaging.getTokenInfo` round-trip.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useSupportedChains } from '../../hooks/useSupportedChains.js';
 import { useMessaging } from '../../useMessaging.js';
 import { tickerReferenceError } from '../../utils/tickerGrammar.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { INPUT, ROW, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+
+const chainRegistry = registryLib.defaultRegistry();
+const SEARCH_DEBOUNCE_MS = 200;
 
 const SECTION_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -70,6 +76,7 @@ export function DisplaySection() {
     const { messaging } = useMessaging();
     const { settings, loading, error, update } = useSettings();
     const chains = useSupportedChains();
+    const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
@@ -78,10 +85,46 @@ export function DisplaySection() {
     const [watchTicker, setWatchTicker] = useState('');
     const [watchMessage, setWatchMessage] = useState(/** @type {string | null} */ (null));
     const [watching, setWatching] = useState(false);
+    const [tokenQuery, setTokenQuery] = useState('');
+    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState('');
+    const tokenSearchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const tokenListsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
     const pinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
     const watched = Array.isArray(settings?.watchedTokens) ? settings.watchedTokens : [];
     const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(handle);
+    }, [tokenQuery]);
+
+    const tokenMatches = useCallback((key) => {
+        const query = debouncedTokenQuery.trim().toLowerCase();
+        if (!query) return true;
+        const tokenKey = String(key);
+        const separator = tokenKey.lastIndexOf(':');
+        const chainId = separator >= 0 ? tokenKey.slice(0, separator) : '';
+        const ticker = separator >= 0 ? tokenKey.slice(separator + 1) : tokenKey;
+        const descriptor = chainRegistry.get(chainId);
+        return [tokenKey, ticker, descriptor?.displayName, descriptor?.coin]
+            .some((value) => String(value || '').toLowerCase().includes(query));
+    }, [debouncedTokenQuery]);
+    const filteredPinned = useMemo(() => pinned.filter(tokenMatches), [pinned, tokenMatches]);
+    const filteredHidden = useMemo(() => hidden.filter(tokenMatches), [hidden, tokenMatches]);
+
+    const handleTokenSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown') return;
+        const result = tokenListsRef.current?.querySelector('[data-token-setting-result="true"] button:not(:disabled)');
+        if (!result) return;
+        event.preventDefault();
+        result.focus();
+    };
+    const clearTokenSearch = () => {
+        setTokenQuery('');
+        setDebouncedTokenQuery('');
+        tokenSearchRef.current?.focus();
+    };
 
     const writePinned = useCallback(async (next) => {
         try {
@@ -222,7 +265,14 @@ export function DisplaySection() {
             setDisplayMessage('Could not save the display preference. Try again.');
         });
     };
-    const resetDisplay = () => {
+    const resetDisplay = async () => {
+        const confirmed = await confirmDialog.confirm({
+            title: 'Reset display settings?',
+            message: 'This restores all balance display options and clears pinned tokens, hidden tokens, and saved list preferences. This cannot be undone.',
+            confirmLabel: 'Reset settings',
+            danger: true,
+        });
+        if (!confirmed) return;
         setDisplayMessage(null);
         update({
             pinnedTokens: [],
@@ -350,87 +400,123 @@ export function DisplaySection() {
                 </div>
             ))}
 
-            <h3 style={SECTION_HEADER}>Pinned tokens ({pinned.length})</h3>
-            <p style={SECTION_HINT}>
-                Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.
-            </p>
-            {pinned.length === 0 ? (
-                <div style={ROW}>
-                    <span style={EMPTY_HINT}>No pinned tokens. Tap the star on a balance row to pin it.</span>
-                </div>
-            ) : (
-                pinned.map((key, idx) => (
-                    <div key={key} style={ROW}>
-                        <span style={KEY_TEXT} title={key}>{key}</span>
-                        <div style={ACTIONS}>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={null}
-                                onClick={() => movePin(idx, -1)}
-                                disabled={idx === 0}
-                                aria-label={`Move ${key} up`}
-                            >
-                                ↑
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={null}
-                                onClick={() => movePin(idx, 1)}
-                                disabled={idx === pinned.length - 1}
-                                aria-label={`Move ${key} down`}
-                            >
-                                ↓
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={null}
-                                onClick={() => unpin(key)}
-                                aria-label={`Unpin ${key}`}
-                            >
-                                <Icon.XIcon />
-                            </Button>
-                        </div>
-                    </div>
-                ))
-            )}
-
-            <h3 style={SECTION_HEADER}>Hidden tokens ({hidden.length})</h3>
-            <p style={SECTION_HINT}>
-                Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.
-            </p>
-            {hidden.length === 0 ? (
-                <div style={ROW}>
-                    <span style={EMPTY_HINT}>No hidden tokens. Tap the hide affordance on a balance row to hide it.</span>
-                </div>
-            ) : (
-                <>
-                    {hidden.map((key) => (
-                        <div key={key} style={ROW}>
-                            <span style={KEY_TEXT} title={key}>{key}</span>
-                            <div style={ACTIONS}>
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    icon={null}
-                                    onClick={() => unhide(key)}
-                                    aria-label={`Unhide ${key}`}
-                                >
-                                    Unhide
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
-                    <div style={ROW}>
-                        <span style={ROW_LABEL}>{hidden.length} hidden</span>
-                        <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
-                            Unhide all
+            {(pinned.length > 0 || hidden.length > 0) ? (
+                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                    <input
+                        ref={tokenSearchRef}
+                        type="search"
+                        value={tokenQuery}
+                        onChange={(event) => setTokenQuery(event.target.value)}
+                        onKeyDown={handleTokenSearchKeyDown}
+                        placeholder="Search token lists"
+                        aria-label="Search pinned and hidden tokens"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        style={{ ...INPUT, flex: 1, minWidth: 0 }}
+                    />
+                    {tokenQuery ? (
+                        <Button size="sm" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
+                            <Icon.XIcon />
                         </Button>
+                    ) : null}
+                </div>
+            ) : null}
+
+            <div ref={tokenListsRef} style={{ display: 'contents' }}>
+                <h3 style={SECTION_HEADER}>Pinned tokens ({pinned.length})</h3>
+                <p style={SECTION_HINT}>
+                    Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.
+                </p>
+                {pinned.length === 0 ? (
+                    <div style={ROW}>
+                        <span style={EMPTY_HINT}>No pinned tokens. Tap the star on a balance row to pin it.</span>
                     </div>
-                </>
-            )}
+                ) : filteredPinned.length === 0 ? (
+                    <div style={ROW} role="status">
+                        <span style={EMPTY_HINT}>No pinned tokens match "{debouncedTokenQuery.trim()}".</span>
+                    </div>
+                ) : (
+                    filteredPinned.map((key) => {
+                        const idx = pinned.indexOf(key);
+                        return (
+                            <div key={key} style={ROW} data-token-setting-result="true">
+                                <span style={KEY_TEXT} title={key}>{key}</span>
+                                <div style={ACTIONS}>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={null}
+                                        onClick={() => movePin(idx, -1)}
+                                        disabled={idx === 0}
+                                        aria-label={`Move ${key} up`}
+                                    >
+                                        ↑
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={null}
+                                        onClick={() => movePin(idx, 1)}
+                                        disabled={idx === pinned.length - 1}
+                                        aria-label={`Move ${key} down`}
+                                    >
+                                        ↓
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={null}
+                                        onClick={() => unpin(key)}
+                                        aria-label={`Unpin ${key}`}
+                                    >
+                                        <Icon.XIcon />
+                                    </Button>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+
+                <h3 style={SECTION_HEADER}>Hidden tokens ({hidden.length})</h3>
+                <p style={SECTION_HINT}>
+                    Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.
+                </p>
+                {hidden.length === 0 ? (
+                    <div style={ROW}>
+                        <span style={EMPTY_HINT}>No hidden tokens. Tap the hide affordance on a balance row to hide it.</span>
+                    </div>
+                ) : filteredHidden.length === 0 ? (
+                    <div style={ROW} role="status">
+                        <span style={EMPTY_HINT}>No hidden tokens match "{debouncedTokenQuery.trim()}".</span>
+                    </div>
+                ) : (
+                    <>
+                        {filteredHidden.map((key) => (
+                            <div key={key} style={ROW} data-token-setting-result="true">
+                                <span style={KEY_TEXT} title={key}>{key}</span>
+                                <div style={ACTIONS}>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={null}
+                                        onClick={() => unhide(key)}
+                                        aria-label={`Unhide ${key}`}
+                                    >
+                                        Unhide
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                        <div style={ROW}>
+                            <span style={ROW_LABEL}>{hidden.length} hidden</span>
+                            <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
+                                Unhide all
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </div>
 
             <h3 style={SECTION_HEADER}>List preferences</h3>
             <p style={SECTION_HINT}>
@@ -459,6 +545,13 @@ export function DisplaySection() {
                     Reset to defaults
                 </Button>
             </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }

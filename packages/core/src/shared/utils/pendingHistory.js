@@ -34,7 +34,7 @@
 
 /**
  * @typedef {Object} PendingMeta
- * @property {'mempool' | 'local' | 'both'} origin  which sources described this tx
+ * @property {'mempool' | 'local' | 'both' | 'remembered'} origin  which sources described this tx
  * @property {number | null} firstSeenMs   when the NETWORK first saw it, ms; null
  *                                          while the transaction is broadcast but
  *                                          not yet observed in any mempool
@@ -399,6 +399,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             localStatus: localEntry.pending.localStatus,
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
+            rbf: localEntry.pending.rbf,
             replacementTxHash: localEntry.pending.replacementTxHash,
             // A block is the one thing a mempool row cannot know about; only
             // our record can carry the proof, and it carries it across.
@@ -517,7 +518,8 @@ export function pendingDisplayState(entry, nowMs, windows) {
     // Present in a mempool as of the latest read: unambiguously healthy.
     if (meta.origin === 'mempool' || meta.origin === 'both') return 'seen';
 
-    // Local-only from here down, so no mempool is reporting it right now.
+    // No mempool is reporting it right now. This includes a local record and
+    // an incoming row remembered from the previous successful mempool read.
     if (meta.lastMempoolSeenMs != null) {
         // It WAS reported and is not any more. Confirmation is the usual
         // reason and it arrives on its own feed, so wait out the grace before
