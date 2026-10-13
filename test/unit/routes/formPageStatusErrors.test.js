@@ -42,21 +42,70 @@ function attribute(element, name) {
     );
 }
 
-function isErrorStatus(element, identifier) {
-    return element.type === 'JSXElement'
-        && element.openingElement.name.name === 'StatusMessage'
-        && attribute(element, 'variant')?.value?.value === 'error'
-        && references(element, identifier);
+// Where each local list is built: its initializer and every `name.push(...)`.
+// A FormErrorSummary takes such a list, so the guard follows the list back
+// to the form error it carries.
+function listSources(ast) {
+    const sources = new Map();
+    const add = (name, node) => sources.set(name, [...(sources.get(name) || []), node]);
+    walk(ast, (node) => {
+        if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
+            add(node.id.name, node.init);
+        }
+        if (node.type === 'CallExpression'
+            && node.callee.type === 'MemberExpression'
+            && node.callee.object.type === 'Identifier'
+            && node.callee.property.name === 'push') {
+            node.arguments.forEach((arg) => add(node.callee.object.name, arg));
+        }
+    });
+    return sources;
+}
+
+function referencesThroughLists(node, identifier, sources, seen = new Set()) {
+    if (references(node, identifier)) return true;
+    let found = false;
+    walk(node, (child) => {
+        if (found || child.type !== 'Identifier' || seen.has(child.name)) return;
+        const origins = sources.get(child.name);
+        if (!origins) return;
+        seen.add(child.name);
+        found = origins.some((origin) => referencesThroughLists(origin, identifier, sources, seen));
+    });
+    return found;
+}
+
+function isErrorStatus(element, identifier, sources = new Map()) {
+    if (element.type !== 'JSXElement') return false;
+    const name = element.openingElement.name.name;
+    if (name === 'StatusMessage') {
+        return attribute(element, 'variant')?.value?.value === 'error'
+            && references(element, identifier);
+    }
+    // The linked validation summary: every field error, form errors included.
+    if (name === 'FormErrorSummary') {
+        const errors = attribute(element, 'errors');
+        return Boolean(errors) && referencesThroughLists(errors.value, identifier, sources);
+    }
+    return false;
 }
 
 function formPages(file) {
     const source = readFileSync(file, 'utf8');
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
+    const sources = listSources(ast);
     const pages = [];
     walk(ast, (node) => {
-        if (node.type === 'JSXElement' && node.openingElement.name.name === 'FormPage') pages.push(node);
+        if (node.type === 'JSXElement' && node.openingElement.name.name === 'FormPage') {
+            pages.push(Object.assign(node, { listSources: sources }));
+        }
     });
     return pages;
+}
+
+function statusCarries(page, identifier) {
+    const status = attribute(page, 'status');
+    return Boolean(status) && referencesThroughLists(status, identifier, page.listSources);
 }
 
 describe('form-level error placement', () => {
@@ -68,17 +117,17 @@ describe('form-level error placement', () => {
             for (const page of formPages(file)) {
                 const status = attribute(page, 'status');
                 for (const identifier of ['formError', 'submitError']) {
-                    if (references(status, identifier)) {
+                    if (statusCarries(page, identifier)) {
                         let hasErrorStatus = false;
                         walk(status, (node) => {
-                            if (isErrorStatus(node, identifier)) hasErrorStatus = true;
+                            if (isErrorStatus(node, identifier, page.listSources)) hasErrorStatus = true;
                         });
                         if (!hasErrorStatus) adHoc.push(`${basename(file)}:${page.loc.start.line}:${identifier}`);
                     }
 
                     for (const child of page.children) {
                         walk(child, (node) => {
-                            if (isErrorStatus(node, identifier)) {
+                            if (isErrorStatus(node, identifier, page.listSources)) {
                                 misplaced.push(`${basename(file)}:${node.loc.start.line}:${identifier}`);
                             }
                             if (node.type === 'JSXAttribute'
@@ -111,7 +160,7 @@ describe('form-level error placement', () => {
 
         for (const [name, clearHandler] of files) {
             const pages = formPages(join(routesDir, name));
-            const candidates = pages.filter((candidate) => references(attribute(candidate, 'status'), 'formError'));
+            const candidates = pages.filter((candidate) => statusCarries(candidate, 'formError'));
             expect(candidates.length, `${name} formError status`).toBeGreaterThan(0);
             // A file may hold a read-only review page that shows formError with no
             // editable fields; the editable page is the one that must clear it.

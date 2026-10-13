@@ -1,126 +1,145 @@
-// Copyright © 2025-2026 Dankest, LLC
-// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, renderHook, waitFor } from '@testing-library/react';
 
-const { useFiatRate, useTickFiatRate } = vi.hoisted(() => ({
-    useFiatRate: vi.fn(),
-    useTickFiatRate: vi.fn(),
-}));
+const { unsubscribeSpies } = vi.hoisted(() => ({ unsubscribeSpies: [] }));
 
-vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
-    useFiatRate,
-    useTickFiatRate,
-}));
+vi.mock('../../../packages/core/src/flows/priceLookup.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        subscribeFiatRates(listener) {
+            const unsubscribe = vi.fn(actual.subscribeFiatRates(listener));
+            unsubscribeSpies.push(unsubscribe);
+            return unsubscribe;
+        },
+    };
+});
 
 const { useFeeFiat } = await import(
     '../../../packages/core/src/shared/hooks/useFeeFiat.js'
 );
+const {
+    configureFiatRateSource,
+    _resetPriceLookupForTests,
+} = await import('../../../packages/core/src/flows/priceLookup.js');
+
+const NOW = Date.parse('2026-10-12T12:00:00Z');
+const FRESH_TS = Math.floor(NOW / 1000) - 60;
+const EXPLORER = {
+    bitcoin: 'https://bitcoin.explorer.test',
+    litecoin: 'https://litecoin.explorer.test',
+};
+
+function venue() {
+    const calls = [];
+    configureFiatRateSource({
+        now: () => NOW,
+        explorerUrlByCoin: EXPLORER,
+        fetch: async (url) => {
+            calls.push(url);
+            if (url.includes('/api/price_snapshots/FINALIZED/status')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [
+                            { coin_pair: 'BTC/USD', price: '100000', block_timestamp: FRESH_TS },
+                            { coin_pair: 'LTC/USD', price: '100', block_timestamp: FRESH_TS },
+                            { coin_pair: 'XCHAIN/USD', price: '0.40', block_timestamp: FRESH_TS },
+                        ],
+                    }),
+                };
+            }
+            if (url.includes('api.coingecko.com')) {
+                return { ok: true, json: async () => ({ bitcoin: { eur: 90000 } }) };
+            }
+            throw new Error(`unexpected url ${url}`);
+        },
+    });
+    return calls;
+}
+
+const options = (overrides = {}) => ({
+    chainCoin: 'bitcoin',
+    nativeTicker: 'BTC',
+    settings: { fiatCurrency: 'USD', privacy: { priceDataEnabled: true } },
+    ...overrides,
+});
 
 beforeEach(() => {
+    unsubscribeSpies.length = 0;
+    _resetPriceLookupForTests();
+});
+
+afterEach(() => {
+    cleanup();
+    _resetPriceLookupForTests();
     vi.clearAllMocks();
-    useFiatRate.mockReturnValue(null);
-    useTickFiatRate.mockReturnValue(null);
 });
 
 describe('useFeeFiat', () => {
-    it('formats native and protocol fees with their independent rates', () => {
-        useFiatRate.mockReturnValue({ rate: 40_000, fiatCurrency: 'USD' });
-        useTickFiatRate.mockReturnValue({ rate: 0.75, fiatCurrency: 'USD' });
+    it('formats native and protocol fees with their own rates', async () => {
+        venue();
+        const { result } = renderHook(() => useFeeFiat(options()));
 
-        const { result } = renderHook(() => useFeeFiat({
-            chainCoin: 'bitcoin',
-            nativeTicker: 'BTC',
-            settings: { fiatCurrency: 'USD' },
-        }));
+        await waitFor(() => {
+            expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD');
+            expect(result.current.formatProtocolFee('5')).toBe('≈ $2.00 USD');
+        });
 
-        expect(result.current.formatNativeFee('0.00025')).toBe('≈ $10.00 USD');
-        expect(result.current.formatProtocolFee('2')).toBe('≈ $1.50 USD');
-        expect(useFiatRate).toHaveBeenCalledWith({
-            chainCoin: 'bitcoin',
-            fiatCurrency: 'USD',
-            allowCoingeckoFallback: true,
-        });
-        expect(useTickFiatRate).toHaveBeenCalledWith({
-            chainCoin: 'bitcoin',
-            tick: 'XCHAIN',
-            nativeTicker: 'BTC',
-            fiatCurrency: 'USD',
-            allowCoingeckoFallback: true,
-        });
+        expect(result.current.formatNativeFee('0')).toBeNull();
+        expect(result.current.formatNativeFee('not-a-number')).toBeNull();
     });
 
-    it('uses updated chain, ticker, currency, and privacy settings after rerender', () => {
-        const nativeRates = {
-            EUR: { rate: 2, fiatCurrency: 'EUR' },
-            GBP: { rate: 3, fiatCurrency: 'GBP' },
-        };
-        const protocolRates = {
-            EUR: { rate: 4, fiatCurrency: 'EUR' },
-            GBP: { rate: 5, fiatCurrency: 'GBP' },
-        };
-        useFiatRate.mockImplementation(({ fiatCurrency }) => nativeRates[fiatCurrency]);
-        useTickFiatRate.mockImplementation(({ fiatCurrency }) => protocolRates[fiatCurrency]);
+    it('refreshes formatters when chain and currency parameters change', async () => {
+        const calls = venue();
         const { result, rerender } = renderHook(
             (props) => useFeeFiat(props),
-            {
-                initialProps: {
-                    chainCoin: 'bitcoin',
-                    nativeTicker: 'BTC',
-                    settings: {
-                        fiatCurrency: 'EUR',
-                        privacy: { priceDataEnabled: false },
-                    },
-                },
-            },
+            { initialProps: options() },
         );
 
-        expect(result.current.formatNativeFee('2')).toBe('≈ €4.00 EUR');
-        expect(result.current.formatProtocolFee('2')).toBe('≈ €8.00 EUR');
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD'));
+        const bitcoinFormatter = result.current.formatNativeFee;
 
-        rerender({
-            chainCoin: 'litecoin',
-            nativeTicker: 'LTC',
-            settings: {
-                fiatCurrency: 'GBP',
-                privacy: { priceDataEnabled: true },
-            },
-        });
+        rerender(options({ chainCoin: 'litecoin', nativeTicker: 'LTC' }));
+        await waitFor(() => expect(result.current.formatNativeFee('0.01')).toBe('≈ $1.00 USD'));
+        expect(result.current.formatNativeFee).not.toBe(bitcoinFormatter);
 
-        expect(result.current.formatNativeFee('2')).toBe('≈ £6.00 GBP');
-        expect(result.current.formatProtocolFee('2')).toBe('≈ £10.00 GBP');
-        expect(useFiatRate).toHaveBeenLastCalledWith({
-            chainCoin: 'litecoin',
-            fiatCurrency: 'GBP',
-            allowCoingeckoFallback: true,
-        });
-        expect(useTickFiatRate).toHaveBeenLastCalledWith({
-            chainCoin: 'litecoin',
-            tick: 'XCHAIN',
-            nativeTicker: 'LTC',
-            fiatCurrency: 'GBP',
-            allowCoingeckoFallback: true,
-        });
+        rerender(options({
+            settings: { fiatCurrency: 'EUR', privacy: { priceDataEnabled: true } },
+        }));
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ €0.90 EUR'));
+        expect(result.current.formatProtocolFee('5')).toBeNull();
+        expect(calls.some((url) => url.includes('vs_currencies=eur'))).toBe(true);
     });
 
-    it('returns null when a rate or a positive finite value is unavailable', () => {
-        const { result, rerender } = renderHook(
-            ({ rate }) => {
-                useFiatRate.mockReturnValue(rate);
-                useTickFiatRate.mockReturnValue(rate);
-                return useFeeFiat();
-            },
-            { initialProps: { rate: null } },
+    it('honors privacy fallback changes and releases every subscription on unmount', async () => {
+        const calls = venue();
+        const { result, rerender, unmount } = renderHook(
+            (props) => useFeeFiat(props),
+            { initialProps: options() },
         );
 
-        expect(result.current.formatNativeFee('1')).toBeNull();
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBe('≈ $1.00 USD'));
 
-        rerender({ rate: { rate: 2, fiatCurrency: 'USD' } });
-        expect(result.current.formatNativeFee('0')).toBeNull();
-        expect(result.current.formatProtocolFee('-1')).toBeNull();
-        expect(result.current.formatProtocolFee('not-a-number')).toBeNull();
+        rerender(options({
+            settings: { fiatCurrency: 'EUR', privacy: { priceDataEnabled: false } },
+        }));
+        await waitFor(() => expect(result.current.formatNativeFee('0.00001')).toBeNull());
+        expect(calls.some((url) => url.includes('api.coingecko.com'))).toBe(false);
+
+        expect(unsubscribeSpies).toHaveLength(3);
+        expect(unsubscribeSpies.every((unsubscribe) => unsubscribe.mock.calls.length === 0)).toBe(true);
+        unmount();
+        expect(unsubscribeSpies.every((unsubscribe) => unsubscribe.mock.calls.length === 1)).toBe(true);
     });
 });

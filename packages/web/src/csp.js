@@ -20,13 +20,13 @@
 // built index.html (see vite.config.js) so it travels with the app.
 //
 // Notes on specific directives:
-//   - script-src 'self' + https://connect.trezor.io: bundled ES modules,
+//   - script-src 'self' + the configured Trezor Connect origin: bundled ES modules,
 //     plus Trezor's hosted Connect global build which we load at runtime
 //     instead of bundling the T-RSL-licensed @trezor/connect-web npm
 //     package (see signers/trezorFactory.js). No 'unsafe-inline' and no
 //     'unsafe-eval'; the crypto stack (@noble/hashes argon2id) is pure
 //     JS, so no wasm-unsafe-eval is required.
-//   - frame-src 'self' + https://connect.trezor.io: Trezor Connect runs
+//   - frame-src 'self' + the configured Trezor Connect origin: Trezor Connect runs
 //     its signing UI in a cross-origin iframe/popup it hosts. Without this
 //     the directive would fall back to default-src 'self' and block it.
 //   - style-src 'unsafe-inline': the UI uses React inline style attributes
@@ -45,6 +45,10 @@ import { WIRE_AUDIT } from '../../core/src/privacy/wireAudit.js';
 import { bitcoinDescriptors } from '../../core/src/registry/descriptors/bitcoin.js';
 import { dogecoinDescriptors } from '../../core/src/registry/descriptors/dogecoin.js';
 import { litecoinDescriptors } from '../../core/src/registry/descriptors/litecoin.js';
+import {
+    DEFAULT_MINER_URL,
+    TREZOR_CONNECT_ORIGIN,
+} from '../../core/src/branding/branding.js';
 
 // PROFILES (; rails §3 owns the names). The policy is not the
 // same on every shell, because the shells do not have the same capabilities.
@@ -57,9 +61,6 @@ import { litecoinDescriptors } from '../../core/src/registry/descriptors/litecoi
 // and one more thing to explain to an app-store reviewer.
 export const BUILD_PROFILES = Object.freeze(['default', 'store']);
 export const DEFAULT_BUILD_PROFILE = 'default';
-
-/** Trezor Connect's hosted origin: script AND frame, or its UI cannot run. */
-const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
 
 const CHAIN_DESCRIPTORS = [
     ...bitcoinDescriptors,
@@ -104,7 +105,7 @@ function connectSources() {
             ...configuredEndpointOrigins(),
             // Developer Mode exposes this fixed regtest-miner default beside
             // the descriptor-backed explorer, encoder, and hub endpoints.
-            'http://localhost:3005',
+            DEFAULT_MINER_URL,
             ...configuredExplorerSocketOrigins(),
         ]),
     ];

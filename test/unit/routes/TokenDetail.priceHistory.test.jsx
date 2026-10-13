@@ -12,20 +12,46 @@
 // price line only for the demo wallet. A real wallet with no real history
 // gets a plain message in the chart's place and no range tabs.
 
-import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
+
+const widgetFailure = vi.hoisted(() => ({ current: null }));
+let consoleError;
+const preventExpectedError = (event) => event.preventDefault();
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
     const actual = await importOriginal();
     return { ...actual, isDemoWallet: (id) => id === 'demo-wallet' };
 });
 
+vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        Sparkline: (props) => {
+            if (widgetFailure.current === 'market') throw new Error('token market panel failed');
+            return React.createElement(actual.Sparkline, props);
+        },
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
-afterEach(() => { cleanup(); __clearTokenInfoCache(); });
+beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.addEventListener('error', preventExpectedError);
+});
+
+afterEach(() => {
+    widgetFailure.current = null;
+    cleanup();
+    __clearTokenInfoCache();
+    window.removeEventListener('error', preventExpectedError);
+    consoleError.mockRestore();
+});
 
 let savedResizeObserver;
 beforeAll(() => {
@@ -139,5 +165,18 @@ describe('TokenDetail price history', () => {
         expect(await screen.findByText('Price (DEX)')).toBeTruthy();
         expect(screen.getByText('$2.00')).toBeTruthy();
         expect(screen.getByText(/DEX price/)).toBeTruthy();
+    });
+
+    it('keeps token details usable when the market panel throws and retries it inline', async () => {
+        widgetFailure.current = 'market';
+        renderDetail('demo-wallet');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not load this section.');
+        expect(screen.getByRole('group', { name: 'Quick actions' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+
+        widgetFailure.current = null;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByRole('img', { name: /^Price trend/ })).toBeInTheDocument();
     });
 });
