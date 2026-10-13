@@ -13,6 +13,7 @@ import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
+import { resolveBindings } from '../keyboard/shortcuts.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
@@ -32,7 +33,11 @@ import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    NUMBER_FORMAT_DEFAULT,
+    SMALL_BALANCE_THRESHOLD_DEFAULT,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import {
     clearActiveWallet,
     writeActiveWallet,
@@ -83,6 +88,7 @@ export function Settings({
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
+    const [walletManagementBusy, setWalletManagementBusy] = useState(false);
 
     const { settings } = useSettings();
 
@@ -97,24 +103,28 @@ export function Settings({
 
     const handleWalletRemoved = useCallback(async (removedWalletId) => {
         clearActiveWallet();
-        if (typeof messaging?.listWallets !== 'function') {
-            throw new Error('Could not refresh the wallet list.');
-        }
+        try {
+            // Require a fresh list before selecting a replacement wallet.
+            if (typeof messaging?.listWallets !== 'function') {
+                throw new Error('Could not refresh the wallet list.');
+            }
+            const listed = await messaging.listWallets();
+            const wallets = Array.isArray(listed) ? listed : listed?.wallets;
+            // Reject unknown response shapes so an empty-looking result cannot wipe a real vault.
+            if (!Array.isArray(wallets)) {
+                throw new Error('Could not refresh the wallet list.');
+            }
 
-        const listed = await messaging.listWallets();
-        const wallets = Array.isArray(listed) ? listed : listed?.wallets;
-        if (!Array.isArray(wallets)) {
-            throw new Error('Could not refresh the wallet list.');
+            const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
+            if (nextWallet) {
+                writeActiveWallet(nextWallet.id);
+            } else {
+                await wipeWalletStorage();
+            }
+        } finally {
+            // Reload even when fallback selection fails so no live screen keeps the removed wallet selected.
+            reload();
         }
-
-        const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
-        if (nextWallet) {
-            writeActiveWallet(nextWallet.id);
-        } else {
-            await wipeWalletStorage();
-        }
-
-        reload();
     }, [messaging, reload]);
 
     const walletLabel = activeWallet?.name || 'No wallet';
@@ -129,7 +139,7 @@ export function Settings({
             keywords: 'wallet name switch rename remove delete destroy upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved },
+            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved, onBusyChange: setWalletManagementBusy },
             summary: walletLabel,
         },
         {
@@ -153,8 +163,8 @@ export function Settings({
         {
             id: 'display',
             title: 'Display',
-            description: 'Pinned and hidden tokens: reorder pinned, bulk-unhide hidden.',
-            keywords: 'display pinned hidden tokens reorder unhide bulk star',
+            description: 'Balance thresholds, number formatting, pinned and hidden tokens.',
+            keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
             searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
             kind: 'internal-drill',
             Component: DisplaySection,
@@ -180,8 +190,8 @@ export function Settings({
         {
             id: 'privacy',
             title: 'Privacy',
-            description: 'Tor, change-address rotation, hide small balances, blur on blur, labels survive restore.',
-            keywords: 'privacy tor routing change address rotation hide small balances blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
+            description: 'Tor, change-address rotation, blur on blur, labels survive restore.',
+            keywords: 'privacy tor routing change address rotation blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
             kind: 'internal-drill',
             Component: PrivacySection,
             summary: privacySummary(settings),
@@ -198,7 +208,7 @@ export function Settings({
         {
             id: 'wallet-mode',
             title: 'Wallet Mode',
-            description: 'Full / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
+            description: 'Normal / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
             Component: WalletModeSection,
@@ -335,6 +345,7 @@ export function Settings({
             const subpageHeader = (
                 <PageHeader
                     onBack={() => setSubpageId(null)}
+                    backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel="Back to settings"
                     title={section.title}
                 />
@@ -535,7 +546,7 @@ function privacySummary(settings) {
     // Mirrors the switches PrivacySection renders. Tor routing is counted
     // only where the shell can proxy; elsewhere its switch is inert.
     // Switches that default on read as on until stored false.
-    const offByDefault = ['changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
+    const offByDefault = ['changeAddressRotation', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
     const onByDefault = ['hapticsEnabled', 'priceDataEnabled', 'metadataFetchEnabled'];
     if (shellCapabilities().socksProxy) offByDefault.unshift('torRouting');
     const onCount = offByDefault.filter((k) => p[k] === true).length
@@ -554,23 +565,30 @@ function displaySummary(settings) {
     if (!settings) return '-';
     const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
     const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
-    if (pinned === 0 && hidden === 0) return 'No customization';
     const parts = [];
     if (pinned > 0) parts.push(`${pinned} pinned`);
     if (hidden > 0) parts.push(`${hidden} hidden`);
+    if (settings.privacy?.hideSmallBalances === true) {
+        const threshold = settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT;
+        parts.push(threshold === 'dust' ? 'Dust hidden' : `<${threshold} hidden`);
+    }
+    if ((settings.numberFormat || NUMBER_FORMAT_DEFAULT) !== NUMBER_FORMAT_DEFAULT) {
+        parts.push(settings.numberFormat === 'trim' ? 'Trimmed numbers' : 'Plain numbers');
+    }
+    if (parts.length === 0) return 'No customization';
     return parts.join(' · ');
 }
 
 function keyboardSummary(settings) {
     if (!settings) return '-';
-    const n = Object.keys(settings.keyboard?.bindings || {}).length;
+    const n = resolveBindings(settings.keyboard?.bindings).filter((shortcut) => shortcut.overridden).length;
     return n === 0 ? 'Defaults' : `${n} custom`;
 }
 
 function walletModeSummary(settings) {
     if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return 'Full';
+    if (mode === 'full') return 'Normal';
     if (mode === 'watcher') return 'Watcher (watch-only)';
     if (mode === 'signer') return 'Signer (air-gapped)';
     return mode;

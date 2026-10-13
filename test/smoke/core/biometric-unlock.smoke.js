@@ -158,11 +158,12 @@ assert.equal(globalThis.localStorage.getItem('xchain-wallet:biometric'), null);
 // --- corruption tolerance --------------------------------------------
 
 globalThis.localStorage.setItem('xchain-wallet:biometric', '{ not json');
-assert.equal(isBiometricRegistered(), true, 'malformed but truthy raw → registered hint stays true');
+assert.equal(isBiometricRegistered(), false, 'malformed record is not an enrollment');
 await assert.rejects(unlockWithBiometric(), /BiometricNotRegisteredError|biometricUnlock/);
 
 clearBiometricCredential();
 globalThis.localStorage.setItem('xchain-wallet:biometric', JSON.stringify({ credentialId: 1 }));
+assert.equal(isBiometricRegistered(), false, 'incomplete record is not an enrollment');
 await assert.rejects(unlockWithBiometric(), /BiometricNotRegisteredError|biometricUnlock/);
 
 // --- support probe negatives -----------------------------------------

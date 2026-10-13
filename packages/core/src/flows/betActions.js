@@ -26,6 +26,7 @@
 // a payout decision.
 
 import { submitAction } from './submitAction.js';
+import { buildActionPsbt } from './buildActionPsbt.js';
 import { normalizeSource } from './sendToken.js';
 import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
 
@@ -103,6 +104,42 @@ function submitBet(opts, builderName, buildInput, summary) {
         waitOpts: opts.waitOpts,
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
+    });
+}
+
+/**
+ * Build the same BET params as the signing lane, then encode them without a
+ * signer for watcher mode.
+ *
+ * @param {BetActionOpts & { builder: string }} opts
+ */
+export function buildBetActionPsbt(opts) {
+    if (!opts) throw new Error('buildBetActionPsbt: opts is required');
+    if (!opts.sdkRegistry) throw new Error('buildBetActionPsbt: sdkRegistry is required');
+    if (!opts.chainId) throw new Error('buildBetActionPsbt: chainId is required');
+    const sdk = opts.sdkRegistry.get(opts.chainId);
+    const builders = ['createMarketParams', 'placeBetParams', 'resolveMarketParams', 'cancelMarketParams', 'editFeedListsParams'];
+    if (!builders.includes(opts.builder)) {
+        throw new Error(`buildBetActionPsbt: unknown builder "${opts.builder}"`);
+    }
+    const params = opts.builder === 'editFeedListsParams'
+        ? buildEditFeedListsParams(sdk, opts.params)
+        : sdk?.betting?.[opts.builder]?.(opts.params);
+    if (!params) {
+        throw new Error(`buildBetActionPsbt: sdk.betting.${opts.builder} is unavailable`);
+    }
+    return buildActionPsbt({
+        chainRegistry: opts.chainRegistry,
+        sdkRegistry: opts.sdkRegistry,
+        chainId: opts.chainId,
+        from: opts.from,
+        actionData: { action: 'BET', params },
+        encoderOpts: {
+            ...(opts.fee !== undefined && { fee: opts.fee }),
+            ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+            ...(opts.rbf !== undefined && { rbf: opts.rbf }),
+            ...(opts.payFeeInNativeCoin !== undefined && { payFeeInNativeCoin: opts.payFeeInNativeCoin }),
+        },
     });
 }
 

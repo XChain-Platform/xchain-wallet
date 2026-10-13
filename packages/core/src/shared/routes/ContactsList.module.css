@@ -241,7 +241,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -355,7 +355,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -417,7 +417,7 @@
     border: 1px solid var(--xc-danger);
     border-radius: var(--xc-radius-sm);
     background: transparent;
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     cursor: pointer;
 }
 
@@ -529,7 +529,7 @@
     min-height: var(--xc-tap-min);
     background: transparent;
     border: 0;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font: inherit;
     cursor: pointer;
     padding: 0;

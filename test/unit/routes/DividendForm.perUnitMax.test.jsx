@@ -222,6 +222,21 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('keeps a fractional indivisible-token payout out of review', async () => {
+        const messaging = mountDividend({
+            balance: '10',
+            holders: [{ address: HOLDER, amount: '3' }],
+            divisibility: 0,
+        });
+        await pickDividendToken();
+        fireEvent.change(await amountField(), { target: { value: '1.5' } });
+        fireEvent.click(submitButton());
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Per-unit amount must be a whole number because XCHAIN is indivisible.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('lets a payable rate through to composing', async () => {
         const messaging = mountDividend();
         await pickDividendToken();

@@ -25,6 +25,9 @@ describe('PanicModeRow borders', () => {
         const activate = screen.getByRole('button', { name: 'Activate' });
         expect(activate.style.border).toContain('var(--xc-danger)');
         fireEvent.click(activate);
+        const confirm = screen.getByRole('button', { name: 'Confirm 24-hour freeze' });
+        expect(confirm.style.border).toContain('var(--xc-danger)');
+        fireEvent.click(confirm);
         const deactivate = screen.getByRole('button', { name: 'Deactivate' });
         expect(deactivate.style.border).toContain('var(--xc-border-strong)');
         expect(warn).not.toHaveBeenCalled();

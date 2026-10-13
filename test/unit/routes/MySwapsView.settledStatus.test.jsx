@@ -202,3 +202,17 @@ describe('deriveStatus with swap_status', () => {
         expect(deriveStatus({ ...base, row }, new Set(), 1000)).toBe('expired');
     });
 });
+
+describe('MySwapsView expiration display', () => {
+    it('does not render a millisecond value as an expiration thousands of years away', async () => {
+        const { messaging } = harness({
+            swaps: [swapRow(730)],
+            details: { 730: swapDetail(730, 'open', String(Date.now())) },
+        });
+        const utils = await open(messaging);
+        const list = section(utils, 'Open swaps');
+        const row = rowFor(list, 730);
+
+        expect(within(row).queryByText(/^Expires /)).toBeNull();
+    });
+});

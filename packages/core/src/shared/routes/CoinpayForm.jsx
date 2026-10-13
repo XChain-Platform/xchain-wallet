@@ -551,7 +551,7 @@ export function CoinpayForm({
                                                 <> · expires {coinpayExpiryText(row.obligation.expiration)}</>
                                             ) : null}
                                             {classifyObligation(row.obligation.expiration).state === 'expired' ? (
-                                                <strong style={{ color: 'var(--xc-danger)' }}> · EXPIRED, do not pay</strong>
+                                                <strong style={{ color: 'var(--xc-danger-fg)' }}> · EXPIRED, do not pay</strong>
                                             ) : null}
                                         </div>
                                     </button>

@@ -83,7 +83,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     // Faster poll than the app-level badge: this screen is the user
     // actively watching deadlines.
-    const { obligations, scanning, refresh } = useCoinpayObligations(
+    const { obligations, scanning, error: scanError, refresh } = useCoinpayObligations(
         walletId,
         activeAccountId,
         { pollMs: 30_000 },
@@ -143,7 +143,11 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!scanning && classified.length === 0 ? (
+                {scanError ? (
+                    <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
+                ) : null}
+
+                {!scanning && !scanError && classified.length === 0 ? (
                     <EmptyState
                         icon={<Icon.ClockIcon />}
                         title="No payments due"
