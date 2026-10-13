@@ -1,12 +1,12 @@
 .hero {
-    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, color-mix(in srgb, var(--xc-accent-primary) 80%, #000) 100%);
-    color: #FFFFFF;
+    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%);
+    color: var(--xc-on-accent);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-2) var(--xc-space-3);
     display: flex;
     flex-direction: column;
     gap: 2px;
-    box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--xc-accent-primary) 25%, transparent);
     margin-bottom: var(--xc-space-3);
 }
 .hero:last-child { margin-bottom: 0; }
@@ -23,13 +23,13 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.85);
+    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
 }
 
 .scope {
     font-weight: 500;
     margin-inline-start: 4px;
-    color: rgba(255, 255, 255, 0.6);
+    color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
     text-transform: none;
     letter-spacing: 0;
 }
@@ -42,9 +42,9 @@
 
 .eye {
     appearance: none;
-    background: rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
     border: none;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -54,16 +54,16 @@
     cursor: pointer;
 }
 .eye svg { width: 14px; height: 14px; }
-.eye:hover { background: rgba(255, 255, 255, 0.25); }
+.eye:hover { background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent); }
 .eye:focus-visible {
-    outline: 2px solid #FFFFFF;
+    outline: 2px solid var(--xc-on-accent);
     outline-offset: 2px;
 }
 
 .figure {
     font-size: 28px;
     font-weight: 800;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     line-height: 1.1;
     margin-top: 4px;
 }
@@ -71,7 +71,7 @@
 .delta {
     font-size: 13px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
 }
 
 /* Engines disagree on whether gradients survive forced-colors mode, so pin

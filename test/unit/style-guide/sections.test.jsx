@@ -8,10 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, expect, it, vi } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { SECTIONS } from '../../../packages/web/src/style-guide/StyleGuidePage.jsx';
 import { VIEWS, ViewContext } from '../../../packages/web/src/style-guide/frames.jsx';
+
+const root = resolve(import.meta.dirname, '../../..');
+const styleGuideRoot = join(root, 'packages/web/src/style-guide');
+const THEMES = ['light', 'dark'];
 
 vi.mock('../../../packages/web/src/style-guide/frames.jsx', async (importOriginal) => {
     const frames = await importOriginal();
@@ -24,16 +30,57 @@ vi.mock('../../../packages/web/src/style-guide/frames.jsx', async (importOrigina
     };
 });
 
-describe.each(Object.values(VIEWS))('$label style-guide sections', ({ id: view }) => {
-    it.each(SECTIONS)('$label renders with a heading', ({ id, Component }) => {
-        render(
-            <ViewContext.Provider value={view}>
-                <Component />
-            </ViewContext.Provider>,
+afterEach(() => {
+    document.documentElement.removeAttribute('data-xc-theme');
+});
+
+describe.each(THEMES)('%s theme', (theme) => {
+    describe.each(Object.values(VIEWS))('$label style-guide sections', ({ id: view }) => {
+        it('renders every section with a heading', () => {
+            document.documentElement.setAttribute('data-xc-theme', theme);
+
+            const { container } = render(
+                <ViewContext.Provider value={view}>
+                    {SECTIONS.map(({ id, Component }) => <Component key={id} />)}
+                </ViewContext.Provider>,
+            );
+
+            for (const { id } of SECTIONS) {
+                const section = container.querySelector(`#${id}`);
+                expect(section, id).not.toBeNull();
+                expect(section.querySelector(':scope > h2'), id).toHaveTextContent(/\S/);
+            }
+        });
+    });
+});
+
+describe('style-guide theme colors', () => {
+    it('resolves every CSS token and keeps theme surfaces free of raw colors', () => {
+        const sectionRoot = join(styleGuideRoot, 'sections');
+        const cssPaths = [
+            join(styleGuideRoot, 'style-guide.css'),
+            ...readdirSync(sectionRoot)
+                .filter((file) => file.endsWith('.css'))
+                .map((file) => join(sectionRoot, file)),
+        ];
+        const tokens = readFileSync(join(root, 'packages/core/src/ui/tokens.css'), 'utf8');
+        const declaredTokens = new Set(
+            [...tokens.matchAll(/(--xc-[\w-]+)\s*:/g)].map((match) => match[1]),
         );
 
-        const section = document.getElementById(id);
-        expect(section).toBeInTheDocument();
-        expect(section.querySelector(':scope > h2')).toHaveTextContent(/\S/);
+        for (const path of cssPaths) {
+            const css = readFileSync(path, 'utf8');
+            for (const [, token] of css.matchAll(/var\((--xc-[\w-]+)/g)) {
+                expect(declaredTokens.has(token), `${path}: ${token}`).toBe(true);
+            }
+        }
+
+        for (const path of [
+            join(styleGuideRoot, 'style-guide.css'),
+            join(sectionRoot, 'AccentBorderedCardSection.module.css'),
+        ]) {
+            const css = readFileSync(path, 'utf8');
+            expect(css, path).not.toMatch(/#[\da-f]{3,8}\b|\brgba?\(|\bhsla?\(/i);
+        }
     });
 });

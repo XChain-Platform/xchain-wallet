@@ -75,7 +75,7 @@ body {
 }
 
 .sg-section > h2 .sg-h2-tag {
-    color: var(--xc-success, #2da44e);
+    color: var(--xc-success);
     font-size: 12px;
     font-weight: 600;
 }
@@ -107,7 +107,7 @@ body {
     color: var(--xc-text);
 }
 
-.sg-guide dt.do { color: var(--xc-success, #2da44e); }
+.sg-guide dt.do { color: var(--xc-success); }
 .sg-guide dt.dont { color: var(--xc-danger-fg); }
 
 .sg-guide dd {
@@ -118,7 +118,7 @@ body {
 }
 
 .sg-guide dd code {
-    background: rgba(127, 127, 127, 0.15);
+    background: color-mix(in srgb, var(--xc-text) 15%, transparent);
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 0.88em;
@@ -128,13 +128,13 @@ body {
     margin-top: 12px;
     padding: 10px 14px;
     border-radius: 6px;
-    background: color-mix(in srgb, var(--xc-warning, #d29922) 10%, transparent);
+    background: color-mix(in srgb, var(--xc-warning) 10%, transparent);
     font-size: 12.5px;
     color: var(--xc-text);
 }
 
 .sg-supersedes code {
-    background: rgba(127, 127, 127, 0.15);
+    background: color-mix(in srgb, var(--xc-text) 15%, transparent);
     padding: 1px 5px;
     border-radius: 3px;
 }
@@ -144,8 +144,8 @@ body {
 }
 
 .sg-markup pre {
-    background: #0a0d12;
-    color: #c9d1d9;
+    background: var(--xc-text);
+    color: var(--xc-bg);
     border: 1px solid var(--xc-border);
     border-radius: 6px;
     padding: 14px 16px;
