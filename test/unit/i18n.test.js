@@ -233,6 +233,42 @@ describe('translations', () => {
         expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
     });
 
+    it('keeps localized A-to-M route copy plain and consistent', () => {
+        expect({
+            networkSettings: en['common.openNetworkSettings'],
+            unavailable: en['common.notAvailable'],
+            watcher: en['common.watcherBuildsUnsigned'],
+            multisigAvailability: en['multisig.share.availability'],
+            signerRegion: en['home.signer.region'],
+            signerBody: en['home.signer.body'],
+            argumentCount: en['execute.review.args'],
+            arguments: en['execute.params'],
+            optionalArguments: en['execute.paramsOptional'],
+            argumentHint: en['execute.paramsHint'],
+            savedPackKey: en['gatedPublish.watcherSavedKey'],
+            watcherPackKey: en['gatedPublish.watcherHint'],
+            importOptions: en['importWallet.lane'],
+            historySearch: en['history.filters.searchPlaceholder'],
+            peerError: en['history.detail.peerError'],
+        }).toEqual({
+            networkSettings: 'Open network settings',
+            unavailable: 'Not available',
+            watcher: 'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
+            multisigAvailability: 'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
+            signerRegion: 'Signer mode home',
+            signerBody: "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
+            argumentCount: '{count, plural, one { with # argument} other { with # arguments}}',
+            arguments: 'Arguments',
+            optionalArguments: 'Arguments (optional)',
+            argumentHint: 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
+            savedPackKey: 'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
+            watcherPackKey: 'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
+            importOptions: 'Wallet import options',
+            historySearch: 'Search action, address, token, transaction ID, memo…',
+            peerError: "Couldn't load the linked transaction. Try again.",
+        });
+    });
+
     it('looks up English keys and exposes unknown keys', () => {
         expect(t('scan.title')).toBe('Scan');
         expect(t('missing.unit.key')).toBe('missing.unit.key');

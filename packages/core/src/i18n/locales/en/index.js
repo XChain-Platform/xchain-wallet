@@ -42,7 +42,7 @@ export const en = {
     'common.clear': 'Clear',
     'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
-    'common.openNetworkSettings': 'Open Network settings',
+    'common.openNetworkSettings': 'Open network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
@@ -51,11 +51,11 @@ export const en = {
     'common.edit': 'Edit',
     'common.estimateUnavailable': 'Estimate unavailable',
     'common.networkFeeUnavailable': 'Network fee estimate unavailable.',
-    'common.notAvailable': 'n/a',
+    'common.notAvailable': 'Not available',
     'common.preview': 'Preview',
     'common.review': 'Review',
     'common.watcherBuildsUnsigned':
-        'Watcher mode: this wallet will build an unsigned transaction. Sign it on your Signer-mode wallet, then bring the signed transaction to a Full-mode wallet to broadcast.',
+        'Watcher mode: this wallet builds an unsigned transaction. Sign it with your signer wallet, then bring the signed transaction to a wallet that can broadcast it.',
     'common.contactName': 'Contact name',
 
     // --- shared components ---------------------------------------
@@ -159,7 +159,7 @@ export const en = {
     'multisig.share.instructions':
         'Give these values to the person creating the multisig. In their wallet they add a cosigner with origin "External xpub" and paste each one into the field of the same name. They are public keys: they show the shared address but can\'t spend from it.',
     'multisig.share.availability':
-        'Only software-seed addresses can be shared here. A watch-only address has no signing key, and a hardware address must be exported using the hardware device or its companion wallet.',
+        'Only addresses from a software wallet can be shared here. A watch-only wallet has no signing key, and a hardware wallet must export this information from the device or its companion app.',
     'multisig.share.address': 'Address to share',
     'multisig.share.selectAddress': 'Select address',
     'multisig.share.payload': 'Share payload',
@@ -281,10 +281,10 @@ export const en = {
     'home.sendOffline': 'Send needs a network connection',
     'home.settings': 'Settings',
     'home.lockWallet': 'Lock wallet',
-    'home.signer.region': 'Signer-mode home',
+    'home.signer.region': 'Signer mode home',
     'home.signer.title': 'Signer mode',
     'home.signer.body':
-        "This wallet only signs transactions from a paired Watcher wallet. Send / Receive / balances aren't available. Switch the wallet's mode in Settings → Wallet Mode if you want full-wallet behaviour back.",
+        "This wallet signs transactions from a paired watcher wallet. Sending, receiving, and balances aren't available. To use them on this device, switch modes under Settings → Wallet mode.",
     'home.signer.signTransaction': 'Sign a transaction',
     'home.signer.signMessage': 'Sign a message',
     'home.signer.verifySignature': 'Verify a signature',
@@ -298,11 +298,11 @@ export const en = {
     'execute.review.summary.deposit':
         'Deposit {quantity} {tick}, then call {method}{args} on contract #{contract}.',
     'execute.review.summary.call': 'Call {method}{args} on contract #{contract}.',
-    'execute.review.args': '{count, plural, one { with # arg} other { with # args}}',
+    'execute.review.args': '{count, plural, one { with # argument} other { with # arguments}}',
     'execute.contract': 'Contract',
     'execute.deposit': 'Deposit',
     'execute.method': 'Method',
-    'execute.params': 'Params',
+    'execute.params': 'Arguments',
     'execute.protocolFee': 'Protocol fee',
     'execute.protocolFee.native': 'Paid in {coin}',
     'execute.protocolFee.xchain': 'Paid from your XCHAIN balance',
@@ -312,8 +312,8 @@ export const en = {
     'execute.caller': 'Caller',
     'execute.enterMethodManually': 'Enter method manually',
     'execute.methodHint': 'Name of the contract method to call.',
-    'execute.paramsOptional': 'Params (optional)',
-    'execute.paramsHint': 'Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods.',
+    'execute.paramsOptional': 'Arguments (optional)',
+    'execute.paramsHint': 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
     'execute.useDeclaredMethods': 'Use declared methods',
     'execute.depositOptional': 'Deposit (optional)',
     'execute.noDeposit': 'No deposit',
@@ -327,7 +327,7 @@ export const en = {
     'gatedPublish.review.title': 'Review gated publish',
     'gatedPublish.title': 'Gated content · {tick}',
     'gatedPublish.watcherSavedKey':
-        'The pack key is saved in this wallet. Sign the transaction on your Signer wallet, then broadcast it from a Full-mode wallet.',
+        'The pack key is saved in this wallet. Sign the transaction with your signer wallet, then broadcast it from a wallet that can send it to the network.',
     'gatedPublish.queuedWhat': 'gated file publish',
     'gatedPublish.success': 'Encrypted file published',
     'gatedPublish.transaction': 'Transaction:',
@@ -352,7 +352,7 @@ export const en = {
     'gatedPublish.permanentHint':
         "Permanent: the encrypted bytes live on-chain forever and the gate can't be removed later, only the key re-shared. One transaction publishes the file and records your recovery copy of the key; there is no key-less window.",
     'gatedPublish.watcherHint':
-        'Watcher mode: this builds an unsigned transaction. The pack key stays in THIS wallet either way.',
+        'Watcher mode: this builds an unsigned transaction. The pack key stays in this wallet either way.',
     'gatedPublish.gatedContent': 'Gated content',
     'gatedPublish.formHint.beforeToken': 'Publish a file that only holders of',
     'gatedPublish.formHint.afterToken':
@@ -395,7 +395,7 @@ export const en = {
     'governance.closesAtBlock': 'Closes at block {block}',
 
     // --- wallet import -------------------------------------------
-    'importWallet.lane': 'Import lane',
+    'importWallet.lane': 'Wallet import options',
     'importWallet.recoveryPhrase': 'Recovery phrase',
     'importWallet.encryptedBackup': 'Encrypted backup',
     'importWallet.browse': 'Browse',
@@ -761,7 +761,7 @@ export const en = {
         'Activity appears here after you send or receive on a selected chain.',
     'history.filters.label': 'History filters',
     'history.filters.toggle': 'Filters ({count})',
-    'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
+    'history.filters.searchPlaceholder': 'Search action, address, token, transaction ID, memo…',
     'history.filters.searchLabel': 'Search history',
     'history.filters.clearSearch': 'Clear history search',
     'history.filters.fromDate': 'From date',
@@ -801,7 +801,7 @@ export const en = {
     'history.detail.copyRawJson': 'Copy raw JSON',
     'history.detail.peerHeading': 'Peer · {ticker} #{index}',
     'history.detail.loadingPeer': 'Loading the linked transaction…',
-    'history.detail.peerError': "Couldn't load peer: {error}",
+    'history.detail.peerError': "Couldn't load the linked transaction. Try again.",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
     'history.detail.peerUnavailableTitle': 'Peer chain unavailable',
     'history.detail.peerUnavailable':

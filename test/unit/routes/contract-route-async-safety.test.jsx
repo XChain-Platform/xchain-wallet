@@ -121,7 +121,7 @@ describe('contract route request isolation', () => {
 
         expect(screen.queryByLabelText('limit (number)')).toBeNull();
         expect(screen.getByLabelText('Method')).toHaveValue('');
-        expect(screen.getByLabelText('Params (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue('');
     });
 
     it('clears positional values whenever a different declared method is selected', async () => {
