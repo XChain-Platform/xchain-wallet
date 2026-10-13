@@ -126,7 +126,7 @@ describe('CreateOrderForm coverage', () => {
         await renderForm();
 
         fireEvent.click(screen.getByRole('button', { name: 'Place order' }));
-        expect(await screen.findByText('Enter the ticker you are offering.')).toBeInTheDocument();
+        expect(await screen.findByText('Enter the ticker to give.')).toBeInTheDocument();
 
         fillBasicOrder();
         fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bad|address' } });
