@@ -1,5 +1,8 @@
 .gridPopup {
     list-style: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     padding: var(--xc-space-3);
     margin: 0 0 var(--xc-space-3);
     display: grid;
@@ -12,6 +15,9 @@
 
 .gridFull {
     list-style: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     padding: var(--xc-space-4);
     margin: 0;
     display: grid;
@@ -42,8 +48,10 @@
 .index {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    min-width: 16px;
+    flex: 0 0 2ch;
+    min-width: 2ch;
     text-align: end;
     user-select: none;
 }
@@ -55,4 +63,17 @@
     font-weight: 500;
     min-width: 0;
     overflow-wrap: anywhere;
+}
+
+@media (max-width: 359px) {
+    .gridPopup,
+    .gridFull {
+        padding: var(--xc-space-2);
+        gap: var(--xc-space-1);
+    }
+
+    .cell {
+        gap: var(--xc-space-1);
+        padding: var(--xc-space-1);
+    }
 }

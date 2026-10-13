@@ -25,6 +25,7 @@ import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault
 import { installKeyboardViewport } from './platform/keyboardViewport.js';
 import { installShellErrorCapture } from './errorCapture.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
+import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.jsx';
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
@@ -115,13 +116,16 @@ const floor = checkWebViewFloor();
 // of this file). Nothing to do here but leave its panel alone.
 if (globalThis.__xchainBootFloor?.blocked) {
     console.warn('web: boot floor refused this engine before the bundle loaded');
+    hideNativeSplash();
 } else if (nativeShellIsBroken()) {
     renderBlockingPanel('XChain Wallet cannot open on this device', BROKEN_SHELL_MESSAGE);
+    hideNativeSplash();
 } else if (!floor.usable) {
     renderBlockingPanel(
         'This device cannot run XChain Wallet safely',
         floorFailureMessage(floor),
     );
+    hideNativeSplash();
 } else {
     if (floor.stale) {
         // Advice, not a gate. Logged rather than modal: the wallet works, and
@@ -129,6 +133,6 @@ if (globalThis.__xchainBootFloor?.blocked) {
         // ships with the OS and "just update it" is not one tap.
         console.warn(`[web] ${floorStaleMessage(floor)}`);
     }
-    createRoot(container).render(<App />);
+    createRoot(container).render(<><App /><NativeShellReady /></>);
     deferNonCriticalWork(syncChainRegistry);
 }

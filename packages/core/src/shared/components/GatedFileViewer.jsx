@@ -173,7 +173,14 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     if (!bytes) {
         body = <p className={styles.notice}>Could not decode the unlocked bytes.</p>;
     } else if (imageUrl) {
-        body = <img className={styles.image} src={imageUrl} alt={name || 'Unlocked gated image'} />;
+        body = (
+            <img className={styles.image} src={imageUrl}
+                alt={name || 'Unlocked gated image'}
+                loading="lazy"
+                decoding="async"
+                style={{ aspectRatio: '1 / 1', objectFit: 'contain' }}
+            />
+        );
     } else if (text !== null) {
         body = <pre className={styles.text}>{text}</pre>;
     } else if (sniffed.kind === 'pdf') {
