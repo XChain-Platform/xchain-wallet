@@ -77,6 +77,8 @@ describe('ConnectedSitesSection settings controls', () => {
         render(<ConnectedSitesSection />);
 
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Connected sites and dApp permissions' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Connected sites' })).toBeTruthy();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
     });
 

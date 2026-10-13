@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, FormSection, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -288,8 +288,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             title="Dispenser explorer"
         />
     );
-    const toolbar = (
-        <form className={local.searchForm} onSubmit={handleSearch} noValidate>
+    const searchForm = (
+        <FormPage className={local.searchForm} onSubmit={handleSearch} sectioned label="Find open dispensers">
+            <FormSection title="Find open dispensers">
                 <div className={local.searchModes}>
                     <Input
                         type="radio"
@@ -368,12 +369,14 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searchDisabledReason}
                     </p>
                 ) : null}
-        </form>
+            </FormSection>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar}>
+            <ListPage>
+            {searchForm}
             {lastQueried ? (
                 <ResultsPane
                     rowsByChain={rowsByChain}

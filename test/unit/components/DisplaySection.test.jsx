@@ -53,6 +53,8 @@ describe('DisplaySection', () => {
         const messaging = setup();
         const hide = await screen.findByRole('switch', { name: 'Hide small balances' });
 
+        expect(screen.getByRole('group', { name: 'Display settings' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Display options' })).toBeTruthy();
         fireEvent.click(hide);
         const threshold = screen.getByRole('combobox', { name: 'Small-balance threshold' });
         const numberFormat = screen.getByRole('combobox', { name: 'Balance number format' });
