@@ -484,8 +484,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                             multisigChainId={multisigChainId}
                             emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
                             emptyBody={networkFilter === 'all'
-                                ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
-                                : 'Coins on this network appear here after this wallet receives them.'}
+                                ? 'Coins appear here after you receive Bitcoin, Litecoin, or Dogecoin.'
+                                : 'Coins on this network appear here after you receive them.'}
                             onReceive={networkFilter === 'all' ? onReceive : undefined}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}
@@ -510,10 +510,10 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 ? 'No matching tokens'
                                 : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
                             emptyBody={tokenQueryTrim
-                                ? `No held tokens match "${tokenQuery.trim()}".`
+                                ? 'Matching tokens appear here after you change or clear the filter.'
                                 : (networkFilter === 'all'
-                                    ? 'Browse markets or accept a token transfer to populate this view.'
-                                    : 'Tokens on this network appear here after this wallet receives them.')}
+                                    ? 'Tokens appear here after you buy one in Markets or receive a transfer.'
+                                    : 'Tokens on this network appear here after you receive them.')}
                             emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
                             onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         />
@@ -598,8 +598,8 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                                 demo={isDemo}
                                 emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
                                 emptyBody={networkFilter === 'all'
-                                    ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
-                                    : 'Collectibles on this network appear here after this wallet receives them.'}
+                                    ? 'Collectibles appear here after you receive an indivisible token with permanently locked supply.'
+                                    : 'Collectibles on this network appear here after you receive them.'}
                                 onReceive={networkFilter === 'all' ? onReceive : undefined}
                                 onSelectToken={onSelectToken}
                                 pinnedKeys={pinnedKeys}

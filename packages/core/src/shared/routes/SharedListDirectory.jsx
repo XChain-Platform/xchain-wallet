@@ -193,10 +193,10 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                         ? "No matching shared lists"
                         : mode === "pick" ? "No shared lists available" : "No shared lists yet"}
                     body={query.trim()
-                        ? "Try a different search."
+                        ? "Matching shared lists appear here after you change or clear the search."
                         : mode === "pick"
-                            ? `No shared ${filteredType ? `${filteredType} ` : ""}lists are available on this chain.`
-                            : "Published shared lists appear here."}
+                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a chain where one is published.`
+                            : "Published shared lists appear here after you or someone else publishes one."}
                 />
             ) : (
                 <>

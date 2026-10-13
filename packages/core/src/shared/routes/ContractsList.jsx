@@ -381,7 +381,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No published contracts"
-                                    emptyText="No contracts published from this chain's addresses yet."
+                                    emptyText="Published contracts appear here after you publish one from an address on this chain."
                                     emptyActionLabel={onDeploy ? 'Publish contract' : undefined}
                                     onEmptyAction={onDeploy}
                                     searchActive={searchQuery.trim().length > 0}
@@ -400,7 +400,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No contract interactions"
-                                    emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
+                                    emptyText={`${actionDisplayLabel('DEPOSIT')} and ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions appear here after an address on this chain interacts with a contract.`}
                                     searchActive={searchQuery.trim().length > 0}
                                     hasUnfilteredRows={state.rows.length > 0}
                                     onRetry={retryContracts}
@@ -425,7 +425,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
                                     emptyTitle="No indexed contracts"
-                                    emptyText="Contracts indexed on this chain appear here."
+                                    emptyText="Indexed contracts appear here after this chain's contract data loads."
                                     searchActive={searchQuery.trim().length > 0}
                                     hasUnfilteredRows={state.rows.length > 0}
                                     onRetry={retryContracts}

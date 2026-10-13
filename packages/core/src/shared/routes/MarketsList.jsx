@@ -439,12 +439,12 @@ export function MarketsList({
                                         ? 'Empty watchlist'
                                         : `No markets for ${selectedAsset.tick}`}
                                 body={debouncedSearch.trim()
-                                    ? `No markets match "${debouncedSearch.trim()}".`
+                                    ? 'Matching markets appear here after you change or clear the search.'
                                     : filtersHideAllMarkets
-                                    ? 'Reset the filters to see all markets.'
+                                    ? 'Matching markets appear here after you reset or change the filters.'
                                     : tab === 'watchlist'
-                                        ? `Starred markets for ${selectedAsset.tick} appear here.`
-                                        : 'No pairs found involving this asset on its chain.'}
+                                        ? `Starred markets for ${selectedAsset.tick} appear here after you star one.`
+                                        : 'Market pairs involving this asset appear here when they become available on its chain.'}
                                 actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />

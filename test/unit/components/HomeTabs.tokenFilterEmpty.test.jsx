@@ -69,7 +69,7 @@ describe('HomeTabs token filter empty state', () => {
         mount({ tokenQuery: 'LTC', onTokenQueryChange });
 
         expect(screen.getByText('No matching tokens')).toBeInTheDocument();
-        expect(screen.getByText('No held tokens match "LTC".')).toBeInTheDocument();
+        expect(screen.getByText('Matching tokens appear here after you change or clear the filter.')).toBeInTheDocument();
         expect(screen.queryByText(/top toolbar/)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
