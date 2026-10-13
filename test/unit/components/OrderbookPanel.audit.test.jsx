@@ -5,9 +5,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { OrderbookPanel } from '../../../packages/core/src/shared/components/OrderbookPanel.jsx';
+import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
+import { TradeHistoryPanel } from '../../../packages/core/src/shared/components/TradeHistoryPanel.jsx';
 
 afterEach(() => cleanup());
 
@@ -69,15 +72,16 @@ describe('OrderbookPanel market display', () => {
         expect(bidScroller.className).toMatch(/levelsScroller/);
         expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 
-        const header = screen.getAllByText('Price (BTC)')[0].parentElement;
-        expect(header.style.textAlign).toBe('right');
-        expect(header.style.fontVariantNumeric).toBe('tabular-nums');
+        const bids = screen.getByRole('table', { name: 'Bids' });
+        const priceHeader = screen.getAllByRole('columnheader', { name: 'Price (BTC)' })[0];
+        expect(priceHeader).toHaveAttribute('scope', 'col');
+        expect(priceHeader.className).toContain('numeric');
+        expect(bids.querySelectorAll('th[scope="col"]')).toHaveLength(3);
 
         const rowButton = screen.getByRole('button', { name: 'Pick price 0.010000' });
-        const row = rowButton.firstElementChild;
-        expect(row.style.textAlign).toBe('right');
-        expect(row.style.fontVariantNumeric).toBe('tabular-nums');
-        expect(row.querySelector('[aria-hidden="true"]').style.width).toBe('50%');
+        const row = rowButton.closest('tr');
+        expect(rowButton.closest('td')).toHaveAttribute('data-label', 'Price');
+        expect(row.style.background).toContain('50%');
 
         fireEvent.click(rowButton);
         expect(onPickPrice).toHaveBeenCalledWith('0.010000');
@@ -89,5 +93,69 @@ describe('OrderbookPanel market display', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the order book.");
         expect(screen.queryByText('No open orders on this market.')).toBeNull();
         expect(screen.queryByText('Loading order book…')).toBeNull();
+    });
+});
+
+describe('market data table semantics', () => {
+    it('stacks labeled cells below 600px', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/components/DataTable.module.css',
+            'utf8',
+        );
+
+        expect(css).toMatch(/@media \(max-width: 599px\)/);
+        expect(css).toMatch(/\.table \.cell\s*\{[\s\S]*display: grid/);
+        expect(css).toMatch(/content: attr\(data-label\)/);
+    });
+
+    it('labels and aligns recent-trade columns', async () => {
+        const getMarketHistory = vi.fn().mockResolvedValue([{
+            action_index: 7,
+            type: 'buy',
+            price: '0.25',
+            amount: '12',
+            timestamp: 1_700_000_000,
+        }]);
+        render(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory }}>
+                <RecentTradesPanel chainId="bitcoin-mainnet" tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        const table = await screen.findByRole('table', { name: 'Recent trades' });
+        expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(4);
+        expect(screen.getByRole('columnheader', { name: 'Price' }).className).toContain('numeric');
+        expect(table.querySelector('td[data-label="Size (XCHAIN)"]').className).toContain('numeric');
+    });
+
+    it('gives wallet trade history a caption, scoped headers, and stacked labels', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{ address: 'bc1qowner' }],
+            }),
+            getMarketHistory: vi.fn().mockResolvedValue([{
+                action_index: 9,
+                type: 'sell',
+                price: '2',
+                amount: '3',
+                timestamp: 1_700_000_000,
+            }]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TradeHistoryPanel
+                    walletId="wallet-1"
+                    chainId="bitcoin-mainnet"
+                    tick1="XCHAIN"
+                    tick2="BTC"
+                />
+            </MessagingProvider>,
+        );
+
+        const table = await screen.findByRole('table', { name: 'Trade history' });
+        expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(5);
+        expect(await screen.findByText('bc1qowner')).toBeInTheDocument();
+        expect(table.querySelector('td[data-label="Price"]')).toBeInTheDocument();
+        expect(table.querySelector('td[data-label="Address"]')).toBeInTheDocument();
     });
 });

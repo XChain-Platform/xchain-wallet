@@ -27,6 +27,7 @@ import { AddressText } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import tableStyles from './DataTable.module.css';
 
 /**
  * @param {object} props
@@ -123,22 +124,57 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             </div>
 
             <div>
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr 1fr 0.75fr 1.5fr',
-                            gap: '0.25rem',
-                            fontSize: '0.75rem',
-                            color: 'var(--xc-fg-muted)',
-                            padding: '0 0.25rem 0.25rem',
-                        }}
-                    >
-                        <span>Time</span>
-                        <span>Price</span>
-                        <span>Size ({tick1})</span>
-                        <span>Side</span>
-                        <span>Address</span>
-                    </div>
+                    <table className={tableStyles.table}>
+                        <caption className={tableStyles.caption}>Trade history</caption>
+                        <thead>
+                            <tr>
+                                <th className={tableStyles.headerCell} scope="col">Time</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                                <th className={tableStyles.headerCell} scope="col">Side</th>
+                                <th className={tableStyles.headerCell} scope="col">Address</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {summaries.map((summary, idx) => {
+                                const key = summary.key || `row-${idx}`;
+                                return (
+                                    <tr key={key}>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                            {onOpenTx && summary.txHash ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenTx(summary.txHash)}
+                                                    aria-label={`Open transaction ${summary.txHash}`}
+                                                    className={tableStyles.cellButton}
+                                                >
+                                                    {summary.timeLabel}
+                                                </button>
+                                            ) : summary.timeLabel}
+                                        </td>
+                                        <td
+                                            className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                                            data-label="Price"
+                                            style={{ color: summary.side === 'buy' ? '#26a69a' : '#ef5350' }}
+                                        >
+                                            {summary.price}
+                                        </td>
+                                        <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                            {summary.size}
+                                        </td>
+                                        <td className={tableStyles.cell} data-label="Side">
+                                            {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                        </td>
+                                        <td className={tableStyles.cell} data-label="Address">
+                                            {summary.ownerAddress ? (
+                                                <AddressText address={summary.ownerAddress} />
+                                            ) : '--'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                     {loadError ? (
                         <p
                             style={{
@@ -161,64 +197,6 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                             No trades on this market yet.
                         </p>
                     ) : null}
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {summaries.map((summary, idx) => {
-                            const content = (
-                                <div
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: '1fr 1fr 1fr 0.75fr 1.5fr',
-                                        gap: '0.25rem',
-                                        padding: '0.15rem 0.25rem',
-                                        fontSize: '0.8rem',
-                                    }}
-                                >
-                                    <span style={{ color: 'var(--xc-fg-muted)' }}>
-                                        {summary.timeLabel}
-                                    </span>
-                                    <span
-                                        style={{
-                                            color: summary.side === 'buy' ? '#26a69a' : '#ef5350',
-                                        }}
-                                    >
-                                        {summary.price}
-                                    </span>
-                                    <span>{summary.size}</span>
-                                    <span>{summary.side === 'buy' ? 'Buy' : 'Sell'}</span>
-                                    <span>
-                                        {summary.ownerAddress ? (
-                                            <AddressText address={summary.ownerAddress} />
-                                        ) : '--'}
-                                    </span>
-                                </div>
-                            );
-                            const key = summary.key || `row-${idx}`;
-                            if (!onOpenTx || !summary.txHash) {
-                                return <li key={key}>{content}</li>;
-                            }
-                            return (
-                                <li key={key}>
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenTx(summary.txHash)}
-                                        aria-label={`Open transaction ${summary.txHash}`}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            background: 'none',
-                                            border: 'none',
-                                            padding: 0,
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
-                                            color: 'inherit',
-                                        }}
-                                    >
-                                        {content}
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
                 </div>
         </div>
     );
