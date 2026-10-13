@@ -136,6 +136,8 @@ export function ViewportFrame({ width, minHeight = 0, padded = true, title, chil
                 className="sg-frame"
                 title={title}
                 srcDoc={FRAME_DOC}
+                sandbox="allow-same-origin"
+                referrerPolicy="no-referrer"
                 width={width}
                 style={{ width: `${width}px`, height: `${height}px` }}
             />
