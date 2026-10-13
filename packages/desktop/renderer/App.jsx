@@ -581,8 +581,10 @@ function AppInner() {
             if (change?.kind !== 'active-wallet' || status.state !== 'unlocked') return;
             const walletId = change.walletId;
             if (typeof walletId !== 'string' || !walletList.some((wallet) => wallet.id === walletId)) return;
+            setActiveAccountId(null);
             setActiveWalletId(walletId);
             writeActiveWallet(walletId);
+            setUnlockedView('home');
         });
     }, [refresh, status.state, walletList]);
 
