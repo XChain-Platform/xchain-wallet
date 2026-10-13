@@ -14,6 +14,7 @@
 //     pnpm --dir test/e2e exec playwright test --config playwright.crawl.config.js
 //     CRAWL_SHARDS=1 ... --workers=1        one shard, for a quick look
 //     CRAWL_ONLY="Settings|Send" ...        only screens whose label matches
+//     CRAWL_VENUES=iphone-17-pro,iphone-se-375 ...   WebKit iPhone venues (or all)
 //
 // The screen list is split across CRAWL_SHARDS tests (default 4) that run in
 // parallel, each in its own browser context with its own demo wallet.
@@ -21,10 +22,38 @@
 // The dev server gets its own port, so a crawl never reuses a server another
 // worktree started on Vite's default port and silently tests that tree.
 
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.CRAWL_PORT || 5191);
 const SHARDS = Number(process.env.CRAWL_SHARDS || 4);
+
+// Venues. The K51 in Chromium is the default; the WebKit iPhone venues are
+// opt-in through CRAWL_VENUES (comma-separated names, or "all"), sized as the
+// layout sweep sizes them. WebKit takes neither the Chromium fake-camera flags
+// nor the clipboard permissions, so those stay on the Chromium venue only.
+const VENUES = [
+    {
+        name: 'android-lg-k51',
+        use: {
+            browserName: 'chromium',
+            viewport: { width: 411, height: 814 },
+            deviceScaleFactor: 1.75,
+            isMobile: true,
+            hasTouch: true,
+            permissions: ['clipboard-read', 'clipboard-write'],
+            launchOptions: {
+                // A camera that exists and is granted, so scanner buttons are
+                // judged on what they do rather than on a missing device.
+                args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+            },
+        },
+    },
+    { name: 'iphone-17-pro', use: { ...devices['iPhone 15 Pro'], viewport: { width: 402, height: 874 } } },
+    { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
+];
+const WANTED = (process.env.CRAWL_VENUES || 'android-lg-k51').split(',').map((v) => v.trim()).filter(Boolean);
+const projects = WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name));
+if (projects.length === 0) throw new Error(`CRAWL_VENUES names no known venue: ${WANTED.join(', ')}`);
 
 // One output folder per run, shared by every shard: workers inherit the
 // runner's environment, so the stamp is set once here and read there.
@@ -44,25 +73,8 @@ export default defineConfig({
         video: 'off',
         screenshot: 'off',
         acceptDownloads: true,
-        permissions: ['clipboard-read', 'clipboard-write'],
-        launchOptions: {
-            // A camera that exists and is granted, so scanner buttons are
-            // judged on what they do rather than on a missing device.
-            args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
-        },
     },
-    projects: [
-        {
-            name: 'android-lg-k51',
-            use: {
-                browserName: 'chromium',
-                viewport: { width: 411, height: 814 },
-                deviceScaleFactor: 1.75,
-                isMobile: true,
-                hasTouch: true,
-            },
-        },
-    ],
+    projects,
     webServer: {
         command: `pnpm -C ../../packages/web exec vite --port ${PORT} --strictPort`,
         url: `http://localhost:${PORT}`,
