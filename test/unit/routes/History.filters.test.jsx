@@ -383,7 +383,7 @@ describe('History filters', () => {
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
 
-            const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
+            const narrow = mediaBlock(historyCss, 'not all and (min-width: 480px)');
             // The two date fields stack into one full-width column on phones.
             expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
             expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);
