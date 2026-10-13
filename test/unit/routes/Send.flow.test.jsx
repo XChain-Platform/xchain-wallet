@@ -17,6 +17,7 @@ import {
     Send,
     getUnusualSendWarnings,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -31,10 +32,10 @@ const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
 
-function composedSend({ amount = AMOUNT, networkFeeSats = 1234 } = {}) {
+function composedSend({ amount = AMOUNT, networkFeeSats = 1234, encoding = 'P2SH' } = {}) {
     return {
         psbt: PSBT,
-        encoding: 'P2SH',
+        encoding,
         actionString: `SEND|1|BTC|${amount}|${TO}`,
         version: 1,
         chainId: CHAIN_ID,
@@ -63,6 +64,7 @@ function mount({
     contacts = [],
     history = [],
     networkFeeSats = 1234,
+    encoding,
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -105,8 +107,10 @@ function mount({
         composeForConfirm: vi.fn().mockImplementation(async (request) => composedSend({
             amount: request.amount,
             networkFeeSats,
+            encoding,
         })),
-        sendToken: vi.fn().mockImplementation(async () => {
+        sendToken: vi.fn().mockImplementation(async (request) => {
+            if (typeof sendResult === 'function') return sendResult(request);
             if (sendResult instanceof Error) throw sendResult;
             return sendResult;
         }),
@@ -137,6 +141,49 @@ function mount({
         </MessagingProvider>,
     );
     return messaging;
+}
+
+function sdkBroadcastHarness(broadcastAnswer) {
+    const pending = new Map();
+    const pendingTxs = {
+        put: vi.fn(async (record) => pending.set(record.id, structuredClone(record))),
+        list: vi.fn(async () => Array.from(pending.values()).map((record) => structuredClone(record))),
+    };
+    const broadcastTx = vi.fn(async () => {
+        if (broadcastAnswer instanceof Error) throw broadcastAnswer;
+        return broadcastAnswer;
+    });
+    const signPsbt = vi.fn(async ({ psbtHex }) => ({
+        signedPsbtHex: `signed:${psbtHex}`,
+        txHex: '0200000001signed',
+        txid: TXID,
+    }));
+    const queued = [];
+    const vault = {
+        pendingTxs,
+        settings: { get: vi.fn(async () => ({})), put: vi.fn(async () => {}) },
+    };
+    const chainRegistry = {
+        get: () => ({ id: CHAIN_ID, coin: 'bitcoin', networkKind: 'mainnet' }),
+    };
+    const sdkRegistry = {
+        get: () => ({
+            encoder: { broadcastTx },
+            wallet: { decomposePsbt: () => ({ inputs: [{}], outputs: [] }) },
+        }),
+    };
+    const send = (request) => submitSendToken({
+        ...request,
+        vault,
+        chainRegistry,
+        sdkRegistry,
+        signer: { kind: 'software', signPsbt },
+        onBroadcastFailure: async (entry) => {
+            queued.push(structuredClone(entry));
+            return true;
+        },
+    });
+    return { send, signPsbt, broadcastTx, pendingTxs, queued };
 }
 
 async function fillSendForm(sendAmount = AMOUNT) {
@@ -473,6 +520,69 @@ describe('Send flow with mocked messaging', () => {
         expect(screen.getByRole('status')).toHaveTextContent(/don't send this payment again/i);
         expect(screen.queryByText(TXID)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Send another' })).not.toBeInTheDocument();
+    });
+
+    it('shows a known node rejection plainly and retains the signed transaction without re-signing', async () => {
+        const sdk = sdkBroadcastHarness(new Error(
+            'Transaction broadcast failed: bad-txns-inputs-missingorspent (code -25)',
+        ));
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't send. The network rejected this transaction.");
+        expect(alert).not.toHaveTextContent('bad-txns-inputs-missingorspent');
+        expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
+        expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
+        expect(sdk.broadcastTx).toHaveBeenCalledTimes(1);
+        expect(sdk.queued).toEqual([]);
+        expect((await sdk.pendingTxs.list()).at(-1)).toMatchObject({
+            status: 'failed',
+            txid: TXID,
+            txHex: '0200000001signed',
+        });
+    });
+
+    it('keeps a timed-out signed transaction retryable and does not sign it again', async () => {
+        const sdk = sdkBroadcastHarness(new Error('ETIMEDOUT after signing'));
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' }))
+            .toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent(/waiting in the queued-transactions banner/i);
+        expect(screen.getByRole('status')).not.toHaveTextContent('ETIMEDOUT');
+        expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
+        expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
+        expect(sdk.broadcastTx).toHaveBeenCalledTimes(1);
+        expect(sdk.queued).toEqual([
+            expect.objectContaining({ signedTxHex: '0200000001signed', txid: TXID }),
+        ]);
+        expect((await sdk.pendingTxs.list()).at(-1)).toMatchObject({
+            status: 'queued',
+            txHex: '0200000001signed',
+        });
+    });
+
+    it('treats a duplicate broadcast as delivered without signing another transaction', async () => {
+        const sdk = sdkBroadcastHarness(new Error('Encoder RPC error: txn-already-known'));
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
+        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
+        expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
+        expect(sdk.broadcastTx).toHaveBeenCalledTimes(1);
+        expect(sdk.queued).toEqual([]);
+        expect((await sdk.pendingTxs.list()).at(-1)).toMatchObject({
+            status: 'broadcast',
+            txid: TXID,
+        });
     });
 
     it('reviews the payment and builds an unsigned PSBT in watcher mode', async () => {
