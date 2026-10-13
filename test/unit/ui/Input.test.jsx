@@ -8,13 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { useRef, useEffect } from 'react';
 import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import { Select } from '../../../packages/core/src/ui/Select.jsx';
 import { Textarea } from '../../../packages/core/src/ui/Textarea.jsx';
+
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+
+afterEach(() => {
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+});
 
 describe('<Input>', () => {
     it('associates label via htmlFor / id', () => {
@@ -61,6 +67,27 @@ describe('<Input>', () => {
         expect(describedBy).toBeTruthy();
         const hintId = describedBy.split(' ')[0];
         expect(document.getElementById(hintId)).toHaveTextContent('Min 8 chars');
+    });
+
+    it.each([360, 412])('uses a concise placeholder at %dpx and preserves the full hint as its description', (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        render(<Input label="Receive at" placeholder="Automatically filled from your wallet on the get chain" />);
+
+        const input = screen.getByLabelText('Receive at');
+        expect(input).toHaveAttribute('placeholder', 'Receive at');
+        expect(input).toHaveAccessibleDescription('Automatically filled from your wallet on the get chain');
+    });
+
+    it('keeps the full placeholder at tablet and desktop widths', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 768 });
+        render(<Input label="Receive at" placeholder="Automatically filled from your wallet on the get chain" />);
+
+        const input = screen.getByLabelText('Receive at');
+        expect(input).toHaveAttribute(
+            'placeholder',
+            'Automatically filled from your wallet on the get chain',
+        );
+        expect(input).not.toHaveAttribute('aria-describedby');
     });
 
     it('renders error and sets aria-invalid, hiding the hint to avoid noise', () => {
