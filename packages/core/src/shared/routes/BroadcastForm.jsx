@@ -207,6 +207,11 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
     }
 
     if (state === 'done') {
+        // A relay that queued the transaction instead of broadcasting it is
+        // not a broadcast; say so before any success copy can render.
+        if (result?.queued) {
+            return <QueuedResultPanel onDone={() => setState('form')} what="broadcast" unsaved={result?.unsaved} />;
+        }
         const txid = result?.txid || result?.broadcast?.txid || '';
         const base = descriptor?.explorer?.defaultUrl || '';
         const code = explorerCoinCode(descriptor);
