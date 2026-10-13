@@ -310,7 +310,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            action={onCreateOrder ? <Button variant="secondary" size="sm" onClick={onCreateOrder}>New order</Button> : undefined}
+            trailing={onCreateOrder ? <Button variant="secondary" size="sm" onClick={onCreateOrder}>New order</Button> : undefined}
         />
     );
     const wrap = (children) => (

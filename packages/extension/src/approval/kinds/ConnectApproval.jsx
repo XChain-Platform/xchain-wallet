@@ -151,7 +151,7 @@ export function ConnectApproval({ id, payload, onReject }) {
 
     return (
         <Screen
-            variant="popup"
+            variant="small"
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>Connection request</span>
