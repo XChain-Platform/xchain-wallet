@@ -35,6 +35,8 @@ public class MainActivity extends BridgeActivity {
         // refuses sensitive copies, rather than writing a seed phrase to an
         // unmarked clip any foreground app can read.
         registerPlugin(XChainClipboardPlugin.class);
+        // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
+        // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
