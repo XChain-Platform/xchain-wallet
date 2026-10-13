@@ -35,6 +35,9 @@
 
 .detailsToggle {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
     padding: 0;
     border: 0;
     background: transparent;
