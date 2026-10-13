@@ -32,40 +32,39 @@ import styles from './LeftNav.module.css';
  * rows to icons with their labels clipped but still in the accessibility
  * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
- * `currentView` is matched against each item's `id`, with two soft
- * mappings so the active highlight survives drilldowns:
- *   - 'token-detail' / 'addresses' / 'wallet-picker' / 'account-picker'
- *     / 'wallet-details' / 'wallet-rename' / 'add-account' / 'add-wallet'
- *     all highlight Home (they're entered from there).
- *   - 'compose-message' highlights Messaging.
- *   - 'dispenser-explorer' / 'dispenser-detail' / 'dispenser' highlight
- *     Dispensers.
- *   - 'contract-*' / 'staking-*' / 'operator-dashboard' / 'stake-form'
- *     highlight Contracts.
- *   - 'market' highlights DEX.
- *   - 'list-detail' / 'list-create' / 'list-fork' highlight Lists.
+ * `currentView` is matched against route groups so drilldowns keep the
+ * closest top-level destination highlighted. Routes without a dedicated
+ * destination belong to Home.
  */
 
 const VIEW_GROUPS = {
-    home: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'],
-    history: ['history'],
-    send: ['send'],
-    receive: ['receive'],
+    home: ['home', 'token-detail', 'my-tokens', 'manage-token', 'addresses', 'address-preferences', 'view-private-key', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'],
+    history: ['history', 'action-detail'],
+    send: ['send', 'send-picker'],
+    receive: ['receive', 'receive-picker'],
     scan: ['scan'],
-    markets: ['markets', 'market'],
+    markets: ['markets', 'markets-picker', 'market', 'market-activity', 'swap', 'create-order', 'my-orders', 'my-swaps', 'cross-chain-swap', 'cross-chain-order', 'cross-chain-templates'],
     'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
-    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
+    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'contract-stake', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
     messaging: ['messaging', 'compose-message'],
     contacts: ['contacts'],
-    lists: ['lists', 'list-detail', 'list-create', 'list-fork'],
+    lists: ['lists', 'list-detail', 'list-create', 'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union', 'shared-lists'],
     obligations: ['obligations'],
     settings: ['settings', 'connected-sites'],
 };
 
-function isActive(itemId, currentView) {
-    const group = VIEW_GROUPS[itemId];
-    return group ? group.includes(currentView) : itemId === currentView;
+const VIEW_ALIASES = {
+    coinpay: 'obligations',
+};
+
+export function isNavItemActive(itemId, currentView) {
+    const activeItem = VIEW_ALIASES[currentView]
+        || Object.entries(VIEW_GROUPS).find(([, views]) => views.includes(currentView))?.[0]
+        || 'home';
+    return itemId === activeItem;
 }
+
+const isActive = isNavItemActive;
 
 // Compact nav badge label: a count capped at "99+" so a large unread total
 // never blows out the pill width.
