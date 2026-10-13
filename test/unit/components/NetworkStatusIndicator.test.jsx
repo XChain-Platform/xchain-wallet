@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const reachability = vi.hoisted(() => ({
     value: { overall: 'normal', perChain: [] },
@@ -27,6 +28,33 @@ afterEach(() => {
 });
 
 describe('NetworkStatusIndicator', () => {
+    it('keeps the closed popover out of the header Tab order', async () => {
+        const user = userEvent.setup();
+        render(
+            <AppHeader
+                onOpenNetworkSettings={() => {}}
+                onOpenSettings={() => {}}
+                onLock={() => {}}
+            />,
+        );
+
+        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const popover = document.querySelector('[role="dialog"][aria-label="Network status"]');
+        expect(popover).toHaveAttribute('hidden');
+        expect(popover).toHaveAttribute('inert');
+
+        await user.tab();
+        expect(trigger).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Lock wallet' })).toHaveFocus();
+
+        fireEvent.click(trigger);
+        expect(popover).not.toHaveAttribute('hidden');
+        expect(popover).not.toHaveAttribute('inert');
+    });
+
     it('shows the connected state and links to network settings', () => {
         const onOpenNetworkSettings = vi.fn();
         render(<AppHeader onOpenNetworkSettings={onOpenNetworkSettings} />);

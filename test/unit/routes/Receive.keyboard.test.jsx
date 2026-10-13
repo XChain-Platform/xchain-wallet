@@ -161,6 +161,41 @@ describe('Receive keyboard operation', () => {
         }
     });
 
+    it('tabs through the phone hero in its condensed visual order', async () => {
+        const user = userEvent.setup();
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+
+        try {
+            renderReceive();
+
+            const addressType = await screen.findByRole('combobox', { name: 'Address type' });
+            const copy = await screen.findByRole('button', { name: 'Copy payment link' });
+            await waitFor(() => expect(copy).not.toBeDisabled());
+            addressType.focus();
+            const expected = [
+                screen.getByRole('textbox', { name: 'Copy payment link for receive address' }),
+                screen.getByRole('button', { name: 'Choose receive address' }),
+                copy,
+                screen.getByRole('button', { name: 'Share QR payment link' }),
+                screen.getByRole('link', { name: 'View address in block explorer' }),
+                screen.getByRole('button', { name: 'Generate new address' }),
+                screen.getByRole('textbox', { name: 'Address label' }),
+                screen.getByRole('button', { name: /^Token:/ }),
+                screen.getByRole('textbox', { name: 'Amount (BTC)' }),
+            ];
+
+            for (const control of expected) {
+                await user.tab();
+                expect(document.activeElement).toBe(control);
+            }
+        } finally {
+            cleanup();
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+            else delete window.innerWidth;
+        }
+    });
+
     it('enters an amount and activates copy and share in visual order', async () => {
         const user = userEvent.setup();
         const write = vi.fn().mockResolvedValue(undefined);
