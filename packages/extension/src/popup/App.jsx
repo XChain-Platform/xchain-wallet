@@ -917,6 +917,7 @@ function AppInner({ canOpenInTab }) {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         onChangeAsset={(carry) => {
                             // Carry the typed To address + amount so picking a
                             // new asset doesn't wipe those fields.

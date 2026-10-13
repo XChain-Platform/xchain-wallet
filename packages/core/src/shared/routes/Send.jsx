@@ -24,6 +24,7 @@ import {
     Icon,
     InfoTip,
     StatusMessage,
+    EmptyState,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -297,14 +298,19 @@ function normalizePastedRecipient(value) {
  *        The merged entry exists immediately (built from this wallet's own
  *        pending record) even though the network has not sighted it yet;
  *        the card's copy says as much. Omit to hide the action.
+ * @param {() => void} [props.onReceive] navigate to Receive when this wallet has no funds
+ *        on the selected chain
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
+    // Watcher mode still composes unsigned PSBTs, so balance-based Send
+    // empty states never replace its form.
+    const { isWatcherMode, isSignerMode } = useWalletMode();
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast } = useToast();
@@ -1224,6 +1230,46 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
 
+    const [chainBalanceState, setChainBalanceState] = useState(
+        /** @type {{ chainId: string | null, status: 'loading' | 'funded' | 'empty' | 'unknown' }} */
+        ({ chainId: null, status: 'loading' }),
+    );
+    useEffect(() => {
+        if (!chainId || !addressesByChain || isWatcherMode || isSignerMode) {
+            setChainBalanceState({ chainId, status: 'unknown' });
+            return undefined;
+        }
+        if (typeof messaging.getWalletBalances !== 'function') {
+            setChainBalanceState({ chainId, status: 'unknown' });
+            return undefined;
+        }
+        let cancelled = false;
+        setChainBalanceState({ chainId, status: 'loading' });
+        messaging.getWalletBalances(walletId, accountId)
+            .then((byChain) => {
+                if (cancelled) return;
+                const entries = byChain?.[chainId];
+                const addressCount = (addressesByChain[chainId] || []).length;
+                // An incomplete or failed aggregate cannot prove the chain is empty.
+                if (!Array.isArray(entries) || entries.length < addressCount
+                    || entries.some((entry) => entry?.error || !entry?.balances)) {
+                    setChainBalanceState({ chainId, status: 'unknown' });
+                    return;
+                }
+                const nativeTicker = nativeTickerFor(chainRegistry.get(chainId));
+                const funded = entries.some((entry) => {
+                    const native = decoderLib.balancesFromSdk(entry.balances)
+                        .find((row) => String(row.tick || '').toUpperCase() === nativeTicker);
+                    return compareDecimalStrings(String(native?.amount || '0'), '0') === 1;
+                });
+                setChainBalanceState({ chainId, status: funded ? 'funded' : 'empty' });
+            })
+            .catch(() => {
+                if (!cancelled) setChainBalanceState({ chainId, status: 'unknown' });
+            });
+        return () => { cancelled = true; };
+    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode]);
+
     // PC-26 gated-send readiness. A tick with active gated content can
     // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
     // enforces that at compose time, and this probe mirrors its key
@@ -1865,14 +1911,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    // §20 / G040: watcher mode skips signing + broadcast and produces an
-    // unsigned PSBT for transport to a Signer-mode wallet. Read with the
-    // explicit default fallback so v2 records without the field behave
-    // like 'full' (the broadcast path).
-    // `isSignerMode` is the route's own refusal. Gating the nav is
-    // not enough - a command-palette entry, a `xchain:` URI intent, and a
-    // restored view state all reach this component without passing a nav rail.
-    const { isWatcherMode, isSignerMode } = useWalletMode();
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -2260,6 +2298,24 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }
     if (!addressesByChain || !chainId) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+    const selectedChainBalanceStatus = chainBalanceState.chainId === chainId
+        ? chainBalanceState.status
+        : 'loading';
+    if (!isWatcherMode && selectedChainBalanceStatus === 'loading') {
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+    if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
+        return wrap(
+            <EmptyState
+                title="This wallet has no coins to send yet."
+                body="Receive funds on this chain before creating a send."
+                icon={<Icon.ReceiveIcon />}
+                actionLabel={onReceive ? t('home.receive') : undefined}
+                onAction={onReceive}
+                actionIcon={<Icon.ReceiveIcon />}
+            />,
+        );
     }
 
     // confirm page, rendered in place of the form (operator

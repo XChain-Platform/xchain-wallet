@@ -814,6 +814,7 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         onChangeAsset={() => {
                             setSendPrefill(null);
                             setUnlockedView('send-picker');

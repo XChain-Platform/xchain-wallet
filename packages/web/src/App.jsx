@@ -1016,6 +1016,7 @@ function AppInner() {
                             setUnlockedView(sendBackTo);
                             setSendBackTo('home');
                         }}
+                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
                         prefill={sendPrefill}
                         onChangeAsset={(carry) => {
                             // Carry the typed To address + amount so picking a
