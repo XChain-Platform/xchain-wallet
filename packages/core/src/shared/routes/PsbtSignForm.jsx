@@ -47,6 +47,8 @@ import {
     Screen,
     Button,
     Input,
+    Select,
+    Textarea,
     ChainBadge,
     AddressText,
     ChainPicker,
@@ -1154,49 +1156,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="psbt-sign-address"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Signing address
-                </label>
-                <select
+                <Select
                     id="psbt-sign-address"
+                    label="Signing address"
                     value={addressId || ''}
                     onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
                     aria-label="Signing address"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}
                 >
                     {addressOptions.map((a) => (
                         <option key={a.id} value={a.id}>{a.address}</option>
                     ))}
-                </select>
+                </Select>
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="psbt-sign-paste"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Unsigned transaction (hex or base64)
-                </label>
                 <div
                     {...drop.rootProps}
                     style={{
@@ -1207,8 +1179,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         transition: 'border-color 120ms ease',
                     }}
                 >
-                    <textarea
+                    <Textarea
                         id="psbt-sign-paste"
+                        label="Unsigned transaction (hex or base64)"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
                         placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…), or drop a .psbt file"
@@ -1227,7 +1200,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             wordBreak: 'break-all',
                         }}
                     />
-                    <input {...drop.pickerProps} aria-label="Upload transaction file" />
+                    <span style={{ display: 'none' }}>
+                        <Input {...drop.pickerProps} aria-label="Upload transaction file" />
+                    </span>
                 </div>
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
                     <span>Or</span>

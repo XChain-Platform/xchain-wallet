@@ -12,6 +12,15 @@
     margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
+.searchField {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.searchField > * {
+    margin-bottom: 0;
+}
+
 .search {
     flex: 1 1 0;
     min-width: 0;

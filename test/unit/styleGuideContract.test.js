@@ -54,6 +54,35 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(menuCss).not.toMatch(/\.lockBtn\s*\{/);
     });
 
+    it('uses shared controls on the adopted advanced, list, signing, and staking routes', () => {
+        const routeNames = [
+            'AdvancedActionsForm.jsx',
+            'MenuRoute.jsx',
+            'MultisigSigningSession.jsx',
+            'MyLists.jsx',
+            'PsbtSignForm.jsx',
+            'StakeNew.jsx',
+            'StakingList.jsx',
+        ];
+        const routes = Object.fromEntries(routeNames.map((name) => [
+            name,
+            read('packages/core/src/shared/routes', name),
+        ]));
+
+        for (const [name, source] of Object.entries(routes)) {
+            expect(source, name).not.toMatch(/<(?:input|select|textarea)\b/);
+        }
+        expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Select[\s\S]*label="Action"/);
+        expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Textarea[\s\S]*list values/);
+        expect(routes['MultisigSigningSession.jsx']).toMatch(/<Textarea[\s\S]*aria-label="Cosigner reply chunks"/);
+        expect(routes['MyLists.jsx']).toMatch(/<Input[\s\S]*aria-label="Search lists"/);
+        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*aria-label="Create list"/);
+        expect(routes['PsbtSignForm.jsx']).toMatch(/<Select[\s\S]*label="Signing address"/);
+        expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);
+        expect(routes['StakingList.jsx']).toMatch(/<Input[\s\S]*aria-label="Search staking positions"/);
+        expect(routes['StakingList.jsx']).toMatch(/<Button[\s\S]*aria-label="New stake"/);
+    });
+
     it('documents the shared Input size prop instead of inline big-field values', () => {
         const source = read('packages/core/src/ui/Input.jsx');
         const css = read('packages/core/src/ui/Input.module.css');

@@ -112,6 +112,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
             <>
                 <p className={local.lede}>{t('stakeNew.chooseNetwork')}</p>
                 <div className={local.chainList}>
+                    {/* Network entries stay native buttons because each control is the complete clickable row. */}
                     {stakingChains.map((cid) => {
                         const d = chainRegistry.get(cid);
                         const iconUrl = branding.chainIconSmallUrl(cid);
@@ -145,6 +146,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                 </p>
             ) : null}
             <div className={local.options}>
+                {/* Staking choices stay native buttons because each control is the complete clickable row. */}
                 <button
                     type="button"
                     className={styles.entry}

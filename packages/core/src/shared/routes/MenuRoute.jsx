@@ -100,6 +100,7 @@ export function MenuRoute({
                     {primary.length > 0 || typeof onSettings === 'function' ? (
                         /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={menuStyles.list} role="list">
+                            {/* Menu entries stay native buttons because each control is the complete clickable row. */}
                             {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                                 <li key={id}>
                                     <button

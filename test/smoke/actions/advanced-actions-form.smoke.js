@@ -103,7 +103,7 @@ assert.ok(
     /AUTO_FIELDS\s*=\s*new Set\(\[['"]VERSION['"]\]\)/.test(src),
     'AdvancedActionsForm treats VERSION as an auto-field',
 );
-assert.ok(/<textarea/.test(src), 'rest-fields render as a textarea');
+assert.ok(/<Textarea\b/.test(src), 'rest-fields render with the shared Textarea');
 assert.ok(/<Input\b/.test(src), 'scalar fields render as <Input>');
 
 // --- 5. Dedicated-form decoration ------------------------------------
