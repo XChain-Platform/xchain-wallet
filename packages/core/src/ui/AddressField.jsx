@@ -71,7 +71,7 @@ export const AddressField = forwardRef(function AddressField(
     const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
         showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
@@ -105,7 +105,10 @@ export const AddressField = forwardRef(function AddressField(
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
                 title={showReadOnlyAddress ? value : undefined}
                 value={value}
                 onChange={onChange}

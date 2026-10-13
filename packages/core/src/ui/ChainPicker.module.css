@@ -1,4 +1,8 @@
 .wrap {
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
     width: 100%;
     display: flex;
@@ -8,21 +12,24 @@
 }
 
 .sm {
-    --chain-picker-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
-    --xc-icon-size: var(--xc-icon-sm);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-sm);
+    --chain-picker-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --chain-picker-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-sm, var(--xc-control-font));
 }
 
 .md {
-    --chain-picker-control-height: var(--xc-control-h-md, 36px);
-    --xc-icon-size: var(--xc-icon-md);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
 }
 
 .lg {
-    --chain-picker-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
-    --xc-icon-size: var(--xc-icon-md);
-    --chain-picker-icon-size: var(--xc-icon-size);
+    --chain-picker-control-height: var(--xc-control-h-lg);
+    --chain-picker-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --chain-picker-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-lg, var(--xc-control-font));
 }
 
 .label {
@@ -41,16 +48,16 @@
     align-items: center;
     gap: var(--xc-space-2);
     min-height: 36px;
-    height: var(--chain-picker-control-height, var(--xc-control-h-md, 36px));
+    min-height: var(--chain-picker-control-height);
+    height: var(--chain-picker-control-height);
     padding: var(--xc-space-2) var(--xc-space-3);
-    padding: 0 var(--xc-control-pad-x, var(--xc-space-3));
+    padding: 0 var(--chain-picker-padding-x);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    font-size: var(--xc-control-font, var(--xc-text-md));
+    font-size: var(--chain-picker-font-size);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-    border-radius: var(--xc-control-radius, var(--xc-radius-md));
+    border-radius: var(--xc-control-radius);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -131,10 +138,6 @@
 
 .lg .trigger {
     min-height: 48px;
-    min-height: var(--chain-picker-control-height);
-}
-
-.sm .trigger {
     min-height: var(--chain-picker-control-height);
 }
 
