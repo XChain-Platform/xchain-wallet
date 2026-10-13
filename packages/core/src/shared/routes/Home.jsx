@@ -1250,12 +1250,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     <StatusMessage variant="status">{t('home.updatingBalances')}</StatusMessage>
                 ) : null}
 
-                {balances === null && !offline && !loadErrorText ? (
-                    <div role="status" aria-label={t('home.loadingBalances')} aria-busy="true">
-                        <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
-                    </div>
-                ) : null}
-
                 {/* Inline notice removed; now surfaces in the Alerts panel
                     of the pancake menu instead so the main view stays
                     focused on balances + work, not status banners. */}
@@ -1388,6 +1382,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onLockWallet={onLockWallet}
                         actions={quickActions}
                     />
+                ) : !offline && !loadErrorText ? (
+                    <HomeLoadingSkeleton actionCount={quickActionCount} />
                 ) : null}
 
                 {activeWalletId ? (
@@ -1506,6 +1502,28 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 />
             ) : null}
         </Screen>
+    );
+}
+
+function HomeLoadingSkeleton({ actionCount }) {
+    return (
+        <div
+            role="status"
+            aria-label={t('home.loadingBalances')}
+            aria-busy="true"
+            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)', width: '100%' }}
+        >
+            <Skeleton shape="card" height={86} />
+            <Skeleton shape="card" height={96} />
+            <div className={styles.quickActions} aria-hidden="true">
+                {Array.from({ length: actionCount }, (_, index) => (
+                    <Skeleton key={index} shape="card" height={72} />
+                ))}
+            </div>
+            <Skeleton shape="text" height={45} />
+            <Skeleton shape="text" width={160} height={36} style={{ alignSelf: 'flex-end' }} />
+            <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
+        </div>
     );
 }
 
