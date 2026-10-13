@@ -36,7 +36,7 @@ describe('LocaleSync', () => {
         const firstApp = render(<LocaleSync />);
         await waitFor(() => expect(getLocale()).toBe('restart-test'));
         expect(t('common.back')).toBe('Retour');
-        expect(t('session.unlock')).toBe('Unlock');
+        expect(t('common.cancel')).toBe('Cancel');
 
         firstApp.unmount();
         await setLocale('en');
@@ -44,6 +44,6 @@ describe('LocaleSync', () => {
         render(<LocaleSync />);
         await waitFor(() => expect(getLocale()).toBe('restart-test'));
         expect(t('common.back')).toBe('Retour');
-        expect(t('session.unlock')).toBe('Unlock');
+        expect(t('common.cancel')).toBe('Cancel');
     });
 });

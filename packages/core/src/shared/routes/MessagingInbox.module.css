@@ -164,6 +164,8 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .messageLink {
@@ -383,6 +385,8 @@
     white-space: nowrap;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

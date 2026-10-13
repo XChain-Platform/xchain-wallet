@@ -155,7 +155,7 @@ describe('History usability', () => {
         expect(preview.style.maxHeight).toBe('');
     });
 
-    it('reports copy failures for detail values and action links', async () => {
+    it('reports copy failures for detail values and receipts', async () => {
         Object.defineProperty(document, 'execCommand', {
             configurable: true,
             value: vi.fn(() => false),
@@ -189,7 +189,7 @@ describe('History usability', () => {
         expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy action link' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
         expect(document.execCommand).toHaveBeenCalledTimes(2);
         await waitFor(() => {
             expect(screen.getAllByText('Copy failed: clipboard unavailable')).toHaveLength(2);
@@ -237,6 +237,66 @@ describe('History usability', () => {
                 .toHaveAttribute('href', `https://mempool.space/tx/${txHash}`);
             expect(screen.getByRole('link', { name: 'Blockstream' }))
                 .toHaveAttribute('href', `https://blockstream.info/tx/${txHash}`);
+        } finally {
+            if (clipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+        }
+    });
+
+    it('copies a plain-text transaction receipt from the detail menu', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        const txHash = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
+        const entry = {
+            action: 'SEND',
+            actionIndex: '12',
+            blockIndex: 100,
+            chainId: 'dogecoin-testnet',
+            timestamp: 1705350600,
+            txHash,
+            source: 'private-source',
+            address: 'private-wallet-address',
+            raw: {
+                amount: '15',
+                tick: 'DOGE',
+                fee: '0.25',
+                destination: 'private-destination',
+                memo: 'private memo',
+            },
+        };
+
+        try {
+            render(provider(
+                { listContacts: vi.fn().mockResolvedValue([]) },
+                <DetailCard
+                    entry={entry}
+                    peerCache={{}}
+                    walletId="wallet-a"
+                    showFiatInHistory={false}
+                    fiatCurrency="USD"
+                />,
+            ));
+
+            fireEvent.click(screen.getByRole('button', { name: 'More' }));
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
+
+            await waitFor(() => expect(writeText).toHaveBeenCalledWith([
+                'Date: 2024-01-15T20:30:00.000Z',
+                'Chain: Dogecoin Testnet',
+                'Amount: 15 DOGE',
+                'Fee: 0.25 DOGE',
+                `Transaction ID: ${txHash}`,
+                `Explorer: https://explorer.xchain.io/TDOGE/tx/${txHash}`,
+            ].join('\n')));
+            expect(writeText.mock.calls[0][0]).not.toMatch(/private|memo|wallet-a/i);
+            expect(await screen.findByText('Transaction receipt copied.')).toBeInTheDocument();
         } finally {
             if (clipboardDescriptor) {
                 Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);

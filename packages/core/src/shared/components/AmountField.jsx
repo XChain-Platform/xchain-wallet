@@ -17,6 +17,7 @@
 
 import { useState } from 'react';
 import { Input, Icon } from '@xchain-wallet/core/ui';
+import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import {
     formatWithThousands,
     normalizeLocalizedDecimal,
@@ -168,13 +169,19 @@ export function AmountField({
                 ) : (
                     <span />
                 )}
-                <span
-                    className={styles.amountFooterRight}
-                    role={hasBalanceText ? 'status' : undefined}
-                    aria-live={hasBalanceText ? 'polite' : undefined}
-                    aria-atomic={hasBalanceText ? 'true' : undefined}
-                >
-                    {balanceText ?? null}
+                <span className={styles.amountFooterRight}>
+                    <ClipboardPasteButton
+                        onPaste={(text) => handleChange({
+                            target: { value: text, selectionStart: text.length },
+                        })}
+                    />
+                    <span
+                        role={hasBalanceText ? 'status' : undefined}
+                        aria-live={hasBalanceText ? 'polite' : undefined}
+                        aria-atomic={hasBalanceText ? 'true' : undefined}
+                    >
+                        {balanceText ?? null}
+                    </span>
                 </span>
             </div>
         </div>

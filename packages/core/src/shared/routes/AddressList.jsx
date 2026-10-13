@@ -26,6 +26,7 @@ import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import {
@@ -347,6 +348,9 @@ export function AddressList({
     // expands it; gates submit on the §15.5.3 backup-implications warning
     // checkbox.
     const [showWifForm, setShowWifForm] = useState(false);
+    // A pasted WIF is the wallet, so Android blocks capture only while this
+    // form is open and leaves the ordinary address list screenshottable.
+    useProtectedScreen(showWifForm);
     const [wifChainId, setWifChainId] = useState('');
     const [wifInput, setWifInput] = useState('');
     // D-68: a WIF is a spending key, so it is masked like a password by
