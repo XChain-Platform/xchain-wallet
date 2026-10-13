@@ -15,6 +15,11 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     AddressText: ({ address }) => React.createElement('span', null, address),
+    StatusMessage: ({ variant, children }) => React.createElement(
+        'div',
+        { role: variant === 'error' ? 'alert' : 'status' },
+        children,
+    ),
 }));
 
 import { TradeHistoryPanel } from '../../../packages/core/src/shared/components/TradeHistoryPanel.jsx';

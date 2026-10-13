@@ -127,12 +127,15 @@ describe('priceOracle', () => {
         time = 6 * 60 * 1000;
         const stale = await oracle.getNativePrices(request);
 
-        expect(stale).toEqual({ prices: first.prices, error: 'HTTP 503' });
+        // A 503 is retried once by fetchWithRetry before it reports the
+        // service as unavailable, so each failed refresh costs two requests.
+        const unavailable = 'The network service is temporarily unavailable. Please try again.';
+        expect(stale).toEqual({ prices: first.prices, error: unavailable });
         oracle.clearCache();
         await expect(oracle.getNativePrices(request)).resolves.toEqual({
             prices: {},
-            error: 'HTTP 503',
+            error: unavailable,
         });
-        expect(fetch).toHaveBeenCalledTimes(3);
+        expect(fetch).toHaveBeenCalledTimes(5);
     });
 });

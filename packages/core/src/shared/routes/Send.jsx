@@ -1302,6 +1302,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
 
+    // Set once the first balance check settles; see the loading gate below.
+    const balanceGateSettledRef = useRef(false);
     const [chainBalanceState, setChainBalanceState] = useState(
         /** @type {{ chainId: string | null, status: 'loading' | 'funded' | 'empty' | 'unknown' }} */
         ({ chainId: null, status: 'loading' }),
@@ -2410,7 +2412,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const selectedChainBalanceStatus = chainBalanceState.chainId === chainId
         ? chainBalanceState.status
         : 'loading';
-    if (!isWatcherMode && selectedChainBalanceStatus === 'loading') {
+    if (selectedChainBalanceStatus !== 'loading') balanceGateSettledRef.current = true;
+    // Only the first balance check holds the form back. A later chain switch
+    // (a pasted payment request, the asset picker) keeps the form mounted so
+    // the entered destination and focus survive while the new chain loads.
+    if (!isWatcherMode && selectedChainBalanceStatus === 'loading' && !balanceGateSettledRef.current) {
         return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
     if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {

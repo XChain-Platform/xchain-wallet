@@ -39,7 +39,7 @@ describe('DemoExitConfirm', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Exit demo and delete its data?' });
         expect(dialog).toHaveAccessibleDescription(DEMO_EXIT_MESSAGE);
-        expect(dialog).toHaveTextContent('sample accounts, addresses, and history');
+        expect(dialog).toHaveTextContent('sample accounts, addresses, balances, and history');
         expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).className)
             .toMatch(/danger/);
     });

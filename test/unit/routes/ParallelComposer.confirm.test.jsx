@@ -139,14 +139,14 @@ describe('ParallelComposer confirmation', () => {
         expect(progress).toHaveAttribute('aria-atomic', 'true');
 
         fireEvent.click(screen.getByRole('button', { name: 'Sign' }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Approve / }));
+        fireEvent.click(await screen.findByTestId('confirm-approve'));
 
         const retry = await screen.findByRole('button', { name: 'Retry row' });
         expect(screen.getByText(/Current row: Failed\./)).toHaveAttribute('role', 'status');
         expect(screen.getByLabelText('Status: Failed')).toHaveTextContent('Failed');
 
         fireEvent.click(retry);
-        fireEvent.click(await screen.findByRole('button', { name: /^Approve / }));
+        fireEvent.click(await screen.findByTestId('confirm-approve'));
         expect(await screen.findByText('Parallel run complete')).toBeTruthy();
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(2);
         expect(advancedAction).toHaveBeenCalledTimes(2);

@@ -251,12 +251,13 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             },
         });
         await pickDividendToken();
-        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+        fireEvent.change(amountField(), { target: { value: '9.998' } });
+        await flushTimers();
 
-        const cost = await screen.findByTestId('dividend-cost-preview', {}, { timeout: 3000 });
-        await waitFor(() => expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN'));
+        const cost = screen.getByTestId('dividend-cost-preview');
+        expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN');
         expect(cost.textContent).toContain('includes 1 XCHAIN protocol fee');
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'Total token cost is ~5,000 XCHAIN: 4,999 payout + 1 protocol fee, but this address holds 4,999 XCHAIN.',
         );
 

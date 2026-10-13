@@ -263,7 +263,7 @@ describe('ContractsList filter field sizing', () => {
                 </MessagingProvider>,
             );
 
-            const card = await screen.findByRole('button', { name: new RegExp(`^${contractName}`) });
+            const card = await screen.findByRole('button', { name: new RegExp(`^Open ${contractName}`) });
             expect(card).toHaveClass(contractStyles.contractRow);
             expect(card).toHaveTextContent(contractName);
             expect(screen.getByRole('tablist', { name: 'Chain filter' }))

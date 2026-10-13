@@ -58,7 +58,9 @@ describe('ContractsList states', () => {
     it('shows address failures and offers a retry', async () => {
         mount({ getAddressesByChain: vi.fn().mockRejectedValue(new Error('Wallet unavailable')) });
 
-        expect(await screen.findByText('Wallet unavailable')).toBeInTheDocument();
+        // The raw error stays out of the UI; the screen shows fixed recovery copy.
+        expect(await screen.findByText('Could not load addresses. Try again.')).toBeInTheDocument();
+        expect(screen.queryByText('Wallet unavailable')).toBeNull();
         expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
         expect(screen.queryByText('No supported address')).toBeNull();
     });

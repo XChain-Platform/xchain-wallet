@@ -56,7 +56,10 @@ export function originIdentityDetails(origin) {
 
         return {
             hostname,
-            hostEnding: labels.slice(-3).join('.') || hostname,
+            // An IPv4 host has no domain hierarchy, so all four octets stay visible.
+            hostEnding: /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+                ? hostname
+                : labels.slice(-3).join('.') || hostname,
             registrableDomain,
             hasPunycode,
             possibleLookalike: hasPunycode || hasDomainInPrefix,
@@ -146,7 +149,5 @@ export function OriginIdentity({
 
 /** Compatibility helper for callers that display a three-label hostname ending. */
 export function originHostEnding(origin) {
-    const { hostname, hostEnding } = originIdentityDetails(origin);
-    const visibleHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) ? hostname : hostEnding;
-    return neutralizeControlText(visibleHost, { maxLength: 255 });
+    return neutralizeControlText(originIdentityDetails(origin).hostEnding, { maxLength: 255 });
 }
