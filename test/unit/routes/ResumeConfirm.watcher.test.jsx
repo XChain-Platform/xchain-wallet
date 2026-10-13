@@ -48,6 +48,7 @@ describe('ResumeConfirm in watcher mode', () => {
         });
 
         expect(utils.getByLabelText('Unsigned transaction hex').value).toBe(session.composed.psbt);
+        expect(utils.getByRole('heading', { level: 1, name: 'Unsigned transaction' })).toBeTruthy();
         expect(utils.queryByLabelText(/Password/i)).toBeNull();
         expect(messaging.preflight).not.toHaveBeenCalled();
     });

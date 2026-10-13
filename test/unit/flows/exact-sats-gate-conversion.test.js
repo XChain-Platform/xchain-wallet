@@ -94,6 +94,13 @@ describe('decimalStringFromSats (non-scientific amount formatter)', () => {
         expect(display).toBe('123456789.87428321');
         expect(exactSatsBigIntFromDecimalString(display)).toBe(balance - fee);
     });
+
+    it('uses descriptor precision for a newly registered chain', () => {
+        const descriptor = { coin: 'examplecoin', nativeDecimals: 2 };
+        expect(exactSatsFromDecimalString('12.34', descriptor)).toBe(1234);
+        expect(exactSatsBigIntFromDecimalString('.09', descriptor)).toBe(9n);
+        expect(decimalStringFromSats(1234n, descriptor)).toBe('12.34');
+    });
 });
 
 // The sats helpers above are fixed at 8 dp, which is the NATIVE coin's scale. onMax ran

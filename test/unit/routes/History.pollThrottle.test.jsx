@@ -29,6 +29,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import * as branding from '../../../packages/core/src/branding/branding.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -117,6 +118,42 @@ describe('History will not stack a fan-out on one still in flight', () => {
     const beat = async () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
     };
+
+    it('does not re-render unchanged rows when the polling beat starts', async () => {
+        useBeatTimers();
+        const held = deferred();
+        const iconRender = vi.spyOn(branding, 'chainIconSmallUrl');
+        const row = {
+            action: 'SEND',
+            action_index: '1',
+            block_index: 100,
+            timestamp: Math.floor(Date.now() / 1000),
+            tx_hash: 'history-render-count',
+            status: 'valid',
+            details: {
+                source: OURS,
+                destination: 'rltc1qdestination',
+                tick: 'LTC',
+                amount: '1',
+            },
+        };
+        const getAddressHistory = vi.fn()
+            .mockResolvedValueOnce([row])
+            .mockReturnValue(held.promise);
+
+        mountHistory({ getAddressHistory });
+        for (let i = 0; i < 8; i += 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await settle();
+        }
+        expect(document.querySelectorAll('[data-history-key]')).toHaveLength(1);
+        const rendersAfterLoad = iconRender.mock.calls.length;
+        expect(rendersAfterLoad).toBeGreaterThan(0);
+
+        await beat();
+        expect(getAddressHistory).toHaveBeenCalledTimes(2);
+        expect(iconRender).toHaveBeenCalledTimes(rendersAfterLoad);
+    });
 
     it('drops the beat while the fan-out is open, and honours the next one after it lands', async () => {
         useBeatTimers();

@@ -49,6 +49,15 @@ describe.each(THEMES)('%s theme', (theme) => {
                 const section = container.querySelector(`#${id}`);
                 expect(section, id).not.toBeNull();
                 expect(section.querySelector(':scope > h2'), id).toHaveTextContent(/\S/);
+
+                const guidanceTerms = [...section.querySelectorAll(':scope > .sg-guide dt')]
+                    .map((term) => term.textContent);
+                expect(guidanceTerms, id).toEqual(expect.arrayContaining([
+                    'When',
+                    'When not',
+                    'Do',
+                    "Don't",
+                ]));
             }
         });
     });

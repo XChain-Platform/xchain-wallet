@@ -74,7 +74,12 @@ jobs:
           java-version: '21'
 
       - name: Set up the Android SDK
-        uses: android-actions/setup-android@v3
+        # The action's default package list still names the retired `tools`
+        # package, which sdkmanager no longer finds, so list packages explicitly
+        # (compileSdk 36 from variables.gradle; AGP 8.13 uses build-tools 36.0.0).
+        uses: android-actions/setup-android@v3.2.2
+        with:
+          packages: "cmdline-tools;latest platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

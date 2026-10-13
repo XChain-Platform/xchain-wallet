@@ -221,7 +221,7 @@
    reducing the tab buttons below the shared pointer-target floor. */
 @media (orientation: landscape) and (max-height: 480px) {
     .bar {
-        height: 44px;
+        min-height: 2.75rem;
     }
 
     .tab {
