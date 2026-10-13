@@ -28,18 +28,20 @@
 }
 
 .row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     gap: var(--xc-space-3);
 }
 
 .row dt {
     color: var(--xc-text-muted);
-    flex: 0 0 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .row dd {
     margin: 0;
+    min-width: 0;
     text-align: end;
     overflow-wrap: anywhere;
     font-weight: 600;
@@ -71,17 +73,21 @@
 }
 
 .delta {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
     gap: var(--xc-space-3);
 }
 
 .deltaTick {
     color: var(--xc-text-muted);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .deltaValues {
     font-family: var(--xc-font-mono);
+    min-width: 0;
+    text-align: end;
     overflow-wrap: anywhere;
     font-weight: 700;
 }
@@ -91,4 +97,17 @@
     margin: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+}
+
+@media (max-width: 399px) {
+    .row,
+    .delta {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--xc-space-1);
+    }
+
+    .row dd,
+    .deltaValues {
+        text-align: start;
+    }
 }
