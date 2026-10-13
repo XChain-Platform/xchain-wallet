@@ -114,6 +114,7 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'RenameAccountForm',
     'RenameWalletForm',
     'ResumeConfirm',
+    'RouteNotFound',
     'ScanRoute',
     'SellOwnershipForm',
     'SendPicker',
