@@ -30,8 +30,8 @@ const ACTION_BTN = {
 };
 const DESTRUCTIVE_BTN = {
     ...ACTION_BTN,
-    color: 'var(--xc-error, #c33)',
-    borderColor: 'var(--xc-error, #c33)',
+    color: 'var(--xc-danger-fg)',
+    borderColor: 'var(--xc-danger-fg)',
 };
 const EXPORT_PANEL = {
     display: 'flex',
@@ -74,12 +74,14 @@ function publicKeyEntries(result) {
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]
  * @param {(walletId: string) => void | Promise<void>} [props.onWalletRemoved]
+ * @param {(busy: boolean) => void} [props.onBusyChange]
  */
 export function ThisWalletSection({
     activeWallet,
     activeAccount,
     onOpenWalletPicker,
     onWalletRemoved,
+    onBusyChange,
 }) {
     const { messaging } = useMessaging();
     const [exportStage, setExportStage] = useState(
@@ -117,11 +119,13 @@ export function ThisWalletSection({
     }
 
     const onConfirmRemove = async () => {
+        // Refuse removal when this shell cannot delete the wallet record.
         if (typeof messaging?.removeWallet !== 'function') {
             setRemoveError('Wallet removal is not wired in this shell yet.');
             return;
         }
         setRemoving(true);
+        onBusyChange?.(true);
         setRemoveError(null);
         let removalSucceeded = false;
         try {
@@ -145,6 +149,7 @@ export function ThisWalletSection({
             if (removalSucceeded) setRemoved(true);
         } finally {
             setRemoving(false);
+            onBusyChange?.(false);
         }
     };
 
@@ -198,6 +203,7 @@ export function ThisWalletSection({
                 hint={activeWallet.name}
                 actionLabel={onOpenWalletPicker ? 'Switch / rename…' : null}
                 onClick={onOpenWalletPicker}
+                disabled={removing}
             />
             {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}
             {activeWallet.format === 'counterwallet-legacy' ? (
@@ -206,6 +212,7 @@ export function ThisWalletSection({
                     hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Upgrade recovery phrase."
                     actionLabel={onOpenWalletPicker ? 'Open wallets…' : null}
                     onClick={onOpenWalletPicker}
+                    disabled={removing}
                 />
             ) : null}
             {activeWallet.format === 'wif-only' ? (
@@ -355,7 +362,7 @@ function PublicKeyExport({
     );
 }
 
-function Row({ label, hint, actionLabel, onClick }) {
+function Row({ label, hint, actionLabel, onClick, disabled = false }) {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -363,7 +370,7 @@ function Row({ label, hint, actionLabel, onClick }) {
                 <span style={ROW_HINT}>{hint}</span>
             </div>
             {actionLabel && onClick ? (
-                <button type="button" onClick={onClick} style={ACTION_BTN}>{actionLabel}</button>
+                <button type="button" onClick={onClick} style={ACTION_BTN} disabled={disabled}>{actionLabel}</button>
             ) : null}
         </div>
     );
@@ -371,6 +378,7 @@ function Row({ label, hint, actionLabel, onClick }) {
 
 function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     const [typed, setTyped] = useState('');
+    // Require the exact wallet name so accidental destructive clicks stay disabled.
     const matches = typed === walletName;
     return (
         <div style={{
@@ -379,10 +387,10 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             gap: 'var(--xc-space-2)',
             padding: 'var(--xc-space-3)',
             background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-error, #c33)',
+            border: '1px solid var(--xc-danger-fg)',
             borderRadius: 'var(--xc-radius-md)',
         }}>
-            <div style={{ color: 'var(--xc-error, #c33)', fontWeight: 600 }}>
+            <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
                 Permanent deletion
             </div>
             <div style={ROW_HINT}>
@@ -396,6 +404,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                 placeholder={walletName}
                 aria-label="Confirm wallet name"
                 autoFocus
+                disabled={busy}
                 style={{
                     background: 'var(--xc-bg)',
                     color: 'var(--xc-text)',
@@ -417,8 +426,8 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     disabled={!matches || busy}
                     style={{
                         ...DESTRUCTIVE_BTN,
-                        background: matches && !busy ? 'var(--xc-error, #c33)' : 'transparent',
-                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-error, #c33)',
+                        background: matches && !busy ? 'var(--xc-danger-fg)' : 'transparent',
+                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-danger-fg)',
                         opacity: matches && !busy ? 1 : 0.6,
                         cursor: matches && !busy ? 'pointer' : 'not-allowed',
                     }}

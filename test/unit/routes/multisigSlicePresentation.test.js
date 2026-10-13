@@ -23,10 +23,10 @@ describe('multisig slice presentation safeguards', () => {
         const inbox = route('MessagingInbox.jsx');
 
         expect(compose).not.toMatch(/#ef5350|#f59e0b/i);
-        expect(compose).toContain("color: 'var(--xc-danger)'");
+        expect(compose).toContain("color: 'var(--xc-danger-fg)'");
         expect(compose).toContain("border: '1px solid var(--xc-warning)'");
         expect(parallel).not.toContain("color: '#b00'");
-        expect(parallel).toContain("color: 'var(--xc-danger)'");
+        expect(parallel).toContain("color: 'var(--xc-danger-fg)'");
         expect(inbox).not.toContain("color: isOutgoing ? '#FFFFFF'");
         expect(inbox).toContain("color: isOutgoing ? 'var(--xc-on-accent)'");
     });

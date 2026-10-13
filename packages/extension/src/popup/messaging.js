@@ -12,6 +12,7 @@
 // wrapper. Each helper documents the exact message type + request shape
 // so callers don't need to build envelopes by hand.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import { sendMessage } from '../shared/chromeMessaging.js';
 
 export { sendMessage };
@@ -231,6 +232,11 @@ export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
 }
 
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
+}
+
 /**
  * §7/§8 SPV: verify a single token balance against a quorum-signed
  * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`
@@ -281,6 +287,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
 /** Rename an address (set its label). @param {string} id @param {string} label */
 export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
+}
+
+/** Hide or unhide an address. @param {string} id @param {boolean} hidden */
+export function setAddressHidden(id, hidden) {
+    return /** @type {any} */ (sendMessage('addresses.setHidden', { id, hidden }));
 }
 
 /** Delete an address record by id. @param {string} id */
@@ -819,7 +830,7 @@ export function activateChainRequest(opts) {
  * counts + recent errors.
  */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**
@@ -1640,6 +1651,10 @@ export function editBetFeedListsActionHw(opts) {
  */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
+}
+
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
 }
 
 // BET reads (no signing): market list / one market with pools + timeline / placed

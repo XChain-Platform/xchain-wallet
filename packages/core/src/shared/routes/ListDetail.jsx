@@ -171,7 +171,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     <>
                         <dt className={styles.detailsLabel}>Forked from</dt>
                         <dd className={styles.detailsValue}>
-                            #{data.list_action_index} ({data.edit === '2' ? 'removed items' : 'added items'})
+                            #{data.list_action_index} ({String(data.edit) === '2' ? 'removed items' : 'added items'})
                         </dd>
                     </>
                 ) : null}

@@ -30,8 +30,13 @@ import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
     buildEditFeedListsParams,
+    buildBetActionPsbt,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
+import {
+    createErrorRingBuffer,
+    installShellErrorCapture,
+} from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -1006,6 +1011,10 @@ export function createBackgroundHost(deps) {
     // ledger with chrome.storage.session makes the reservations survive that
     // restart; the store returns null outside an extension (Node tests, web
     // and desktop shells), where the ledger stays in-memory.
+    // Crash hook: uncaught errors and rejections feed the dump's recent_errors.
+    const errorBuffer = createErrorRingBuffer();
+    installShellErrorCapture(globalThis, errorBuffer);
+
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
@@ -1728,7 +1737,7 @@ export function createBackgroundHost(deps) {
     // button on About panel, etc.) so users can paste it into a bug
     // report. No secrets included: this passes the diagnosticDump flow's
     // own redaction.
-    host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+    host.register('diagnostic.dump', async (req, { vault, chainRegistry }) => {
         // §50 / Cluster L FOLLOWUP 4: fill env / build / signers so the
         // dump tells support which shell + build + paired devices were
         // running. The shell-supplied callback contributes env + build
@@ -1780,6 +1789,12 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
+            // Shell-side crashes arrive with the request; merge them with the
+            // background's own buffer, oldest first (the dump keeps the tail).
+            recentErrors: [
+                ...(Array.isArray(req?.recentErrors) ? req.recentErrors : []),
+                ...errorBuffer.list(),
+            ],
             recentLogs,
         });
     });
@@ -2301,6 +2316,20 @@ export function createBackgroundHost(deps) {
         return { ok: true };
     });
 
+    // Keep hidden addresses in the vault and off the main list. The list's
+    // collapsed hidden section remains the recovery path for this flag.
+    host.register('addresses.setHidden', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.setHidden: id is required');
+        if (typeof req?.hidden !== 'boolean') {
+            throw new Error('addresses.setHidden: hidden must be a boolean');
+        }
+        const rec = await vault.addresses.get(id);
+        if (!rec) throw new Error('addresses.setHidden: address not found');
+        await vault.addresses.put({ ...rec, hidden: req.hidden });
+        return { ok: true };
+    });
+
     // Delete an address record by id (e.g. an imported WIF the user no
     // longer wants surfaced). A derived address comes back through
     // receive.getAddress, which re-derives the lowest index no record
@@ -2487,6 +2516,7 @@ export function createBackgroundHost(deps) {
                 ...(req.fee !== undefined && { fee: req.fee }),
                 ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req.rbf !== undefined && { rbf: req.rbf }),
+                ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
             };
         }
 
@@ -2499,7 +2529,14 @@ export function createBackgroundHost(deps) {
         // A caller that named its own change destination is stating where the
         // value must land; a privacy preference does not get to move it. Only
         // the default (change back to the spender) is rotated.
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.composeForConfirm: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -2534,12 +2571,20 @@ export function createBackgroundHost(deps) {
             pubkey: source.publicKey,
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
+            ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
         };
         encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
-        const { change } = await confirmChangeAndOwnAddresses({
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.quoteMaxSendable: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return flows.quoteMaxSendable({
             sdkRegistry, chainRegistry, vault, chainId,
@@ -4628,6 +4673,10 @@ export function createBackgroundHost(deps) {
         return { ...composed, betParams: params };
     });
 
+    host.register('action.bet.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildBetActionPsbt({ ...req, chainRegistry, sdkRegistry });
+    });
+
     // BET reads (no signing): market list / one market with pools + timeline /
     // placed bets / an oracle's track record.
     host.register('bet.feeds', async (req, { sdkRegistry }) => {
@@ -5115,6 +5164,22 @@ export function createBackgroundHost(deps) {
 
     host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
         return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    });
+
+    host.register('utxos.address', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const address = req?.address;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('utxos.address: chainId is required');
+        }
+        if (typeof address !== 'string' || !address) {
+            throw new Error('utxos.address: address is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getUTXOs !== 'function') {
+            throw new Error(`utxos.address: SDK unavailable for "${chainId}"`);
+        }
+        return sdk.getUTXOs(address);
     });
 
     host.register('history.address', async (req, { sdkRegistry }) => {

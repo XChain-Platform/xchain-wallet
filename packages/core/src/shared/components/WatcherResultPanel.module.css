@@ -86,7 +86,7 @@
     align-self: flex-start;
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     cursor: pointer;
     font-size: var(--xc-text-xs);
     font-family: inherit;
