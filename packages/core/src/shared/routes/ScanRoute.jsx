@@ -22,7 +22,7 @@
 // vault from a casual scan. Address / BIP21 / xchain-uri / PSBT-hex
 // drive the four supported routes.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Button, FormPage, Icon, PageHeader, QrScanner, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
@@ -65,8 +65,10 @@ const PASTE_BOX = {
  * @param {(outcome: ScanRouteOutcome) => void} props.onClassified
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
+ * @param {boolean} [props.embedded]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false }) {
+    const headingId = useId();
     const [paste, setPaste] = useState('');
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [stopped, setStopped] = useState(false);
@@ -211,12 +213,18 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
+            titleId={headingId}
             titleIcon={<Icon.CameraIcon />}
         />
-    ), [onBack]);
+    ), [headingId, onBack]);
 
     return (
-        <Screen variant="small" header={header}>
+        <Screen
+            variant="small"
+            header={header}
+            bodyAs={embedded ? 'section' : 'main'}
+            bodyLabelledBy={headingId}
+        >
             <FormPage
                 label={t('scan.title')}
                 data-testid="scan-route"

@@ -29,16 +29,23 @@ const MAIN_ID = 'xc-main';
  * @param {import('react').ReactNode} [props.header]
  * @param {import('react').ReactNode} [props.footer]
  * @param {'small' | 'full'} [props.variant]
+ * @param {'main' | 'section' | 'div'} [props.bodyAs]
+ * @param {string} [props.bodyLabelledBy]
  * @param {import('react').ReactNode} props.children
  */
-export function Screen({ header, footer, variant = 'small', children }) {
+export function Screen({ header, footer, variant = 'small', bodyAs: Body = 'main', bodyLabelledBy, children }) {
     const className = `${styles.screen} ${styles[variant]}`;
     return (
         <div className={className}>
             {header ? <header className={styles.header}>{header}</header> : null}
-            <main id={MAIN_ID} tabIndex={-1} className={styles.body}>
+            <Body
+                id={Body === 'main' ? MAIN_ID : undefined}
+                tabIndex={-1}
+                className={styles.body}
+                aria-labelledby={bodyLabelledBy}
+            >
                 {children}
-            </main>
+            </Body>
             {footer ? <footer className={styles.footer}>{footer}</footer> : null}
         </div>
     );
