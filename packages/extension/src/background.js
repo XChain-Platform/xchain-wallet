@@ -615,13 +615,23 @@ function renewBroadcastQueueStore() {
 // keepalive alarm checks + locks.
 
 let lastActivityStampAt = 0;
+let activeUiRequests = 0;
 function noteAutoLockActivity() {
+    activeUiRequests += 1;
+    let finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        activeUiRequests = Math.max(0, activeUiRequests - 1);
+    };
     const now = Date.now();
     // Throttle persisted writes to at most once per 10s; a message burst from
     // the open popup only needs to keep the idle clock roughly fresh.
-    if (now - lastActivityStampAt < 10_000) return;
-    lastActivityStampAt = now;
-    stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    if (now - lastActivityStampAt >= 10_000) {
+        lastActivityStampAt = now;
+        stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    }
+    return finish;
 }
 
 // Lock sequencing (retry record kept across a lock that left a secret behind)
@@ -638,6 +648,7 @@ const lockBackstop = createLockBackstop({
         void surfaceStateEvents.publish('session', { state: 'locked' });
     },
     isUnlocked: () => Boolean(host && vault),
+    isRequestActive: () => activeUiRequests > 0,
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,
