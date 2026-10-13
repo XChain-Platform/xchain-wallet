@@ -92,7 +92,7 @@ describe('Address detail actions', () => {
         expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
         const notifications = screen.getByRole('status', { name: 'Notifications' });
         expect(notifications).toHaveTextContent('Copied');
-        expect(screen.getAllByText('Copied')).toHaveLength(1);
+        expect(screen.getAllByText('Copied')).toHaveLength(2);
     });
 
     it('reports clipboard failure and does not switch the button to Copied', async () => {
@@ -105,7 +105,9 @@ describe('Address detail actions', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        await waitFor(() => expect(
+            screen.getByRole('status', { name: 'Notifications' }),
+        ).toHaveTextContent('Copy failed: the clipboard is unavailable.'));
         expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
     });
@@ -215,6 +217,20 @@ describe('Address detail actions', () => {
 
         expect(screen.queryByRole('button', { name: `View address ${ADDRESS}` })).toBeNull();
         expect(screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeInTheDocument();
+    });
+
+    it('keeps style-guide search and menu controls available by role', async () => {
+        mount(messagingWith());
+
+        const search = await screen.findByRole('textbox', { name: 'Search addresses' });
+        expect(search).toHaveAttribute('type', 'search');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add or import address' }));
+        expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+            'Add address',
+            'Generate at index (advanced)',
+            'Import address',
+        ]);
     });
 
     it('bounds thousands of addresses and keeps the list scroller anchored while expanding', async () => {

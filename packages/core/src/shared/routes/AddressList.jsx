@@ -9,14 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
-import { copyText } from '../clipboard.js';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -25,7 +24,6 @@ import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
@@ -153,7 +151,6 @@ export function AddressList({
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
     const { showToast, announce } = useToast();
-    const haptic = useHapticFeedback();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -748,27 +745,25 @@ export function AddressList({
                         disabled={advancedBusy}
                     />
                     {advancedDescriptor ? (
-                        <label className={wifStyles.wifField}>
-                            <span className={wifStyles.wifLabel}>Address type</span>
-                            <select
-                                value={effectiveAdvancedAddressType}
-                                onChange={(e) => {
-                                    setAdvancedAddressType(e.target.value);
-                                    setAdvancedError(null);
-                                }}
-                                disabled={advancedBusy}
-                                className={wifStyles.wifSelect}
-                            >
-                                {(advancedDescriptor.addressTypes || []).map((type) => {
-                                    const hint = addressTypeHint(advancedDescriptor, type);
-                                    return (
-                                        <option key={type} value={type}>
-                                            {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </label>
+                        <Select
+                            label="Address type"
+                            value={effectiveAdvancedAddressType}
+                            onChange={(e) => {
+                                setAdvancedAddressType(e.target.value);
+                                setAdvancedError(null);
+                            }}
+                            disabled={advancedBusy}
+                        >
+                            {/* Select uses native options because the kit has no option primitive. */}
+                            {(advancedDescriptor.addressTypes || []).map((type) => {
+                                const hint = addressTypeHint(advancedDescriptor, type);
+                                return (
+                                    <option key={type} value={type}>
+                                        {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                    </option>
+                                );
+                            })}
+                        </Select>
                     ) : null}
                     <Input
                         label="Derivation index"
@@ -841,24 +836,22 @@ export function AddressList({
                             disabled={wifBusy}
                         />
                         {wifChainId ? (
-                            <label className={wifStyles.wifField}>
-                                <span className={wifStyles.wifLabel}>Address type</span>
-                                <select
-                                    value={effectiveWifAddressType}
-                                    onChange={(e) => setWifAddressType(e.target.value)}
-                                    disabled={wifBusy}
-                                    className={wifStyles.wifSelect}
-                                >
-                                    {(wifDescriptor?.addressTypes || []).map((t) => {
-                                        const hint = addressTypeHint(wifDescriptor, t);
-                                        return (
-                                            <option key={t} value={t}>
-                                                {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                            </label>
+                            <Select
+                                label="Address type"
+                                value={effectiveWifAddressType}
+                                onChange={(e) => setWifAddressType(e.target.value)}
+                                disabled={wifBusy}
+                            >
+                                {/* Select uses native options because the kit has no option primitive. */}
+                                {(wifDescriptor?.addressTypes || []).map((t) => {
+                                    const hint = addressTypeHint(wifDescriptor, t);
+                                    return (
+                                        <option key={t} value={t}>
+                                            {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        </option>
+                                    );
+                                })}
+                            </Select>
                         ) : null}
                         <Input
                             label="WIF private key"
@@ -875,14 +868,16 @@ export function AddressList({
                             spellCheck={false}
                             disabled={wifBusy}
                         />
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             className={wifStyles.wifToggle}
                             onClick={() => setWifRevealed((s) => !s)}
                             aria-pressed={wifRevealed}
                         >
                             {wifRevealed ? 'Hide private key' : 'Show private key'}
-                        </button>
+                        </Button>
                         <Input
                             label="Label (optional)"
                             value={wifLabel}
@@ -910,6 +905,7 @@ export function AddressList({
                             Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
                         </p>
                         <label className={wifStyles.wifAck}>
+                            {/* Checkbox stays native because the kit has no checkbox field. */}
                             <input
                                 type="checkbox"
                                 checked={wifWarningAck}
@@ -933,7 +929,7 @@ export function AddressList({
             titleIcon={<Icon.ScanIcon />}
             trailing={(
                 <div className={local.addMenuWrap} ref={addMenuRef}>
-                    <button
+                    <Button
                         type="button"
                         className={local.addBtn}
                         onClick={() => setAddMenuOpen((o) => !o)}
@@ -944,11 +940,12 @@ export function AddressList({
                         data-testid="address-add-menu"
                     >
                         <Icon.PlusIcon />
-                    </button>
+                    </Button>
                     {addMenuOpen ? (
+                        /* The kit has no menu-list container, so native list semantics group its menu items. */
                         <ul className={local.addMenu} role="menu">
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -957,10 +954,10 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Add address
-                                </button>
+                                </Button>
                             </li>
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -973,10 +970,10 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Generate at index (advanced)
-                                </button>
+                                </Button>
                             </li>
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -994,7 +991,7 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
                                     Import address
-                                </button>
+                                </Button>
                             </li>
                         </ul>
                     ) : null}
@@ -1090,17 +1087,6 @@ export function AddressList({
             } finally {
                 setLabelSaving(false);
             }
-        };
-        const copyAddress = async () => {
-            const { ok } = await copyText(selected.address);
-            if (ok) {
-                setAddrCopied(true);
-                setTimeout(() => setAddrCopied(false), 1200);
-                haptic.tap();
-                announce('Copied');
-                return;
-            }
-            showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
         };
         const toggleAddressHidden = async () => {
             if (!selected.record?.id || visibilitySaving) return;
@@ -1232,15 +1218,16 @@ export function AddressList({
                     </div>
                     <div className={local.detailAddr}>
                         <AddressText address={selected.address} truncate={false} />
-                        <button
-                            type="button"
-                            className={local.copyIcon}
-                            onClick={copyAddress}
-                            aria-label={addrCopied ? 'Copied' : 'Copy address'}
-                            title={addrCopied ? 'Copied' : 'Copy address'}
-                        >
-                            {addrCopied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
-                        </button>
+                        <span title={addrCopied ? 'Copied' : 'Copy address'}>
+                            <CopyButton
+                                value={selected.address}
+                                label={addrCopied ? 'Copied' : 'Copy address'}
+                                onCopied={() => {
+                                    setAddrCopied(true);
+                                    setTimeout(() => setAddrCopied(false), 1200);
+                                }}
+                            />
+                        </span>
                     </div>
                     <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>Label</div>
                     {selected.record?.id ? (
@@ -1272,7 +1259,7 @@ export function AddressList({
 
                     <div className={local.quickActions} role="group" aria-label="Address actions">
                     {selected.record?.id && !isActiveRow(selected) ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={setAsActive}
@@ -1282,10 +1269,10 @@ export function AddressList({
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
                             <span>{detailAction === 'use' ? 'Switching…' : 'Use'}</span>
-                        </button>
+                        </Button>
                     ) : null}
                     {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={toggleAddressHidden}
@@ -1295,20 +1282,20 @@ export function AddressList({
                                 {selected.record.hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
                             </span>
                             <span>{selected.record.hidden ? 'Unhide' : 'Hide'}</span>
-                        </button>
+                        </Button>
                     ) : null}
                     {canSecret ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={() => onShowPrivateKey?.(selected.record)}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
                             <span>Secret</span>
-                        </button>
+                        </Button>
                     ) : null}
                     {explorerUrl ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={() => {
@@ -1317,10 +1304,10 @@ export function AddressList({
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
                             <span>XChain</span>
-                        </button>
+                        </Button>
                     ) : null}
                     {canDelete ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={removeAddress}
@@ -1329,18 +1316,19 @@ export function AddressList({
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
                             <span>{detailAction === 'delete' ? 'Deleting…' : 'Delete'}</span>
-                        </button>
+                        </Button>
                     ) : null}
                     </div>
 
                     <div className={local.tabsRow} role="tablist" aria-label="Address sections">
+                    {/* The tab stays native because the kit has no tab control. */}
                     <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
                         About
                     </button>
                     </div>
 
                     <div className={local.tabPanel}>
-                    <div className={local.detailCard}>
+                    <FormSection title="About" headingLevel="h3" className={local.detailCard}>
                         {/* The testid is derived from the label so every detail field is
                             addressable without hand-maintaining a list. Before it, a spec
                             reading a field had to find the label text and walk to its
@@ -1360,18 +1348,19 @@ export function AddressList({
                                 </div>
                             </div>
                         ))}
-                    </div>
+                    </FormSection>
                     {/* PC-32: on-chain ADDRESS v0 preferences for this address. */}
-                    <div className={local.detailCard} style={{ marginTop: 'var(--xc-space-3)' }}>
-                        <div className={local.detailField}>
-                            <div className={local.detailLabel}>On-chain preferences</div>
-                            <div className={local.detailValue}>
-                                {chainPrefsError
-                                    ? chainPrefsError
-                                    : (chainPrefs
-                                        ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
-                                        : 'Loading…')}
-                            </div>
+                    <FormSection
+                        title="On-chain preferences"
+                        headingLevel="h3"
+                        className={`${local.detailCard} ${local.detailCardSpaced}`}
+                    >
+                        <div className={local.detailValue}>
+                            {chainPrefsError
+                                ? chainPrefsError
+                                : (chainPrefs
+                                    ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
+                                    : 'Loading…')}
                         </div>
                         {chainPrefs ? (
                             <>
@@ -1400,7 +1389,7 @@ export function AddressList({
                                 </Button>
                             </div>
                         ) : null}
-                    </div>
+                    </FormSection>
                     </div>
                     {confirmDialog.request ? (
                         <ConfirmModal
@@ -1435,20 +1424,21 @@ export function AddressList({
     return wrap(
         <ListPage toolbar={(
             <>
-                <input
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    role="textbox"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search addresses"
-                />
+                <div className={local.searchField}>
+                    <Input
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        role="textbox"
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search addresses"
+                    />
+                </div>
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </>
         )}>
@@ -1459,6 +1449,7 @@ export function AddressList({
                     { id: 'imported', label: 'Imported' },
                     { id: 'misc', label: 'Misc' },
                 ].map((opt) => (
+                    /* Segmented tabs stay native because the kit has no segmented control. */
                     <button
                         key={opt.id}
                         type="button"
@@ -1479,10 +1470,11 @@ export function AddressList({
 
 
             {pickerMode && pickerActions.length > 0 ? (
+                /* The kit has no list container, so native list semantics group picker actions. */
                 <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label="Picker options">
                     {pickerActions.map((act) => (
                         <li key={act.key}>
-                            <button type="button" className={local.addrRow} onClick={act.onSelect}>
+                            <Button type="button" className={local.addrRow} onClick={act.onSelect}>
                                 <div className={local.addrTopRow}>
                                     <span className={local.addrLabel}>{act.label}</span>
                                 </div>
@@ -1491,7 +1483,7 @@ export function AddressList({
                                         <span className={local.addrFiat}>{act.sublabel}</span>
                                     </div>
                                 ) : null}
-                            </button>
+                            </Button>
                         </li>
                     ))}
                 </ul>
@@ -1505,12 +1497,13 @@ export function AddressList({
                 />
             ) : (
             <>
+            {/* The kit has no list container, so native list semantics expose the address rows. */}
             <ul className={local.addrList} aria-label="Addresses">
                 {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
                     return (
                         <li key={row.key}>
-                            <button
+                            <Button
                                 type="button"
                                 className={local.addrRow}
                                 onClick={() => {
@@ -1553,7 +1546,7 @@ export function AddressList({
                                         <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
                                     ) : null}
                                 </div>
-                            </button>
+                            </Button>
                         </li>
                     );
                 })}
@@ -1571,8 +1564,9 @@ export function AddressList({
             </>
             )}
             {!pickerMode && hiddenRows.length > 0 ? (
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
                     className={local.hiddenToggle}
                     onClick={() => setShowHidden((value) => !value)}
                     aria-expanded={showHidden}
@@ -1580,7 +1574,7 @@ export function AddressList({
                     {showHidden
                         ? `Hide ${hiddenRows.length} hidden address${hiddenRows.length === 1 ? '' : 'es'}`
                         : `Show ${hiddenRows.length} hidden address${hiddenRows.length === 1 ? '' : 'es'}`}
-                </button>
+                </Button>
             ) : null}
         </ListPage>,
     );
