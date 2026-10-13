@@ -80,7 +80,7 @@ describe('translations', () => {
             ))
             .map(([, value]) => value);
         expect(narrativeValues.filter((value) => !/[.!?…]$/.test(value))).toEqual([]);
-        expect(en['send.memoCount']).toBe('{used} / {max} characters');
+        expect(en['send.memoCount']).toBe('{used} / {max} bytes');
         expect(en['send.destination.placeholder']).toBe('Enter or paste an address or name…');
     });
 
