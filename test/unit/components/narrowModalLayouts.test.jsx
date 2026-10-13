@@ -11,6 +11,7 @@ import { BottomTabBar } from '../../../packages/core/src/shared/components/Botto
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
 const UI_DIR = join(process.cwd(), 'packages/core/src/ui');
@@ -151,11 +152,11 @@ describe('320x568 modal renders', () => {
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
         const sheet = screen.getByRole('dialog', { name: 'More' });
-        expect(sheet.firstElementChild).toContainElement(
-            screen.getByRole('button', { name: 'Close more navigation' }),
-        );
+        const close = screen.getByRole('button', { name: 'Close more navigation' });
+        expect(sheet.firstElementChild).toContainElement(close);
+        expect(close).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
         expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Close more navigation' }));
+        fireEvent.click(close);
         expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
     });
 });
@@ -196,7 +197,19 @@ describe('320x568 modal layout contracts', () => {
         expect(sheet).toMatch(/max-height:\s*70vh/);
         expect(sheet).toMatch(/overflow:\s*hidden/);
         expect(sheet).toMatch(/flex-direction:\s*column/);
-        expect(rule(bottomBar, '.sheetHeader')).toMatch(/flex:\s*0 0 auto/);
+        const sheetHeader = rule(bottomBar, '.sheetHeader');
+        expect(sheetHeader).toMatch(/display:\s*grid/);
+        expect(sheetHeader).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
+        expect(sheetHeader).toMatch(/flex:\s*0 0 auto/);
+        const sheetClose = rule(bottomBar, '.sheetClose');
+        expect(sheetClose).toMatch(/width:\s*var\(--xc-control-h-md\)/);
+        expect(sheetClose).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(sheetClose).not.toMatch(/position:\s*absolute/);
+        const button = readFileSync(join(UI_DIR, 'Button.module.css'), 'utf8');
+        expect(rule(button, '.md')).toMatch(/min-height:\s*var\(--xc-control-h-md,\s*40px\)/);
+        expect(button).toMatch(
+            /@media \(pointer:\s*coarse\)[\s\S]*?\.btn::after\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/,
+        );
         expect(rule(bottomBar, '.sheetBody')).toMatch(/min-height:\s*0/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/overflow-y:\s*auto/);

@@ -248,6 +248,7 @@ export function BottomTabBar({
                             <span className={styles.sheetClose}>
                                 <Button
                                     variant="secondary"
+                                    size="md"
                                     icon={<Icon.XIcon />}
                                     onClick={() => setSheetOpen(false)}
                                     aria-label="Close more navigation"
