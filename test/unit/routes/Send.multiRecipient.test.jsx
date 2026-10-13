@@ -168,6 +168,26 @@ describe('Send: multi-recipient (PC-52)', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('rejects an incomplete primary decimal instead of composing it', async () => {
+        const messaging = mount();
+        await fillFirst({ amount: '.' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(await screen.findByText('Amount must be a positive number.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an incomplete added-recipient decimal', async () => {
+        const messaging = mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '.' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(await screen.findByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('carries a per-recipient token when the switch is on (the multi-tick case)', async () => {
         const messaging = mount();
         await fillFirst();
