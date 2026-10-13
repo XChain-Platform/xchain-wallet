@@ -42,7 +42,7 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border-strong);
-    border-radius: 8px;
+    border-radius: var(--xc-radius-md);
     width: 38px;
     height: 38px;
     display: inline-flex;
@@ -79,7 +79,7 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-header-menu);
     display: flex;
     flex-direction: column;
     gap: 2px;
