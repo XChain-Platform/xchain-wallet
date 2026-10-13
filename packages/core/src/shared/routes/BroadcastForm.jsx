@@ -275,6 +275,7 @@ function RawTransactionBroadcast({
                     <>
                         <Button
                             type="button"
+                            variant="ghost"
                             onClick={() => setState('form')}
                             disabled={state === 'submitting'}
                         >

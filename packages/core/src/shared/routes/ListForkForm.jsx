@@ -913,7 +913,7 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                         works fine in watcher mode).
                     </p>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={() => setStage('compose')}>Back</Button>
+                        <Button variant="ghost" onClick={() => setStage('compose')}>Back</Button>
                     </div>
                 </>,
             );

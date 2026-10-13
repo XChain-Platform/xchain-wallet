@@ -4,12 +4,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const PHRASE = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
 const SECOND_PHRASE = 'account accuse achieve acid acoustic acquire across act action actor actress actual';
 const PASSWORD = 'correct-horse-battery';
 const BIP39_PASSPHRASE = 'separate secret';
+const ORIGINAL_VIEWPORT_WIDTH = window.innerWidth;
+const BUTTON_CSS = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 
 const mocks = vi.hoisted(() => ({
     generateBip39Mnemonic: vi.fn(),
@@ -105,9 +109,26 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    window.innerWidth = ORIGINAL_VIEWPORT_WIDTH;
 });
 
 describe('CreateWallet lifecycle guards', () => {
+    it('keeps one outlined Back and one primary action on the phone verify step', () => {
+        window.innerWidth = 360;
+        render(wallet());
+        enterPasswordStep();
+        startQuiz();
+
+        const backButtons = screen.getAllByRole('button', { name: /^Back/ });
+        expect(backButtons).toHaveLength(1);
+        expect(backButtons[0]).toHaveClass(buttonStyles.secondary);
+        expect(BUTTON_CSS).toMatch(/\.secondary\s*\{[^}]*background:\s*transparent;/s);
+
+        const createButton = screen.getByRole('button', { name: 'Create wallet' });
+        expect(createButton).toHaveClass(buttonStyles.primary);
+        expect(document.querySelectorAll(`.${buttonStyles.primary}`)).toHaveLength(1);
+    });
+
     it('keeps one generated phrase through mnemonic-step rerenders', () => {
         mocks.generateBip39Mnemonic.mockReturnValueOnce(PHRASE).mockReturnValue(SECOND_PHRASE);
         render(wallet());
