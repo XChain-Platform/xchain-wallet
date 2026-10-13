@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -470,6 +470,7 @@ export function MultisigCreate({ walletId, onBack }) {
             <FormSection title="Scheme">
                 {SCHEMES.map((s) => (
                     <label key={s.value} className={styles.checkRow} style={{ alignItems: 'flex-start' }}>
+                        {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
                         <input
                             type="radio"
                             name="scheme"
@@ -546,48 +547,42 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
                 placeholder="My signer / Bob's Trezor / cold-storage xpub"
             />
 
-            <label className={styles.pickerLabel}>
-                <span>Origin</span>
-                <select
-                    className={styles.picker}
-                    value={row.origin}
-                    onChange={(e) => onChange({
-                        origin: e.target.value,
-                        // Clear origin-specific fields when switching.
-                        xpub: '',
-                        addressId: null,
-                        localSignerId: null,
-                        fingerprintNote: null,
-                        // Keys auto-filled from this wallet must not ride along
-                        // into an external cosigner row.
-                        ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
-                    })}
-                >
-                    <option value="local">Local (software account or paired HW signer)</option>
-                    <option value="external-xpub">External xpub (paste from another wallet)</option>
-                    <option value="external-hardware">External hardware (sign via file transfer)</option>
-                </select>
-            </label>
+            <Select
+                label="Origin"
+                value={row.origin}
+                onChange={(e) => onChange({
+                    origin: e.target.value,
+                    // Clear origin-specific fields when switching.
+                    xpub: '',
+                    addressId: null,
+                    localSignerId: null,
+                    fingerprintNote: null,
+                    // Keys auto-filled from this wallet must not ride along
+                    // into an external cosigner row.
+                    ...(row.origin === 'local' ? { pubkey: '', fingerprint: '', derivationPath: '' } : {}),
+                })}
+            >
+                <option value="local">Local (software account or paired HW signer)</option>
+                <option value="external-xpub">External xpub (paste from another wallet)</option>
+                <option value="external-hardware">External hardware (sign via file transfer)</option>
+            </Select>
 
             {row.origin === 'local' ? (
-                <label className={styles.pickerLabel}>
-                    <span>Use one of this wallet's addresses</span>
-                    <select
-                        className={styles.picker}
-                        value={row.addressId || ''}
-                        onChange={(e) => {
-                            const a = addresses.find((x) => x.id === e.target.value);
-                            onLocalAddressPick(a || null);
-                        }}
-                    >
-                        <option value="">Select address</option>
-                        {addresses.map((a) => (
-                            <option key={a.id} value={a.id}>
-                                {a.address} {a.label ? `· ${a.label}` : ''}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <Select
+                    label="Use one of this wallet's addresses"
+                    value={row.addressId || ''}
+                    onChange={(e) => {
+                        const a = addresses.find((x) => x.id === e.target.value);
+                        onLocalAddressPick(a || null);
+                    }}
+                >
+                    <option value="">Select address</option>
+                    {addresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                            {a.address} {a.label ? `· ${a.label}` : ''}
+                        </option>
+                    ))}
+                </Select>
             ) : null}
 
             {row.origin === 'external-xpub' ? (

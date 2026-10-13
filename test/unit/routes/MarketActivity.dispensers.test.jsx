@@ -71,15 +71,13 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(screen.getAllByText('100 XCHAIN remaining').length).toBe(2);
         expect(screen.queryByText(/7 XCHAIN per/)).toBeNull();
         expect(screen.queryByRole('button', { name: /5 XCHAIN per 0.01 BTC/ })).toBeNull();
-        expect(document.querySelector('button:disabled')).toBeNull();
+        expect(screen.queryAllByRole('button').filter((button) => button.disabled)).toHaveLength(0);
     });
 
     it('makes an offer a button only when the route supplies a working action', async () => {
         const onOpenDispenser = vi.fn();
         renderMarket({}, { onOpenDispenser });
-        const label = await screen.findByText('5 XCHAIN per 0.01 BTC');
-        const button = label.closest('button');
-        expect(button).not.toBeNull();
+        const button = await screen.findByRole('button', { name: /5 XCHAIN per 0.01 BTC/ });
         fireEvent.click(button);
         expect(onOpenDispenser).toHaveBeenCalledWith(expect.any(String), '20');
     });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -174,7 +174,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     {tick1} <span style={{ color: 'var(--xc-text-muted)', fontWeight: 500 }}>/</span> {tick2}
                 </span>
                 {typeof onSwap === 'function' ? (
-                    <button
+                    <Button
                         type="button"
                         onClick={() => {
                             setPrefillPrice(null);
@@ -198,7 +198,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         }}
                     >
                         <Icon.SwapIcon />
-                    </button>
+                    </Button>
                 ) : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
@@ -301,7 +301,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 ].map((opt) => {
                     const active = tab === opt.id;
                     return (
-                        <button
+                        <Button
                             key={opt.id}
                             id={`${tabsId}-tab-${opt.id}`}
                             type="button"
@@ -312,9 +312,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                             className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                             style={{ flex: 1 }}
                             onClick={() => setTab(opt.id)}
+                            icon={null}
                         >
                             {opt.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

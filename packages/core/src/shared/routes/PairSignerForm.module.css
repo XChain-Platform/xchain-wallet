@@ -51,6 +51,14 @@
     outline-offset: 2px;
 }
 
+.vendorCardContent {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    width: 100%;
+}
+
 .vendorName {
     font-size: var(--xc-text-md);
     font-weight: 600;

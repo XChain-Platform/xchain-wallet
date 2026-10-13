@@ -280,38 +280,42 @@ export function PairSignerForm({
                 ) : null}
                 <ul className={styles.vendorGrid}>
                     <li>
-                        <button
+                        <Button
                             type="button"
                             className={styles.vendorCard}
                             onClick={() => handlePickVendor('trezor')}
                             disabled={!pairTrezor}
                         >
-                            <span className={styles.vendorName}>Trezor</span>
-                            <span className={styles.vendorTag}>
-                                {pairTrezor ? 'Connect via Trezor Connect popup.' : 'Not available in this context.'}
+                            <span className={styles.vendorCardContent}>
+                                <span className={styles.vendorName}>Trezor</span>
+                                <span className={styles.vendorTag}>
+                                    {pairTrezor ? 'Connect via Trezor Connect popup.' : 'Not available in this context.'}
+                                </span>
                             </span>
-                        </button>
+                        </Button>
                     </li>
                     <li>
-                        <button
+                        <Button
                             type="button"
                             className={styles.vendorCard}
                             onClick={() => handlePickVendor('ledger')}
                             disabled={!ledgerCanPair}
                         >
-                            <span className={styles.vendorName}>Ledger</span>
-                            <span className={styles.vendorTag}>
-                                {!pairLedger
-                                    ? 'Not available in this context.'
-                                    : ledgerNeedsWebHid
-                                    ? browserFamily === 'firefox'
-                                        ? 'WebHID required. Firefox is not supported. Switch to Chrome, Edge, or Brave.'
-                                        : browserFamily === 'safari'
-                                        ? 'WebHID required. Safari is not supported. Switch to Chrome, Edge, or Brave.'
-                                        : 'WebHID required. This browser does not support it. Switch to Chrome, Edge, or Brave.'
-                                    : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
+                            <span className={styles.vendorCardContent}>
+                                <span className={styles.vendorName}>Ledger</span>
+                                <span className={styles.vendorTag}>
+                                    {!pairLedger
+                                        ? 'Not available in this context.'
+                                        : ledgerNeedsWebHid
+                                        ? browserFamily === 'firefox'
+                                            ? 'WebHID required. Firefox is not supported. Switch to Chrome, Edge, or Brave.'
+                                            : browserFamily === 'safari'
+                                            ? 'WebHID required. Safari is not supported. Switch to Chrome, Edge, or Brave.'
+                                            : 'WebHID required. This browser does not support it. Switch to Chrome, Edge, or Brave.'
+                                        : 'Connect via WebHID. Chrome, Edge, or Brave on desktop.'}
+                                </span>
                             </span>
-                        </button>
+                        </Button>
                     </li>
                 </ul>
             </FormPage>,
