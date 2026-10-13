@@ -10,10 +10,9 @@
 
 // PrivacySection (§35.1 Privacy panel).
 //
-// All five §35.1 toggles backed by `settings.privacy.*` (schema v2):
+// Privacy toggles backed by `settings.privacy.*` (schema v2):
 //   - Tor routing
 //   - Change-address rotation
-//   - Hide small balances
 //   - Blur sensitive data on blur (window-unfocus blur of mnemonic /
 //     QR / balance values; toggle ships now, the actual blur-on-blur
 //     wiring lives in shell-level event handlers added later)
@@ -105,12 +104,6 @@ export function PrivacySection() {
                 hint="Use a fresh change address for every send. Improves chain-analysis resistance. Your leftover balance moves to the new address, which appears in your address list as “Change #N”."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
-            />
-            <ToggleRow
-                label="Hide small balances"
-                hint="Collapse balances under the dust threshold from balance / portfolio views."
-                checked={settings.privacy.hideSmallBalances}
-                onChange={(v) => onToggle('hideSmallBalances', v)}
             />
             <ToggleRow
                 label="Blur sensitive data on blur"

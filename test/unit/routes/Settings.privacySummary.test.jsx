@@ -59,22 +59,22 @@ describe('Privacy row summary', () => {
             blurOnBlur: false,
             labelsSurviveRestore: false,
         };
-        expect(summaryText()).toContain('3 of 8 on');
+        expect(summaryText()).toContain('3 of 7 on');
     });
 
     it('drops a default-on switch once it is stored false', () => {
         privacy = { hapticsEnabled: false, priceDataEnabled: false, metadataFetchEnabled: false };
-        expect(summaryText()).toContain('0 of 8 on');
+        expect(summaryText()).toContain('0 of 7 on');
     });
 
     it('counts the switches beyond the first five', () => {
         privacy = { alwaysRequireHwExplicitConfirm: true, changeAddressRotation: true };
-        expect(summaryText()).toContain('5 of 8 on');
+        expect(summaryText()).toContain('5 of 7 on');
     });
 
     it('adds Tor routing to the total only where the shell can proxy', () => {
         setShellCapabilities({ socksProxy: true });
         privacy = { torRouting: true };
-        expect(summaryText()).toContain('4 of 9 on');
+        expect(summaryText()).toContain('4 of 8 on');
     });
 });

@@ -10,7 +10,11 @@
     "server": {
         "androidScheme": "https"
     },
-    "plugins": {},
+    "plugins": {
+        "SystemBars": {
+            "style": "LIGHT"
+        }
+    },
     "ios": {
         "contentInset": "never"
     }

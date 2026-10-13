@@ -22,11 +22,16 @@
 //     burning explorer bandwidth for off-screen tabs. WS push is
 //     Phase 4+ work once the explorer exposes a stream.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
-import { divideDecimalStrings } from '../utils/amountFormat.js';
+import {
+    divideDecimalStrings,
+    formatWithThousands,
+    trimAmountTail,
+} from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const POLL_INTERVAL_MS = 5000;
@@ -42,17 +47,14 @@ const POLL_INTERVAL_MS = 5000;
 export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {
     const { messaging } = useMessaging();
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [lastRefreshed, setLastRefreshed] = useState(0);
-    const mountedRef = useRef(true);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        return () => { mountedRef.current = false; };
-    }, []);
 
     useEffect(() => {
         let cancelled = false;
+        setBook({ bids: [], asks: [], maxCumulative: '0' });
+        setLoadError(null);
+        setLoading(true);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
@@ -69,7 +71,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 }
                 setBook(normalized);
                 setLoadError(null);
-                setLastRefreshed(Date.now());
+                setLoading(false);
             } catch (err) {
                 if (cancelled) return;
                 // Demo wallets keep the UI populated through dev/CORS
@@ -77,6 +79,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 // showing fabricated prices.
                 if (demo) setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
                 setLoadError(readFailureMessage(err, 'load the order book'));
+                setLoading(false);
             }
         };
         tick();
@@ -88,15 +91,21 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
     }, [messaging, chainId, tick1, tick2, demo]);
 
     return (
-        <div
+        <section
+            aria-label="Order book"
+            aria-busy={loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Orderbook</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))',
+                gap: '0.5rem',
+            }}>
                 <LevelsColumn
                     title="Bids"
                     side="bid"
@@ -116,36 +125,40 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                     tick1={tick1}
                 />
             </div>
-            {loadError ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
-                    {loadError}
-                </p>
+            {loading ? (
+                <StatusMessage variant="status">Loading order book…</StatusMessage>
             ) : null}
-            {!loadError && book.bids.length === 0 && book.asks.length === 0 ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loading && !loadError && book.bids.length === 0 && book.asks.length === 0 ? (
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     No open orders on this market.
                 </p>
             ) : null}
-        </div>
+        </section>
     );
 }
 
 function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, tick2 }) {
     return (
-        <div>
+        <div style={{ minWidth: 0 }}>
+            <p style={{ margin: '0 0 0.25rem', fontSize: '0.75rem', fontWeight: 700 }}>{title}</p>
             <div
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
                     gap: '0.25rem',
                     fontSize: '0.75rem',
-                    color: 'var(--xc-fg-muted)',
+                    color: 'var(--xc-text-muted)',
                     padding: '0 0.25rem 0.25rem',
+                    textAlign: 'right',
+                    fontVariantNumeric: 'tabular-nums',
                 }}
             >
-                <span>{title} ({tick2})</span>
+                <span>Price ({tick2})</span>
                 <span>Size ({tick1})</span>
-                <span>Total</span>
+                <span>Total ({tick1})</span>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {levels.map((level) => (
@@ -175,10 +188,12 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
             style={{
                 position: 'relative',
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
+                gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
                 gap: '0.25rem',
                 padding: '0.15rem 0.25rem',
                 fontSize: '0.8rem',
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
             }}
         >
             <span
@@ -192,12 +207,17 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                     pointerEvents: 'none',
                 }}
             />
-            <span style={{ position: 'relative', color: side === 'bid' ? '#26a69a' : '#ef5350' }}>
-                {level.displayPrice}
+            <span
+                title={level.displayPrice}
+                style={{ position: 'relative', color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger)' }}
+            >
+                {formatBookNumber(level.displayPrice)}
             </span>
-            <span style={{ position: 'relative' }}>{level.displaySize}</span>
-            <span style={{ position: 'relative', color: 'var(--xc-fg-muted)' }}>
-                {level.cumulative.toString()}
+            <span title={level.displaySize} style={{ position: 'relative' }}>
+                {formatBookNumber(level.displaySize)}
+            </span>
+            <span title={level.cumulative} style={{ position: 'relative', color: 'var(--xc-text-muted)' }}>
+                {formatBookNumber(level.cumulative)}
             </span>
         </div>
     );
@@ -224,4 +244,8 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
             </button>
         </li>
     );
+}
+
+function formatBookNumber(value) {
+    return formatWithThousands(trimAmountTail(value));
 }

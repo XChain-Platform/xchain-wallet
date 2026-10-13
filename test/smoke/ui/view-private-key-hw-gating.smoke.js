@@ -39,9 +39,7 @@ assert.ok(/case 'watch-only':\s*return\s*\{\s*kind:\s*'watch-only'/.test(vpk),
 // Hardware branch must short-circuit BEFORE the warning / reveal
 // render-stage branches. Use the render-branch headers
 // (`stage === 'warning'`, `// stage === 'revealed'`). Those only appear
-// once, in render order. The reveal is gated by the warning alone; the
-// password re-entry stage was retired (reveal exports from the already
-// unlocked session signer).
+// once, in render order.
 const hwBranch = /sourceInfo\.kind === 'hardware'/.exec(vpk);
 const warningStage = /stage === 'warning'/.exec(vpk);
 const revealStage = /\/\/ stage === 'revealed'/.exec(vpk);

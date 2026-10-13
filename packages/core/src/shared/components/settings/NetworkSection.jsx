@@ -23,19 +23,24 @@
 
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
 import {
+    activeNetworkLabel,
     activeNetworkOptions,
-    confirmActiveNetworkSwitch,
     normalizeActiveNetwork,
     persistActiveNetwork,
 } from '../../utils/activeNetworkSwitch.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 
 export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
     const { messaging } = useMessaging();
+    const confirmDialog = useConfirmModal();
     const [switching, setSwitching] = useState(false);
+    const [switchError, setSwitchError] = useState(/** @type {string|null} */ (null));
     const walletId = activeWallet?.id;
 
     if (loading) return <Status text="Loading…" />;
@@ -55,7 +60,15 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
 
     const onChange = async (next) => {
         if (next === current) return;
-        if (!confirmActiveNetworkSwitch(current, next)) return;
+        const nextLabel = activeNetworkLabel(next);
+        const currentLabel = activeNetworkLabel(current);
+        const confirmed = await confirmDialog.confirm({
+            title: `Switch to ${nextLabel}?`,
+            message: `The wallet will reload and show ${nextLabel} chains. Your ${currentLabel} balances and chain settings stay unchanged.`,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
+        setSwitchError(null);
         setSwitching(true);
         try {
             // Prepare destination addresses before reloading so every
@@ -63,27 +76,41 @@ export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
             await persistActiveNetwork({ messaging, update, walletId, network: next });
             reload();
         } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('activeNetwork update failed:', err);
+            setSwitchError(userFacingMessage(err, 'Could not switch networks. Try again.'));
+        } finally {
             setSwitching(false);
         }
     };
 
     return (
-        <div style={ROW}>
-            <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
-            <select
-                value={current}
-                onChange={(e) => onChange(e.target.value)}
-                aria-label="Active network"
-                disabled={switching}
-                style={SELECT}
-            >
-                {options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-            </select>
-        </div>
+        <>
+            <div style={ROW}>
+                <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
+                <select
+                    value={current}
+                    onChange={(e) => onChange(e.target.value)}
+                    aria-label="Active network"
+                    style={SELECT}
+                    disabled={switching || Boolean(confirmDialog.request)}
+                >
+                    {options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            </div>
+            {switchError ? (
+                <div role="alert" style={{ color: 'var(--xc-danger-fg, #c33)', fontSize: 'var(--xc-text-xs)' }}>
+                    {switchError}
+                </div>
+            ) : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
+        </>
     );
 }
 

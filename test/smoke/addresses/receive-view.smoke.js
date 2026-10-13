@@ -63,22 +63,15 @@ for (const symbol of [
 ]) {
     assert.ok(receive.includes(symbol), `shared Receive.jsx references ${symbol}`);
 }
-// QR-first redesign: Receive reads existing addresses only
-// (getAddressesByChain + getNewestAddress). The inline "derive a fresh
-// next-index address" flow (messaging.generateReceiveAddress, which
-// prompted for the password and surfaced InvalidPasswordError) was
-// dropped from the screen. The backend handler + messaging export are
-// retained (asserted below) for callers that still derive.
+// Receive reads stored addresses and can derive a fresh next-index address
+// for the selected type without leaving the payment-request screen.
 for (const call of [
     'messaging.getAddressesByChain',
     'messaging.getNewestAddress',
+    'messaging.generateReceiveAddress',
 ]) {
     assert.ok(receive.includes(call), `shared Receive.jsx wires ${call}`);
 }
-assert.ok(
-    !receive.includes('messaging.generateReceiveAddress'),
-    'shared Receive.jsx no longer derives a fresh address inline (QR-first)',
-);
 
 const sharedHome = join(
     wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx',

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A failed "Broadcast now" re-lists the queue, so a row the host removed
+// A failed send re-lists the queue, so a row the host removed
 // before throwing leaves at once, and the user reads plain words for what happened.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -18,12 +18,14 @@ import React from 'react';
 let queue = [];
 let broadcastImpl = async () => {};
 let discardImpl = async () => {};
+let listImpl = async () => queue;
+let reachabilityOverall = 'normal';
 const toasts = [];
 
 // One stable messaging object, as the provider gives: a fresh one per render
 // re-arms the banner's list effect on every render.
 const messaging = {
-    listQueuedBroadcasts: async () => queue,
+    listQueuedBroadcasts: () => listImpl(),
     broadcastQueuedRequest: (req) => broadcastImpl(req),
     discardQueuedRequest: (req) => discardImpl(req),
 };
@@ -34,7 +36,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
-    useReachability: () => ({ overall: 'normal' }),
+    useReachability: () => ({ overall: reachabilityOverall }),
 }));
 
 vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
@@ -50,6 +52,8 @@ afterEach(() => {
     toasts.length = 0;
     broadcastImpl = async () => {};
     discardImpl = async () => {};
+    listImpl = async () => queue;
+    reachabilityOverall = 'normal';
 });
 
 function entry(id, summary) {
@@ -69,7 +73,7 @@ async function renderWith(rows) {
 }
 
 function pressBroadcast(index = 0) {
-    fireEvent.click(screen.getAllByRole('button', { name: /broadcast now/i })[index]);
+    fireEvent.click(screen.getAllByRole('button', { name: /send now/i })[index]);
 }
 
 describe('QueuedBroadcastBanner after a failed broadcast', () => {
@@ -114,12 +118,12 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts[0].message).not.toMatch(/broadcast\.queue:|compose/i);
     });
 
-    it('shows an unrelated error as before while the row is still queued', async () => {
+    it('hides an unrelated host error while the row is still waiting to send', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async () => { throw new Error('boom'); };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe('boom');
+        expect(alert.textContent).toBe('Could not send this transaction. It is still waiting to send. Try again.');
         expect(screen.getByText('Send 1 XCP')).toBeTruthy();
     });
 
@@ -129,9 +133,62 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
             queue = queue.filter((e) => e.id !== id);
             throw new Error('vault refused');
         };
-        fireEvent.click(screen.getAllByRole('button', { name: /discard/i })[0]);
+        fireEvent.click(screen.getAllByRole('button', { name: /remove from queue/i })[0]);
         await waitFor(() => expect(screen.queryByText('Send 1 XCP')).toBeNull());
         expect(screen.getByText('Send 2 XCP')).toBeTruthy();
+        expect(toasts.at(-1)?.message).toBe('Transaction removed from the queue.');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('QueuedBroadcastBanner actions and announcements', () => {
+    it('uses plain labels and announces the queue count without wrapping controls in a status', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        const status = screen.getByRole('status');
+        expect(status).toHaveTextContent('Waiting to send (1)');
+        expect(status).toHaveAttribute('aria-live', 'polite');
+        expect(status).toHaveAttribute('aria-atomic', 'true');
+        expect(screen.getByRole('button', { name: 'Send now: Send 1 XCP' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Remove from queue: Send 1 XCP' })).toBeEnabled();
+    });
+
+    it('disables every row action while one transaction is being sent', async () => {
+        let finish;
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        await renderWith([entry('a', 'Send 1 XCP'), entry('b', 'Send 2 XCP')]);
+        pressBroadcast();
+        await waitFor(() => {
+            for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
+        });
+        expect(screen.getByText('Sending Send 1 XCP.')).toHaveAttribute('aria-live', 'polite');
+        expect(screen.getByRole('button', { name: 'Sending: Send 1 XCP' })).toBeDisabled();
+        finish();
+        await waitFor(() => expect(toasts.some((toast) => toast.message === 'Transaction sent.')).toBe(true));
+    });
+
+    it('removes a successfully handled row when the follow-up list cannot be read', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        listImpl = async () => { throw new Error('list unavailable'); };
+        pressBroadcast();
+        await waitFor(() => expect(screen.queryByText('Send 1 XCP')).toBeNull());
+        expect(toasts.at(-1)).toMatchObject({ message: 'Transaction sent.', variant: 'success' });
+    });
+
+    it('moves focus to the first send action from the reconnect reminder', async () => {
+        reachabilityOverall = 'offline';
+        queue = [entry('a', 'Send 1 XCP')];
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await screen.findByText('Send 1 XCP');
+        const scrollIntoView = vi.fn();
+        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+        reachabilityOverall = 'normal';
+        view.rerender(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await waitFor(() => expect(toasts.at(-1)?.actionLabel).toBe('Review'));
+        toasts.at(-1).onAction();
+
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send now: Send 1 XCP' }));
+        expect(scrollIntoView).toHaveBeenCalledOnce();
     });
 });
 
@@ -143,6 +200,9 @@ describe('queuedBroadcastFailure', () => {
 
     it('trusts a re-listed queue that still holds the row', () => {
         const out = queuedBroadcastFailure(named('BroadcastFailedPermanentError', 'x'), [{ id: 'a' }], 'a');
-        expect(out).toEqual({ removed: false, message: 'x' });
+        expect(out).toEqual({
+            removed: false,
+            message: 'Could not send this transaction. It is still waiting to send. Try again.',
+        });
     });
 });

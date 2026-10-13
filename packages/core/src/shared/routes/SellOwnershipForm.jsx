@@ -19,6 +19,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     estimateNativeSendFee,
@@ -35,6 +36,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -174,6 +176,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
+    const priceTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick.trim().toUpperCase(),
+        skip: getMode !== 'token' || !getTick.trim(),
+    });
 
     // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
     // the form stage. `feeEstimate` backs the slider readout and the review
@@ -298,6 +305,16 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         if (validationError) return;
         if (!priceReady || !getTickReady) {
             setFormError(`Enter what you want in return and a price greater than 0.`);
+            return;
+        }
+        // Keep the sale price within the payment asset's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(price, {
+            divisibility: getMode === 'coin' ? 8 : priceTokenInfo?.divisibility,
+            tick: getMode === 'coin' ? coinTicker : getTick,
+            noun: 'Price',
+        });
+        if (precisionError) {
+            setFormError(precisionError);
             return;
         }
         setFormError(null);
