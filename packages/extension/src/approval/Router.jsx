@@ -25,6 +25,16 @@ const SIGN_APPROVAL_KINDS = new Set([
     'coSign',
     'signIn',
 ]);
+const APPROVAL_UNAVAILABLE_MESSAGE =
+    'This approval is no longer available. Close this window and try again from the site.';
+
+function approvalLoadErrorMessage(error) {
+    if (error?.name === 'ApprovalNotFoundError'
+        || error?.name === 'RuntimeConnectionError') {
+        return APPROVAL_UNAVAILABLE_MESSAGE;
+    }
+    return error?.message || 'Failed to load request.';
+}
 
 function getRequestId() {
     const params = new URLSearchParams(window.location.search);
@@ -61,7 +71,7 @@ function ApprovalRoute() {
         }
         fetchApproval(id)
             .then(setData)
-            .catch((err) => setError(err?.message || 'Failed to load request.'));
+            .catch((err) => setError(approvalLoadErrorMessage(err)));
     }, [id]);
 
     const reject = useCallback(async () => {

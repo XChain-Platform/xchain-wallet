@@ -12,7 +12,13 @@ import {
     connectToBackground,
 } from '../../../packages/extension/src/popup/backgroundConnection.jsx';
 import { getSessionStatus } from '../../../packages/extension/src/popup/messaging.js';
-import { RUNTIME_MESSAGE_TIMEOUT_MS } from '../../../packages/extension/src/shared/chromeMessaging.js';
+import {
+    BACKGROUND_INTERRUPTED_MESSAGE,
+    RUNTIME_MESSAGE_TIMEOUT_MS,
+    sendMessage,
+} from '../../../packages/extension/src/shared/chromeMessaging.js';
+import { Router as ApprovalRouter } from '../../../packages/extension/src/approval/Router.jsx';
+import { sequenceUnlockedSession } from '../../../packages/extension/src/background/walletLock.js';
 
 function reply(runtime, callback, response, lastError) {
     runtime.lastError = lastError;
@@ -129,5 +135,70 @@ describe('popup background connection recovery', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
         expect(onReload).toHaveBeenCalledOnce();
         expect(runtime.sendMessage).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('service-worker interruption safety', () => {
+    it('reports a pending signature interruption without exposing Chrome internals', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage.mockImplementation((_message, callback) => reply(
+            runtime,
+            callback,
+            undefined,
+            { message: 'The message port closed before a response was received.' },
+        ));
+        vi.stubGlobal('chrome', { runtime });
+
+        const error = await sendMessage('auth.signMessage', { message: 'reviewed' })
+            .catch((caught) => caught);
+
+        expect(error).toMatchObject({
+            name: 'RuntimeConnectionError',
+            code: 'RUNTIME_DISCONNECTED',
+            message: BACKGROUND_INTERRUPTED_MESSAGE,
+        });
+        expect(error.message).not.toMatch(/message port|response/i);
+        expect(runtime.sendMessage).toHaveBeenCalledOnce();
+    });
+
+    it('fails a lost approval closed with a plain recovery message', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        runtime.sendMessage.mockImplementation((_message, callback) => reply(runtime, callback, {
+            ok: false,
+            error: {
+                name: 'ApprovalNotFoundError',
+                message: 'approval.fetch: unknown id "lost-request"',
+            },
+        }));
+        vi.stubGlobal('chrome', { runtime });
+        window.history.replaceState({}, '', '/approval.html?id=lost-request');
+
+        render(
+            <MessagingProvider shell="approval" messaging={{}}>
+                <ApprovalRouter />
+            </MessagingProvider>,
+        );
+        await flushPromises();
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This approval is no longer available. Close this window and try again from the site.',
+        );
+        expect(screen.getByRole('alert')).not.toHaveTextContent('unknown id');
+    });
+
+    it('finishes clearing stale auto-lock state before the UI can re-arm it', async () => {
+        let finishClear;
+        const clearAutoLockState = vi.fn(() => new Promise((resolve) => {
+            finishClear = resolve;
+        }));
+        const continueUnlock = vi.fn(async () => 'unlocked');
+
+        const pending = sequenceUnlockedSession({ clearAutoLockState, continueUnlock });
+        await flushPromises();
+        expect(continueUnlock).not.toHaveBeenCalled();
+
+        finishClear();
+        await expect(pending).resolves.toBe('unlocked');
+        expect(continueUnlock).toHaveBeenCalledOnce();
     });
 });
