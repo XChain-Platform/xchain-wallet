@@ -22,9 +22,9 @@
 // Design choices:
 //   - Every mutation auto-saves. Shells that want batching can set
 //     autoSave: false and call vault.save() explicitly.
-//   - Reads migrate records forward via the schema migration harness.
-//     Migrations run lazily; the on-disk record stays at its stored
-//     version until the next write.
+//   - Reads migrate records forward via the schema migration harness and
+//     cache the result. The on-disk record stays at its stored version until
+//     the next write.
 //   - AAD is optional; when supplied it's passed through to AEAD
 //     unchanged on both save and load.
 
@@ -110,6 +110,11 @@ export class Vault {
         /** @type {import('./codec.js').VaultDocument | null} */
         this._doc = null;
         this._opened = false;
+        /** @type {Promise<void> | null} */
+        this._opening = null;
+        // Every document write runs in invocation order. A rejected write is
+        // absorbed only by the tail so later operations can still proceed.
+        this._writeTail = Promise.resolve();
 
         this.wallets = makeCollection(this, 'wallets', migrateWallet, validateWallet);
         this.accounts = makeCollection(this, 'accounts', migrateAccount, validateAccount);
@@ -211,20 +216,34 @@ export class Vault {
      */
     async open() {
         if (this._opened) return;
-        const blob = await this._backend.load();
-        this._doc = blob
-            ? await decodeDocument(this._masterKey, blob, this._aad)
-            : emptyDocument();
-        this._opened = true;
-        logConsole.record({
-            source: 'vault',
-            level: 'info',
-            message: blob ? 'open (existing)' : 'open (empty)',
-        });
+        if (!this._opening) {
+            this._opening = (async () => {
+                const blob = await this._backend.load();
+                this._doc = blob
+                    ? await decodeDocument(this._masterKey, blob, this._aad)
+                    : emptyDocument();
+                this._opened = true;
+                logConsole.record({
+                    source: 'vault',
+                    level: 'info',
+                    message: blob ? 'open (existing)' : 'open (empty)',
+                });
+            })();
+        }
+        try {
+            await this._opening;
+        } finally {
+            this._opening = null;
+        }
     }
 
     /** Flush the current document to the backend. */
     async save() {
+        this._assertOpen();
+        return this._enqueueWrite(() => this._saveNow());
+    }
+
+    async _saveNow() {
         this._assertOpen();
         const blob = await encodeDocument(this._masterKey, this._doc, this._aad);
         await this._backend.save(blob);
@@ -235,10 +254,12 @@ export class Vault {
      * the vault in a closed state. Callers must `open()` again.
      */
     async clear() {
-        await this._backend.clear();
-        this._doc = null;
-        this._opened = false;
-        logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
+        return this._enqueueWrite(async () => {
+            await this._backend.clear();
+            this._doc = null;
+            this._opened = false;
+            logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
+        });
     }
 
     /** Zero the cached master key and close. Safe to call multiple times. */
@@ -263,8 +284,29 @@ export class Vault {
         }
     }
 
-    async _maybeAutoSave() {
-        if (this._autoSave) await this.save();
+    _enqueueWrite(operation) {
+        const result = this._writeTail.then(operation);
+        this._writeTail = result.catch(() => {});
+        return result;
+    }
+
+    async _mutate(buildNext) {
+        this._assertOpen();
+        return this._enqueueWrite(async () => {
+            this._assertOpen();
+            const previous = this._doc;
+            const { document, result, persist = true } = buildNext(previous);
+            this._doc = document;
+            try {
+                if (this._autoSave && persist) await this._saveNow();
+                return result;
+            } catch (err) {
+                // A close or clear may replace the document while the backend
+                // settles. Restore only the state owned by this operation.
+                if (this._doc === document) this._doc = previous;
+                throw err;
+            }
+        });
     }
 }
 
@@ -279,13 +321,21 @@ function makeCollection(vault, collection, migrate, validate) {
     return {
         async get(id) {
             vault._assertOpen();
-            const found = vault._doc[collection].find((r) => r.id === id);
-            return found ? migrate(found) : null;
+            const arr = vault._doc[collection];
+            const idx = arr.findIndex((r) => r.id === id);
+            if (idx < 0) return null;
+            const migrated = migrate(arr[idx]);
+            arr[idx] = migrated;
+            return migrated;
         },
 
         async list() {
             vault._assertOpen();
-            return vault._doc[collection].map((r) => migrate(r));
+            return vault._doc[collection].map((r, idx, arr) => {
+                const migrated = migrate(r);
+                arr[idx] = migrated;
+                return migrated;
+            });
         },
 
         async put(record) {
@@ -297,21 +347,24 @@ function makeCollection(vault, collection, migrate, validate) {
             if (!result.ok) {
                 throw new VaultValidationError(collection, result.errors);
             }
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === record.id);
-            if (idx >= 0) arr[idx] = record;
-            else arr.push(record);
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => {
+                const arr = [...document[collection]];
+                const idx = arr.findIndex((r) => r.id === record.id);
+                if (idx >= 0) arr[idx] = record;
+                else arr.push(record);
+                return { document: { ...document, [collection]: arr } };
+            });
         },
 
         async delete(id) {
             vault._assertOpen();
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === id);
-            if (idx < 0) return false;
-            arr.splice(idx, 1);
-            await vault._maybeAutoSave();
-            return true;
+            return vault._mutate((document) => {
+                const arr = [...document[collection]];
+                const idx = arr.findIndex((r) => r.id === id);
+                if (idx < 0) return { document, result: false, persist: false };
+                arr.splice(idx, 1);
+                return { document: { ...document, [collection]: arr }, result: true };
+            });
         },
 
         async count() {
@@ -321,9 +374,15 @@ function makeCollection(vault, collection, migrate, validate) {
 
         async findBy(field, value) {
             vault._assertOpen();
-            return vault._doc[collection]
-                .filter((r) => r[field] === value)
-                .map((r) => migrate(r));
+            const arr = vault._doc[collection];
+            const found = [];
+            arr.forEach((r, idx) => {
+                if (r[field] !== value) return;
+                const migrated = migrate(r);
+                arr[idx] = migrated;
+                found.push(migrated);
+            });
+            return found;
         },
     };
 }
@@ -343,6 +402,7 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
             const r = vault._doc[key];
             if (!r) return null;
             const migrated = migrate(r);
+            vault._doc[key] = migrated;
             return inflate ? inflate(migrated) : migrated;
         },
 
@@ -354,14 +414,19 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
             if (!result.ok) {
                 throw new VaultValidationError(key, result.errors);
             }
-            vault._doc[key] = deflate ? deflate(record) : record;
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => ({
+                document: {
+                    ...document,
+                    [key]: deflate ? deflate(record) : record,
+                },
+            }));
         },
 
         async clear() {
             vault._assertOpen();
-            vault._doc[key] = null;
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => ({
+                document: { ...document, [key]: null },
+            }));
         },
     };
 }
