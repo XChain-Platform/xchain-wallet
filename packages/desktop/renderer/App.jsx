@@ -2670,6 +2670,7 @@ function AppInner() {
             // pending-COINPAY scan.
             const unlockedTree = (
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}

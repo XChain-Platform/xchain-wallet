@@ -93,6 +93,10 @@
     position: relative;
 }
 
+.routeFocusTarget:focus {
+    outline: none;
+}
+
 /* compact tier (< 640px): the bottom tab bar owns navigation.
    FullLayoutWithNav already withholds the nav slot here, so this rule is
    the belt-and-braces for any shell that renders a sidebar anyway. */

@@ -2830,6 +2830,7 @@ function AppInner() {
                 // that used to disagree with the CSS and leave 640-899px with
                 // no navigation at all.
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
