@@ -39,11 +39,44 @@ describe('<Input>', () => {
         expect(screen.getByRole('alert')).toHaveTextContent('Required');
         // Hint hidden when error is present (intentional; avoids dual messages).
         expect(screen.queryByText('Use work email')).toBeNull();
+        const describedIds = input.getAttribute('aria-describedby').split(' ');
+        expect(describedIds).toHaveLength(1);
+        expect(document.getElementById(describedIds[0])).toHaveTextContent('Required');
     });
 
     it('omits aria-invalid when there is no error', () => {
         render(<Input label="Name" />);
         expect(screen.getByLabelText('Name')).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('uses mobile-safe text-entry defaults', () => {
+        render(<Input label="Code" />);
+        const input = screen.getByLabelText('Code');
+        expect(input).toHaveAttribute('type', 'text');
+        expect(input).toHaveAttribute('autocapitalize', 'off');
+        expect(input).toHaveAttribute('autocorrect', 'off');
+        expect(input).toHaveAttribute('spellcheck', 'false');
+        expect(input).toHaveAttribute('enterkeyhint', 'done');
+    });
+
+    it('uses a search return key and honors keyboard-hint overrides', () => {
+        const { rerender } = render(<Input label="Find" type="search" />);
+        expect(screen.getByLabelText('Find')).toHaveAttribute('enterkeyhint', 'search');
+
+        rerender(
+            <Input
+                label="Name"
+                autoCapitalize="words"
+                autoCorrect="on"
+                spellCheck
+                enterKeyHint="go"
+            />,
+        );
+        const input = screen.getByLabelText('Name');
+        expect(input).toHaveAttribute('autocapitalize', 'words');
+        expect(input).toHaveAttribute('autocorrect', 'on');
+        expect(input).toHaveAttribute('spellcheck', 'true');
+        expect(input).toHaveAttribute('enterkeyhint', 'go');
     });
 
     it('pass-through value + onChange work end-to-end', () => {
@@ -84,4 +117,3 @@ describe('<Input>', () => {
         expect(screen.queryByText(/local time zone/)).toBeNull();
     });
 });
-

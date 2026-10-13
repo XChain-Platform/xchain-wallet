@@ -26,6 +26,7 @@ import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
 import {
     feePreferenceLabel,
@@ -150,6 +151,7 @@ export function AddressList({
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
     const { showToast } = useToast();
+    const haptic = useHapticFeedback();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -1056,6 +1058,7 @@ export function AddressList({
             if (ok) {
                 setAddrCopied(true);
                 setTimeout(() => setAddrCopied(false), 1200);
+                haptic.tap();
                 return;
             }
             showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
@@ -1200,6 +1203,7 @@ export function AddressList({
                                 onChange={(e) => setLabelDraft(e.target.value)}
                                 placeholder="Add a label"
                                 aria-label="Address label"
+                                autoComplete="off"
                             />
                             <Button
                                 size="md"
@@ -1377,6 +1381,8 @@ export function AddressList({
             <>
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
                     role="textbox"
                     className={local.search}
                     placeholder="Search"
@@ -1435,9 +1441,12 @@ export function AddressList({
                 </ul>
             ) : null}
             {listedRows.length === 0 ? (
-                <EmptyState title={hiddenRows.length > 0
-                    ? 'All matching addresses are hidden.'
-                    : 'No addresses match the current filter.'} />
+                <EmptyState
+                    title={hiddenRows.length > 0 ? "All matching addresses are hidden" : "No matching addresses"}
+                    body={hiddenRows.length > 0
+                        ? "Show hidden addresses to see them again."
+                        : "Try a different search or network filter."}
+                />
             ) : (
             <ul className={local.addrList} aria-label="Wallet addresses">
                 {listedRows.map((row) => {

@@ -135,11 +135,15 @@ export function Settings({
         {
             id: 'this-wallet',
             title: 'This Wallet',
-            description: 'Wallet name, switch / rename, remove wallet.',
-            keywords: 'wallet name remove rename migrate bip39 delete destroy',
+            description: 'Wallet name, extended public keys, switch / rename, remove wallet.',
+            keywords: 'wallet name xpub extended public key watch only export switch rename remove delete destroy migrate bip39 upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved, onBusyChange: setWalletManagementBusy },
+            props: {
+                activeWallet, onOpenWalletPicker, activeAccount,
+                onWalletRemoved: handleWalletRemoved,
+                onBusyChange: setWalletManagementBusy,
+            },
             summary: walletLabel,
         },
         {
@@ -156,7 +160,7 @@ export function Settings({
             id: 'appearance',
             title: 'Appearance',
             description: 'Theme, accent color, reduced motion.',
-            keywords: 'appearance theme color motion accent dark light reduced',
+            keywords: 'appearance theme system default color motion accent dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
         },
@@ -165,6 +169,7 @@ export function Settings({
             title: 'Display',
             description: 'Balance thresholds, number formatting, pinned and hidden tokens.',
             keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
+            searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
             kind: 'internal-drill',
             Component: DisplaySection,
             summary: displaySummary(settings),
@@ -173,7 +178,7 @@ export function Settings({
             id: 'keyboard',
             title: 'Keyboard',
             description: 'Keyboard shortcuts: view and rebind.',
-            keywords: 'keyboard shortcuts rebind keys hotkeys bindings palette',
+            keywords: 'keyboard shortcuts rebind reset keys hotkeys bindings open command palette lock wallet settings new send go balances history receive dex contacts filter export pin hide focused token submit form',
             kind: 'internal-drill',
             Component: KeyboardSection,
             summary: keyboardSummary(settings),
@@ -182,7 +187,7 @@ export function Settings({
             id: 'language-region',
             title: 'Language & Region',
             description: 'Language, currency.',
-            keywords: 'language region currency fiat locale',
+            keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
             Component: LanguageRegionSection,
         },
@@ -190,7 +195,7 @@ export function Settings({
             id: 'privacy',
             title: 'Privacy',
             description: 'Tor, change-address rotation, blur on blur, labels survive restore.',
-            keywords: 'privacy tor rotation labels blur',
+            keywords: 'privacy tor routing change address rotation blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
             kind: 'internal-drill',
             Component: PrivacySection,
             summary: privacySummary(settings),
@@ -199,7 +204,7 @@ export function Settings({
             id: 'safety',
             title: 'Safety',
             description: 'Auto-lock, undo-send, test-send threshold, panic mode, backup reminders.',
-            keywords: 'safety autolock auto lock undo panic backup reminders',
+            keywords: 'safety autolock auto lock timeout test send warning threshold cancel sends undo biometric unlock wallet password panic mode duress passphrase backup reminders',
             kind: 'internal-drill',
             Component: SafetySection,
             summary: safetySummary(settings),
@@ -217,17 +222,17 @@ export function Settings({
             id: 'backup',
             title: 'Backup',
             description: 'Seed phrase, dry-run restore, encrypted backup file.',
-            keywords: 'backup seed phrase restore encrypted file labels export',
+            keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
-            props: { activeWallet },
+            props: { activeWallet, reload },
             summary: 'Encrypted file export',
         },
         {
             id: 'fees',
             title: 'Fees',
             description: 'Per-chain fee strategy, RBF defaults.',
-            keywords: 'fees fee strategy rbf chain custom',
+            keywords: 'fees fee strategy rate rbf replace by fee chain custom allow bump defaults',
             kind: 'internal-drill',
             Component: FeesSection,
             summary: feesSummary(settings),
@@ -241,8 +246,8 @@ export function Settings({
                 ? 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.'
                 : 'Choose Mainnet or Testnet. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
             keywords: settings?.developerMode
-                ? 'network mainnet testnet regtest active filter chain switch mode dev'
-                : 'network mainnet testnet active filter chain switch mode',
+                ? 'network active mainnet testnet regtest filter chain switch mode dev'
+                : 'network active mainnet testnet filter chain switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
@@ -253,7 +258,7 @@ export function Settings({
             id: 'network-endpoints',
             title: 'Network & Endpoints',
             description: 'Per-chain explorer, encoder, and hub URLs.',
-            keywords: 'network endpoints explorer encoder hub url chain registry',
+            keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
             summary: endpointsSummary(settings),
@@ -262,7 +267,7 @@ export function Settings({
             id: 'notifications',
             title: 'Notifications',
             description: 'Confirmations, receipts, dispenser fills, order fills, price alerts.',
-            keywords: 'notifications confirmations receipts dispenser order price alert',
+            keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
             Component: NotificationsSection,
             props: { walletId: activeWallet?.id },
@@ -271,7 +276,7 @@ export function Settings({
             id: 'connected-sites',
             title: 'Connected Sites',
             description: 'dApp connections and per-site permissions.',
-            keywords: 'connected sites dapp permissions origin disconnect',
+            keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
             kind: 'internal-drill',
             Component: ConnectedSitesSection,
             summary: connectedSitesSummary(siteCount),
@@ -280,7 +285,7 @@ export function Settings({
             id: 'contacts',
             title: 'Contacts',
             description: 'Export and import the address book.',
-            keywords: 'contacts address book export import',
+            keywords: 'contacts address book export import json file drop private encrypted',
             kind: 'panel',
             Component: ContactsSection,
         },
@@ -288,7 +293,7 @@ export function Settings({
             id: 'ads',
             title: 'Automatic Donation System',
             description: 'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
-            keywords: 'donation ads automatic per chain amount threshold lifetime',
+            keywords: 'donation ads automatic on off per chain transaction amount trigger threshold address lifetime totals',
             kind: 'internal-drill',
             Component: AdsSection,
             summary: adsSummary(settings),
@@ -297,7 +302,7 @@ export function Settings({
             id: 'developer',
             title: 'Developer Mode',
             description: 'Custom endpoints, regtest networks, and diagnostics.',
-            keywords: 'developer mode regtest custom endpoints diagnostics learn',
+            keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
             props: { onNavigateToMint },
@@ -307,12 +312,12 @@ export function Settings({
             id: 'about',
             title: 'About',
             description: 'Version, license, reproducible build verification, release signatures.',
-            keywords: 'about version license repro reproducible signatures release security',
+            keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -320,13 +325,19 @@ export function Settings({
     // call from the second render, tripping React's
     // "Rendered fewer hooks than expected" guard.
     const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
+        const q = normalizeSearchText(query);
         if (!q) return sections;
-        return sections.filter((s) =>
-            s.title.toLowerCase().includes(q)
-            || s.description.toLowerCase().includes(q)
-            || s.keywords.toLowerCase().includes(q),
-        );
+        return sections.filter((s) => {
+            if (s.visible === false) return false;
+            const searchable = normalizeSearchText([
+                s.title,
+                s.description,
+                s.keywords,
+                s.searchTerms,
+                s.summary,
+            ].filter(Boolean).join(' '));
+            return q.split(' ').every((term) => searchable.includes(term));
+        });
     }, [sections, query]);
 
     // ─── Subpage view ─────────────────────────────────────────────
@@ -368,6 +379,10 @@ export function Settings({
                 toolbar={(
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Search settings…"
@@ -385,7 +400,7 @@ export function Settings({
                 )}
             >
                 {filtered.length === 0 ? (
-                    <EmptyState title={`No settings match "${query}".`} />
+                    <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
                 ) : null}
                 {filtered.map((section) => {
                     if (section.kind === 'external-drill') {
@@ -443,12 +458,20 @@ function reloadPage() {
     }
 }
 
+function normalizeSearchText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
 /**
  * @typedef {{
  *   id: string,
  *   title: string,
  *   description: string,
  *   keywords: string,
+ *   searchTerms?: string,
  *   kind: 'external-drill' | 'internal-drill' | 'panel' | 'stub',
  *   visible?: boolean,
  *   summary?: string,

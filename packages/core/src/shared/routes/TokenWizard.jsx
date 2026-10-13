@@ -17,10 +17,10 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
@@ -42,6 +42,9 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useSettings } from '../hooks/useSettings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -92,6 +95,7 @@ export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -264,6 +268,16 @@ export function TokenWizard({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        [chainId],
+    );
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -560,9 +574,15 @@ export function TokenWizard({ walletId, onBack }) {
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
             />
         );
@@ -699,6 +719,7 @@ export function TokenWizard({ walletId, onBack }) {
                 warnings: advancedIssueWarnings(advanced),
             },
             formError,
+            onEdit: () => { if (formError) setFormError(null); },
             onSubmit: handleDetailsSubmit,
             submitLabel: 'Review token',
         })}
@@ -784,6 +805,13 @@ export function TokenWizard({ walletId, onBack }) {
                     {(decoded?.details || []).map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
+                    />
                     <DetailRow
                         label="Protocol fee paid in"
                         value={payFeeInNativeCoin ? coinTicker : 'XCHAIN'}
@@ -1211,7 +1239,7 @@ function renderDetailsStage({
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
-    formError, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1220,6 +1248,7 @@ function renderDetailsStage({
         <FormPage
             label="Token details"
             onSubmit={onSubmit}
+            onChangeCapture={onEdit}
             intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
@@ -1305,7 +1334,7 @@ function renderDetailsStage({
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     maxLength={250}
                 />
@@ -1336,7 +1365,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting opens at block (optional)"
                     hint="Block height when public minting starts. Leave blank to open immediately."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStartBlock}
                     onChange={(e) => setMintStartBlock(e.target.value)}
                     autoComplete="off"
@@ -1346,7 +1375,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting closes at block (optional)"
                     hint="Block height when public minting ends. Leave blank to keep it open until sold out."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStopBlock}
                     onChange={(e) => setMintStopBlock(e.target.value)}
                     autoComplete="off"
@@ -1369,7 +1398,7 @@ function renderDetailsStage({
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1380,7 +1409,7 @@ function renderDetailsStage({
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1515,7 +1544,7 @@ function AdvancedIssuePanel({
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"

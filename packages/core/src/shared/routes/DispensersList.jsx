@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -63,6 +63,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     const [dispensersByChain, setDispensersByChain] = useState(
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [dispensersReload, setDispensersReload] = useState(0);
     // In-page filters: free-text search + network dropdown, mirroring the
     // contacts / messaging toolbars.
     const [query, setQuery] = useState('');
@@ -78,6 +80,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -87,7 +90,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     // Local labels for this account's dispenser sub-addresses (role=2
     // branch), keyed by address. A dispenser row whose on-chain dispenser
@@ -200,7 +203,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId]);
+    }, [addressesByChain, messaging, walletId, dispensersReload]);
     // Re-render once a minute while any closing row shows a countdown, and
     // re-read the protocol time of each chain with one, at most once per
     // CHAIN_TIME_REFRESH_MS. The key is a sorted list so it only changes when
@@ -304,17 +307,39 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     if (addressesError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setAddressesError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {addressesError}
+                </StatusMessage>
             </ListPage>,
         );
     }
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.entryDescription}>Loading addresses…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading dispensers">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
             <ListPage>
-                <EmptyState title="No addresses on any chain yet. Use Receive to generate one first, or Create dispenser to open your first." />
+                <EmptyState
+                    title="No supported address"
+                    body="A supported address is required before dispensers can be created or viewed."
+                />
             </ListPage>,
         );
     }
@@ -325,6 +350,8 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={local.search}
                         placeholder="Search"
                         value={query}
@@ -339,12 +366,26 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             )}
         >
             {loadErrors.length > 0 ? (
-                <StatusMessage variant="error" className={styles.entryDescription}>
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setDispensersByChain({});
+                            setDispensersReload((value) => value + 1);
+                        },
+                    }}
+                >
                     Couldn't load some dispensers. {loadErrors.join('; ')}
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>Loading…</p>
+                <div role="status" aria-label="Loading dispensers">
+                    <Skeleton.List rows={5} />
+                </div>
+            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+                null
             ) : visibleRows.length === 0 ? (
                 allRows.length === 0 ? (
                     <EmptyState
@@ -354,7 +395,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
                     />
                 ) : (
-                    <EmptyState title="No dispensers match the current filter." />
+                    <EmptyState title="No matching dispensers" body="Try a different search or network filter." />
                 )
             ) : (
                 <div className={local.list} role="list">

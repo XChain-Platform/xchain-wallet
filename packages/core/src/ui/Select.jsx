@@ -30,7 +30,7 @@ export const Select = forwardRef(function Select(
 ) {
     const autoId = useId();
     const selectId = id || autoId;
-    const hintId = hint ? `${selectId}-hint` : undefined;
+    const hintId = hint && !error ? `${selectId}-hint` : undefined;
     const errorId = error ? `${selectId}-error` : undefined;
     const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
     const selectClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();

@@ -120,6 +120,67 @@ describe('governance route audit', () => {
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
     });
 
+    it('shows the current ballot, delegation rules, change action, and block countdown', async () => {
+        const messaging = messagingWith({
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 110 }),
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 7,
+                tick: 'VOTE',
+                poll_status: 'open',
+                options: ['Yes', 'No'],
+                tally_mode: 'approval',
+                max_selections: 1,
+                end_block: 120,
+            }),
+            governanceVotes: vi.fn().mockResolvedValue({
+                data: [
+                    { action_index: 50, source: ADDRESS.address, poll_index: 7, choice: 0, share: '1' },
+                    { action_index: 55, source: ADDRESS.address, poll_index: 7, choice: 1, share: '1' },
+                ],
+            }),
+        });
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 7, onBack() {},
+        }, messaging);
+
+        expect(await screen.findByText('10 blocks remaining')).toBeTruthy();
+        expect(await screen.findByRole('button', { name: 'Change vote' })).toBeTruthy();
+        expect(screen.getByLabelText('0: Yes')).not.toBeChecked();
+        expect(screen.getByLabelText('1: No')).toBeChecked();
+        expect(screen.getByText(/A direct ballot overrides any standing VOTE delegation/)).toBeTruthy();
+        expect(screen.getByText(/latest confirmed ballot replaces its earlier ballot/)).toBeTruthy();
+        expect(messaging.governanceVotes).toHaveBeenCalledWith({
+            chainId: CHAIN, query: ADDRESS.address, type: 'address',
+        });
+    });
+
+    it('closes the editor at a passed end block and loads finalized results', async () => {
+        const messaging = messagingWith({
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 121 }),
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 9,
+                tick: 'VOTE',
+                poll_status: 'open',
+                options: ['Yes', 'No'],
+                tally_mode: 'approval',
+                max_selections: 1,
+                end_block: 120,
+            }),
+            governancePollResults: vi.fn().mockResolvedValue({
+                data: [{ option_index: 1, total_weight: '25', voter_count: 2 }],
+            }),
+        });
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 9, onBack() {},
+        }, messaging);
+
+        expect(await screen.findByText('Awaiting finalization')).toBeTruthy();
+        expect(screen.getByText('Voting closed')).toBeTruthy();
+        expect(await screen.findByText('25')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+        expect(messaging.governancePollResults).toHaveBeenCalledWith({ chainId: CHAIN, pollIndex: 9 });
+    });
+
     it('reports a missing poll instead of leaving the loading state forever', async () => {
         mount(PollDetail, {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 404, onBack() {},

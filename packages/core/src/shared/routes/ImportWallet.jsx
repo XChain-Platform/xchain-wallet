@@ -26,6 +26,11 @@ import { useToast } from '../components/ToastHost.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
+import { englishWordlist, isValidBip39Mnemonic } from '../../crypto/mnemonic.js';
+import {
+    COUNTERWALLET_WORDLIST,
+    isValidCounterwalletMnemonic,
+} from '../../crypto/counterwallet.js';
 // The flows this screen calls throw function-prefixed preconditions
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
@@ -47,6 +52,43 @@ import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
+const BIP39_WORDS = new Set(englishWordlist);
+const COUNTERWALLET_WORDS = new Set(COUNTERWALLET_WORDLIST);
+const MAX_WORD_SUGGESTIONS = 5;
+
+function normalizePhraseEntry(value) {
+    return typeof value === 'string'
+        ? value.trim().toLowerCase().split(/\s+/).filter(Boolean).join(' ')
+        : '';
+}
+
+function phraseFormat(value) {
+    if (isValidBip39Mnemonic(value)) return 'bip39';
+    if (isValidCounterwalletMnemonic(value)) return 'counterwallet';
+    return null;
+}
+
+function phraseValidationMessage(value) {
+    const words = value.split(' ');
+    const unknownWord = words.find((word) => !BIP39_WORDS.has(word) && !COUNTERWALLET_WORDS.has(word));
+    if (unknownWord) {
+        return `Unknown recovery phrase word "${unknownWord}". Check its spelling.`;
+    }
+    if (words.every((word) => BIP39_WORDS.has(word))) {
+        return 'Every word is in the BIP39 list, but the checksum does not match. Check the word order and spelling.';
+    }
+    const nonBip39Word = words.find((word) => !BIP39_WORDS.has(word));
+    return `This is not a valid BIP39 or Counterwallet/FreeWallet recovery phrase. Check "${nonBip39Word}" and the other words.`;
+}
+
+function wordRangeAt(value, cursor) {
+    const safeCursor = Math.min(Math.max(cursor, 0), value.length);
+    let start = safeCursor;
+    let end = safeCursor;
+    while (start > 0 && !/\s/.test(value[start - 1])) start -= 1;
+    while (end < value.length && !/\s/.test(value[end])) end += 1;
+    return { start, end, prefix: value.slice(start, safeCursor).toLowerCase() };
+}
 
 // The one restore error that IS about the file rather than a password, and so
 // the only one the Browse affordance belongs on.
@@ -110,6 +152,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const [lane, setLane] = useState(/** @type {'mnemonic' | 'backup'} */ ('mnemonic'));
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
+    const [mnemonicCursor, setMnemonicCursor] = useState(0);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [backupContent, setBackupContent] = useState('');
@@ -154,26 +197,27 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     function handleQrFrame(text) {
         if (typeof text !== 'string' || text.length === 0) return;
         // Strip an optional `bip39:` prefix that some QR generators emit.
-        const cleaned = text.replace(/^\s*bip39:\s*/i, '').trim();
+        const cleaned = normalizePhraseEntry(text.replace(/^\s*bip39:\s*/i, ''));
         setMnemonic(cleaned);
+        setMnemonicCursor(cleaned.length);
         setScanning(false);
         if (error) setError(null);
     }
 
-    function handleBackupFile(event) {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        setBackupFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = () => {
-            const text = typeof reader.result === 'string' ? reader.result : '';
-            setBackupContent(text);
-            if (error) setError(null);
-        };
-        reader.onerror = () => {
-            setError('Could not read the selected file.');
-        };
-        reader.readAsText(file);
+    function handleMnemonicPaste(event) {
+        const pasted = event.clipboardData?.getData('text');
+        const normalized = normalizePhraseEntry(pasted);
+        if (normalized.split(' ').length < 2) return;
+        event.preventDefault();
+        const textarea = event.currentTarget;
+        const start = textarea.selectionStart ?? mnemonic.length;
+        const end = textarea.selectionEnd ?? start;
+        const combined = normalizePhraseEntry(
+            `${mnemonic.slice(0, start)} ${normalized} ${mnemonic.slice(end)}`,
+        );
+        setMnemonic(combined);
+        setMnemonicCursor(combined.length);
+        if (error) setError(null);
     }
 
     // Encrypted-backup drop zone (same .xchain-wallet / JSON / text MIME
@@ -186,6 +230,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         disabled: busy,
         onError: setError,
         onFile: ({ file, content }) => {
+            setBackupPointer(null);
+            setBackupScanning(false);
             setBackupFileName(file.name);
             setBackupContent(typeof content === 'string' ? content : '');
             if (error) setError(null);
@@ -200,6 +246,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         if (typeof text !== 'string' || text.trim().length === 0) return;
         const detected = detectQrContent(text.trim());
         if (detected.type === 'backup-pointer') {
+            setBackupContent('');
+            setBackupFileName(null);
             setBackupPointer(detected.pointer);
             setBackupScanning(false);
             if (error) setError(null);
@@ -375,7 +423,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     async function handleSubmit(event) {
         event.preventDefault();
         if (busy) return;
-        const trimmed = mnemonic.trim().replace(/\s+/g, ' ');
+        const trimmed = normalizePhraseEntry(mnemonic);
         if (trimmed.length === 0) {
             setError('Recovery phrase is required.');
             return;
@@ -384,6 +432,10 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         if (!acceptedWordCounts.includes(wordCount)) {
             const expected = acceptedWordCounts.join(', ');
             setError(`Expected ${expected} word${acceptedWordCounts.length === 1 ? '' : 's'}, got ${wordCount}.`);
+            return;
+        }
+        if (!phraseFormat(trimmed)) {
+            setError(phraseValidationMessage(trimmed));
             return;
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -444,6 +496,39 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const mnemonicClass = isFull ? styles.mnemonicFull : styles.mnemonicPopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
+    const backupSourceMessage = backupDrop.isDragOver
+        ? 'Drop the backup file here.'
+        : backupFileName
+            ? `Loaded ${backupFileName} (${backupContent.length.toLocaleString()} bytes).`
+            : backupContent.trim().length > 0
+                ? `Backup contents pasted (${backupContent.length.toLocaleString()} bytes).`
+                : 'Choose or drop a backup file onto the box below, paste its contents, or scan a backup pointer.';
+    const normalizedMnemonic = normalizePhraseEntry(mnemonic);
+    const mnemonicWordCount = normalizedMnemonic.length === 0
+        ? 0
+        : normalizedMnemonic.split(' ').length;
+    const detectedPhraseFormat = phraseFormat(normalizedMnemonic);
+    const activeWord = wordRangeAt(mnemonic, mnemonicCursor);
+    const wordSuggestions = activeWord.prefix.length < 2 || BIP39_WORDS.has(activeWord.prefix)
+        ? []
+        : englishWordlist
+            .filter((word) => word.startsWith(activeWord.prefix))
+            .slice(0, MAX_WORD_SUGGESTIONS);
+
+    function useWordSuggestion(word) {
+        const before = mnemonic.slice(0, activeWord.start);
+        const after = mnemonic.slice(activeWord.end);
+        const separator = after.length === 0 ? ' ' : '';
+        const next = `${before}${word}${separator}${after}`;
+        const nextCursor = activeWord.start + word.length + separator.length;
+        setMnemonic(next);
+        setMnemonicCursor(nextCursor);
+        if (error) setError(null);
+        requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+            textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+        });
+    }
 
     const laneSwitcher = !isFreeWallet ? (
         <div className={styles.laneSwitcher} role="tablist" aria-label="Import lane">
@@ -537,8 +622,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
-                            ? 'Paste your 12-word FreeWallet recovery phrase. We\'ll import it as a Counterwallet-legacy wallet using the same derivation FreeWallet used, so every address matches the one you already know.'
-                            : 'Paste your 12-word FreeWallet recovery phrase.')
+                            ? 'Paste your 12-word FreeWallet recovery phrase. We detect BIP39 or the legacy Counterwallet/FreeWallet format automatically so the correct address derivation is used.'
+                            : 'Paste your 12-word FreeWallet recovery phrase. Its format is detected automatically.')
                         : lane === 'backup'
                             ? (isFull
                                 ? (mode === 'add'
@@ -571,12 +656,14 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             }}
                             disabled={busy}
                             aria-pressed={backupScanning}
+                            aria-expanded={backupScanning}
+                            aria-controls="xc-backup-scanner"
                         >
                             {backupScanning ? 'Cancel scan' : 'Scan pointer QR'}
                         </button>
                     </div>
                     {backupScanning ? (
-                        <div className={styles.scannerBox}>
+                        <div id="xc-backup-scanner" className={styles.scannerBox}>
                             <QrScanner onFrame={handleBackupQrFrame} alt="Backup-pointer QR scanner" />
                         </div>
                     ) : null}
@@ -598,25 +685,27 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     ) : (
                         <>
                     <input
+                        {...backupDrop.pickerProps}
                         id="xc-backup-file"
-                        type="file"
-                        accept=".xchain-wallet,application/json,text/plain"
-                        onChange={handleBackupFile}
+                        aria-label="Backup file"
                         disabled={busy}
-                        className={styles.backupFileInput}
                     />
-                    {backupFileName ? (
-                        <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
-                    ) : (
-                        <p className={styles.backupHint}>Or drop a backup file onto the box below, paste its contents, or scan a backup pointer.</p>
-                    )}
+                    <button
+                        type="button"
+                        className={styles.backupFileButton}
+                        onClick={backupDrop.openFilePicker}
+                        disabled={busy}
+                    >
+                        Choose backup file
+                    </button>
+                    <p className={styles.backupHint} aria-live="polite">{backupSourceMessage}</p>
                     <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
                         Backup file contents
                     </label>
                     <textarea
                         id="xc-backup-content"
                         {...backupDrop.rootProps}
-                        className={mnemonicClass}
+                        className={`${mnemonicClass}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
                         value={backupContent}
                         onChange={(e) => {
                             setBackupContent(e.target.value);
@@ -625,15 +714,11 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         }}
                         placeholder='{"version":1,"kdf":{"name":"argon2id"…'
                         spellCheck={false}
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
-                        style={{
-                            outline: backupDrop.isDragOver ? '2px dashed var(--xc-accent)' : undefined,
-                            outlineOffset: backupDrop.isDragOver ? 2 : undefined,
-                        }}
                     />
                         </>
                     )}
@@ -734,20 +819,49 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     value={mnemonic}
                     onChange={(e) => {
                         setMnemonic(e.target.value);
+                        setMnemonicCursor(e.target.selectionStart ?? e.target.value.length);
                         if (error) setError(null);
                     }}
+                    onPaste={handleMnemonicPaste}
+                    onSelect={(e) => setMnemonicCursor(e.currentTarget.selectionStart ?? 0)}
+                    onKeyUp={(e) => setMnemonicCursor(e.currentTarget.selectionStart ?? 0)}
                     placeholder={
                         isFull
                             ? 'word word word word word word word word word word word word'
                             : 'word word word…'
                     }
                     spellCheck={false}
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
                     rows={3}
                     disabled={busy}
                 />
+                <div className={styles.phraseMeta} aria-live="polite">
+                    <span>
+                        {isFreeWallet
+                            ? `${mnemonicWordCount} / 12 words`
+                            : `${mnemonicWordCount} word${mnemonicWordCount === 1 ? '' : 's'} entered (use 12, 15, 18, 21, or 24)`}
+                    </span>
+                    {detectedPhraseFormat === 'bip39' ? <span>BIP39 recovery phrase detected</span> : null}
+                    {detectedPhraseFormat === 'counterwallet' ? <span>Counterwallet/FreeWallet recovery phrase detected</span> : null}
+                </div>
+                {wordSuggestions.length > 0 ? (
+                    <div className={styles.wordSuggestions} aria-label="BIP39 word suggestions">
+                        {wordSuggestions.map((word) => (
+                            <button
+                                key={word}
+                                type="button"
+                                className={styles.wordSuggestion}
+                                onClick={() => useWordSuggestion(word)}
+                                disabled={busy}
+                                aria-label={`Use BIP39 word "${word}"`}
+                            >
+                                {word}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
                 <p className={styles.dropHint}>
                     {dragOver ? 'Release to load' : 'Drop a .txt file with your seed phrase to load it here.'}
                 </p>

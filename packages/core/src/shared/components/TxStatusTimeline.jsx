@@ -10,6 +10,7 @@
 
 import styles from './TxStatusTimeline.module.css';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
+import { formatRelativeTime } from '../utils/dateTime.js';
 
 // Copy for the mempool stage, one entry per state `pendingDisplayState` can
 // return. Written so each line is a claim the wallet can defend from what it
@@ -144,7 +145,7 @@ export function TxStatusTimeline({
     // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
-        ? (relativeTime(signedAt) || 'Approved and signed')
+        ? (formatRelativeTime(signedAt) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
             : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
@@ -169,7 +170,7 @@ export function TxStatusTimeline({
                 ? 'The service is still catching up to this block'
                 : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
-        ? relativeTime(timestamp)
+        ? formatRelativeTime(timestamp)
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''
@@ -246,25 +247,4 @@ export function TxStatusTimeline({
 function short(s) {
     if (typeof s !== 'string' || s.length <= 14) return s;
     return `${s.slice(0, 8)}…${s.slice(-6)}`;
-}
-
-// Human-readable "X ago" for the confirmed-stage sub label. Accepts
-// unix seconds or ms; returns '' for invalid input so the caller can
-// fall back to a static placeholder.
-function relativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
 }

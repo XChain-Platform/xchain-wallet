@@ -150,6 +150,8 @@ describe('Send: multi-recipient (PC-52)', () => {
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         const payload = messaging.composeForConfirm.mock.calls[0][0];
         expect(payload.legs).toBeUndefined();
+        expect(payload.change).toBeUndefined();
+        expect(payload.utxos).toBeUndefined();
         expect(payload).toMatchObject({ to: ALICE, tick: 'PEPE', amount: '7' });
     });
 

@@ -1718,8 +1718,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 : 'Paste addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
                     </label>
                     <div className={styles.fromLine}>
@@ -1802,7 +1803,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
@@ -1991,8 +1992,8 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
     if (rows.length === 0) {
         return wrap(
             <EmptyState
-                title="No lists published from this chain's addresses yet."
-                body="Switch to Paste addresses or Token holders to publish one here, or use My Lists from Home once you have."
+                title="No published lists yet"
+                body="Address and token lists published from this chain appear here."
             />,
         );
     }

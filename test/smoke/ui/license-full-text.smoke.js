@@ -13,12 +13,11 @@
 //
 // Pins:
 //   - packages/core/src/license.js exports LICENSE_TEXT.
-//   - LICENSE_TEXT matches the canonical LICENSE.md byte-for-byte
-//     (modulo trailing whitespace differences caused by the JS
-//     template literal's escape semantics).
+//   - LICENSE_TEXT matches the canonical LICENSE.md wording while storing
+//     each paragraph without editorial-width line breaks.
 //   - AboutSection imports LICENSE_TEXT, mounts a "Show full text" /
 //     "Hide full text" toggle next to the existing License DocLink,
-//     and renders the text in an <pre> with id="full-license-text"
+//     and renders the text as paragraphs with id="full-license-text"
 //     and aria-expanded / aria-controls wired to the toggle button.
 
 import { strict as assert } from 'node:assert';
@@ -49,23 +48,18 @@ assert.match(LICENSE_SUMMARY, /AGPL-3\.0/, 'LICENSE_SUMMARY names the license in
 
 // ─── 2. sync invariant: LICENSE_TEXT === LICENSE.md ────────────────────
 //
-// The template literal can't preserve the two-trailing-space line-break
-// pattern that markdown uses (those would survive a literal copy, but
-// our JS file's editor + linter strips trailing whitespace). Compare
-// after normalizing trailing whitespace on each line on BOTH sides so
-// the smoke catches actual content drift, not formatting noise.
+// The bundled copy deliberately removes editorial-width line breaks. Compare
+// after normalizing whitespace so the smoke catches wording drift without
+// requiring the UI copy to inherit the source document's line length.
 
 function normalize(text) {
-    return text
-        .split('\n')
-        .map((line) => line.replace(/[ \t]+$/, ''))
-        .join('\n');
+    return text.replace(/\s+/g, ' ').trim();
 }
 
 assert.equal(
-    normalize(LICENSE_TEXT).trim(),
-    normalize(licenseMd).trim(),
-    'LICENSE_TEXT in license.js is in sync with LICENSE.md (modulo trailing whitespace)',
+    normalize(LICENSE_TEXT),
+    normalize(licenseMd),
+    'LICENSE_TEXT in license.js has the same wording as LICENSE.md',
 );
 
 // ─── 3. AboutSection wiring ────────────────────────────────────────────
@@ -77,7 +71,7 @@ assert.match(
 );
 assert.match(
     aboutSrc,
-    /\{LICENSE_SUMMARY\}/,
+    /text=\{LICENSE_SUMMARY\}/,
     'AboutSection renders the plain-English LICENSE_SUMMARY',
 );
 assert.match(
@@ -97,8 +91,8 @@ assert.match(
 );
 assert.match(
     aboutSrc,
-    /id="full-license-text"[\s\S]+?\{LICENSE_TEXT\}/,
-    'license <pre> element has the matching id and renders LICENSE_TEXT',
+    /<LicenseParagraphs[\s\S]+?id="full-license-text"[\s\S]+?text=\{LICENSE_TEXT\}/,
+    'license paragraphs have the matching id and render LICENSE_TEXT',
 );
 
 console.log('license-full-text smoke OK');

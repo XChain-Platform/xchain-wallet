@@ -61,7 +61,7 @@ describe('Receive with no addresses on any chain', () => {
                 <Receive walletId="w2" accountId="acct-2" />
             </MessagingProvider>,
         );
-        await screen.findByText(/No addresses yet on any chain/);
+        await screen.findByText(/^No addresses yet$/);
 
         await act(async () => {
             resolveOld({
@@ -75,7 +75,8 @@ describe('Receive with no addresses on any chain', () => {
     it('offers a generate CTA instead of dead-ending on the error string', async () => {
         renderReceive(baseMessaging());
 
-        await waitFor(() => expect(screen.getByText(/No addresses yet on any chain/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/^No addresses yet$/)).toBeTruthy());
+        expect(screen.getByText('Generate an address to start receiving.')).toBeTruthy();
         expect(screen.getByRole('button', { name: /Generate an address/i })).toBeTruthy();
     });
 
@@ -117,6 +118,6 @@ describe('Receive with no addresses on any chain', () => {
         fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
 
         await waitFor(() => expect(screen.getByDisplayValue('bcrt1qexample')).toBeTruthy());
-        expect(screen.queryByText(/No addresses yet on any chain/)).toBeNull();
+        expect(screen.queryByText(/^No addresses yet$/)).toBeNull();
     });
 });

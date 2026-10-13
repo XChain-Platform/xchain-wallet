@@ -97,12 +97,10 @@ assert.equal(
     false,
     'mixed content refused in the WebView',
 );
-assert.deepEqual(
-    capConfig.plugins,
-    {},
-    'no plugins registered yet: every registered plugin is reachable from any'
-    + ' script in the WebView (§1 bridge boundary), so they arrive one at a'
-    + ' time with the feature that needs them',
+assert.equal(
+    capConfig.plugins?.SystemBars?.style,
+    'LIGHT',
+    'the native status bar starts with dark content over the white splash',
 );
 
 // --- 3 + 4. Gradle: SDK floor and tag-derived version -----------------
@@ -614,6 +612,13 @@ assert.match(
     /<data android:scheme="xchain" \/>/,
     'the xchain: scheme is accepted inbound',
 );
+for (const scheme of ['bitcoin', 'litecoin', 'dogecoin']) {
+    assert.match(
+        manifest,
+        new RegExp(`<data android:scheme="${scheme}" \\/>`),
+        `${scheme}: payment links are accepted inbound`,
+    );
+}
 assert.doesNotMatch(
     manifest,
     /android:scheme="http"[^s]/,
@@ -626,6 +631,13 @@ const linksJava = readFileSync(
     'utf8',
 );
 assert.match(linksJava, /@CapacitorPlugin\(name = "XChainLinks"\)/);
+for (const constant of ['SCHEME_BITCOIN', 'SCHEME_LITECOIN', 'SCHEME_DOGECOIN']) {
+    assert.match(
+        linksJava,
+        new RegExp(`${constant}\\.equalsIgnoreCase\\(scheme\\)`),
+        `${constant} is declared in the manifest but rejected by the native link inbox`,
+    );
+}
 assert.match(
     linksJava,
     /public void takePendingLink\(PluginCall call\)/,
@@ -1408,7 +1420,8 @@ assert.match(
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
-    + ' zero registered plugins; minSdkVersion 26 (D2); versionCode/versionName read from the'
+    + ' built-in SystemBars starts with splash-compatible contrast; minSdkVersion 26 (D2);'
+    + ' versionCode/versionName read from the'
     + ' tag-derived version.properties with no literal fallback and a hard failure when absent;'
     + ' exactly one exported component; no google-services wiring; keystores + generated version'
     + ' file + staged webDir all git-ignored; staged assets byte-identical to packages/web/dist.'
@@ -1420,7 +1433,7 @@ console.log(
     + ' camera and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
-    + ' URLs to the browser, plus the inbound xchain: scheme and no'
+    + ' URLs to the browser, plus inbound xchain and payment schemes and no'
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
     + ` assetlinks ships as a ${fingerprints.length}-fingerprint template (${playSlots.length} Play`

@@ -11,6 +11,19 @@
 import styles from './AddressText.module.css';
 
 /**
+ * Keeps both identifying ends of a long address visible.
+ *
+ * @param {string} address
+ * @returns {string}
+ */
+export function truncateAddress(address) {
+    if (typeof address !== 'string' || address.length <= 14) {
+        return address;
+    }
+    return `${address.slice(0, 6)}…${address.slice(-6)}`;
+}
+
+/**
  * Monospace address display.
  *
  * - When `truncate` is true (default), addresses longer than 14
@@ -46,7 +59,7 @@ export function AddressText({ address, truncate = true, highlight = false, size 
     const tail = address.slice(-6);
     const middleFull = address.slice(6, -6);
     if (!highlight) {
-        const display = truncate ? `${head}…${tail}` : address;
+        const display = truncate ? truncateAddress(address) : address;
         return (
             <span className={cls} title={address} aria-label={address}>
                 {display}
