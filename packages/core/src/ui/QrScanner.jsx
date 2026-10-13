@@ -30,8 +30,9 @@ import { getNativeQrScanner } from './nativeQrScanner.js';
  * what payload shape is being transported.
  *
  * Lifecycle (BarcodeDetector path):
- *   - on mount (or `autoStart=true`): getUserMedia → attach to
- *     video → start `requestAnimationFrame` loop that runs
+ *   - in the Android app, explain the camera use and wait for a tap.
+ *   - then, on mount (or `autoStart=true`): getUserMedia → attach
+ *     to video → start `requestAnimationFrame` loop that runs
  *     `detector.detect(video)` on each frame.
  *   - on unmount: stop every track + cancel the RAF loop.
  *
@@ -235,6 +236,9 @@ export function QrScanner({
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const [running, setRunning] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [cameraRationaleAccepted, setCameraRationaleAccepted] = useState(
+        () => Boolean(previewState) || !isNativeApp(),
+    );
     const hasBarcodeDetector = previewState === 'denied'
         || (previewState !== 'unsupported'
             && typeof window !== 'undefined'
@@ -251,7 +255,7 @@ export function QrScanner({
         && isSecureContext;
 
     useEffect(() => {
-        if (!supported || !autoStart) return undefined;
+        if (!supported || !autoStart || !cameraRationaleAccepted) return undefined;
         if (previewState === 'denied') {
             setError(cameraErrorText({ name: 'NotAllowedError' }));
             return undefined;
@@ -330,7 +334,7 @@ export function QrScanner({
             if (video) video.srcObject = null;
             setRunning(false);
         };
-    }, [supported, autoStart, onFrame, previewState]);
+    }, [supported, autoStart, onFrame, previewState, cameraRationaleAccepted]);
 
     // The iPhone app: no BarcodeDetector in its WebView, but a native
     // scanner registered by the shell. Android's WebView has BarcodeDetector
@@ -395,6 +399,40 @@ export function QrScanner({
                 }}
             >
                 {reason}
+            </div>
+        );
+    }
+
+    if (!cameraRationaleAccepted) {
+        return (
+            <div
+                role="region"
+                aria-label={alt}
+                data-testid="qr-scanner-camera-rationale"
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.75rem',
+                    fontSize: '0.85rem',
+                    color: 'var(--xc-text)',
+                    lineHeight: 1.4,
+                    background: 'var(--xc-bg-muted)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                }}
+            >
+                <p style={{ margin: 0 }}>
+                    XChain Wallet uses the camera only to scan QR codes while this scanner is open.
+                    You can paste the code instead.
+                </p>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCameraRationaleAccepted(true)}
+                >
+                    Continue to camera
+                </Button>
             </div>
         );
     }

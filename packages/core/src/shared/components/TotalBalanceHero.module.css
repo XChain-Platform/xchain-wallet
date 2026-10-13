@@ -10,14 +10,17 @@
 }
 
 .row {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-areas:
+        'label actions'
+        'amount amount';
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
+    gap: 2px var(--xc-space-2);
 }
 
 .label {
+    grid-area: label;
     flex: 1 1 140px;
     min-width: 0;
     font-size: var(--xc-text-xs);
@@ -36,6 +39,7 @@
 }
 
 .actions {
+    grid-area: actions;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -87,6 +91,7 @@
 }
 
 .amount {
+    grid-area: amount;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;

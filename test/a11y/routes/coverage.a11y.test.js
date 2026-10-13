@@ -75,6 +75,7 @@ const ROUTES_RENDERED_BY_AXE = [
     'Locked',
     'Onboarding',
     'OnboardingCarousel',
+    'PollDetail',
     'Receive',
     'Send',
     'Settings',
@@ -106,7 +107,6 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'PairPartnerWallet',
     'PairSignerForm',
     'ParallelComposer',
-    'PollDetail',
     'ProjectRosterForm',
     'PsbtSignForm',
     'PublishFileForm',
@@ -163,6 +163,11 @@ describe('a11y route coverage inventory', () => {
             'Settings',
             'Onboarding',
             'OnboardingCarousel',
+            'IssueTokenForm',
+            'DispenserForm',
+            'CreateOrderForm',
+            'BetFeedDetail',
+            'PollDetail',
         ]));
     });
 });

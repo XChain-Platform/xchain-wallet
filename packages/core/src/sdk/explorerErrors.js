@@ -182,13 +182,12 @@ export function explorerErrorMessage(err) {
 
     if (code === 'EXPLORER_TIMEOUT') {
         return 'The service that reads the chain did not answer in time, so the wallet could not check '
-            + 'this action before sending it. Nothing was signed or sent, so nothing was spent. Try '
-            + 'again in a moment.';
+            + 'this action, but nothing was signed or sent, and nothing was spent. Try again in a moment.';
     }
 
     if (code === 'EXPLORER_NETWORK') {
-        return 'The wallet could not reach the service that reads the chain. Nothing was signed or sent, '
-            + 'so nothing was spent. Check your connection and try again.';
+        return 'The wallet could not reach the service that reads the chain, but nothing was signed or sent, '
+            + 'and nothing was spent. Check your connection and try again.';
     }
 
     if (code === 'EXPLORER_BAD_FEEQUOTE') {
@@ -196,34 +195,33 @@ export function explorerErrorMessage(err) {
         // answer was unusable - but the wallet REFUSING to size a fee output
         // from it is the correct outcome, so the sentence says that plainly
         // rather than implying a fault the user can clear by trying harder.
-        return 'The protocol fee for this action could not be read: the service answered with a price '
-            + 'the wallet could not use, and it will not guess at a fee it would send on-chain. Nothing '
-            + 'was signed or sent, so nothing was spent. Try again in a moment, and report it if it '
-            + 'keeps happening.';
+        return 'The protocol fee for this action could not be read, and the wallet will not guess at an '
+            + 'on-chain amount; nothing was signed or sent, and nothing was spent. Try again in a moment, and report it '
+            + 'if it keeps happening.';
     }
 
     if (code === 'COIN_DATA_STALE') {
-        return 'The service that reads the chain is still catching up. Nothing was signed or sent, so '
+        return 'The service that reads the chain is still catching up, but nothing was signed or sent, and '
             + 'nothing was spent. Wait a few minutes and try again.';
     }
 
     if (code === 'INVALID_NETWORK') {
-        return 'The wallet does not recognize the selected network. Nothing was signed or sent, so nothing '
-            + 'was spent. Choose a supported network in Settings and try again.';
+        return 'The wallet does not recognize the selected network, but nothing was signed or sent, and nothing was spent. '
+            + 'Choose a supported network in Settings and try again.';
     }
 
     if (code === 'INVALID_ADDRESSES') {
-        return 'The wallet could not check one or more addresses for this action. Nothing was signed or sent, '
-            + 'so nothing was spent. Check the addresses and try again.';
+        return 'The wallet could not check one or more addresses for this action, but nothing was signed or '
+            + 'sent, and nothing was spent. Check the addresses and try again.';
     }
 
     if (code === 'EXPLORER_BATCH_UNSUPPORTED') {
-        return 'The service that reads the chain does not support this wallet request. Nothing was signed or '
-            + 'sent, so nothing was spent. Update the wallet and try again, or report it if it continues.';
+        return 'The service that reads the chain does not support this wallet request, but nothing was signed '
+            + 'or sent, and nothing was spent. Update the wallet and try again, or report it if it continues.';
     }
 
     if (code === 'WS_CONNECTION_CLOSED' || code === 'WS_CONNECTION_FAILED' || code === 'WS_TIMEOUT') {
-        return 'The wallet lost its live connection to the chain service. Nothing was signed or sent, so '
+        return 'The wallet lost its live connection to the chain service, but nothing was signed or sent, and '
             + 'nothing was spent. Check your connection and try again.';
     }
 
@@ -246,17 +244,17 @@ export function explorerErrorMessage(err) {
         // left this branch for the rate-limit copy above.
         const retryable = status.startsWith('5');
         return retryable
-            ? `The service that reads the chain is temporarily unavailable (error ${status}). Nothing was `
-              + 'signed or sent, so nothing was spent. Try again in a moment.'
-            : `The service that reads the chain refused this request (error ${status}). Nothing was signed `
-              + 'or sent, so nothing was spent. If it keeps happening, please report it.';
+            ? `The service that reads the chain is temporarily unavailable (error ${status}), but nothing `
+              + 'was signed or sent, and nothing was spent. Try again in a moment.'
+            : `The service that reads the chain refused this request (error ${status}), but nothing was `
+              + 'signed or sent, and nothing was spent. If it keeps happening, please report it.';
     }
 
     // An EXPLORER_* code minted after this mapper was written. Say the safe,
     // true thing rather than fall through to the wire wording, which is the
     // whole failure this module exists to end.
-    return 'The service that reads the chain could not answer, so the wallet could not check this action '
-        + 'before sending it. Nothing was signed or sent, so nothing was spent. Try again in a moment.';
+    return 'The service that reads the chain could not answer, so the wallet could not check this action, '
+        + 'but nothing was signed or sent, and nothing was spent. Try again in a moment.';
 }
 
 /**

@@ -42,6 +42,7 @@ import { useSignerReady } from './useSignerReady.js';
 import { useWalletMode } from './useWalletMode.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -135,7 +136,9 @@ export function useActionForm({
                 }
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) {
+                    setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
+                }
             });
         return () => { cancelled = true; };
         // noAddressMessage / lockedToken / initialChainId are read-once
