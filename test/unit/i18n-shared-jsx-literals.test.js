@@ -14,18 +14,33 @@ import { describe, expect, test } from 'vitest';
 import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 import { findViolations } from '../../tools/eslint/rules/no-jsx-literal-strings.js';
 
-const sources = import.meta.glob(
+const sharedSources = import.meta.glob(
     '../../packages/core/src/shared/**/*.jsx',
     { query: '?raw', import: 'default', eager: true },
 );
 
-describe('shared route localization', () => {
-    test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
+const shellSources = import.meta.glob(
+    [
+        '../../packages/desktop/renderer/**/*.jsx',
+        '../../packages/web/src/App.jsx',
+        '../../packages/web/src/components/**/*.jsx',
+    ],
+    { query: '?raw', import: 'default', eager: true },
+);
+
+describe('shipping JSX localization', () => {
+    test('localized shared screens and shell code keep user-facing copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
 
-        for (const [file, source] of Object.entries(sources)) {
-            if (!/\bt\s*\(/.test(source)) continue;
+        const localizedSources = {
+            ...Object.fromEntries(
+                Object.entries(sharedSources).filter(([, source]) => /\bt\s*\(/.test(source)),
+            ),
+            ...shellSources,
+        };
+
+        for (const [file, source] of Object.entries(localizedSources)) {
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }

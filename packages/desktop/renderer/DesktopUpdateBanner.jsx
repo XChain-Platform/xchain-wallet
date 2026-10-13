@@ -34,6 +34,7 @@
 // getting that wrong silences the next one too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../../core/src/i18n/index.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -185,52 +186,53 @@ export function DesktopUpdateBanner() {
         <div role="status" aria-live="polite" style={WRAP}>
             <span aria-hidden="true">⬆</span>
             <div style={{ flex: 1 }}>
-                {state === 'checking' ? 'Checking for updates…' : null}
-                {state === 'current' ? 'XChain Wallet is up to date.' : null}
+                {state === 'checking' ? t('desktopUpdate.checking') : null}
+                {state === 'current' ? t('desktopUpdate.current') : null}
                 {state === 'available' ? (
                     version
-                        ? `Version ${version} is available.`
-                        : 'A newer version is available.'
+                        ? t('desktopUpdate.availableVersion', { version })
+                        : t('desktopUpdate.available')
                 ) : null}
                 {state === 'downloading' ? (
-                    progress == null ? 'Downloading update…' : `Downloading update… ${progress}%`
+                    progress == null
+                        ? t('desktopUpdate.downloading')
+                        : t('desktopUpdate.downloadProgress', { progress })
                 ) : null}
-                {state === 'verifying' ? 'Verifying the downloaded update…' : null}
-                {state === 'ready' ? 'Update is ready to restart.' : null}
+                {state === 'verifying' ? t('desktopUpdate.verifying') : null}
+                {state === 'ready' ? t('desktopUpdate.ready') : null}
                 {state === 'restart-blocked' ? (
-                    'Finish the current wallet operation before restarting.'
+                    t('desktopUpdate.restartBlocked')
                 ) : null}
                 {state === 'error' && retryAction.current === 'check' ? (
-                    'Could not check for updates. Check your connection and try again.'
+                    t('desktopUpdate.checkError')
                 ) : null}
                 {state === 'error' && retryAction.current !== 'check' ? (
-                    'This update could not be downloaded or verified, so it was not installed. '
-                    + 'Your wallet is untouched. See docs.xchain.io for steps to verify a release.'
+                    t('desktopUpdate.installError')
                 ) : null}
             </div>
             {state === 'available' ? (
                 <button type="button" onClick={() => runAction('download')} style={LINK_BUTTON}>
-                    Download update
+                    {t('desktopUpdate.download')}
                 </button>
             ) : null}
             {state === 'ready' || state === 'restart-blocked' ? (
                 <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
-                    Restart to update
+                    {t('desktopUpdate.restart')}
                 </button>
             ) : null}
             {state === 'error' ? (
                 <button type="button" onClick={() => runAction(retryAction.current)} style={LINK_BUTTON}>
-                    Retry
+                    {t('desktopUpdate.retry')}
                 </button>
             ) : null}
             {['checking', 'downloading', 'verifying'].includes(state) ? null : (
                 <button
                     type="button"
                     onClick={() => setDismissed(true)}
-                    aria-label="Dismiss update notice"
+                    aria-label={t('desktopUpdate.dismissLabel')}
                     style={LINK_BUTTON}
                 >
-                    Dismiss
+                    {t('desktopUpdate.dismiss')}
                 </button>
             )}
         </div>

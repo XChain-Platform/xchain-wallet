@@ -188,7 +188,46 @@ export const en = {
     'send.success.viewInHistoryHint':
         'The transaction already appears in History. Its network status may take up to a minute to update.',
 
+    // --- shell ---------------------------------------------------
+    'shell.markets.selectAsset': 'Select coin or token',
+    'shell.markets.back': 'Back to markets',
+    'shell.privateKeyQr': 'Private key QR',
+    'shell.messageSent': 'Message sent',
+    'shell.cannotOpenLink': 'Cannot open link',
+    'shell.unknownState': 'unknown state "{state}"',
+
+    // --- desktop update banner ----------------------------------
+    'desktopUpdate.checking': 'Checking for updates…',
+    'desktopUpdate.current': 'XChain Wallet is up to date.',
+    'desktopUpdate.availableVersion': 'Version {version} is available.',
+    'desktopUpdate.available': 'A newer version is available.',
+    'desktopUpdate.downloading': 'Downloading update…',
+    'desktopUpdate.downloadProgress': 'Downloading update… {progress}%',
+    'desktopUpdate.verifying': 'Verifying the downloaded update…',
+    'desktopUpdate.ready': 'Update is ready to restart.',
+    'desktopUpdate.restartBlocked': 'Finish the current wallet operation before restarting.',
+    'desktopUpdate.checkError': 'Could not check for updates. Check your connection and try again.',
+    'desktopUpdate.installError':
+        'This update could not be downloaded or verified, so it was not installed. '
+        + 'Your wallet is untouched. See docs.xchain.io for steps to verify a release.',
+    'desktopUpdate.download': 'Download update',
+    'desktopUpdate.restart': 'Restart to update',
+    'desktopUpdate.retry': 'Retry',
+    'desktopUpdate.dismissLabel': 'Dismiss update notice',
+    'desktopUpdate.dismiss': 'Dismiss',
+
     // --- extension banner ----------------------------------------
+    'extensionBanner.activeTitle': 'Using your extension wallet.',
+    'extensionBanner.activeBody':
+        'Signing and account access route through the XChain Wallet extension on this site.',
+    'extensionBanner.switchBack': 'Switch back',
+    'extensionBanner.detectedTitle': 'XChain Wallet extension detected.',
+    'extensionBanner.detectedBody':
+        'Use your extension wallet on this site instead of the web app.',
+    'extensionBanner.connecting': 'Connecting…',
+    'extensionBanner.useExtension': 'Use extension wallet',
+    'extensionBanner.dismissLabel': 'Dismiss extension notice',
+    'extensionBanner.notNow': 'Not now',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
     'uri.intent.send': 'Send',

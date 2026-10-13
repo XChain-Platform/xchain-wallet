@@ -281,9 +281,12 @@ function* tCalls(src) {
 }
 
 const packagesDir = join(wsRoot, 'packages');
-const translated = readdirSync(packagesDir)
+const translatedRoots = readdirSync(packagesDir)
     .map((pkg) => join(packagesDir, pkg, 'src'))
-    .filter((dir) => { try { return statSync(dir).isDirectory(); } catch { return false; } })
+    .filter((dir) => { try { return statSync(dir).isDirectory(); } catch { return false; } });
+translatedRoots.push(join(packagesDir, 'desktop', 'renderer'));
+
+const translated = translatedRoots
     .flatMap((dir) => sourceFiles(dir))
     .map((f) => ({ rel: relative(wsRoot, f).split('\\').join('/'), src: readFileSync(f, 'utf8') }))
     .filter(({ src }) => /(?<![\w$.])t\(/.test(src) && keyLiterals(src).length > 0);
