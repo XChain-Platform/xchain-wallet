@@ -204,7 +204,7 @@ jobs:
       # Assert the frozen install put the lockfile-pinned published SDK in every
       # shell; a mismatch or a missing SDK fails the job.
       - name: Installed SDK matches lockfile pin
-        run: node tools/dev/sdk-installed-guard.mjs
+        run: pnpm run sdk:check
 
   # Build the shipped shells, then run the gates that can ONLY be checked against a
   # real build artifact. None of this can live in the `test` job: it has no dist/.

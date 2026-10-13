@@ -115,6 +115,22 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
             .toHaveTextContent('The contract only holds 5,000 MEMEVALID.');
     });
 
+    it('compares large custody quantities without losing integer precision', async () => {
+        const messaging = mountForm('withdraw', {
+            getContractBalance: vi.fn().mockResolvedValue({
+                data: [{ tick: 'MEMEVALID', quantity: '9007199254740992' }],
+            }),
+        });
+        await pickToken(messaging);
+        fireEvent.change(await screen.findByLabelText(/Quantity/i), {
+            target: { value: '9007199254740993' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /^(Withdraw|Preview)$/ }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('The contract only holds 9,007,199,254,740,992 MEMEVALID.');
+    });
+
     it('allows a withdrawal the contract can cover', async () => {
         const messaging = mountForm('withdraw');
         await pickToken(messaging);
@@ -133,5 +149,16 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
         await pickToken(messaging);
         expect(await screen.findByText(/635,000 MEMEVALID available/)).toBeInTheDocument();
         expect(messaging.getContractBalance).not.toHaveBeenCalled();
+    });
+
+    it('blocks a deposit larger than the wallet balance', async () => {
+        const messaging = mountForm('deposit');
+        await pickToken(messaging);
+        expect(await screen.findByText(/635,000 MEMEVALID available/)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '635001' } });
+        fireEvent.click(screen.getByRole('button', { name: /^(Deposit|Preview)$/ }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Only 635,000 MEMEVALID is available to deposit.');
     });
 });

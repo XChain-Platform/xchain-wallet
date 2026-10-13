@@ -184,7 +184,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -212,6 +212,12 @@
 .qrActions > * {
     flex: 1 1 0;
     min-width: 0;
+}
+
+.generateAddressAction {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--xc-space-3);
 }
 
 /* §17.6 hardware receive-address confirmation block. */

@@ -24,6 +24,17 @@
               fetches from connect.trezor.io.
         -->
         <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'none';" />
+        <meta name="theme-color" content="#FFFFFF" />
+        <script src="./theme-init.js"></script>
+        <style>
+            html, body { background: #FFFFFF; }
+            @media (prefers-color-scheme: dark) {
+                html:not([data-xc-theme="light"]),
+                html:not([data-xc-theme="light"]) body { background: #0B0F17; }
+            }
+            html[data-xc-theme="dark"], html[data-xc-theme="dark"] body { background: #0B0F17; }
+            html[data-xc-theme="light"], html[data-xc-theme="light"] body { background: #FFFFFF; }
+        </style>
         <title>XChain Wallet</title>
     </head>
     <body>

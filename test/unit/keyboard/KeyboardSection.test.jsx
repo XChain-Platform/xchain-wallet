@@ -50,6 +50,9 @@ describe('KeyboardSection', () => {
     it('lists rebindable rows with Rebind buttons and fixed context rows without', () => {
         return setup().then(() => {
             expect(screen.getByText('Export history')).toBeTruthy();
+            expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
+            expect(screen.getByText('Requires “Show pin button on rows” in Display.')).toBeTruthy();
+            expect(screen.getByText('Requires “Show hide button on rows” in Display.')).toBeTruthy();
             const rebinds = screen.getAllByRole('button', { name: 'Rebind' });
             // General (5, incl. palette) + Go to (6) are rebindable; the six
             // context shortcuts are not.
@@ -85,5 +88,24 @@ describe('KeyboardSection', () => {
             keyboard: { bindings: {} },
         }));
         expect(lockRow).toBeTruthy();
+    });
+
+    it('removes an override when capture returns to the built-in binding', async () => {
+        const messaging = await setup({ lock: 'mod+j' });
+        const lockRow = screen.getByText('Lock wallet').closest('div');
+        fireEvent.click(lockRow.querySelector('button'));
+        press({ key: 'l', ctrlKey: true });
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
+            keyboard: { bindings: {} },
+        }));
+    });
+
+    it('resets every override in one persisted update', async () => {
+        const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
+        fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
+            keyboard: { bindings: {} },
+        }));
+        expect(await screen.findByText('All shortcuts reset to defaults.')).toBeTruthy();
     });
 });
