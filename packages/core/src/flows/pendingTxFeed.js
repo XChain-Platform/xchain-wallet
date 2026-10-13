@@ -131,12 +131,10 @@ export async function livePendingTxs({ vault, chainRegistry, chainId, address, s
     if (!vault) throw new Error('livePendingTxs: vault is required');
     if (!chainId) throw new Error('livePendingTxs: chainId is required');
     const all = await vault.pendingTxs.list();
-    let removedIds = new Set();
-    try {
-        removedIds = new Set(await pruneConfirmedPendingTxs({ vault, records: all }));
-    } catch {
-        removedIds = new Set();
-    }
+    // Surface retention write failures so a partially persisted cleanup is never reported as success.
+    const removedIds = typeof vault.pendingTxs.delete === 'function'
+        ? new Set(await pruneConfirmedPendingTxs({ vault, records: all }))
+        : new Set();
     const descriptor = chainRegistry?.get?.(chainId) || null;
     const wanted = address ? String(address).toLowerCase() : null;
     const out = [];
