@@ -92,6 +92,11 @@ assert.equal(
     'https',
     'androidScheme https: crypto.subtle needs a secure context',
 );
+assert.deepEqual(
+    capConfig.server?.allowNavigation,
+    [],
+    'remote origins stay in the system browser instead of entering the wallet WebView',
+);
 assert.equal(
     capConfig.android?.allowMixedContent,
     false,
@@ -1045,9 +1050,19 @@ assert.match(appGradle, /minifyEnabled false/,
     + 'crash and ANR report from that build onward is unreadable.');
 assert.match(appGradle, /R8 DECISION, PINNED/, 'and the reasoning is written down');
 assert.equal(
-    capConfig.android?.webContentsDebuggingEnabled,
+    Object.hasOwn(capConfig.android, 'webContentsDebuggingEnabled'),
     false,
-    'no WebView debugging in the shipped app',
+    'Capacitor follows the native debuggable flag instead of disabling DevTools in debug builds',
+);
+assert.match(
+    appGradle,
+    /release\s*\{\s*(?:\/\/[^\n]*\s*)*debuggable false/,
+    'release clears FLAG_DEBUGGABLE so Capacitor disables WebView debugging',
+);
+assert.match(
+    appGradle,
+    /debug\s*\{\s*debuggable true/,
+    'debug sets FLAG_DEBUGGABLE so Capacitor keeps WebView debugging available',
 );
 // Capacitor's debug-build logging writes every plugin call's arguments to
 // logcat, and the argon2id and biometricEnroll calls carry the wallet
@@ -1443,7 +1458,8 @@ console.log(
     + ' S4: allowBackup=false with BOTH the cloud-backup and device-transfer surfaces excluded and'
     + ' the API 26-30 rules beside them; cleartext refused and user-added CAs untrusted in release,'
     + ' with the regtest exemption confined to the debug source set; R8 pinned off with its reasoning;'
-    + ' no WebView debugging; FLAG_SECURE wired to the five screens that show or accept key material'
+    + ' WebView debugging follows the build type and is off in release; remote navigation denied;'
+    + ' FLAG_SECURE wired to the five screens that show or accept key material'
     + ' and deliberately not to receive/settings; the update feed carries one semver field and the'
     + ' client renders none of it, identifies nobody and refuses redirects; the capability floor is'
     + ' feature-detected before React mounts; and the listing pack, wire audit, privacy-policy mobile'
