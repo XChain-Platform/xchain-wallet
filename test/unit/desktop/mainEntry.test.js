@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const electron = vi.hoisted(() => {
     const appListeners = new Map();
+    const powerMonitorListeners = new Map();
     const browserWindowOptions = [];
     const isolatedSession = { partition: 'trezor-connect-isolated' };
     const state = {
@@ -51,6 +52,7 @@ const electron = vi.hoisted(() => {
     }
     return {
         appListeners,
+        powerMonitorListeners,
         browserWindowOptions,
         isolatedSession,
         ownerWindow,
@@ -73,6 +75,9 @@ const electron = vi.hoisted(() => {
             setApplicationMenu: vi.fn(),
         },
         ipcMain: { handle: vi.fn() },
+        powerMonitor: {
+            on: vi.fn((name, listener) => { powerMonitorListeners.set(name, listener); }),
+        },
         safeStorage: {},
         screen: {
             getAllDisplays: vi.fn(() => state.displays),
@@ -109,6 +114,7 @@ const runtime = vi.hoisted(() => ({
     createRuntime: vi.fn(),
     enforceIdleAutoLock: vi.fn(),
     enforceLaunchAutoLock: vi.fn(),
+    enforceSystemAutoLock: vi.fn(),
     ensureHost: vi.fn(),
     handleIpcMessage: vi.fn(),
     tearDownHost: vi.fn(),
@@ -192,6 +198,7 @@ const tempDirs = [];
 
 beforeEach(() => {
     electron.appListeners.clear();
+    electron.powerMonitorListeners.clear();
     electron.browserWindowOptions.length = 0;
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }];
@@ -203,6 +210,7 @@ beforeEach(() => {
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
     runtime.createRuntime.mockReturnValue(runtime.instance);
     runtime.enforceLaunchAutoLock.mockResolvedValue({ locked: false });
+    runtime.enforceSystemAutoLock.mockResolvedValue({ locked: true, reason: 'system-event' });
     vi.resetModules();
 });
 
@@ -262,6 +270,21 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
 
         expect(electron.app.quit).toHaveBeenCalledOnce();
+    });
+
+    it.each(['lock-screen', 'suspend'])('locks and notifies renderers on Electron %s', async (eventName) => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.powerMonitorListeners.has(eventName)).toBe(true));
+        await vi.waitFor(() => expect(electron.BrowserWindow.instances).toHaveLength(1));
+
+        electron.powerMonitorListeners.get(eventName)();
+
+        await vi.waitFor(() => expect(runtime.enforceSystemAutoLock).toHaveBeenCalledWith(runtime.instance));
+        expect(electron.BrowserWindow.instances[0].webContents.send).toHaveBeenCalledWith(
+            'xchain:state-changed',
+            { kind: 'session' },
+        );
     });
 
     it('parks an Electron deep link until a renderer can claim it', async () => {

@@ -114,6 +114,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
  */
@@ -165,6 +166,8 @@ export function createRuntime(deps) {
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
+        // OS lock and suspend can arrive together, so they share one lock.
+        systemLockInFlight: null,
         // One broadcast-queue store for every host this process builds, as the
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
@@ -289,13 +292,49 @@ async function runIdleAutoLock(runtime, now) {
     if (!hasEnforceableWindow(state)) return { locked: false, reason: 'no-window' };
     if (!shouldAutoLock(state, now)) return { locked: false, reason: 'within-window' };
 
-    // Stop the watchers first so nothing signs from the pool while the key goes.
+    return lockRuntimeForAutoLock(runtime, store, 'idle-window-elapsed');
+}
+
+/**
+ * Lock an armed desktop wallet immediately for an OS screen lock or suspend.
+ * The existing Never setting remains the opt-out; enabled timeout lengths do
+ * not delay an OS event because the user is no longer at the machine.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<{ locked: boolean, reason: string }>}
+ */
+export function enforceSystemAutoLock(runtime) {
+    if (!runtime) return Promise.resolve({ locked: false, reason: 'no-runtime' });
+    if (!runtime.systemLockInFlight) {
+        runtime.systemLockInFlight = runSystemAutoLock(runtime)
+            .catch((err) => {
+                console.error('[xchain] system auto-lock check failed:', err);
+                return { locked: false, reason: 'check-failed' };
+            })
+            .finally(() => { runtime.systemLockInFlight = null; });
+    }
+    return runtime.systemLockInFlight;
+}
+
+async function runSystemAutoLock(runtime) {
+    const store = runtime.autoLockStore;
+    if (!store) return { locked: false, reason: 'no-store' };
+    let state = null;
+    try { state = await store.load(); } catch { state = null; }
+    if (!state) return { locked: false, reason: 'no-record' };
+    if (state.armed !== true) return { locked: false, reason: 'disarmed' };
+    if (!hasEnforceableWindow(state)) return { locked: false, reason: 'no-window' };
+    return lockRuntimeForAutoLock(runtime, store, 'system-event');
+}
+
+async function lockRuntimeForAutoLock(runtime, store, reason) {
+    // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
     try { await runtime.sessionBackend.clear(); } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
     }
     try { await store.clear(); } catch { /* best-effort */ }
-    return { locked: true, reason: 'idle-window-elapsed' };
+    return { locked: true, reason };
 }
 
 /**

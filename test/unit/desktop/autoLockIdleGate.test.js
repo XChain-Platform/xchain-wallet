@@ -33,6 +33,7 @@ import { FileAutoLockStore, autoLockStatePathFor } from '../../../packages/deskt
 import {
     createRuntime,
     enforceIdleAutoLock,
+    enforceSystemAutoLock,
     handleIpcMessage,
 } from '../../../packages/desktop/main/runtime.js';
 import { KeychainSessionBackend, sessionKeyPathFor } from '../../../packages/desktop/main/keychain.js';
@@ -157,5 +158,29 @@ describe('windowless idle auto-lock', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, (
 
         expect(await enforceIdleAutoLock(runtime, Date.now())).toEqual({ locked: false, reason: 'no-record' });
         expect(runtime.host).not.toBe(null);
+    });
+});
+
+describe('OS event auto-lock', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, () => {
+    it('locks immediately when auto-lock is enabled and the idle window has not elapsed', async () => {
+        const { runtime, vault, signerPool } = await unlockedWindowlessRuntime();
+        const now = Date.now();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: now });
+
+        expect(await enforceSystemAutoLock(runtime)).toEqual({ locked: true, reason: 'system-event' });
+        expect(runtime.host).toBe(null);
+        expect(vault.close).toHaveBeenCalledOnce();
+        expect(signerPool.lockAll).toHaveBeenCalledOnce();
+        expect(await runtime.sessionBackend.load()).toBe(null);
+        expect(await runtime.autoLockStore.load()).toBe(null);
+    });
+
+    it('honours Never for OS events', async () => {
+        const { runtime } = await unlockedWindowlessRuntime();
+        await runtime.autoLockStore.save({ armed: false, idleMs: 0, lastActivity: Date.now() });
+
+        expect(await enforceSystemAutoLock(runtime)).toEqual({ locked: false, reason: 'disarmed' });
+        expect(runtime.host).not.toBe(null);
+        expect(existsSync(sessionFile())).toBe(true);
     });
 });
