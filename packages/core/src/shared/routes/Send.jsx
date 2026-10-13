@@ -3224,6 +3224,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
               */}
             {fromAddress ? (
                 <AddressField
+                    size="md"
                     label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
@@ -3239,7 +3240,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 </StatusMessage>
             )}
             <AddressCombobox
-                size="lg"
+                size="md"
                 id="send-destination"
                 icon="contacts"
                 label={matchedContact
@@ -3303,7 +3304,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 />
             )}
             <AmountField
-                size="lg"
+                size="md"
                 id="send-amount"
                 amount={amount}
                 fiatAmount={fiatAmount}

@@ -100,12 +100,14 @@ assert.match(amountJs, /size = 'md'/, 'AmountField defaults size to md');
 assert.match(amountJs, /<Input\s+ref=\{inputRef\}\s+size=\{size\}/s, 'AmountField forwards size to Input');
 assert.doesNotMatch(amountCss, /\.bigField/, 'AmountField leaves big-field rules to Input');
 assert.doesNotMatch(amountJs, /fontSize: 'var\(--xc-text-lg\)'/, 'AmountField leaves big-field styles to Input');
-assert.match(amountJs, /<Button\s+variant="primary"\s+size="sm"/s, 'Max uses the shared small primary Button');
-assert.match(amountJs, /bottom: size === 'lg' \? '10px' : '4px'/, 'Max button offset is keyed to field size');
+assert.match(amountJs, /<Button\s+variant="primary"\s+size=\{size\}/s, 'Max shares the amount Input size');
+assert.match(amountCss, /\.amountFieldWrap\s*\{[^}]*flex-wrap:\s*wrap[^}]*gap:\s*var\(--xc-space-2\)/s,
+    'Amount controls align in a wrapping row with a space-scale gap');
+assert.doesNotMatch(amountJs, /bottom:\s*size\s*===/, 'Max does not use size-specific offsets');
 
-// --- Send opts its hero fields into lg ---------------------------------
+// --- Send keeps its form rows on the shared md default -----------------
 
-assert.match(sendJs, /<AddressCombobox\s+size="lg"/s, 'Send To field is lg');
-assert.match(sendJs, /<AmountField\s+size="lg"/s, 'Send Amount field is lg');
+assert.match(sendJs, /<AddressCombobox\s+size="md"/s, 'Send To field is md');
+assert.match(sendJs, /<AmountField\s+size="md"/s, 'Send Amount field is md');
 
 console.log('field-size-prop smoke OK');
