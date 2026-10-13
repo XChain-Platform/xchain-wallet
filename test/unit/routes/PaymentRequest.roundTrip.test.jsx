@@ -170,7 +170,7 @@ async function pasteRequestIntoSend(descriptor, request) {
     expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
 
     fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'ROUNDTRIP' } });
-    expect(screen.getByLabelText('Memo')).toHaveValue(LABEL);
+    expect(screen.getByLabelText('Memo (optional)')).toHaveValue(LABEL);
 }
 
 afterEach(() => {

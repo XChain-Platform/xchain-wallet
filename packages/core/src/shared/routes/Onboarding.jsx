@@ -53,8 +53,8 @@ const EXPLAINER_FRAMES = [
     {
         id: 'multi-chain',
         icon: <Icon.TokenIcon />,
-        title: 'One wallet, several chains',
-        body: 'Bitcoin, Litecoin, and Dogecoin each have their own addresses here. The wallet keeps them separate on purpose so you always know which chain you are acting on.',
+        title: 'Built for the XChain Platform',
+        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the chains supported today. Each chain has its own addresses here, kept separate so you always know where you are acting.',
     },
 ];
 

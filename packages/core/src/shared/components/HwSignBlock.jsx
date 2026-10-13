@@ -28,6 +28,7 @@
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
 import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
@@ -120,7 +121,7 @@ export function HwSignBlock({
  * @param {'trezor'|'ledger'} signerKind
  * @param {string | undefined} chainId
  */
-function statusCopy(status, signerKind, chainId) {
+export function statusCopy(status, signerKind, chainId, detail) {
     switch (status) {
         case 'available':
             return 'Ready. 1. Select the sign button below. 2. Review every detail on your device. 3. Approve on the device only if everything matches. To cancel, reject on the device; nothing will be signed.';
@@ -133,11 +134,15 @@ function statusCopy(status, signerKind, chainId) {
                 ? 'Device is locked. Enter your PIN on the Trezor.'
                 : 'Device is locked. Unlock it and try again.';
         case 'disconnected':
-            return 'Device not detected. Check its connection, unlock it, and try again.';
+            return detail
+                ? `Device not detected. ${userFacingMessage(detail, 'Check its connection, unlock it, and try again.')}`
+                : 'Device not detected. Check its connection, unlock it, and try again.';
         case 'cancelled':
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':
-            return "Couldn't reach the device. Check its connection and try again.";
+            return detail
+                ? `Couldn't reach the device. ${userFacingMessage(detail, 'Check its connection and try again.')}`
+                : "Couldn't reach the device. Check its connection and try again.";
         default:
             return '';
     }

@@ -111,6 +111,17 @@ export function OnboardingCarousel({
         tabRefs.current[next]?.focus();
     }
 
+    function handleCarouselKeyDown(event) {
+        if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            goTo(index + 1);
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            goTo(index - 1);
+        }
+    }
+
     // --- Reduced motion: stack every frame, no stepping, no auto-advance.
     if (reducedMotion) {
         return (
@@ -119,6 +130,11 @@ export function OnboardingCarousel({
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
             >
+                <div className={styles.skipRow}>
+                    <button type="button" className={styles.skipBtn} onClick={handleSkip}>
+                        Skip
+                    </button>
+                </div>
                 <div className={styles.stack}>
                     {frames.map((frame, i) => {
                         const Heading = i === 0 ? 'h1' : 'h2';
@@ -146,6 +162,7 @@ export function OnboardingCarousel({
             className={isFull ? styles.rootFull : styles.rootPopup}
             data-testid="onboarding-carousel"
             data-reduced-motion="false"
+            onKeyDown={handleCarouselKeyDown}
         >
             <div className={styles.skipRow}>
                 <button type="button" className={styles.skipBtn} onClick={handleSkip}>

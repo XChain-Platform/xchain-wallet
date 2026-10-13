@@ -20,8 +20,8 @@
 // hand-typed over-payout must stop at the form rather than after a LIST
 // has already been broadcast and paid for.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
@@ -113,7 +113,7 @@ function mountAirdrop({ balance = '4999', divisibility = 8, holderCount = 4 } = 
     return messaging;
 }
 
-const amountField = () => screen.findByLabelText(/^Per-recipient amount/);
+const amountField = () => screen.getByLabelText(/^Per-recipient amount/);
 const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable amount is not.
@@ -123,29 +123,43 @@ const submitButton = () => screen.getByRole('button', { name: /^Review recipient
 // The route loads its addresses asynchronously, so every case waits for
 // the compose form itself before touching a field.
 async function pasteRecipients(list = RECIPIENTS) {
-    await amountField();
+    await flushTimers();
+    amountField();
     const box = document.querySelector('textarea');
     if (!box) throw new Error('no recipients textarea');
     fireEvent.change(box, { target: { value: list.join('\n') } });
 }
 
-/** Wait until the balance lookup (400ms debounce) has armed Max. */
-const maxReady = () => waitFor(
-    () => expect(maxButton().disabled).toBe(false),
-    { timeout: 3000 },
-);
+async function flushTimers() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
+
+/** Wait until the balance lookup debounce has armed Max. */
+const maxReady = async () => {
+    await flushTimers();
+    expect(maxButton().disabled).toBe(false);
+};
 
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
 // the rendered text as a whole.
-const expectText = (re, timeout = 3000) => waitFor(
-    () => expect(document.body.textContent).toMatch(re),
-    { timeout },
-);
+const expectText = async (re) => {
+    await flushTimers();
+    expect(document.body.textContent).toMatch(re);
+};
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
 
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    vi.useRealTimers();
 });
 
 describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
@@ -157,8 +171,8 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         // 4,999 XCHAIN across two addresses = 2,499.5 each. The old, wrong
         // number was the balance itself, once per recipient.
         // The field renders grouped, so the assertion reads as the user sees it.
-        await waitFor(async () => expect((await amountField()).value).toBe('2,499.5'));
-        expect((await amountField()).value).not.toBe('4,999');
+        expect(amountField().value).toBe('2,499.5');
+        expect(amountField().value).not.toBe('4,999');
     });
 
     it('quotes a total the balance can actually pay', async () => {
@@ -185,7 +199,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients([...RECIPIENTS, 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3']);
         await maxReady();
         fireEvent.click(maxButton());
-        await waitFor(async () => expect((await amountField()).value).toBe('3'));
+        expect(amountField().value).toBe('3');
     });
 
     it('discloses the balance left by per-recipient rounding', async () => {
@@ -204,12 +218,13 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await expectText(/4,999 XCHAIN available/);
         const max = maxButtonOrNull();
         expect(max === null || max.disabled).toBe(true);
-        expect((await amountField()).value).toBe('');
+        expect(amountField().value).toBe('');
     });
 
     it('divides by the previewed holder count for a token-holder list', async () => {
         mountAirdrop({ holderCount: 4 });
-        const mode = await screen.findByLabelText(/^Airdrop to/);
+        await flushTimers();
+        const mode = screen.getByLabelText(/^Airdrop to/);
         fireEvent.change(mode, { target: { value: 'holders' } });
         const ticks = document.querySelector('textarea');
         if (!ticks) throw new Error('no token-list textarea');
@@ -217,16 +232,16 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.click(maxButton());
         // Four current holders of S19MINT, 4,999 to spread across them.
-        await waitFor(async () => expect((await amountField()).value).toBe('1,249.75'));
+        expect(amountField().value).toBe('1,249.75');
     });
 
     it('blocks a hand-typed over-payout at the form, before the LIST is composed', async () => {
         const messaging = mountAirdrop();
         await pasteRecipients();
         await maxReady();
-        fireEvent.change(await amountField(), { target: { value: '4999' } });
+        fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'This pays ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -235,9 +250,9 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('keeps a fractional indivisible-token payout out of both review steps', async () => {
         const messaging = mountAirdrop({ balance: '10', divisibility: 0 });
         await pasteRecipients();
-        fireEvent.change(await amountField(), { target: { value: '1.5' } });
+        fireEvent.change(amountField(), { target: { value: '1.5' } });
         fireEvent.click(submitButton());
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'Per-recipient amount must be a whole number because XCHAIN is indivisible.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -248,7 +263,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         mountAirdrop();
         await pasteRecipients();
         await maxReady();
-        fireEvent.change(await amountField(), { target: { value: '2499.5' } });
+        fireEvent.change(amountField(), { target: { value: '2499.5' } });
         fireEvent.click(submitButton());
         await expectText(/Review address list/);
     });
@@ -256,10 +271,11 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('shows distribution and both transaction fees before the first confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
-        fireEvent.change(await amountField(), { target: { value: '10' } });
+        fireEvent.change(amountField(), { target: { value: '10' } });
         fireEvent.click(submitButton());
 
-        await screen.findByRole('form', { name: 'Review recipient list' });
+        await flushTimers();
+        expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
         expect(screen.getByText('Total distribution')).toBeTruthy();
         expect(document.body.textContent).toMatch(/~20 XCHAIN/);
         expect(screen.getByText('Estimated network fees (2 transactions)')).toBeTruthy();
@@ -287,7 +303,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
             ),
         );
         await pasteRecipients();
-        fireEvent.change(await amountField(), { target: { value: '4999' } });
+        fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
         await expectText(/Review address list/);
     });

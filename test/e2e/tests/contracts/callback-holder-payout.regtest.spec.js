@@ -101,7 +101,7 @@ async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
 
 async function openManageToken(page) {
     await page.getByRole('button', { name: 'Open menu' }).click();
-    await page.getByRole('button', { name: 'My Tokens', exact: true }).click();
+    await page.getByRole('button', { name: 'My tokens', exact: true }).click();
     const main = page.getByRole('main');
     const search = main.getByLabel('Search your tokens by ticker or description');
     await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
