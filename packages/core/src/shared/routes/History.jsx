@@ -75,6 +75,7 @@ import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -641,13 +642,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             if (throttle.isInFlight()) return;
             setRefreshTick((n) => n + 1);
         };
-        const id = setInterval(() => {
-            // A hidden tab is not watching; polling it only burns the shared
-            // rate limit the explorer zone is sized against.
-            if (typeof document !== 'undefined' && document.hidden) return;
-            bump();
-        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
-        if (typeof window === 'undefined') return () => clearInterval(id);
+        const stopPollInterval = startVisibleInterval(bump, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        if (typeof window === 'undefined') return stopPollInterval;
         // A refocus is worth a fan-out only when the rows are already an
         // interval old; a burst of window switches used to cost one each.
         // `start()` rather than `claim()`: the fan-out this bump asks for is
@@ -657,7 +653,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
         window.addEventListener('focus', onFocus);
         return () => {
-            clearInterval(id);
+            stopPollInterval();
             window.removeEventListener('focus', onFocus);
         };
     }, [addressesByChain, walletId]);

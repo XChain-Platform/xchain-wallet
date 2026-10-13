@@ -36,6 +36,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
@@ -774,7 +775,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             load();
         };
 
-        const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        const stopPollInterval = startVisibleInterval(poll, BALANCE_POLL_INTERVAL_MS, {
+            runOnVisible: false,
+        });
         // An alt-tab fires `focus` and `visibilitychange` together, so coming
         // back to the wallet used to cost two loads. The first event after the
         // balances have aged past one interval still fires at once; the rest
@@ -790,7 +793,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
         return () => {
             cancelled = true;
-            clearInterval(intervalId);
+            stopPollInterval();
             window.removeEventListener('focus', onVisibilityOrFocus);
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };

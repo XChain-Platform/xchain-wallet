@@ -33,6 +33,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { compareAmounts } from '../../market/orderMath.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import {
     divideDecimalStrings,
     subtractDecimalStrings,
@@ -128,9 +129,9 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 if (!cancelled) setLoadError(readFailureMessage(err, 'load your open orders'));
             }
         };
-        tick();
-        const handle = setInterval(tick, POLL_INTERVAL_MS);
-        return () => { cancelled = true; clearInterval(handle); };
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
+        const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
+        return () => { cancelled = true; stopPollInterval(); };
     }, [messaging, chainId, tick1, tick2, addresses]);
 
     const rows = useMemo(() => {

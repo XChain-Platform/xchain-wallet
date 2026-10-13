@@ -33,6 +33,7 @@ import {
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -57,8 +58,6 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
         setLoading(true);
         const tick = async () => {
             if (cancelled) return;
-            if (typeof document !== 'undefined'
-                && document.visibilityState === 'hidden') return;
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
                 if (cancelled) return;
@@ -82,11 +81,11 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 setLoading(false);
             }
         };
-        tick();
-        const handle = setInterval(tick, POLL_INTERVAL_MS);
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
+        const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
         return () => {
             cancelled = true;
-            clearInterval(handle);
+            stopPollInterval();
         };
     }, [messaging, chainId, tick1, tick2, demo]);
 

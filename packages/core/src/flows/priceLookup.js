@@ -47,6 +47,9 @@ const REFRESH_TTL_MS = 5 * 60 * 1000;
 
 const FETCH_TIMEOUT_MS = 8000;
 
+export const NATIVE_RATE_CACHE_MAX = 32;
+export const TOKEN_RATE_CACHE_MAX = 256;
+
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 
 // CoinGecko id per coin family. For the launch coins the id happens to
@@ -89,6 +92,20 @@ const coinRefreshes = new Map();
 
 /** @type {Set<() => void>} */
 const listeners = new Set();
+
+function readCacheEntry(cache, key) {
+    const entry = cache.get(key);
+    if (entry === undefined) return undefined;
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry;
+}
+
+function writeCacheEntry(cache, key, entry, maxSize) {
+    cache.delete(key);
+    cache.set(key, entry);
+    while (cache.size > maxSize) cache.delete(cache.keys().next().value);
+}
 
 // Injectable deps so tests (and shells with their own fetch policy)
 // can rewire the module without touching the network.
@@ -300,9 +317,9 @@ export async function refreshFiatRates({
     const wanted = Array.from(new Set(chainCoins)).filter((coin) => {
         if (typeof coin !== 'string' || coin.length === 0) return false;
         if (force) return true;
-        const missAt = coinMissAt.get(cacheKey(coin, fiatCurrency));
+        const missAt = readCacheEntry(coinMissAt, cacheKey(coin, fiatCurrency));
         if (missAt != null && nowMs - missAt <= MISS_TTL_MS) return false;
-        const hit = rateCache.get(cacheKey(coin, fiatCurrency));
+        const hit = readCacheEntry(rateCache, cacheKey(coin, fiatCurrency));
         return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
     });
     if (wanted.length === 0) return { updated: [] };
@@ -350,7 +367,7 @@ async function refreshFiatRateBatch({
     /** @type {string[]} */
     const updated = [];
     const put = (coin, rate, source) => {
-        rateCache.set(cacheKey(coin, fiatCurrency), {
+        writeCacheEntry(rateCache, cacheKey(coin, fiatCurrency), {
             rate: Object.freeze({
                 rate,
                 chainCoin: coin,
@@ -359,7 +376,7 @@ async function refreshFiatRateBatch({
                 fetchedAt: new Date(nowMs).toISOString(),
             }),
             fetchedAtMs: nowMs,
-        });
+        }, NATIVE_RATE_CACHE_MAX);
         coinMissAt.delete(cacheKey(coin, fiatCurrency));
         updated.push(coin);
     };
@@ -388,7 +405,9 @@ async function refreshFiatRateBatch({
     }
 
     for (const coin of wanted) {
-        if (!updated.includes(coin)) coinMissAt.set(cacheKey(coin, fiatCurrency), nowMs);
+        if (!updated.includes(coin)) {
+            writeCacheEntry(coinMissAt, cacheKey(coin, fiatCurrency), nowMs, NATIVE_RATE_CACHE_MAX);
+        }
     }
 
     if (updated.length > 0) notifyListeners();
@@ -408,7 +427,7 @@ async function refreshFiatRateBatch({
  */
 export function getFiatRate({ chainCoin, fiatCurrency = 'USD' } = {}) {
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
-    const hit = rateCache.get(cacheKey(chainCoin, fiatCurrency));
+    const hit = readCacheEntry(rateCache, cacheKey(chainCoin, fiatCurrency));
     return hit ? hit.rate : null;
 }
 
@@ -546,7 +565,7 @@ export async function refreshTokenFiatRate({
     const nowMs = deps.now();
 
     const key = tokenCacheKey(chainCoin, t, fiatCurrency);
-    const hit = tokenRateCache.get(key);
+    const hit = readCacheEntry(tokenRateCache, key);
     if (!force && hit) {
         const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
         if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
@@ -590,11 +609,16 @@ async function refreshTokenFiatRateUncached({
     // blank because one request timed out. Stamping the time either way
     // is what stops a miss being re-asked on every render.
     const miss = () => {
-        tokenRateCache.set(key, { rate: hit?.rate ?? null, fetchedAtMs: nowMs });
+        writeCacheEntry(
+            tokenRateCache,
+            key,
+            { rate: hit?.rate ?? null, fetchedAtMs: nowMs },
+            TOKEN_RATE_CACHE_MAX,
+        );
         return { updated: false };
     };
     const put = (rate, source) => {
-        tokenRateCache.set(key, {
+        writeCacheEntry(tokenRateCache, key, {
             rate: Object.freeze({
                 rate,
                 chainCoin,
@@ -604,7 +628,7 @@ async function refreshTokenFiatRateUncached({
                 fetchedAt: new Date(nowMs).toISOString(),
             }),
             fetchedAtMs: nowMs,
-        });
+        }, TOKEN_RATE_CACHE_MAX);
         notifyListeners();
         return { updated: true };
     };
@@ -648,7 +672,7 @@ export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {})
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
     const t = normalizeTick(tick);
     if (t.length === 0) return null;
-    const hit = tokenRateCache.get(tokenCacheKey(chainCoin, t, fiatCurrency));
+    const hit = readCacheEntry(tokenRateCache, tokenCacheKey(chainCoin, t, fiatCurrency));
     return hit && hit.rate ? hit.rate : null;
 }
 
