@@ -79,6 +79,28 @@ for (const name of requiredCases) {
     );
 }
 
+const textSpacingSpec = readFileSync(
+    join(e2e, 'tests', 'a11y', 'text-spacing.spec.js'), 'utf8',
+);
+const textSpacingCss = readFileSync(
+    join(e2e, 'fixtures', 'text-spacing.css'), 'utf8',
+);
+for (const route of ['Home', 'Send', 'Receive', 'Settings']) {
+    assert.ok(textSpacingSpec.includes(route), `text-spacing spec renders ${route}`);
+}
+for (const declaration of [
+    /line-height:\s*1\.5\s*!important/,
+    /margin-bottom:\s*2em\s*!important/,
+    /letter-spacing:\s*0\.12em\s*!important/,
+    /word-spacing:\s*0\.16em\s*!important/,
+]) {
+    assert.ok(declaration.test(textSpacingCss), `text-spacing stylesheet includes ${declaration}`);
+}
+assert.ok(
+    /clippedTextContainers/.test(textSpacingSpec) && /toEqual\(\[\]\)/.test(textSpacingSpec),
+    'text-spacing spec fails when fixed-height containers clip text',
+);
+
 // --- 3. Every case asserts zero violations --------------------------
 
 // The shared scan helper still asserts an EMPTY violation set...
