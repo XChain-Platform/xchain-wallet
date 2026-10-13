@@ -24,7 +24,7 @@ import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
-import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
@@ -33,11 +33,8 @@ const chainRegistry = registryLib.defaultRegistry();
 
 // Native ticker for the §5.2.5 exact-fee line, resolved from the composed
 // envelope's own chainId so no call site has to pass it.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(chainId) {
-    const coin = chainId ? chainRegistry.get(chainId)?.coin : null;
-    if (!coin) return '';
-    return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
+    return tickerForDescriptor(chainId ? chainRegistry.get(chainId) : null);
 }
 
 function useSourceIdentity(address, chainId, walletId) {
@@ -173,10 +170,13 @@ export function ActionConfirmScreen({
     // stays labelled as an estimate rather than passing for the real thing.
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
+    const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
     const ticker = coinTicker || nativeTickerFor(composed?.chainId);
     // An envelope's total covers its commit and its reveal, and says so.
     const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
-    const exactCoinAmount = Number.isFinite(exactSats) ? satsToCoinDecimal(exactSats) : null;
+    const exactCoinAmount = Number.isFinite(exactSats)
+        ? formatNativeBaseUnits(exactSats, descriptor)
+        : null;
     const exactFeeFiat = exactCoinAmount && typeof formatNativeFee === 'function'
         ? formatNativeFee(exactCoinAmount)
         : null;
@@ -198,7 +198,7 @@ export function ActionConfirmScreen({
         && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
         ? trimAmountTail(sumDecimalStrings([
             amountDetail.value,
-            satsToCoinDecimal(exactSats),
+            formatNativeBaseUnits(exactSats, descriptor),
         ]))
         : null;
 

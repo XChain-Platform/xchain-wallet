@@ -41,7 +41,11 @@ import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import {
+    tickerForCoin,
+    tickerForDescriptor,
+    transactionExplorerLinks,
+} from '../../registry/coinTicker.js';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
@@ -105,6 +109,7 @@ function writePersistedGroupingMode(walletId, mode) {
 }
 
 const chainRegistry = registryLib.defaultRegistry();
+const NATIVE_TICKER_BY_COIN = (descriptor) => tickerForDescriptor(descriptor);
 
 // LINK action coin field is a ticker (e.g. "BTC", "DOGE", "LTC"). The
 // chain registry's descriptor.coin is the lowercase coin name. This
@@ -210,7 +215,8 @@ function pendingStateOf(entry) {
  */
 function isNativeCoinMovement(entry) {
     const coin = coinOfChainId(entry?.chainId);
-    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const descriptor = chainRegistry.get(entry?.chainId) || (coin ? { coin } : null);
+    const nativeTicker = NATIVE_TICKER_BY_COIN(descriptor);
     const tick = String(entry?.raw?.tick || '').toUpperCase();
     return Boolean(nativeTicker) && tick === nativeTicker;
 }
@@ -2805,7 +2811,7 @@ function explorerLinksFor(entry, settings) {
     const links = [];
     if (!entry) return links;
     const txHash = entry.txHash;
-    const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
+    const [coin = '', networkKind = 'mainnet'] = String(entry.chainId || '').split('-');
 
     // XChain actions have their own detail page. Plain transfers keep the
     // third-party transaction links below when that network has coverage.
@@ -2828,66 +2834,8 @@ function explorerLinksFor(entry, settings) {
     // External chain explorers: only mainnet and testnet have
     // working third-party coverage. Regtest is local-only; suppress
     // external links so they don't render mainnet URLs that 404.
-    if (!txHash) return links;
-    if (network !== 'mainnet' && network !== 'testnet') return links;
-
-    if (coin === 'bitcoin') {
-        // Mempool.space serves Bitcoin testnet under `/testnet4/`
-        // (current testnet variant). Blockstream.info still indexes
-        // the legacy `/testnet/` (testnet3) endpoint, so testnet
-        // links there may not resolve for testnet4 hashes; kept
-        // anyway as a second affordance.
-        const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
-        const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
-        links.push({
-            id: 'mempool',
-            label: 'Mempool',
-            iconImg: 'https://mempool.space/resources/favicons/favicon.ico',
-            url: `https://mempool.space/${mempoolPath}tx/${txHash}`,
-        });
-        links.push({
-            id: 'blockstream',
-            label: 'Blockstream',
-            iconImg: 'https://blockstream.info/favicon.ico',
-            url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
-        });
-    } else if (coin === 'litecoin') {
-        // LitecoinSpace mirrors mempool.space's URL scheme (it's a
-        // fork); mainnet has no prefix, testnet is `/testnet/`.
-        // Blockchair covers mainnet only.
-        const litecoinSpacePath = network === 'testnet' ? 'testnet/' : '';
-        links.push({
-            id: 'litecoinspace',
-            label: 'LitecoinSpace',
-            iconImg: 'https://litecoinspace.org/favicon.ico',
-            url: `https://litecoinspace.org/${litecoinSpacePath}tx/${txHash}`,
-        });
-        if (network === 'mainnet') {
-            links.push({
-                id: 'blockchair',
-                label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/litecoin/transaction/${txHash}`,
-            });
-        }
-    } else if (coin === 'dogecoin') {
-        // No reliable third-party DOGE testnet explorer at time of
-        // writing; show external links on mainnet only.
-        if (network === 'mainnet') {
-            links.push({
-                id: 'blockchair',
-                label: 'Blockchair',
-                iconImg: 'https://blockchair.com/favicon.ico',
-                url: `https://blockchair.com/dogecoin/transaction/${txHash}`,
-            });
-            links.push({
-                id: 'blockcypher',
-                label: 'BlockCypher',
-                iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
-                url: `https://live.blockcypher.com/doge/tx/${txHash}`,
-            });
-        }
-    }
+    const descriptor = chainRegistry.get(entry.chainId) || { coin, networkKind };
+    links.push(...transactionExplorerLinks(descriptor, txHash));
     return links;
 }
 
@@ -3167,10 +3115,6 @@ function coinOfChainId(chainId) {
     return coin || null;
 }
 
-// Coin family -> native ticker, used to gate the History fiat
-// toggle to genuinely native-coin amounts.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
-
 /**
  * Resolve an exact native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
@@ -3190,7 +3134,8 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
 function nativeAmountFieldOf(entry) {
     if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
     const coin = coinOfChainId(entry.chainId);
-    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const descriptor = chainRegistry.get(entry.chainId) || (coin ? { coin } : null);
+    const nativeTicker = NATIVE_TICKER_BY_COIN(descriptor);
     if (!nativeTicker) return null;
     const raw = entry.raw || {};
     const tick = raw.tick ?? raw.TICK ?? raw.token;
