@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -71,7 +71,6 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isDelegate = mode === 'delegate';
     const verb = isDelegate ? 'Delegate signing key' : 'Revoke delegation';
 
@@ -346,7 +345,12 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                     : verb}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
+    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -392,8 +396,32 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     if (stage === 'review' || stage === 'submitting') {
         const shownPubkey = actionParams.NEW_SIGNING_PUBKEY || actionParams.SIGNING_PUBKEY;
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+        return wrapForm(
+            <FormPage
+                label={`Review ${verb.toLowerCase()}`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : verb}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     {isDelegate
                         ? `Delegate hub-signing authority to ${shownPubkey.slice(0, 12)}…`
@@ -444,28 +472,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : verb}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -508,8 +515,24 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         );
     }
 
-    return wrap(
-        <form onSubmit={handleReview} noValidate>
+    return wrapForm(
+        <FormPage
+            label={verb}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !pubkey.trim() || actionConfirm.composing}
+                >
+                    {singleEncode ? verb : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
@@ -547,21 +570,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !pubkey.trim() || actionConfirm.composing}
-                >
-                    {singleEncode ? verb : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

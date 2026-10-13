@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -74,7 +74,6 @@ const PROTOCOL_COIN_TICKER = {
 export function CallbackForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const lockedToken = !!(initialChainId && initialTick);
     const {
@@ -448,9 +447,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
+    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
 
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
@@ -504,8 +504,36 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     );
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Review callback"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={isWatcherMode ? 'primary' : 'danger'}
+                        loading={stage === 'submitting'}
+                        disabled={
+                            !typedConfirmOk || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : (!signerReady && password.length === 0)
+                            )
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Call back on ${descriptor.displayName}` : 'Call back')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -556,9 +584,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 <Input
                     label="Type CALLBACK to confirm"
                     hint="This recalls every unit of the token from all holders and pays them the amount above. It cannot be undone."
@@ -568,29 +593,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     autoCorrect="off"
                     spellCheck={false}
                 />
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Call back on ${descriptor.displayName}` : 'Call back')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -649,8 +652,28 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
-    return wrap(
-        <form onSubmit={handleReview} noValidate>
+    return wrapForm(
+        <FormPage
+            label="Execute callback"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={confirmAction.composing}
+                    disabled={!fromAddress
+                        || !configComplete
+                        || !blockReached
+                        || !!memoTooLong
+                        || confirmAction.composing}
+                >
+                    {!isWatcherMode ? 'Execute callback' : 'Preview'}
+                </Button>
+            )}
+        >
             <div role="alert" className={styles.warnings}>
                 <p className={styles.warning}>
                     <strong>Callback recalls everything.</strong> Every unit of {ticker || 'this token'}
@@ -719,25 +742,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress
-                        || !configComplete
-                        || !blockReached
-                        || !!memoTooLong
-                        || confirmAction.composing}
-                >
-                    {!isWatcherMode ? 'Execute callback' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
