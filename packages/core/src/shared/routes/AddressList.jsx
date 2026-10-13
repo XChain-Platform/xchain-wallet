@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -1474,16 +1474,13 @@ export function AddressList({
                 <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label="Picker options">
                     {pickerActions.map((act) => (
                         <li key={act.key}>
-                            <Button type="button" className={local.addrRow} onClick={act.onSelect}>
-                                <div className={local.addrTopRow}>
-                                    <span className={local.addrLabel}>{act.label}</span>
-                                </div>
-                                {act.sublabel ? (
-                                    <div className={local.addrLine2}>
-                                        <span className={local.addrFiat}>{act.sublabel}</span>
-                                    </div>
-                                ) : null}
-                            </Button>
+                            <ListRow
+                                type="button"
+                                title={act.label}
+                                subtitle={act.sublabel}
+                                onClick={act.onSelect}
+                                aria-busy="false"
+                            />
                         </li>
                     ))}
                 </ul>
@@ -1503,50 +1500,55 @@ export function AddressList({
                     const d = chainRegistry.get(row.chainId);
                     return (
                         <li key={row.key}>
-                            <Button
+                            <ListRow
                                 type="button"
-                                className={local.addrRow}
                                 onClick={() => {
                                     if (pickerMode && onPick && row.record) { onPick(row.record); return; }
                                     setSelected(row);
                                     setLabelDraft(row.label || '');
                                 }}
                                 aria-label={`View address ${row.address}`}
-                            >
-                                {(row.label || isActiveRow(row) || row.record?.hidden) ? (
-                                    <div className={local.addrTopRow}>
-                                        <span className={local.addrLabel}>{row.label || ''}</span>
-                                        <span className={local.addrBadges}>
-                                            {isActiveRow(row) ? (
-                                                <span className={local.addrActive}>Active</span>
-                                            ) : null}
-                                            {row.record?.hidden ? (
-                                                <span className={local.addrHidden}>Hidden</span>
+                                aria-busy="false"
+                                title={(
+                                    <span className={local.addrRowMain}>
+                                        {(row.label || isActiveRow(row) || row.record?.hidden) ? (
+                                            <span className={local.addrTopRow}>
+                                                <span className={local.addrLabel}>{row.label || ''}</span>
+                                                <span className={local.addrBadges}>
+                                                    {isActiveRow(row) ? (
+                                                        <span className={local.addrActive}>Active</span>
+                                                    ) : null}
+                                                    {row.record?.hidden ? (
+                                                        <span className={local.addrHidden}>Hidden</span>
+                                                    ) : null}
+                                                </span>
+                                            </span>
+                                        ) : null}
+                                        <span className={local.addrLine1}>
+                                            {d
+                                                ? <ChainBadge descriptor={d} size="sm" />
+                                                : <span>{row.chainId}</span>}
+                                            <AddressText address={row.address} truncate={false} />
+                                            {row.multisig ? (
+                                                <MultisigBadge
+                                                    threshold={row.multisig.threshold}
+                                                    cosignerCount={row.multisig.cosignerCount}
+                                                    scheme={row.multisig.scheme}
+                                                    size="sm"
+                                                />
                                             ) : null}
                                         </span>
-                                    </div>
-                                ) : null}
-                                <div className={local.addrLine1}>
-                                    {d
-                                        ? <ChainBadge descriptor={d} size="sm" />
-                                        : <span>{row.chainId}</span>}
-                                    <AddressText address={row.address} truncate={false} />
-                                    {row.multisig ? (
-                                        <MultisigBadge
-                                            threshold={row.multisig.threshold}
-                                            cosignerCount={row.multisig.cosignerCount}
-                                            scheme={row.multisig.scheme}
-                                            size="sm"
-                                        />
-                                    ) : null}
-                                </div>
-                                <div className={local.addrLine2}>
-                                    <span className={local.addrAmount}>{amountTextFor(row)}</span>
-                                    {fiatTextFor(row) ? (
-                                        <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
-                                    ) : null}
-                                </div>
-                            </Button>
+                                    </span>
+                                )}
+                                subtitle={(
+                                    <span className={local.addrLine2}>
+                                        <span className={local.addrAmount}>{amountTextFor(row)}</span>
+                                        {fiatTextFor(row) ? (
+                                            <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
+                                        ) : null}
+                                    </span>
+                                )}
+                            />
                         </li>
                     );
                 })}
