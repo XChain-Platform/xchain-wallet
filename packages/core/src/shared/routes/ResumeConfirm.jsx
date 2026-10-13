@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -189,22 +189,24 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                     />
                 )}
             >
-                {composed?.psbt ? (
-                    <WatcherResultPanel
-                        result={{
-                            psbtHex: String(composed.psbt),
-                            encoding: composed.encoding,
-                            chainId,
-                            fromAddress: fromAddress?.address,
-                        }}
-                        onDone={async () => {
-                            await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
-                            onCancel?.();
-                        }}
-                    />
-                ) : (
-                    <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
-                )}
+                <FormPage label="Unsigned transaction">
+                    {composed?.psbt ? (
+                        <WatcherResultPanel
+                            result={{
+                                psbtHex: String(composed.psbt),
+                                encoding: composed.encoding,
+                                chainId,
+                                fromAddress: fromAddress?.address,
+                            }}
+                            onDone={async () => {
+                                await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
+                                onCancel?.();
+                            }}
+                        />
+                    ) : (
+                        <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                    )}
+                </FormPage>
             </Screen>
         );
     }
@@ -260,7 +262,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 />
             )}
         >
-            <div className={styles.page}>
+            <FormPage label={title}>
                 {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                 {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
                 {result ? (
@@ -293,14 +295,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>From</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{sourceAddress}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('from', sourceAddress)}
                                             aria-label="Copy from address"
                                         >
                                             {copied === 'from' ? 'Copied' : 'Copy'}
-                                        </button>
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -309,14 +313,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>To</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{destinationAddress}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('to', destinationAddress)}
                                             aria-label="Copy to address"
                                         >
                                             {copied === 'to' ? 'Copied' : 'Copy'}
-                                        </button>
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -325,14 +331,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                                     <dt>Transaction ID</dt>
                                     <dd className={styles.copyableValue}>
                                         <code>{txid}</code>
-                                        <button
+                                        <Button
                                             type="button"
-                                            className={styles.copyButton}
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => copyValue('txid', txid)}
                                             aria-label="Copy transaction ID"
                                         >
                                             {copied === 'txid' ? 'Copied' : 'Copy'}
-                                        </button>
+                                        </Button>
                                     </dd>
                                 </div>
                             ) : null}
@@ -344,7 +352,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                         ) : null}
                     </section>
                 ) : null}
-            </div>
+            </FormPage>
         </Screen>
     );
 }

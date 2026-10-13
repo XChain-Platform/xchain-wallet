@@ -24,12 +24,6 @@
     outline-offset: 2px;
 }
 
-/* A list fills the content area on wide screens, the same as every other
-   list (operator ruling 2026-10-12); only forms keep a narrow column. */
-.bodyFull {
-    padding: var(--xc-space-4) 0;
-}
-
 .error {
     font-size: var(--xc-text-sm);
     color: var(--xc-danger-fg);

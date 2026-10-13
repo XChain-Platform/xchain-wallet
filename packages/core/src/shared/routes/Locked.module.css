@@ -3,7 +3,6 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: var(--xc-space-5) 0;
 }
 
 .logo {
@@ -20,7 +19,6 @@
 
 @media (min-width: 600px) {
     .hero {
-        padding: 0;
         margin-bottom: var(--xc-space-5);
     }
 
@@ -166,7 +164,6 @@
             flex-direction: row;
             justify-content: center;
             gap: var(--xc-space-2);
-            padding: 0;
             margin-bottom: var(--xc-space-2);
         }
 
@@ -208,7 +205,6 @@
     flex-direction: row;
     justify-content: center;
     gap: var(--xc-space-2);
-    padding: 0;
     margin-bottom: 0;
 }
 
