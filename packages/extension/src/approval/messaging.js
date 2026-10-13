@@ -39,15 +39,22 @@ export function fetchApproval(id) {
 /**
  * Report the user's decision. `result` must match the shape the
  * relevant bridge handler expects (ConnectApprovalResult for connect,
- * SignApprovalResult for the signing kinds). Broker closes the window
- * on resolve; the promise is effectively fire-and-forget.
+ * SignApprovalResult for the signing kinds). The broker closes the window
+ * after a successful resolve; a stale or missing request rejects.
  *
  * @param {string} id
  * @param {object} result
  * @returns {Promise<{ resolved: boolean }>}
  */
 export function resolveApproval(id, result) {
-    return /** @type {any} */ (sendMessage('approval.resolve', { id, result }));
+    return sendMessage('approval.resolve', { id, result }).then((response) => {
+        if (/** @type {any} */ (response)?.resolved !== true) {
+            const error = new Error('Approval request is no longer pending.');
+            error.name = 'ApprovalNotFoundError';
+            throw error;
+        }
+        return /** @type {{ resolved: boolean }} */ (response);
+    });
 }
 
 /**
@@ -85,7 +92,7 @@ export function getTokenInfo(req) {
  *
  * @param {string} walletId
  * @param {string} [accountId]   when supplied, restrict to a single BIP44 account
- * @returns {Promise<Record<string, Array<{ address: string }>>>}
+ * @returns {Promise<Record<string, Array<{ address: string, derivationPath?: string | null }>>>}
  */
 export function getAddressesByChain(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));

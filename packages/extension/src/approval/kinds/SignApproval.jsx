@@ -125,6 +125,30 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
+    const walletSigningTargets = useMemo(() => {
+        if (!chainId) return [];
+        if (kind === 'signMessage') {
+            const address = payload?.payload?.address;
+            return typeof address === 'string' && address ? [{ address }] : [];
+        }
+        if (kind === 'signAction') {
+            const address = payload?.payload?.from?.address || payload?.from?.address;
+            return typeof address === 'string' && address ? [{ address }] : [];
+        }
+        if (kind === 'signPsbt' && Array.isArray(payload?.payload?.signingPaths)) {
+            return payload.payload.signingPaths.flatMap((entry) => {
+                if (typeof entry?.address === 'string' && entry.address) {
+                    return [{ address: entry.address }];
+                }
+                if (typeof entry?.derivationPath === 'string' && entry.derivationPath) {
+                    return [{ derivationPath: entry.derivationPath }];
+                }
+                return [];
+            });
+        }
+        return [];
+    }, [chainId, kind, payload]);
+
     // Sign-in signs as one address the user picks here, from the list the
     // background built out of this site's grant; nothing else can be chosen.
     const signInAddresses = kind === 'signIn' && Array.isArray(payload?.payload?.addresses)
@@ -135,17 +159,55 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const signInPick = signInAddresses[signInChoice] ?? null;
 
     useEffect(() => {
-        listWallets()
-            .then((list) => {
-                if (Array.isArray(list) && list.length > 0) {
-                    setWalletId(list[0].id);
+        let cancelled = false;
+        setWalletId(null);
+        async function loadSigningWallet() {
+            try {
+                const list = await listWallets();
+                if (cancelled) return;
+                const wallets = Array.isArray(list)
+                    ? list.filter((wallet) => typeof wallet?.id === 'string' && wallet.id)
+                    : [];
+                if (wallets.length === 0) {
+                    setError('No signing wallet is available.');
+                    return;
                 }
-            })
-            .catch((err) => {
+
+                if (walletSigningTargets.length === 0) {
+                    setWalletId(wallets[0].id);
+                    return;
+                }
+
+                const candidates = await Promise.all(wallets.map(async (wallet) => {
+                    try {
+                        const byChain = await getAddressesByChain(wallet.id);
+                        return { wallet, addresses: byChain?.[chainId] || [] };
+                    } catch {
+                        return { wallet, addresses: [] };
+                    }
+                }));
+                if (cancelled) return;
+                const match = candidates.find(({ addresses }) => (
+                    walletSigningTargets.every((target) => addresses.some((address) => (
+                        target.address
+                            ? address?.address === target.address
+                            : address?.derivationPath === target.derivationPath
+                    )))
+                ));
+                if (!match) {
+                    setError('The requested signing account is not available in this wallet.');
+                    return;
+                }
+                setWalletId(match.wallet.id);
+            } catch (err) {
+                if (cancelled) return;
                 // Show the error but still let the user reject cleanly.
                 setError(err?.message || 'Failed to load wallets.');
-            });
-    }, []);
+            }
+        }
+        void loadSigningWallet();
+        return () => { cancelled = true; };
+    }, [chainId, walletSigningTargets]);
 
     // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
     // inside the shared MessagingProvider, so it can't use the

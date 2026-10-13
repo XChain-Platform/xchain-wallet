@@ -55,13 +55,27 @@ function ApprovalRoute() {
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
+        setData(null);
+        setError(null);
         if (!id) {
             setError('Missing approval id in URL.');
             return;
         }
+        let cancelled = false;
         fetchApproval(id)
-            .then(setData)
-            .catch((err) => setError(err?.message || 'Failed to load request.'));
+            .then((request) => {
+                if (cancelled) return;
+                if (!request || typeof request !== 'object'
+                    || request.id !== id || typeof request.kind !== 'string'
+                    || !Object.prototype.hasOwnProperty.call(request, 'payload')) {
+                    throw new Error('Approval response did not match this request.');
+                }
+                setData(request);
+            })
+            .catch((err) => {
+                if (!cancelled) setError(err?.message || 'Failed to load request.');
+            });
+        return () => { cancelled = true; };
     }, [id]);
 
     const reject = useCallback(async () => {
