@@ -19,21 +19,13 @@
     margin-bottom: var(--xc-space-2);
 }
 
-.search {
+.searchField {
     flex: 1 1 0;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.searchField > * {
+    margin-bottom: 0;
 }
 
 /* Header "+" button + its Add/Import dropdown menu. */
@@ -104,6 +96,14 @@
 
 .addMenuItem:hover {
     background: var(--xc-bg-muted);
+}
+
+.addMenuItem > span {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    width: 100%;
 }
 
 .addMenuIcon {
@@ -182,6 +182,14 @@
     text-align: start;
     font: inherit;
     cursor: pointer;
+}
+
+.addrRow > span {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-1);
+    width: 100%;
 }
 
 .addrList li:first-child .addrRow {
@@ -330,6 +338,10 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
+}
+
+.detailCardSpaced {
+    margin-top: var(--xc-space-3);
 }
 
 .detailName {
@@ -500,6 +512,13 @@
 .quickAction:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.quickAction > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
 }
 
 .quickActionIcon {

@@ -68,7 +68,7 @@ async function openImportForm(messaging) {
 
 function typeSelect() {
     return /** @type {HTMLSelectElement} */ (
-        screen.getByText('Address type').parentElement.querySelector('select')
+        screen.getByRole('combobox', { name: 'Address type' })
     );
 }
 
