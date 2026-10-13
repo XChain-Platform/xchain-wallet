@@ -43,6 +43,7 @@ const receiveCss = readCss('packages/core/src/shared/routes/Receive.module.css')
 const historyCss = readCss('packages/core/src/shared/routes/History.module.css');
 const settingsCss = readCss('packages/core/src/shared/routes/Settings.module.css');
 const onboardingCss = readCss('packages/core/src/shared/routes/Onboarding.module.css');
+const formPageCss = readCss('packages/core/src/ui/FormPage.module.css');
 
 const FIXED_INLINE_SIZE = /(?:^|;)\s*(?:width|min-width)\s*:\s*[0-9.]+(?:px|r?em)(?:\s*!important)?\s*(?:;|$)/i;
 const CLIPPED_BUTTON_TEXT = /(?:^|;)\s*(?:white-space\s*:\s*nowrap|overflow\s*:\s*hidden|text-overflow\s*:\s*ellipsis)(?:\s*!important)?\s*(?:;|$)/i;
@@ -96,10 +97,9 @@ const SCREEN_TEXT_RULES = {
         [settingsCss, '.sectionHeader'],
     ],
     Onboarding: [
-        [onboardingCss, '.namePopup'],
-        [onboardingCss, '.nameFull'],
-        [onboardingCss, '.taglinePopup'],
-        [onboardingCss, '.taglineFull'],
+        // The product name and tagline render through the FormPage header.
+        [formPageCss, '.title'],
+        [formPageCss, '.description'],
         [onboardingCss, '.demoGraduateNotice'],
         [onboardingCss, '.licenseAck'],
     ],
