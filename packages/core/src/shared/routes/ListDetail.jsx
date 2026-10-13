@@ -76,6 +76,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -83,9 +84,11 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
         setLoadError(null);
         messaging.getListByActionIndex({ chainId, actionIndex })
             .then((row) => { if (!cancelled) setData(row || null); })
-            .catch((err) => { if (!cancelled) setLoadError(readFailureMessage(err, 'load this list')); });
+            .catch((err) => {
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load this list'));
+            });
         return () => { cancelled = true; };
-    }, [chainId, actionIndex, messaging]);
+    }, [chainId, actionIndex, messaging, reload]);
 
     useEffect(() => {
         let cancelled = false;
@@ -138,10 +141,22 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
     if (data === undefined) {
-        return wrap(<StatusMessage variant="status">Loading list…</StatusMessage>);
+        return wrap(
+            <div role="status" aria-label="Loading list details" aria-busy="true">
+                Loading list…
+            </div>,
+        );
     }
     if (data === null) {
         return wrap(<EmptyState title="List not found" body="It may have been removed or not indexed yet." />);

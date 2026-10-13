@@ -15,6 +15,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
 
@@ -99,7 +100,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load governance addresses. Try again.'));
+            });
         return () => { cancelled = true; };
     }, [walletId, messaging, governanceChainIds, addressesReload]);
 
@@ -110,7 +113,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         setError(null);
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
             .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load polls.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load governance polls. Try again.'));
+            });
         return () => { cancelled = true; };
     }, [chainId, messaging, pollsReload]);
 
@@ -125,7 +130,15 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             />,
         );
     }
-    if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
+    if (!chainId && !error) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading governance addresses" aria-busy="true">
+                    Loading governance addresses…
+                </div>
+            </ListPage>,
+        );
+    }
     if (!chainId) {
         return wrap(
             <ListPage>
@@ -158,7 +171,11 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                     {error}
                 </StatusMessage>
             ) : null}
-            {chainId && !rows && !error ? <p>Loading polls…</p> : null}
+            {chainId && !rows && !error ? (
+                <div role="status" aria-label="Loading governance polls" aria-busy="true">
+                    Loading governance polls…
+                </div>
+            ) : null}
             {rows && rows.length === 0 ? (
                 <EmptyState title="No polls yet" body="Polls created on this chain appear here." />
             ) : null}
