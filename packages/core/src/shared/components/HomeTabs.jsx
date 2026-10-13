@@ -236,6 +236,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         hiddenKeys={hiddenKeys}
                         onToggleHide={onToggleHide}
                         hideSmallBalances={hideSmallBalances}
+                        smallBalanceThreshold={settings?.smallBalanceThreshold}
+                        numberFormat={settings?.numberFormat}
                     />
                 ) : null}
 
@@ -262,6 +264,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         onToggleHide={onToggleHide}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
+                        smallBalanceThreshold={settings?.smallBalanceThreshold}
+                        numberFormat={settings?.numberFormat}
                     />
                     {issuedUnheld.length > 0 ? (
                         <section aria-label="Issued by you" data-testid="issued-unheld">
@@ -275,6 +279,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                                 hiddenKeys={hiddenKeys}
                                 onToggleHide={onToggleHide}
                                 verifyMap={verifyMap}
+                                numberFormat={settings?.numberFormat}
                             />
                         </section>
                     ) : null}

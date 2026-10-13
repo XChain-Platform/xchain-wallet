@@ -79,7 +79,8 @@ async function pickTemplate(label) {
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
 }
 
 async function composedParams() {

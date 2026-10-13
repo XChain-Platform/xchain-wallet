@@ -19,8 +19,8 @@
 // anywhere, and only the not-yet-captured case does, pointing at the
 // unlock screen as the remedy rather than a field on this screen.
 
-import { describe, it, expect } from 'vitest';
-import { render, act as domAct } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, fireEvent, within, act as domAct } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
@@ -96,15 +96,18 @@ describe('WalletPicker badges read passphraseStored', () => {
 });
 
 describe('WalletDetails passphrase row reads passphraseStored', () => {
-    async function renderDetails(wallet) {
-        const messaging = stubMessaging({ listWallets: () => Promise.resolve([wallet]) });
+    async function renderDetails(wallet, props = {}, messagingOverrides = {}) {
+        const messaging = stubMessaging({
+            listWallets: () => Promise.resolve([wallet]),
+            ...messagingOverrides,
+        });
         let utils;
         await domAct(async () => {
             utils = render(
                 React.createElement(
                     MessagingProvider,
                     { shell: 'web', messaging },
-                    React.createElement(WalletDetails, { walletId: wallet.id, onBack() {} }),
+                    React.createElement(WalletDetails, { walletId: wallet.id, onBack() {}, ...props }),
                 ),
             );
             await drainMicrotasks();
@@ -129,5 +132,40 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         expect(utils.container.textContent).toMatch(/needs its passphrase once/i);
         expect(utils.container.textContent, 'the remedy is the unlock screen, not a field here')
             .toMatch(/unlock screen/i);
+    });
+
+    it('passes the loaded wallet to rename so the form can prefill its name', async () => {
+        const onRename = vi.fn();
+        const utils = await renderDetails(STORED, { onRename });
+
+        fireEvent.click(utils.getByRole('button', { name: /Rename wallet/ }));
+
+        expect(onRename).toHaveBeenCalledWith(STORED);
+    });
+
+    it('locks navigation and wallet actions while demo removal is in flight', async () => {
+        globalThis.localStorage.setItem('xc:demoWalletId', STORED.id);
+        let finishRemoval;
+        const onExited = vi.fn();
+        const utils = await renderDetails(STORED, { onRename: vi.fn(), onExited }, {
+            removeWallet: vi.fn(() => new Promise((resolve) => {
+                finishRemoval = resolve;
+            })),
+        });
+
+        // The exit now asks first; confirming inside the dialog starts the removal.
+        fireEvent.click(utils.getByRole('button', { name: 'Exit demo & wipe' }));
+        const dialog = utils.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
+
+        const hidden = { hidden: true };
+        expect(utils.getByRole('button', { name: 'Back', ...hidden }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: /Rename wallet/, ...hidden }).disabled).toBe(true);
+        expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).disabled).toBe(true);
+
+        finishRemoval();
+        await domAct(async () => { await drainMicrotasks(); });
+        expect(onExited).toHaveBeenCalledOnce();
+        globalThis.localStorage.removeItem('xc:demoWalletId');
     });
 });

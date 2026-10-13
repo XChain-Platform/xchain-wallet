@@ -117,6 +117,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     alt=""
                     width={size}
                     height={size}
+                    // Stays white in every theme: a QR needs a light quiet zone to scan.
                     style={{ background: '#FFFFFF', borderRadius: 4 }}
                 />
             ) : (
@@ -124,12 +125,12 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     style={{
                         width: size,
                         height: size,
-                        background: '#F1F5F9',
+                        background: 'var(--xc-bg-muted)',
                         borderRadius: 4,
                     }}
                 />
             )}
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
                 Frame {activeIndex + 1} / {frameCount}
                 {cadenceLabel ? ` · ${cadenceLabel}` : ''}
             </span>

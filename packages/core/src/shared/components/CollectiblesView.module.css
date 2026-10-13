@@ -139,11 +139,11 @@
 }
 
 .pinBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+    color: var(--xc-accent-text, #f5b400);
 }
 
 .hideBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+    color: var(--xc-accent-text, #f5b400);
 }
 
 .meta {

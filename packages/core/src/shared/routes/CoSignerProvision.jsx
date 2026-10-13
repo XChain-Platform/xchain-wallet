@@ -52,7 +52,7 @@ const chainRegistry = registryLib.defaultRegistry();
 const COSIGNER_COIN = 'bitcoin';
 
 // A compressed secp256k1 pubkey is 33 bytes = 66 hex chars.
-const PUBKEY_RE = /^[0-9a-fA-F]{66}$/;
+const PUBKEY_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 
 /**
  * @param {object} props
@@ -112,8 +112,13 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const composeError = useMemo(() => {
         if (!chainId) return 'Pick a Bitcoin network.';
         if (!daemonAddress) return 'Pick one of your addresses to be this wallet\'s key.';
-        if (!daemonAddress.publicKey) return 'The selected address has no public key on record.';
-        if (!PUBKEY_RE.test(agentPubkey.trim())) return 'Enter the agent public key as 66 hex characters (33-byte compressed).';
+        if (!PUBKEY_RE.test(String(daemonAddress.publicKey || ''))) {
+            return 'The selected address has no valid compressed public key on record.';
+        }
+        if (!daemonAddress.derivationPath) return 'The selected address has no derivation path on record.';
+        if (!PUBKEY_RE.test(agentPubkey.trim())) {
+            return 'Enter a compressed agent public key starting with 02 or 03, followed by 64 hex characters.';
+        }
         if (agentPubkey.trim().toLowerCase() === String(daemonAddress.publicKey).toLowerCase()) {
             return 'The agent key must differ from this wallet\'s key.';
         }

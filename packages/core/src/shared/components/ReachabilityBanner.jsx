@@ -37,7 +37,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.startupGraceMs] override the cold-start silence window
  */
 export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGraceMs }) {
-    const { overall, perChain, refresh, lastChecked } = useReachability({
+    const { loading, overall, perChain, refresh, lastChecked } = useReachability({
         chainIds,
         intervalMs,
         confirmMs,
@@ -55,6 +55,7 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
         <div
             role="status"
             aria-live="polite"
+            aria-atomic="true"
             className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
             <span className={styles.icon} aria-hidden="true">
@@ -63,8 +64,8 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             <div className={styles.body}>
                 <div className={styles.title}>
                     {overall === 'offline'
-                        ? "You're offline"
-                        : "You're in degraded mode"}
+                        ? 'Wallet is offline'
+                        : 'Some wallet information is unavailable'}
                 </div>
                 <div className={styles.detail}>
                     {summary}
@@ -75,9 +76,9 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
                 type="button"
                 className={styles.retry}
                 onClick={refresh}
-                aria-label="Retry reachability probe"
+                disabled={loading}
             >
-                Retry
+                {loading ? 'Checking…' : 'Try again'}
             </button>
         </div>
     );
@@ -122,7 +123,7 @@ function summariseDegradation(perChain) {
     const offline = perChain.filter((c) => c.mode === 'offline');
     const degraded = perChain.filter((c) => c.mode === 'degraded');
     if (offline.length === perChain.length) {
-        return "Can't reach the network on any active chain.";
+        return "Can't connect to any selected network.";
     }
     const summaries = [];
     for (const c of degraded) {

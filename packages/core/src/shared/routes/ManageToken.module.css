@@ -46,6 +46,8 @@
     margin: 0;
     font-size: var(--xc-text-2xl, 1.5rem);
     font-weight: 700;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .lockBadge {
@@ -65,7 +67,7 @@
 
 .lockBadgeLocked {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .lockBadgeUnlocked {
@@ -102,6 +104,7 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 /* ───── Market panel - stats strip + chart placeholder. ───── */
@@ -227,7 +230,7 @@
 
 .manageBtnDanger {
     border-color: var(--xc-danger, #DC2626);
-    color: var(--xc-danger, #DC2626);
+    color: var(--xc-danger-fg, #DC2626);
 }
 
 .manageIcon {
@@ -235,7 +238,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -243,7 +246,7 @@
 
 .manageBtnDanger .manageIcon {
     background: color-mix(in srgb, var(--xc-danger, #DC2626) 12%, transparent);
-    color: var(--xc-danger, #DC2626);
+    color: var(--xc-danger-fg, #DC2626);
 }
 
 .manageIcon > svg {
@@ -302,7 +305,7 @@
     outline-offset: -2px;
 }
 
-.manageMoreItemDanger { color: var(--xc-danger, #DC2626); }
+.manageMoreItemDanger { color: var(--xc-danger-fg, #DC2626); }
 
 .manageMoreItemIcon {
     flex: 0 0 auto;
@@ -311,10 +314,10 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
-.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger, #DC2626); }
+.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger-fg, #DC2626); }
 
 /* ───── Tabs - match TokenDetail's pattern. ───── */
 
@@ -357,7 +360,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -417,6 +420,16 @@ button.row:hover:not(:disabled) {
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.holderAddress,
+.copyableGenesis {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .rowSub {
@@ -435,7 +448,7 @@ button.row:hover:not(:disabled) {
     align-self: center;
     background: transparent;
     border: 0;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     cursor: pointer;
@@ -483,6 +496,10 @@ button.row:hover:not(:disabled) {
     font-family: var(--xc-font-mono, monospace);
 }
 
+.copyableGenesis {
+    justify-content: flex-end;
+}
+
 .subassetList {
     list-style: none;
     padding: 0;
@@ -499,6 +516,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-xs);
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 /* ───── History-style row used by Dispensers / Orders / Swaps panels.
@@ -607,7 +626,7 @@ button.row:hover:not(:disabled) {
 
 .histStatusOpen {
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .histStatusPending {
@@ -651,7 +670,7 @@ button.row:hover:not(:disabled) {
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;

@@ -32,6 +32,7 @@ import { clearLastView } from '../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import styles from './Locked.module.css';
 
 /**
@@ -90,6 +91,7 @@ export function Locked({ onUnlocked }) {
     const [biometricAvailable, setBiometricAvailable] = useState(false);
     const [demoWipeBusy, setDemoWipeBusy] = useState(false);
     const [demoWipeError, setDemoWipeError] = useState(/** @type {string | null} */ (null));
+    const [demoConfirmOpen, setDemoConfirmOpen] = useState(false);
     const [forgotOpen, setForgotOpen] = useState(false);
     const [wipeConfirmText, setWipeConfirmText] = useState('');
     const [wipeBusy, setWipeBusy] = useState(false);
@@ -100,8 +102,8 @@ export function Locked({ onUnlocked }) {
     // Demo wallets use a randomly-generated 64-char hex password held in
     // the session cache. If the cache evaporates (auto-lock, tab close
     // followed by reopen, etc.) the user has no recoverable password.
-    // Surface a one-tap "Exit demo & start over" affordance so they can
-    // bail back to onboarding without being permanently stuck.
+    // Surface an explicit exit-and-wipe confirmation so they can return
+    // to onboarding without being permanently stuck.
     const demoWalletId = getDemoWalletId();
 
     async function handleExitDemo() {
@@ -109,47 +111,15 @@ export function Locked({ onUnlocked }) {
         setDemoWipeBusy(true);
         setDemoWipeError(null);
         try {
-            // Try the surgical messaging path first: works when the
-            // wallet happens to still be unlocked, or on shells whose
-            // host accepts wallet.remove without an unlocked vault.
-            try {
-                if (typeof messaging?.removeWallet === 'function') {
-                    await messaging.removeWallet({ walletId: demoWalletId });
-                } else if (typeof messaging?.sendMessage === 'function') {
-                    await messaging.sendMessage('wallet.remove', { walletId: demoWalletId });
-                } else {
-                    throw new Error('messaging.removeWallet unavailable');
-                }
-                clearDemoWalletId();
-                clearLastView(demoWalletId);
-                // sweep this wallet's messaging read marks/unread
-                // counts too, or they orphan in localStorage forever.
-                sweepMsgMemoryForWallet(demoWalletId);
-                onUnlocked?.();
+            await wipeWalletStorage();
+            clearDemoWalletId();
+            clearLastView(demoWalletId);
+            sweepMsgMemoryForWallet(demoWalletId);
+            if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+                window.location.reload();
                 return;
-            } catch (innerErr) {
-                // Demo wallets are unrecoverable once the session
-                // password cache is gone, and the vault blob is one
-                // encrypted unit, so there's no way to surgically remove
-                // a single wallet record without the master key. Fall
-                // back to clearing every store this shell keeps a vault
-                // In (on desktop that includes files only the
-                // main process can reach) so the App reboots into clean
-                // onboarding rather than an unlock screen for a vault
-                // that is no longer usable. The demo-exit
-                // affordance only renders when a demo wallet exists,
-                // so the destructive scope is acknowledged by the
-                // user clicking through it.
-                clearDemoWalletId();
-                clearLastView(demoWalletId);
-                // sweep this wallet's messaging read marks/unread
-                // counts too; wipeWalletStorage below clears the vault
-                // stores but not this separate xc:msgRead:/xc:msgUnread:
-                // namespace, so it would otherwise survive the wipe.
-                sweepMsgMemoryForWallet(demoWalletId);
-                await wipeWalletStorage();
-                if (typeof window !== 'undefined') window.location.reload();
             }
+            onUnlocked?.();
         } catch (err) {
             setDemoWipeError(err?.message || 'Could not exit demo mode.');
             setDemoWipeBusy(false);
@@ -501,19 +471,26 @@ export function Locked({ onUnlocked }) {
             {demoWalletId ? (
                 <div className={styles.demoExitBlock}>
                     <p className={styles.demoExitNote}>
-                        This is a demo wallet. Its password is randomly generated and not recoverable. Exiting will wipe all wallet data on this device and return you to onboarding.
+                        This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.
                     </p>
                     <Button
                         type="button"
                         variant="danger"
-                        onClick={handleExitDemo}
-                        loading={demoWipeBusy}
-                        disabled={demoWipeBusy}
+                        onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                     >
-                        Wipe wallet data &amp; start over
+                        Exit demo &amp; wipe
                     </Button>
-                    {demoWipeError ? (
+                    {demoWipeError && !demoConfirmOpen ? (
                         <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
+                    ) : null}
+                    {demoConfirmOpen ? (
+                        <DemoExitConfirm
+                            busy={demoWipeBusy}
+                            error={demoWipeError}
+                            message="This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions. Make sure you have every recovery phrase or backup file you need. This cannot be undone."
+                            onConfirm={handleExitDemo}
+                            onCancel={() => { setDemoConfirmOpen(false); setDemoWipeError(null); }}
+                        />
                     ) : null}
                 </div>
             ) : (
@@ -532,14 +509,14 @@ export function Locked({ onUnlocked }) {
                         <div
                             id="locked-forgot-password-panel"
                             className={styles.wipeConfirm}
-                            role="region"
+                            role="dialog"
                             aria-label="Wipe wallet data"
                         >
                             <p className={styles.wipeWarning}>
-                                <strong>Without your recovery phrase or encrypted backup file, wiping this wallet will permanently lose access to any funds it holds.</strong>
+                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
                             </p>
                             <p className={styles.wipeNote}>
-                                Wiping only removes the wallet from this device. The wallet on the blockchain itself is unaffected. Use this only if you have a backup, or if this wallet is empty.
+                                Funds on the blockchain are unaffected, but you need each wallet's recovery phrase or encrypted backup file to restore access. Use this only if you have those backups, or if every wallet is empty.
                             </p>
                             <Input
                                 type="text"

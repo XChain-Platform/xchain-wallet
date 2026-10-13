@@ -45,8 +45,8 @@ export class PriceAlertWatcher {
      *   the user's alerts; the watcher filters to status === 'armed'
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
      *   read live Settings each tick so toggling a flag off takes effect immediately
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
-     *   the shell-specific delivery adapter (shared with NotificationService)
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
+     *   the shell-specific delivery adapter (shared with NotificationService); false means delivery was unavailable
      * @param {(id: string) => (void | Promise<void>)} deps.markTriggered
      *   disarm an alert after it fires (one-shot)
      * @param {number} [deps.intervalMs]  poll cadence; defaults to 5 min
@@ -196,7 +196,7 @@ export class PriceAlertWatcher {
         // re-arming any other triggered alert.
         if (!isWithinQuietHours(settings)) {
             try {
-                await this._notify({
+                const delivered = await this._notify({
                     kind: 'price-alert',
                     title: 'Price alert',
                     // Privacy-safe: coin + threshold only, no balances or keys.
@@ -209,8 +209,14 @@ export class PriceAlertWatcher {
                         alertId: alert.id,
                     },
                 });
+                if (delivered === false) {
+                    this._fired.delete(alert.id);
+                    return;
+                }
             } catch (e) {
                 this._log.error('PriceAlertWatcher: notify adapter threw', e);
+                this._fired.delete(alert.id);
+                return;
             }
         }
         try {

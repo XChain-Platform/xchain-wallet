@@ -100,4 +100,53 @@ describe('extension wallet creation derives the master key once', () => {
             state.issued.length = 0;
         }
     });
+
+    it('a failure after pooling locks the pool again: no signer outlives a failed create', async () => {
+        const chainRegistry = core.registry.defaultRegistry();
+        const sdkRegistry = new core.sdk.SDKRegistry({
+            chainRegistry,
+            sdkFactory: ({ network }) => ({
+                wallet: {
+                    deriveAddress: (publicKeyHex, opts) => (
+                        core.sdk.mockDeriveAddress(network, opts?.type, publicKeyHex)
+                    ),
+                },
+            }),
+        });
+        const signerPool = new core.signers.SignerPool();
+        const onUnlocked = vi.fn();
+        let sessionKey = null;
+
+        try {
+            await expect(dispatchPreHost('wallet.create', {
+                password: PASSWORD,
+                activeChainIds: [core.registry.DEFAULT_ONBOARDING_CHAIN_IDS[0]],
+            }, {
+                storageBackend: new core.storage.InMemoryBackend(),
+                sessionBackend: {
+                    load: async () => sessionKey,
+                    save: async (key) => { sessionKey = new Uint8Array(key); },
+                    clear: async () => { sessionKey = null; },
+                },
+                metaBackend: {
+                    load: async () => null,
+                    save: async () => { throw new Error('meta write refused'); },
+                    clear: async () => {},
+                },
+                chainRegistry,
+                sdkRegistry,
+                signerPool,
+                onUnlocked,
+            })).rejects.toThrow('meta write refused');
+
+            expect(signerPool.size()).toBe(0);
+            expect(sessionKey).toBeNull();
+            expect(onUnlocked).not.toHaveBeenCalled();
+            expect(state.issued).toHaveLength(1);
+            expect(state.issued.every(zeroed)).toBe(true);
+        } finally {
+            signerPool.lockAll();
+            state.issued.length = 0;
+        }
+    });
 });

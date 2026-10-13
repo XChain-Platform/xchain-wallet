@@ -73,25 +73,25 @@ const BADGE_SPEC = {
         glyph: '✓',
         label: 'Verified',
         title: 'Independently checked against the network’s signed record; this value is proven',
-        bg: '#DCFCE7', fg: '#166534', border: '#86EFAC', // green
+        bg: 'var(--xc-success-bg)', fg: 'var(--xc-success)', border: 'var(--xc-success)', // green
     },
     failed: {
         glyph: '✕',
         label: 'Proof failed',
         title: 'The server could not prove this value; do not trust it',
-        bg: '#FEE2E2', fg: '#991B1B', border: '#FCA5A5', // red
+        bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)', border: 'var(--xc-danger-fg)', // red
     },
     unavailable: {
         glyph: '∘',
         label: 'Unverified',
         title: 'No proof available to verify this value',
-        bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1', // slate
+        bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)', border: 'var(--xc-border-strong)', // slate
     },
     pending: {
         glyph: '…',
         label: 'Verifying',
         title: 'Checking this value against the network’s signed record',
-        bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1', // slate
+        bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)', border: 'var(--xc-border-strong)', // slate
     },
 };
 
