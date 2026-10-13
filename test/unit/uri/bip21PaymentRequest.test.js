@@ -93,4 +93,21 @@ describe('BIP21-style Receive payment requests', () => {
             { chainRegistry: registry },
         ).type).toBe('unknown');
     });
+
+    it('surfaces required extension parameters separately', () => {
+        const parsed = parseBip21Uri('bitcoin:bc1qexample?req-extra=needed&label=Invoice');
+
+        expect(parsed.required).toEqual(['extra']);
+        expect(parsed.params).toEqual({
+            'req-extra': 'needed',
+            label: 'Invoice',
+        });
+    });
+
+    it.each([
+        '1bitcoin:bc1qexample',
+        'bit_coin:bc1qexample',
+    ])('rejects an invalid URI scheme in %s', (uri) => {
+        expect(() => parseBip21Uri(uri)).toThrow(/invalid scheme/);
+    });
 });

@@ -53,4 +53,31 @@ describe('fee estimate source fallback', () => {
         expect(tiers.normal.source).toBe('static-placeholder');
         expect(tiers.normal.rateValue).toBe(6);
     });
+
+    it('honors a zero-millisecond timeout', async () => {
+        const delayedEstimate = () => new Promise((resolve) => {
+            setTimeout(() => resolve({ normal: { rate: 20 } }), 10);
+        });
+
+        const tiers = await fetchTiers(delayedEstimate, 0);
+
+        expect(tiers.normal.source).toBe('static-placeholder');
+        expect(tiers.normal.rateValue).toBe(6);
+    });
+
+    it('rounds a fractional live fee up to a whole satoshi', async () => {
+        const tiers = await fetchTiers(async () => ({
+            normal: { rate: 0.005 },
+        }));
+
+        expect(tiers.normal.source).toBe('sdk');
+        expect(tiers.normal.sats).toBe(2);
+        expect(tiers.normal.coinAmount).toBe('0.00000002');
+    });
+
+    it('falls back to the relay floor when the estimator returns zero', async () => {
+        const tiers = await fetchTiers(async () => ({ minimumRate: 0 }));
+
+        expect(tiers.minimumRate).toBe(1);
+    });
 });
