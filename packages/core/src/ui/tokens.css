@@ -51,6 +51,14 @@
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
+    /* Shared stacking contexts stay ordered across every shell. */
+    --xc-z-base: 1;
+    --xc-z-sticky: 20;
+    --xc-z-dropdown: 50;
+    --xc-z-overlay: 60;
+    --xc-z-modal: 1000;
+    --xc-z-toast: 9999;
+
     /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
     --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
