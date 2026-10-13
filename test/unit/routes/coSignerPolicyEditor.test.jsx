@@ -318,6 +318,16 @@ describe('CoSignerPolicyEditor allowed-actions picker', () => {
         expect(screen.getByRole('checkbox', { name: 'Coin payment' })).toBeTruthy();
     });
 
+    it('uses a switch for the rolling-limit setting and preserves its handler', () => {
+        const onChange = vi.fn();
+        render(<CoSignerPolicyEditor value={emptyPolicyDraft()} onChange={onChange} />);
+        const toggle = screen.getByRole('switch', { name: 'Enforce a rolling limit' });
+
+        expect(toggle).not.toBeChecked();
+        fireEvent.click(toggle);
+        expect(onChange.mock.calls[0][0].windowEnabled).toBe(true);
+    });
+
     it('ticking an action appends its raw key', () => {
         const onChange = vi.fn();
         render(<CoSignerPolicyEditor value={draftWith('SEND')} onChange={onChange} />);

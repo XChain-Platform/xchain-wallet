@@ -29,12 +29,16 @@ const migratedRoutes = [
 
 const styleGuideRoutes = {
     AccountPicker: ['Button', 'ListRow'],
-    ControllerBindForm: ['Button', 'Input', 'Select'],
-    ListCreateForm: ['Button', 'Input', 'Select', 'Textarea'],
+    CoSignerPolicyEditor: ['Button', 'Checkbox', 'Input', 'Select', 'Switch'],
+    ControllerBindForm: ['Button', 'Checkbox', 'Input', 'Select'],
+    ListCreateForm: ['Button', 'Checkbox', 'Input', 'Select', 'Textarea'],
+    ListForkForm: ['Button', 'Checkbox', 'Input', 'Textarea'],
     MarketActivity: ['Button'],
     MarketView: ['Button'],
     MultisigCreate: ['Button', 'Input', 'Select'],
     PairSignerForm: ['Button', 'Input'],
+    PollDetail: ['Button', 'Checkbox', 'Input'],
+    UnionListForm: ['Button', 'Checkbox', 'Input'],
 };
 const styleGuideRowRoutes = [
     'BetFeedDetail',
@@ -170,7 +174,7 @@ describe('shared route button usage', () => {
     });
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
-        const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
+        const expectedInputs = { MultisigCreate: 1 };
         const expectedButtons = { MarketActivity: 1 };
 
         for (const routeName of Object.keys(styleGuideRoutes)) {

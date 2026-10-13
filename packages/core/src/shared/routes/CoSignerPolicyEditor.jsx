@@ -19,7 +19,7 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Button, FormPage, FormSection, Input, Select } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -312,8 +312,6 @@ const pickerStyle = {
     gap: 'var(--xc-space-1) var(--xc-space-3)',
     marginBottom: 'var(--xc-space-2)',
 };
-const pickLabelStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' };
-
 /**
  * Controlled policy editor.
  *
@@ -353,15 +351,13 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </p>
                 <div style={pickerStyle} role="group" aria-label="Actions">
                     {ACTION_CHOICES.map(({ key, label }) => (
-                        <label key={key} style={pickLabelStyle}>
-                            <input
-                                type="checkbox"
-                                value={key}
-                                checked={pickedKeys.includes(key)}
-                                onChange={(e) => toggleAction(key, e.target.checked)}
-                            />
-                            <span>{label}</span>
-                        </label>
+                        <Checkbox
+                            key={key}
+                            label={label}
+                            value={key}
+                            checked={pickedKeys.includes(key)}
+                            onChange={(e) => toggleAction(key, e.target.checked)}
+                        />
                     ))}
                 </div>
                 {actionPreview.length > 0 ? (
@@ -457,14 +453,11 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     Cap total activity over a rolling time window (for example, at most
                     10 actions per 24 hours). Optional.
                 </p>
-                <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', marginBottom: 'var(--xc-space-2)' }}>
-                    <input
-                        type="checkbox"
-                        checked={draft.windowEnabled}
-                        onChange={(e) => set({ windowEnabled: e.target.checked })}
-                    />
-                    <span>Enforce a rolling limit</span>
-                </label>
+                <Switch
+                    label="Enforce a rolling limit"
+                    checked={draft.windowEnabled}
+                    onChange={(e) => set({ windowEnabled: e.target.checked })}
+                />
                 {draft.windowEnabled ? (
                     <>
                         <div style={rowStyle}>
