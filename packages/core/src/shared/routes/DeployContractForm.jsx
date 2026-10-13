@@ -41,6 +41,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import contractStyles from './ContractScreens.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -1348,17 +1349,13 @@ export function DeployContractForm({ walletId, onBack }) {
                     autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
+                    wrap="off"
                     placeholder="// JavaScript contract source…"
-                    style={{
-                        width: '100%',
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem',
-                        padding: '0.5rem',
-                    }}
+                    className={contractStyles.codeSource}
                 />
             </label>
 
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            <div className={contractStyles.toolActions}>
                 <Button
                     type="button"
                     variant="ghost"
@@ -1459,6 +1456,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 hint="Values passed to the contract when it is created. Separate them with |."
                 value={constructorParams}
                 onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
+                className={contractStyles.monospaceInput}
                 autoComplete="off"
             />
 
@@ -1476,6 +1474,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 hint="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
+                className={contractStyles.monospaceInput}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"

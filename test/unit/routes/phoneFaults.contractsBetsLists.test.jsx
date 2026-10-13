@@ -11,6 +11,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
+import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
+import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const route = (name) => readFileSync(resolve(here, '../../../packages/core/src/shared/routes', name), 'utf8');
@@ -86,9 +88,53 @@ describe('BetFeedsList market cards', () => {
 });
 
 describe('ContractsList filter field sizing', () => {
+    it.each([320, 360])('contains an unbroken contract name at %ipx', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        const contractName = 'A'.repeat(64);
+        const row = {
+            action_index: 42,
+            meta_name: contractName,
+            source: 'bc1qexampleexampleexampleexampleexampleex',
+            status: 'active',
+            block_index: 100,
+        };
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{ address: row.source }],
+            }),
+            getContractsForSource: vi.fn().mockResolvedValue({ data: [row] }),
+            getDepositsForAddress: vi.fn().mockResolvedValue({ data: [] }),
+            getWithdrawalsForAddress: vi.fn().mockResolvedValue({ data: [] }),
+            getContractsBrowseAll: vi.fn().mockResolvedValue({ data: [] }),
+        };
+
+        try {
+            render(
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <ContractsList
+                        walletId="w1"
+                        onOpenContract={() => {}}
+                        onDeploy={() => {}}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+
+            const card = await screen.findByRole('button', { name: new RegExp(`^${contractName}`) });
+            expect(card).toHaveClass(contractStyles.contractRow);
+            expect(card).toHaveTextContent(contractName);
+            expect(screen.getByRole('tablist', { name: 'Chain filter' }))
+                .toHaveClass(contractStyles.chainFilters);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('puts the flex basis on a wrapper, never on the input itself', () => {
         const source = route('ContractsList.jsx');
         expect(source).not.toMatch(/aria-label="Filter contracts"\s*\n\s*style=/);
-        expect(source).toMatch(/<div style=\{\{ flex: '1 1 200px', minWidth: 0[^}]*\}\}>\s*\n\s*<Input/);
+        expect(source).toMatch(/<div className=\{contractStyles\.toolbarSearch\}>\s*\n\s*<Input/);
+        expect(source).toMatch(/className=\{`\$\{styles\.entry\} \$\{contractStyles\.contractRow\}`\}/);
     });
 });
