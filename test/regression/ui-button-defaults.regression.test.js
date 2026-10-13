@@ -18,6 +18,11 @@
 //   [P1] 2026-04-25: Buttons could wrap to two lines under tight
 //        widths (e.g., the popup viewport). Fix: `white-space: nowrap`
 //        on the base .btn class.
+//
+//   2026-10-13: superseded by the pseudo-long layout guard. A nowrap
+//        label pushed long translations past narrow screens, so the base
+//        .btn now wraps inside its own box (max-width: 100%, min-width: 0,
+//        overflow-wrap: anywhere) instead of overflowing it.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -53,7 +58,11 @@ describe('regression/ui-button-defaults', () => {
         }
     });
 
-    it('[REGRESSION P1] base .btn declares white-space: nowrap', () => {
-        expect(css).toMatch(/\.btn[\s\S]*?white-space:\s*nowrap/);
+    it('[REGRESSION P1] base .btn wraps inside its box instead of overflowing', () => {
+        const base = css.match(/^\.btn\s*\{([^}]*)\}/m)?.[1] ?? '';
+        expect(base).toMatch(/max-width:\s*100%/);
+        expect(base).toMatch(/min-width:\s*0/);
+        expect(base).toMatch(/white-space:\s*normal/);
+        expect(base).toMatch(/overflow-wrap:\s*anywhere/);
     });
 });
