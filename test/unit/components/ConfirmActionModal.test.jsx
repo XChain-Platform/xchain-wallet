@@ -8,6 +8,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
@@ -39,6 +40,14 @@ function base(overrides = {}) {
 }
 
 describe('ConfirmActionModal', () => {
+
+    it('has no serious axe violations in its open state', async () => {
+        const { container } = render(<ConfirmActionModal {...base({
+            credentials: <label>Password<input type="password" /></label>,
+        })} />);
+
+        await expectNoSeriousAxeViolations(container);
+    });
 
     it('renders nothing when phase is idle', () => {
         const { container } = render(<ConfirmActionModal {...base({ phase: 'idle' })} />);
