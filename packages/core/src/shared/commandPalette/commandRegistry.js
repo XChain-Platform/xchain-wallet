@@ -27,11 +27,12 @@ import { Icon } from '../../ui/index.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
-// free-form parsed intents (§33.3) and is only ever produced by
-// parseFreeformCommands, never by buildCommands, so an empty query never shows
-// it; when present it is prepended ahead of everything else.
+// free-form parsed intents (§33.3), while CommandPalette creates 'Recent' from
+// commands selected during this session. Neither category is emitted by
+// buildCommands.
 export const COMMAND_CATEGORIES = /** @type {const} */ ([
     'Suggested',
+    'Recent',
     'Navigate',
     'Tokens',
     'Create',

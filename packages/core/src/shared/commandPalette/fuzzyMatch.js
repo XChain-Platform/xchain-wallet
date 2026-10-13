@@ -82,7 +82,10 @@ export function scoreText(query, textRaw) {
  */
 export function scoreCommand(query, command) {
     if (!query) return 1;
-    let best = scoreText(query, command.title);
+    const titleScore = scoreText(query, command.title);
+    // Keep title matches in a separate tier so even a loose title match
+    // outranks an exact keyword or subtitle match.
+    let best = titleScore > 0 ? 1000 + titleScore : 0;
     for (const kw of command.keywords || []) {
         best = Math.max(best, scoreText(query, kw) * 0.6);
     }

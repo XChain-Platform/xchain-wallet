@@ -47,6 +47,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 export function CommandPalette({ open, onClose, commands, placeholder, parseQuery }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    const [recentCommandIds, setRecentCommandIds] = useState(/** @type {string[]} */ ([]));
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -59,10 +60,22 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
         const q = (query || '').trim();
-        if (!q || typeof parseQuery !== 'function') return base;
+        if (!q) {
+            // Resolve IDs against the current catalogue so recent rows always
+            // use fresh route closures and disappear when their command does.
+            const commandById = new Map(base.map((command) => [command.id, command]));
+            const recent = recentCommandIds
+                .map((id) => commandById.get(id))
+                .filter(Boolean)
+                .map((command) => ({ ...command, category: 'Recent' }));
+            if (recent.length === 0) return base;
+            const recentIds = new Set(recent.map((command) => command.id));
+            return [...recent, ...base.filter((command) => !recentIds.has(command.id))];
+        }
+        if (typeof parseQuery !== 'function') return base;
         const freeform = parseQuery(q) || [];
         return freeform.length ? [...freeform, ...base] : base;
-    }, [commands, query, parseQuery]);
+    }, [commands, query, parseQuery, recentCommandIds]);
 
     // Reset to a clean slate every time the palette opens, and focus the
     // input. Without the reset a re-open shows the previous query + stale
@@ -95,6 +108,14 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const runAt = (index) => {
         const command = results[index];
         if (!command) return;
+        // Synthetic free-form commands are query-specific and do not exist in
+        // the catalogue on the next open, so only catalogue rows become recent.
+        if ((commands || []).some((candidate) => candidate.id === command.id)) {
+            setRecentCommandIds((ids) => [
+                command.id,
+                ...ids.filter((id) => id !== command.id),
+            ].slice(0, 5));
+        }
         // Close first so a command that navigates doesn't render behind an
         // open palette for a frame.
         onClose();
