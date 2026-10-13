@@ -1,0 +1,19 @@
+{
+    "packages/core/src/shared/components/BottomTabBar.module.css | .tabDot | height: 8px": "The tab dot is a status indicator rather than an interactive control.",
+    "packages/core/src/shared/components/DataTable.module.css | .cellButton | min-height: 24px": "Dense table-cell actions intentionally use the compact control measure.",
+    "packages/core/src/shared/components/HeaderSettingsButton.module.css | .networkSelect | min-height: 36px": "The header network selector intentionally uses the compact control measure.",
+    "packages/core/src/shared/components/HomeTabs.module.css | .sortSelect | min-height: 36px": "The tab-toolbar sort selector intentionally uses the compact control measure.",
+    "packages/core/src/shared/routes/ContactsList.module.css | .addButton | height: 38px": "The contacts header action matches the adjacent fixed-size header control.",
+    "packages/core/src/shared/routes/History.module.css | .searchInput | min-height: 36px": "The history toolbar search intentionally uses the compact control measure.",
+    "packages/core/src/shared/routes/History.module.css | .chainPickerIcon | height: 18px": "The chain-picker icon is artwork inside a control, not the control itself.",
+    "packages/core/src/shared/routes/History.module.css | .chainPickerAllIcon | height: 18px": "The all-chains picker icon is artwork inside a control, not the control itself.",
+    "packages/core/src/shared/routes/MyTokens.module.css | .issueButton | height: 32px": "The issue action matches the adjacent fixed-size route header control.",
+    "packages/core/src/shared/routes/MyTokens.module.css | .chipGroup | min-height: 36px": "The chip group is a layout container rather than an interactive control.",
+    "packages/core/src/shared/routes/OnboardingCarousel.module.css | .rootFull | margin: 0 auto": "Auto inline margins center the bounded full-page onboarding route.",
+    "packages/core/src/shared/routes/TokenDetail.module.css | .socialChipIcon | height: 14px": "The social-chip icon is artwork inside a control, not the control itself.",
+    "packages/core/src/ui/AddressCombobox.module.css | .iconButton | height: 36px": "The address combobox icon action matches its compact input height.",
+    "packages/core/src/ui/AddressCombobox.module.css | .lg .iconButton | height: 48px": "The large address combobox icon action matches its large input height.",
+    "packages/core/src/ui/AddressField.module.css | .iconButton | height: 36px": "The address-field icon action matches its compact input height.",
+    "packages/core/src/ui/AddressField.module.css | .lg .iconButton | height: 48px": "The large address-field icon action matches its large input height.",
+    "packages/web/src/style-guide/sections/templateExamples.module.css | .select | min-height: 36px": "The style-guide select demonstrates the existing compact control measure."
+}
