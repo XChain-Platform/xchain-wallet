@@ -68,6 +68,27 @@
     font-size: inherit;
 }
 
+/* Receive keeps the complete address visible. The taller field gives common
+ * Bech32 and Base58 addresses room to wrap without colliding with the picker. */
+.wrappedReadOnly input,
+.wrappedReadOnly .readOnlyValue,
+.wrappedReadOnly .iconButton {
+    min-height: 64px;
+    height: 64px;
+}
+
+.wrappedReadOnly .readOnlyValue {
+    align-items: center;
+    white-space: normal;
+}
+
+.wrappedReadOnly .readOnlyValue > span {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    line-height: 1.35;
+}
+
 .lg .readOnlyValue {
     inset-inline-start: var(--xc-space-4);
     min-height: 48px;

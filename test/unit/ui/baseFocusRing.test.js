@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Every form control has the app's focus ring even without a style of its
-// own, and the base rule never outranks a component's (zero specificity).
+// Every native or custom interactive control keeps the shared focus ring even
+// when a component resets the browser outline.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -19,9 +19,30 @@ import { fileURLToPath } from 'node:url';
 const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../packages/core/src/ui/tokens.css'), 'utf8');
 
 describe('base focus ring', () => {
-    it('covers inputs, selects, textareas and buttons at zero specificity', () => {
-        const rule = /:where\(input, select, textarea, button\):focus-visible\s*\{([^}]*)\}/.exec(css);
+    it('covers native and custom controls with the theme token', () => {
+        const rule = /:where\(([\s\S]*?)\):focus-visible\s*\{([^}]*)\}/.exec(css);
         expect(rule).not.toBeNull();
-        expect(rule[1]).toMatch(/outline:\s*2px solid var\(--xc-accent-primary\)/);
+        for (const selector of [
+            'a[href]',
+            'audio[controls]',
+            'button',
+            'input',
+            'select',
+            'textarea',
+            "[role='button']",
+            "[role='link']",
+            "[role='tab']",
+            "[tabindex]:not([tabindex='-1'])",
+            "[contenteditable]:not([contenteditable='false'])",
+        ]) {
+            expect(rule[1]).toContain(selector);
+        }
+        expect(rule[2]).toMatch(/outline:\s*2px solid var\(--xc-focus-ring\) !important/);
+        expect(rule[2]).toMatch(/outline-offset:\s*-2px !important/);
+    });
+
+    it('defines a high-contrast token for the light and both dark theme paths', () => {
+        expect(css).toMatch(/:root\s*\{[\s\S]*?--xc-focus-ring:\s*#0F172A;/);
+        expect(css.match(/--xc-focus-ring:\s*#FFFFFF;/g)).toHaveLength(2);
     });
 });

@@ -39,9 +39,16 @@ describe('PageHeader', () => {
         const onBack = vi.fn();
         render(<PageHeader title="Wallet details" onBack={onBack} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('expands a generic back label to name its destination', () => {
+        render(<PageHeader title="Publish file" onBack={() => {}} backLabel="Back" />);
+
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     });
 
     it('uses a route-specific back label and keeps a disabled action inert', () => {

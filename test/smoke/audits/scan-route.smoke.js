@@ -87,6 +87,7 @@ const SCAN_KEYS = [
     'scan.classifyPaste',
     'scan.error.pasteEmpty',
     'scan.error.unknownXchainIntent',
+    'scan.error.paymentRequest',
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
@@ -172,7 +173,8 @@ for (const shell of shells) {
     // Membership, not position. This asserted `'scan'` was the LAST member of
     // the union, so any later view (PC-30's 'oracle', that 'settings')
     // read as a missing scan route.
-    assert.ok(/@type \{[^}]*'scan'[^}]*\} \*\/ \('home'\)/.test(src),
+    // The initial value may be a handoff expression rather than a bare 'home'.
+    assert.ok(/@type \{'home'[^}]*'scan'[^}]*\} \*\/ \(/.test(src),
         `${shell.name} App.jsx unlockedView union covers 'scan'`);
 }
 

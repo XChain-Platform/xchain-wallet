@@ -96,24 +96,31 @@ describe('TokenPicker asset visibility and filtering', () => {
         await screen.findByText(LONG_NAME);
 
         fireEvent.change(search, { target: { value: 'wrp123' } });
+        expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        });
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
         fireEvent.change(search, { target: { value: 'wrap cleanly' } });
-        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
-        expect(screen.getByText('No matching balances')).toBeInTheDocument();
+        expect(await screen.findByText('No matching balances')).toBeInTheDocument();
         expect(screen.getByText('No balances match "missing asset".'))
             .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear token search' }));
+        expect(search).toHaveValue('');
+        expect(screen.queryByRole('button', { name: 'Clear token search' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
     });
 
-    it('wraps long names instead of truncating them', () => {
+    it('keeps long names on one line and ellipsizes them', () => {
         const nameRule = balanceListCss.match(/\.name\s*\{([^}]*)\}/)?.[1] || '';
-        expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(nameRule).toMatch(/white-space:\s*normal/);
-        expect(nameRule).not.toMatch(/text-overflow:\s*ellipsis/);
+        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
+        expect(nameRule).toMatch(/white-space:\s*nowrap/);
+        expect(nameRule).toMatch(/min-width:\s*0/);
     });
 
     it('uses the chain filter for held balances and Receive platform discovery', async () => {
@@ -133,9 +140,50 @@ describe('TokenPicker asset visibility and filtering', () => {
             target: { value: 'PEPE' },
         });
         await waitFor(() => expect(searchTokens).toHaveBeenCalledOnce());
-        expect(searchTokens).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', query: 'PEPE' });
+        expect(searchTokens).toHaveBeenCalledWith({ chainId: 'litecoin-mainnet', query: 'PEPE', limit: 50 });
         expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
             .toBeInTheDocument();
+    });
+
+    it('resets filters from an empty result', async () => {
+        mount();
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        await screen.findByText(LONG_NAME);
+        fireEvent.change(search, { target: { value: 'missing asset' } });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset filters' }));
+        expect(search).toHaveValue('');
+        expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
+    });
+
+    it('retries balance and platform-search failures', async () => {
+        const getWalletBalances = vi.fn()
+            .mockRejectedValueOnce(new Error('balance service unavailable'))
+            .mockResolvedValue(balances);
+        const searchTokens = vi.fn()
+            .mockRejectedValueOnce(new Error('search service unavailable'))
+            .mockResolvedValueOnce([{ tick: 'LTC.PEPE' }]);
+        mount({
+            purpose: 'receive',
+            messaging: makeMessaging({ getWalletBalances, searchTokens }),
+        });
+
+        expect(await screen.findByText('balance service unavailable')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
+
+        fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search coins or tokens' }), {
+            target: { value: 'PEPE' },
+        });
+        expect(await screen.findByText('Could not search all platform tokens. Try again.'))
+            .toBeInTheDocument();
+        expect(screen.queryByText('No matching balances')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByRole('button', { name: /^Select LTC.PEPE\b/ }))
+            .toBeInTheDocument();
+        expect(searchTokens).toHaveBeenCalledTimes(2);
     });
 });
 
@@ -145,10 +193,17 @@ describe('TokenPicker keyboard and return behavior', () => {
         const onBack = vi.fn();
         mount({ onSelect, onBack, backLabel: 'Back to send' });
         const row = await screen.findByRole('button', { name: new RegExp('^Select ' + LONG_NAME) });
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
 
-        row.focus();
+        fireEvent.change(search, { target: { value: 'wrp123' } });
+        await waitFor(() => {
+            expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        });
+        search.focus();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
         expect(document.activeElement).toBe(row);
-        await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+        search.focus();
+        await act(async () => fireEvent.keyDown(search, { key: 'Enter' }));
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
             chainId: 'bitcoin-mainnet',
             tick: 'WRP123',

@@ -58,6 +58,10 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 function messagingWithRefusal() {
+    const refusal = Object.assign(new Error(`Encoder RPC error: ${REFUSAL}`), {
+        name: 'SDKEncoderError',
+        code: 'ENCODER_RPC_ERROR',
+    });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [SOURCE, FIRST, SECOND] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: SOURCE }),
@@ -65,7 +69,7 @@ function messagingWithRefusal() {
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
-        composeForConfirm: vi.fn().mockRejectedValue(new Error(REFUSAL)),
+        composeForConfirm: vi.fn().mockRejectedValue(refusal),
     };
     return new Proxy(target, {
         get(object, property) {
@@ -91,8 +95,7 @@ async function refuseCreate(utils) {
         fireEvent.click(utils.getByRole('button', { name: 'Create' }));
         await drainMicrotasks();
     });
-    // An unclassified compose error reaches the user as the generic house line.
-    expect(utils.getByText(/Something went wrong\. Try again\./)).toBeInTheDocument();
+    expect(utils.getByText(/network would refuse a dispenser at this address/i)).toBeInTheDocument();
 }
 
 describe('DispenserForm stale address refusal', () => {
@@ -122,10 +125,10 @@ describe('DispenserForm stale address refusal', () => {
 
         await refuseCreate(utils);
         await pickAddress(utils, SECOND.address);
-        expect(utils.queryByText(/Something went wrong\. Try again\./)).not.toBeInTheDocument();
+        expect(utils.queryByText(/network would refuse a dispenser at this address/i)).not.toBeInTheDocument();
 
         await refuseCreate(utils);
         await pickAddress(utils, SOURCE.address);
-        expect(utils.queryByText(/Something went wrong\. Try again\./)).not.toBeInTheDocument();
+        expect(utils.queryByText(/network would refuse a dispenser at this address/i)).not.toBeInTheDocument();
     });
 });

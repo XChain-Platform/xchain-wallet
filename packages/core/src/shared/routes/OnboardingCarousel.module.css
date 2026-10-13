@@ -220,3 +220,40 @@
         transition: none;
     }
 }
+
+/* The active explanation scrolls within its lane when translated text is
+   taller than a short landscape screen. Navigation remains outside it. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .rootPopup,
+    .rootFull {
+        gap: var(--xc-space-2);
+    }
+
+    .frameViewport {
+        align-items: flex-start;
+        overflow-y: auto;
+    }
+
+    .frame {
+        padding: var(--xc-space-1) var(--xc-space-3);
+    }
+
+    .frameIcon {
+        width: 40px;
+        height: 40px;
+        margin-bottom: var(--xc-space-1);
+    }
+
+    .frameTitle {
+        font-size: var(--xc-text-lg);
+        margin-bottom: var(--xc-space-1);
+    }
+
+    .frameBody {
+        line-height: 1.35;
+    }
+
+    .dots {
+        padding-block: 0;
+    }
+}

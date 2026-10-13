@@ -9,6 +9,14 @@
     box-sizing: border-box;
 }
 
+.refreshing svg {
+    animation: history-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes history-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Unified filter card containing search, chain picker, and the collapsible
    advanced-filters panel in one bordered container so the mobile view reads
    as one block instead of three stacked widgets. */
@@ -113,7 +121,7 @@
     z-index: 20;
     list-style: none;
     margin: 0;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
@@ -161,7 +169,7 @@
     font-weight: 600;
     padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
-    margin-bottom: 4px;
+    margin-bottom: var(--xc-space-1);
     list-style: none;
 }
 
@@ -385,6 +393,8 @@
     color: var(--xc-text);
     font-family: inherit;
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     text-align: start;
     margin: var(--xc-space-1) 0;
 }
@@ -410,17 +420,6 @@
     gap: var(--xc-space-2);
 }
 
-/* Plain chain icon for row headers: no pill, no tinted background.
-   Just the raw 16px logo so the row reads as icon + action label. */
-.rowChainIcon {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    display: block;
-}
-
 .actionBadge {
     font-weight: 600;
     font-size: var(--xc-text-sm);
@@ -439,8 +438,10 @@
 
 .rowMeta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -448,6 +449,9 @@
 .rowSummary {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -498,7 +502,19 @@
     font-family: var(--xc-font-mono, monospace);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    word-break: break-all;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.rowReceiveLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text);
+    word-break: break-word;
 }
 
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
@@ -988,7 +1004,7 @@
     z-index: 1;
     background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
     border-radius: var(--xc-radius-sm);
-    backdrop-filter: blur(2px);
+    backdrop-filter: var(--xc-backdrop-filter);
 }
 
 .empty {
@@ -1319,5 +1335,85 @@
 .pendingAmount {
     font-style: italic;
     color: var(--xc-text-muted);
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Compact history layouts wrap controls and row metadata, while detail keys
+   stack above their values. This keeps each piece of content in its own track
+   when the available width reaches the 320px phone viewport. */
+@media (max-width: 399px) {
+    .filterCard {
+        min-width: 0;
+    }
+
+    .dateRow {
+        flex-wrap: wrap;
+    }
+
+    .dateInput {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .dateSep {
+        display: none;
+    }
+
+    .filterFooter {
+        align-items: stretch;
+    }
+
+    .filterFooter > .filterDisclosure {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .rowHeader,
+    .rowMeta {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .rowSourceAddress,
+    .rowContractLabel,
+    .rowSummary {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .pendingAmount {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .rowRelativeTime {
+        margin-inline-start: 0;
+    }
+
+    .detailsTable tbody {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsTable th,
+    .detailSectionFlush .detailsTable th {
+        padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-1);
+        white-space: normal;
+    }
+
+    .detailsTable td,
+    .detailSectionFlush .detailsTable td {
+        padding: 0 var(--xc-space-3) var(--xc-space-2);
+    }
+
+    .detailsTable tr + tr > td {
+        border-top: 0;
+    }
 }

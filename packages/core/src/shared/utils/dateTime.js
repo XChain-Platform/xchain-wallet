@@ -9,6 +9,17 @@ const SECOND_MS = 1000;
 const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
+const RELATIVE_CUTOFF_MS = 7 * DAY_MS;
+
+function timestampMs(timestamp) {
+    const numeric = Number(timestamp);
+    if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric < 1e12 ? numeric * SECOND_MS : numeric;
+    }
+    if (typeof timestamp !== 'string' || !timestamp.trim()) return null;
+    const parsed = Date.parse(timestamp);
+    return Number.isNaN(parsed) ? null : parsed;
+}
 
 /**
  * Compact elapsed-time wording shared by activity surfaces.
@@ -38,10 +49,24 @@ export function formatElapsedTime(diffMs) {
  * @returns {string}
  */
 export function formatRelativeTime(timestamp, nowMs = Date.now()) {
-    const n = Number(timestamp);
-    if (!Number.isFinite(n) || n <= 0) return '';
-    const ms = n < 1e12 ? n * SECOND_MS : n;
+    const ms = timestampMs(timestamp);
+    if (ms === null) return '';
     return formatElapsedTime(nowMs - ms);
+}
+
+/** Format activity relatively for one week, then as a local calendar date. */
+export function formatActivityTime(timestamp, nowMs = Date.now()) {
+    const ms = timestampMs(timestamp);
+    if (ms === null) return '';
+    if (nowMs - ms < RELATIVE_CUTOFF_MS) return formatElapsedTime(nowMs - ms);
+    const date = new Date(ms);
+    try {
+        return date.toLocaleDateString(getFormatLocale(), {
+            year: 'numeric', month: 'short', day: 'numeric',
+        });
+    } catch {
+        return date.toISOString().slice(0, 10);
+    }
 }
 
 /**
@@ -51,9 +76,8 @@ export function formatRelativeTime(timestamp, nowMs = Date.now()) {
  * @returns {string | null}
  */
 export function formatLocalDateTime(timestamp) {
-    const n = Number(timestamp);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    const ms = n < 1e12 ? n * SECOND_MS : n;
+    const ms = timestampMs(timestamp);
+    if (ms === null) return null;
     const date = new Date(ms);
     if (Number.isNaN(date.getTime())) return null;
     try {
