@@ -2713,7 +2713,8 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                     </div>
                                 ) : (
                                     <EmptyState
-                                        title={t('history.detail.peerUnavailable', {
+                                        title={t('history.detail.peerUnavailableTitle')}
+                                        body={t('history.detail.peerUnavailable', {
                                             ticker: entry.link.peerCoinTicker,
                                             index: entry.link.peerActionIndex,
                                         })}

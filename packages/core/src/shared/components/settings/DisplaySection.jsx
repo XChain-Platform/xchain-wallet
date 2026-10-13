@@ -450,13 +450,15 @@ export function DisplaySection() {
                 <DisplaySaveError error={saveError} controlKey="pinnedTokens" />
                 {pinned.length === 0 ? (
                     <EmptyState
-                        title="No pinned tokens. Tap the star on a balance row to pin it."
+                        title="No pinned tokens"
                         titleAs="p"
+                        body="Tap the star on a balance row to pin it."
                     />
                 ) : filteredPinned.length === 0 ? (
                     <EmptyState
-                        title={`No pinned tokens match "${debouncedTokenQuery.trim()}".`}
+                        title="No matching pinned tokens"
                         titleAs="p"
+                        body={`No pinned tokens match "${debouncedTokenQuery.trim()}".`}
                     />
                 ) : (
                     filteredPinned.map((key) => {
@@ -508,13 +510,15 @@ export function DisplaySection() {
                 <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
                 {hidden.length === 0 ? (
                     <EmptyState
-                        title="No hidden tokens. Tap the hide affordance on a balance row to hide it."
+                        title="No hidden tokens"
                         titleAs="p"
+                        body="Tap the hide control on a balance row to hide it."
                     />
                 ) : filteredHidden.length === 0 ? (
                     <EmptyState
-                        title={`No hidden tokens match "${debouncedTokenQuery.trim()}".`}
+                        title="No matching hidden tokens"
                         titleAs="p"
+                        body={`No hidden tokens match "${debouncedTokenQuery.trim()}".`}
                     />
                 ) : (
                     <>

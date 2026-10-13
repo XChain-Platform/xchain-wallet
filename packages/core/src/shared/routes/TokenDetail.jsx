@@ -1178,8 +1178,9 @@ function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
             <EmptyState
-                title="Native coin. Token-information documents are an XChain-issued-token concept."
+                title="Native coin"
                 titleAs="p"
+                body="Token-information documents apply only to XChain-issued tokens."
             />
         );
     }
@@ -1323,7 +1324,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
 
     if (isNative) {
         return (
-            <EmptyState title="Native coins don't carry attached media." titleAs="p" />
+            <EmptyState title="No attached media" titleAs="p" body="Native coins don't carry attached media." />
         );
     }
     if (loading) {

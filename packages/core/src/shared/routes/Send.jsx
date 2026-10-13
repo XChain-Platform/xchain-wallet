@@ -3660,7 +3660,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 })}
                             </div>
                         ) : (
-                            <EmptyState title={t('send.advanced.noInputs')} titleAs="p" />
+                            <EmptyState title={t('send.advanced.noInputsTitle')} titleAs="p" body={t('send.advanced.noInputs')} />
                         )}
                         <dl
                             className={styles.coinControlSummary}

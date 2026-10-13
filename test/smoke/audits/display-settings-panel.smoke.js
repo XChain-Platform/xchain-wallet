@@ -83,9 +83,9 @@ assert.ok(/Unhide all/.test(sectionSrc),
 
 // --- 4. Empty-state hints ---------------------------------------------
 
-assert.ok(/No pinned tokens\./.test(sectionSrc),
+assert.ok(/title="No pinned tokens"[\s\S]*?body="Tap the star on a balance row to pin it\."/.test(sectionSrc),
     'empty pinned list shows the documented hint');
-assert.ok(/No hidden tokens\./.test(sectionSrc),
+assert.ok(/title="No hidden tokens"[\s\S]*?body="Tap the hide control on a balance row to hide it\."/.test(sectionSrc),
     'empty hidden list shows the documented hint');
 
 // --- 5. Settings.jsx mounts DisplaySection ----------------------------

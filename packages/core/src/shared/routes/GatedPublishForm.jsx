@@ -682,7 +682,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ) : packsError ? (
                     <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
                 ) : packs.length === 0 ? (
-                    <EmptyState title={t('gatedPublish.pack.empty')} titleAs="p" />
+                    <EmptyState title={t('gatedPublish.pack.emptyTitle')} titleAs="p" body={t('gatedPublish.pack.empty')} />
                 ) : null}
             </fieldset>
 

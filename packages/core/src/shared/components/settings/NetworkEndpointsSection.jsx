@@ -55,7 +55,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <EmptyState title="No chains registered." titleAs="p" />;
+        return <EmptyState title="No chains registered" titleAs="p" body="Registered chains and their endpoints appear here." />;
     }
 
     return (

@@ -515,8 +515,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
         return (
             <div style={MANAGER}>
                 <EmptyState
-                    title={!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
+                    title={!walletId ? 'No wallet selected' : 'Price alerts unavailable'}
                     titleAs="p"
+                    body={!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
                 />
             </div>
         );
@@ -541,7 +542,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                     <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>Try again</Button>
                 </span>
             ) : alerts.length === 0 ? (
-                <EmptyState title="No price alerts yet. Add one below." titleAs="p" />
+                <EmptyState title="No price alerts yet" titleAs="p" body="Add one below." />
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>

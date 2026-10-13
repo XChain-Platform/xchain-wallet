@@ -207,6 +207,6 @@ describe('publish forms replace file state safely', () => {
         );
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not load reusable packs');
-        expect(document.body.textContent).not.toContain('No reusable packs in this wallet yet');
+        expect(document.body.textContent).not.toContain('No reusable packs');
     });
 });

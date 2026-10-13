@@ -788,7 +788,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         <EmptyState
                             title="No owned tokens"
                             titleAs="h3"
-                            body="This wallet doesn't own any tokens. Only a token's owner can publish gated files against it (that's a protocol rule, it stops strangers gating spam to your token). Create a token first, then publish gated content for its holders."
+                            body="Only a token's owner can publish gated files for it, so create a token first and then publish gated content for its holders."
                         />
                     ) : (
                         <>

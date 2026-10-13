@@ -372,8 +372,9 @@ export const en = {
     'gatedPublish.pack.add': 'Add to pack',
     'gatedPublish.pack.unlockTogether': '(files in this pack unlock together)',
     'gatedPublish.pack.loading': 'Loading reusable packs…',
+    'gatedPublish.pack.emptyTitle': 'No reusable packs yet',
     'gatedPublish.pack.empty':
-        'No reusable packs in this wallet yet. Files published under one pack share a single key and unlock together.',
+        'Files published under one pack share a single key and unlock together.',
     'gatedPublish.ackForever':
         "I understand the encrypted file is published on-chain forever and the gate can't be removed later.",
 
@@ -554,7 +555,8 @@ export const en = {
     'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
-    'send.advanced.noInputs': 'No spendable inputs found.',
+    'send.advanced.noInputsTitle': 'No spendable inputs',
+    'send.advanced.noInputs': 'Inputs this wallet can spend appear here.',
     'send.advanced.changeAddress': 'Change address',
     'send.advanced.automaticChange': 'Automatic: {address}',
     'send.advanced.changeHint': 'Any leftover native coin returns here.',
@@ -801,6 +803,7 @@ export const en = {
     'history.detail.loadingPeer': 'Loading the linked transaction…',
     'history.detail.peerError': "Couldn't load peer: {error}",
     'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
+    'history.detail.peerUnavailableTitle': 'Peer chain unavailable',
     'history.detail.peerUnavailable':
         'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
