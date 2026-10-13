@@ -4876,8 +4876,8 @@ export function createBackgroundHost(deps) {
         return aggregateMultisigSession({ ...req, vault, sdkRegistry });
     });
 
-    host.register('multisigSign.finalize', async (req, { vault }) => {
-        return finalizeMultisigSigningSession({ ...req, vault });
+    host.register('multisigSign.finalize', async (req, { vault, sdkRegistry }) => {
+        return finalizeMultisigSigningSession({ ...req, vault, sdkRegistry });
     });
 
     // §22.3 + §42.9 local-cosigner contribution (Step 21). Unlocks

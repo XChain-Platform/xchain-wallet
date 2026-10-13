@@ -213,6 +213,41 @@ export function MultisigSigningSession({ walletId, onBack }) {
         }
     }
 
+    async function handleFinalize() {
+        if (!active || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await messaging.finalizeMultisigSigningSession({ sessionId: active.id });
+            await refreshActive(active.id);
+            await refreshList();
+        } catch (err) {
+            console.error('Multisig finalization failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Could not finalize the signed transaction.'), handleFinalize);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function handleBroadcast() {
+        if (!active || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await messaging.finalizeMultisigSigningSession({
+                sessionId: active.id,
+                broadcast: true,
+            });
+            await refreshActive(active.id);
+            await refreshList();
+        } catch (err) {
+            console.error('Multisig broadcast failed:', err); // eslint-disable-line no-console
+            fail(userFacingMessage(err, 'Could not broadcast the signed transaction.'), handleBroadcast);
+        } finally {
+            setBusy(false);
+        }
+    }
+
     // §20.3 chunked QR frames for the current outbound envelope.
     // Coordinator's request kind switches with the session's status:
     // round 1 (MuSig2 nonces) vs round 2 (MuSig2 partials, carries
@@ -827,6 +862,16 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {canAggregate && !isTerminal ? (
                     <Button variant="primary" onClick={handleAggregate} loading={busy && !canceling} disabled={busy}>
                         Combine replies
+                    </Button>
+                ) : null}
+                {active.status === 'ready-to-finalize' ? (
+                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy}>
+                        Finalize transaction
+                    </Button>
+                ) : null}
+                {active.status === 'finalized' ? (
+                    <Button variant="primary" onClick={handleBroadcast} loading={busy && !canceling} disabled={busy}>
+                        Broadcast transaction
                     </Button>
                 ) : null}
             </div>
