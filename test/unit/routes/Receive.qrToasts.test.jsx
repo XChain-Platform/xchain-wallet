@@ -24,6 +24,11 @@ vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => ({ showToast, dismissToast: () => {}, clearToasts: () => {} }),
 }));
 
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useFiatRate: () => ({ rate: 50000, fiatCurrency: 'USD' }),
+}));
+
 // jsdom has no canvas, so the real encoder cannot draw the QR; a fixed PNG
 // data URL lets the Copy and Share buttons enable.
 vi.mock('qrcode', () => ({
@@ -123,6 +128,54 @@ describe('Receive QR copy and share toasts', () => {
         });
     });
 
+    it('converts fiat to coin precision and updates both QR and copied request', async () => {
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        renderReceive();
+
+        fireEvent.click(await screen.findByRole('button', { name: /Switch input to USD/ }));
+        const amount = screen.getByRole('textbox', { name: 'Amount (USD)' });
+        fireEvent.change(amount, { target: { value: '10.123456789' } });
+
+        expect(amount).toHaveValue('10.123456789');
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('amount=0.00020247'),
+        )).toBe(true));
+        const paymentRequest = qrToDataURL.mock.calls.findLast(
+            ([value]) => value.includes('amount=0.00020247'),
+        )[0];
+
+        fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
+        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(paymentRequest));
+    });
+
+    it('clears the amount from the QR and copied request', async () => {
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        renderReceive();
+        const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
+
+        fireEvent.change(amount, { target: { value: '1.25' } });
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('amount=1.25'),
+        )).toBe(true));
+        fireEvent.change(amount, { target: { value: '' } });
+        fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
+        await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(
+            `bitcoin:${ADDRESS.address}`,
+        ));
+        await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
+            `bitcoin:${ADDRESS.address}`,
+            expect.any(Object),
+        ));
+    });
+
     it('shows plain copy-failure text and logs the browser message', async () => {
         stubBrowser({
             write: vi.fn(async () => { throw new Error(BROWSER_TEXT); }),
@@ -219,8 +272,8 @@ describe('Receive address handling', () => {
 
         fireEvent.click(generatedField);
         await waitFor(() => expect(writeText).toHaveBeenCalled());
-        expect(writeText.mock.calls.at(-1)[0]).toContain(`bitcoin:${generated.address}?`);
-        expect(qrToDataURL.mock.calls.at(-1)[0]).toContain(`bitcoin:${generated.address}?`);
+        expect(writeText.mock.calls.at(-1)[0]).toBe(`bitcoin:${generated.address}`);
+        expect(qrToDataURL.mock.calls.at(-1)[0]).toBe(`bitcoin:${generated.address}`);
     });
 
     it('shows amount validation and never encodes a rejected value', async () => {
@@ -243,6 +296,11 @@ describe('Receive address handling', () => {
     it('hides an old QR while the current payment request is still rendering', async () => {
         /** @type {Array<(value: string) => void>} */
         const resolveQr = [];
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
         qrToDataURL.mockImplementation(() => new Promise((resolve) => resolveQr.push(resolve)));
         renderReceive();
 
@@ -256,6 +314,8 @@ describe('Receive address handling', () => {
         await waitFor(() => expect(resolveQr).toHaveLength(2));
         expect(screen.queryByRole('img', { name: /QR code for/ })).toBeNull();
         expect(screen.getByText('Rendering QR…')).toBeInTheDocument();
+        fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
+        await waitFor(() => expect(writeText.mock.calls.at(-1)[0]).toContain('amount=2'));
 
         resolveQr[1]('data:image/png;base64,Y3VycmVudA==');
         const currentQr = await screen.findByRole('img', { name: /QR code for/ });
