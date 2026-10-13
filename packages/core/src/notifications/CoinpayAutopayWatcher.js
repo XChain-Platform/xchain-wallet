@@ -64,6 +64,7 @@ import {
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
 import { randomUUID } from '../util/uuid.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 
@@ -71,8 +72,6 @@ const DEFAULT_INTERVAL_MS = 60 * 1000;
 // block payment for long; with the 60s default this is a 3-minute
 // takeover window, inside the spec's 15-minute bound for 5-min cycles).
 const LEASE_CYCLES = 3;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 /** PendingTx statuses that mean "a payment may already be in flight". */
 const ATTEMPTED_STATUSES = new Set([
@@ -152,7 +151,7 @@ export class CoinpayAutopayWatcher {
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'coinpay');
         this._coinpayAction = coinpayAction || defaultCoinpayAction;
 
         this._instanceId = randomUUID();

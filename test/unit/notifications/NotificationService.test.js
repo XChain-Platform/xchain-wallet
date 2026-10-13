@@ -302,4 +302,20 @@ describe('NotificationService', () => {
         expect(deps.sdks['bitcoin-mainnet'].onAddress).toHaveBeenCalledTimes(2);
         expect(deps.sdks['bitcoin-mainnet'].subCount('addrBTC2')).toBe(1);
     });
+
+    it('tags subscription failures without logging addresses or error payloads', async () => {
+        const deps = makeDeps();
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        deps.sdks['bitcoin-mainnet'].onAddress.mockImplementation(() => {
+            throw new Error('password=hunter2 body={"address":"addrBTC","balance":42}');
+        });
+
+        const svc = makeService(deps, { logger });
+        await svc.start();
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.error.mock.calls[0][0]).toMatch(/^\[notify\] /);
+        expect(logger.error.mock.calls[0][1]).toBe('<Error>');
+        expect(JSON.stringify(logger.error.mock.calls)).not.toMatch(/addrBTC|hunter2|balance|body=/);
+    });
 });
