@@ -33,8 +33,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -251,6 +253,7 @@ function canonicalEndpoint(value) {
 }
 
 function ChainEndpointBlock({ descriptor, override, onSave }) {
+    const confirmDialog = useConfirmModal();
     const defaults = {
         explorerUrl: sdkLib.joinEndpoint(descriptor.explorer),
         encoderUrl: sdkLib.joinEndpoint(descriptor.encoder),
@@ -337,6 +340,12 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         }
     };
     const onReset = async () => {
+        const confirmed = await confirmDialog.confirm({
+            title: 'Reset network endpoints?',
+            message: `Restore ${descriptor.displayName}${networkSuffix} explorer, encoder, and hub URLs to their defaults?`,
+            confirmLabel: 'Reset endpoints',
+        });
+        if (!confirmed) return;
         setDraft(defaults);
         setSaveError(null);
         setSaving(true);
@@ -412,6 +421,13 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                     </button>
                 ) : null}
             </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }

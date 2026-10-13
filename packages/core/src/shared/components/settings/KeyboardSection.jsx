@@ -24,6 +24,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     SHORTCUTS,
     SHORTCUT_GROUPS,
@@ -90,6 +92,7 @@ function bindingFromEvent(e, kind) {
 
 export function KeyboardSection() {
     const { settings, update, loading, error } = useSettings();
+    const confirmDialog = useConfirmModal();
     const overrides = settings?.keyboard?.bindings || {};
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     const mac = isMac();
@@ -147,14 +150,27 @@ export function KeyboardSection() {
         return () => window.removeEventListener('keydown', onKey, true);
     }, [capturingId, leaderLead, overrides, shortcuts, update, mac]);
 
-    const resetOne = (id) => {
+    const resetOne = async (id) => {
+        const shortcut = shortcuts.find((candidate) => candidate.id === id);
+        const confirmed = await confirmDialog.confirm({
+            title: 'Reset shortcut?',
+            message: `Restore "${shortcut?.label || id}" to its built-in binding?`,
+            confirmLabel: 'Reset shortcut',
+        });
+        if (!confirmed) return;
         const next = { ...overrides };
         delete next[id];
         update({ keyboard: { bindings: next } })
             .then(() => setStatus({ kind: 'ok', text: 'Shortcut reset to its default.' }))
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset.' }));
     };
-    const resetAll = () => {
+    const resetAll = async () => {
+        const confirmed = await confirmDialog.confirm({
+            title: 'Reset all shortcuts?',
+            message: 'Every custom shortcut will return to its built-in binding.',
+            confirmLabel: 'Reset shortcuts',
+        });
+        if (!confirmed) return;
         setCapturingId(null);
         setLeaderLead(null);
         update({ keyboard: { bindings: {} } })
@@ -237,6 +253,13 @@ export function KeyboardSection() {
                     </Button>
                 </div>
             </section>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }
