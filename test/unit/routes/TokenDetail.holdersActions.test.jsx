@@ -77,9 +77,35 @@ describe('TokenDetail holders', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
 
-        expect(await screen.findByText('12,345.5')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Copy holder address 1' }));
+        const list = await screen.findByRole('list', { name: 'Holder balances' });
+        const row = within(list).getByRole('listitem');
+        expect(within(row).getByText('12,345.5')).toBeTruthy();
+        fireEvent.click(within(row).getByRole('button', { name: 'Copy holder address 1' }));
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(HOLDER));
+    });
+
+    it('uses the shared row primitive for actions, details, and holders', async () => {
+        const onViewActivity = vi.fn();
+        mount({
+            holders: { data: [{ address: HOLDER, amount: '7' }] },
+            props: { onViewActivity },
+        });
+
+        const activityRow = screen.getByRole('button', { name: 'History' });
+        fireEvent.click(activityRow);
+        expect(onViewActivity).toHaveBeenCalledOnce();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        const detailList = await screen.findByRole('list', { name: 'Token detail fields' });
+        const detailRow = within(detailList).getAllByRole('listitem')[0].firstElementChild;
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+        const holderList = await screen.findByRole('list', { name: 'Holder balances' });
+        const holderRow = within(holderList).getByRole('listitem').firstElementChild;
+
+        const sharedRowClass = detailRow.classList[0];
+        expect(activityRow).toHaveClass(sharedRowClass);
+        expect(holderRow).toHaveClass(sharedRowClass);
     });
 
     it('distinguishes an empty list from a failed holder lookup', async () => {
@@ -104,8 +130,8 @@ describe('TokenDetail holders', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
 
         await screen.findByText('Holders (5000)');
-        const list = screen.getByRole('table', { name: 'Holder balances' });
-        expect(list.querySelectorAll('tbody tr')).toHaveLength(100);
+        const list = screen.getByRole('list', { name: 'Holder balances' });
+        expect(within(list).getAllByRole('listitem')).toHaveLength(100);
         expect(screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' })).toBeInTheDocument();
 
         const scroller = document.querySelector('main');
@@ -115,7 +141,7 @@ describe('TokenDetail holders', () => {
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
 
-        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(200));
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(200));
         expect(scroller.scrollTop).toBe(197);
     });
 
@@ -173,7 +199,7 @@ describe('TokenDetail holders', () => {
 
         view.rerender(tree('NEW'));
         expect(screen.getByRole('tab', { name: 'About' })).toHaveAttribute('aria-selected', 'true');
-        expect(screen.queryByRole('table', { name: 'Holder balances' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Holder balances' })).toBeNull();
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
         expect(await screen.findByTitle(freshHolder)).toBeTruthy();
 
@@ -265,7 +291,6 @@ describe('TokenDetail actions', () => {
 
         const send = await screen.findByRole('button', { name: 'Send' });
         expect(send.disabled).toBe(true);
-        expect(send.title).toBe('No balance to send.');
         expect(screen.getByText('No balance to send.')).toBeTruthy();
     });
 });

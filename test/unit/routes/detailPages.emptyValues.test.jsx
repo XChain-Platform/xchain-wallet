@@ -68,6 +68,9 @@ function valueBeside(label) {
     const heading = screen.getByText(label, { exact: true });
     const row = heading.closest('tr');
     if (row) return row.querySelector('td');
+    const listItem = screen.queryAllByRole('listitem')
+        .find((candidate) => candidate.contains(heading));
+    if (listItem) return listItem.firstElementChild?.lastElementChild;
     return heading.nextElementSibling;
 }
 
