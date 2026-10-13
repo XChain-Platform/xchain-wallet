@@ -20,28 +20,10 @@
 // fire on the next check.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, Input, Select } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
-const FIELD = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
-const PRIMARY_BTN = {
-    background: 'var(--xc-accent-primary)',
-    color: 'var(--xc-on-accent)',
-    border: 'none',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-};
 const HINT = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
@@ -145,28 +127,28 @@ export function PriceAlertForm({
                 {lockedChainId ? (
                     <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
                 ) : (
-                    <select
+                    <Select
                         aria-label="Coin"
                         value={chainId}
                         onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
-                        style={FIELD}
                     >
+                        {/* Native options remain because Select owns the listbox control, not its choices. */}
                         {MAINNET_PRICE_CHAINS.map((c) => (
                             <option key={c} value={c}>{coinLabelForChain(c)}</option>
                         ))}
-                    </select>
+                    </Select>
                 )}
-                <select
+                <Select
                     aria-label="Direction"
                     value={direction}
                     onChange={(e) => updateInput(setDirection, e.target.value, direction)}
-                    style={FIELD}
                 >
+                    {/* Native options remain because Select owns the listbox control, not its choices. */}
                     <option value="above">rises above</option>
                     <option value="below">falls below</option>
-                </select>
+                </Select>
                 <span aria-hidden="true">{symbol}</span>
-                <input
+                <Input
                     type="text"
                     inputMode="decimal"
                     enterKeyHint="go"
@@ -181,26 +163,28 @@ export function PriceAlertForm({
                         targetStr,
                     )}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-                    style={{ ...FIELD, width: 110 }}
+                    style={{ width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
-                <button
+                <Button
                     type="button"
                     onClick={submit}
                     disabled={!valid || busy}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}
+                    size="sm"
+                    variant="primary"
                 >
                     {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
-                </button>
+                </Button>
                 {onCancel ? (
-                    <button
+                    <Button
                         type="button"
                         onClick={onCancel}
-                        style={{ ...FIELD, cursor: 'pointer', background: 'transparent' }}
+                        size="sm"
+                        variant="secondary"
                     >
                         Cancel
-                    </button>
+                    </Button>
                 ) : null}
             </div>
             {disabledReason ? (

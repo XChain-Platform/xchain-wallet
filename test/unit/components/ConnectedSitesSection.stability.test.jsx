@@ -234,8 +234,9 @@ describe('ConnectedSitesSection settings controls', () => {
 
     it('writes effective defaults when both throttle fields are cleared', async () => {
         render(<ConnectedSitesSection />);
-        const burst = await screen.findByLabelText('Sign-throttle burst (max requests per window)');
-        const windowSeconds = screen.getByLabelText('Sign-throttle window in seconds');
+        const burst = await screen.findByRole('spinbutton', { name: 'Sign-throttle burst (max requests per window)' });
+        const windowSeconds = screen.getByRole('spinbutton', { name: 'Sign-throttle window in seconds' });
+        expect(burst.className).toMatch(/input/);
         fireEvent.change(burst, { target: { value: '' } });
         fireEvent.change(windowSeconds, { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -250,9 +251,9 @@ describe('ConnectedSitesSection settings controls', () => {
 
     it('rejects fractional throttle values instead of rounding them', async () => {
         render(<ConnectedSitesSection />);
-        const burst = await screen.findByLabelText('Sign-throttle burst (max requests per window)');
+        const burst = await screen.findByRole('spinbutton', { name: 'Sign-throttle burst (max requests per window)' });
         fireEvent.change(burst, { target: { value: '2.5' } });
-        fireEvent.submit(burst.closest('form'));
+        fireEvent.submit(screen.getByRole('form', { name: 'Sign-request throttle controls' }));
 
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByText(/Burst must be an integer/)).toBeTruthy();
@@ -262,9 +263,9 @@ describe('ConnectedSitesSection settings controls', () => {
         settings.signThrottle.windowMs = 1001;
         render(<ConnectedSitesSection />);
 
-        const windowSeconds = await screen.findByLabelText('Sign-throttle window in seconds');
+        const windowSeconds = await screen.findByRole('spinbutton', { name: 'Sign-throttle window in seconds' });
         expect(windowSeconds.value).toBe('1.001');
-        fireEvent.submit(windowSeconds.closest('form'));
+        fireEvent.submit(screen.getByRole('form', { name: 'Sign-request throttle controls' }));
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({
             signThrottle: {
@@ -284,7 +285,8 @@ describe('ConnectedSitesSection settings controls', () => {
         render(<ConnectedSitesSection />);
 
         const entry = await screen.findByText('https://blocked.example');
-        const list = entry.closest('ul');
+        const list = screen.getByRole('list');
+        expect(list).toContainElement(entry);
         expect(list.style.overflowY).toBe('');
         expect(list.style.maxHeight).toBe('');
     });

@@ -14,7 +14,7 @@ describe('PriceAlertForm', () => {
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
         const action = screen.getByRole('button', { name: 'Add alert' });
-        const target = screen.getByLabelText('Target price');
+        const target = screen.getByRole('textbox', { name: 'Target price' });
 
         expect(action).toBeDisabled();
         expect(action.getAttribute('aria-describedby')).toBe(target.getAttribute('aria-describedby'));
@@ -27,7 +27,7 @@ describe('PriceAlertForm', () => {
         const onCreate = vi.fn().mockResolvedValue(undefined);
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        const input = screen.getByLabelText('Target price');
+        const input = screen.getByRole('textbox', { name: 'Target price' });
         fireEvent.change(input, { target: { value: '12,345.67' } });
         expect(input.value).toBe('12345.67');
 
@@ -44,7 +44,7 @@ describe('PriceAlertForm', () => {
         let resolveSave;
         const onCreate = vi.fn(() => new Promise((resolve) => { resolveSave = resolve; }));
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
-        const input = screen.getByLabelText('Target price');
+        const input = screen.getByRole('textbox', { name: 'Target price' });
 
         fireEvent.change(input, { target: { value: '10' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
@@ -59,7 +59,7 @@ describe('PriceAlertForm', () => {
         let rejectSave;
         const onCreate = vi.fn(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
-        const input = screen.getByLabelText('Target price');
+        const input = screen.getByRole('textbox', { name: 'Target price' });
 
         fireEvent.change(input, { target: { value: '10' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
@@ -71,16 +71,16 @@ describe('PriceAlertForm', () => {
         expect(screen.getByRole('button', { name: 'Add alert' })).toBeEnabled();
     });
 
-    it('uses theme tokens and exposes save failures as an alert', async () => {
+    it('uses style-guide controls and exposes save failures as an alert', async () => {
         render(<PriceAlertForm
             lockedChainId="bitcoin-mainnet"
             onCreate={vi.fn().mockRejectedValue(new Error('Save failed'))}
         />);
         const button = screen.getByRole('button', { name: 'Add alert' });
-        expect(button.style.background).toBe('var(--xc-accent-primary)');
-        expect(button.style.color).toBe('var(--xc-on-accent)');
+        expect(button.className).toMatch(/primary/);
+        expect(screen.getByRole('textbox', { name: 'Target price' }).className).toMatch(/input/);
 
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '10' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
         fireEvent.click(button);
         expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
     });
@@ -91,7 +91,7 @@ describe('PriceAlertForm', () => {
             onCreate={vi.fn().mockRejectedValue(new Error('saveAlert: vault is required'))}
         />);
 
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '10' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '10' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the alert. Try again.');
@@ -102,7 +102,7 @@ describe('PriceAlertForm', () => {
         const onCreate = vi.fn();
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
 
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '0' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '0' } });
 
         expect(screen.getByRole('alert')).toHaveTextContent('Enter a price greater than zero.');
         expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
@@ -118,11 +118,11 @@ describe('PriceAlertForm', () => {
             onCancel={vi.fn()}
         />);
 
-        expect(screen.getByLabelText('Coin').value).toBe('bitcoin-mainnet');
-        expect(screen.getByLabelText('Direction').value).toBe('below');
-        expect(screen.getByLabelText('Target price').value).toBe('65000');
+        expect(screen.getByRole('combobox', { name: 'Coin' }).value).toBe('bitcoin-mainnet');
+        expect(screen.getByRole('combobox', { name: 'Direction' }).value).toBe('below');
+        expect(screen.getByRole('textbox', { name: 'Target price' }).value).toBe('65000');
 
-        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '64000' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Target price' }), { target: { value: '64000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
         await waitFor(() => expect(onCreate).toHaveBeenCalledWith({

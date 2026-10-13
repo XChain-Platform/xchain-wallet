@@ -54,8 +54,12 @@ describe('DisplaySection', () => {
         const hide = await screen.findByRole('switch', { name: 'Hide small balances' });
 
         fireEvent.click(hide);
-        fireEvent.change(screen.getByLabelText('Small-balance threshold'), { target: { value: '0.01' } });
-        fireEvent.change(screen.getByLabelText('Balance number format'), { target: { value: 'trim' } });
+        const threshold = screen.getByRole('combobox', { name: 'Small-balance threshold' });
+        const numberFormat = screen.getByRole('combobox', { name: 'Balance number format' });
+        expect(threshold.className).toMatch(/input/);
+        expect(numberFormat.className).toMatch(/input/);
+        fireEvent.change(threshold, { target: { value: '0.01' } });
+        fireEvent.change(numberFormat, { target: { value: 'trim' } });
 
         await waitFor(() => {
             expect(messaging.updateSettings).toHaveBeenCalledWith({ privacy: { hideSmallBalances: true } });
@@ -111,8 +115,8 @@ describe('DisplaySection', () => {
         const messaging = setup({}, { getTokenInfo });
         await screen.findByRole('heading', { name: 'Watched tokens (0)' });
 
-        fireEvent.change(screen.getByLabelText('Token chain'), { target: { value: 'dogecoin-testnet' } });
-        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'MISSING' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Token chain' }), { target: { value: 'dogecoin-testnet' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
 
         expect(await screen.findByText('Token "MISSING" was not found on Dogecoin (testnet).')).toBeTruthy();
@@ -122,7 +126,7 @@ describe('DisplaySection', () => {
             demo: false,
         });
 
-        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'WOW' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
 
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
@@ -131,7 +135,7 @@ describe('DisplaySection', () => {
         }));
         expect(await screen.findByText('dogecoin-testnet:WOW')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'WOW' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
         fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
         expect(await screen.findByText('WOW is already watched on Dogecoin (testnet).')).toBeTruthy();
         expect(getTokenInfo).toHaveBeenCalledTimes(2);

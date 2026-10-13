@@ -23,13 +23,19 @@
 // block an origin without it being connected first.
 //
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, EmptyState, FormErrorSummary } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    FormErrorSummary,
+    FormSection,
+    Input,
+} from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { INPUT, ROW, ROW_HINT, ROW_VALUE, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -41,23 +47,6 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-};
-
-const SITE_BLOCK = {
-    ...ROW,
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    gap: 'var(--xc-space-2)',
-};
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
@@ -210,19 +199,21 @@ export function ConnectedSitesSection() {
                 sites.map((site) => {
                     const isOpen = expanded.has(site.id);
                     return (
-                        <div key={site.id} style={SITE_BLOCK}>
-                            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                    <span style={ROW_VALUE}>
-                                        {site.appName || site.origin}
-                                    </span>
-                                    <span style={ROW_HINT}>{site.origin}</span>
+                        <FormSection
+                            key={site.id}
+                            headingLevel="h3"
+                            title={site.appName || site.origin}
+                            description={(
+                                <>
+                                    <span style={{ display: 'block' }}>{site.origin}</span>
                                     <span style={ROW_HINT}>
                                         Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
                                     </span>
-                                </div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
-                                    <button
+                                </>
+                            )}
+                        >
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
+                                    <Button
                                         type="button"
                                         aria-expanded={isOpen}
                                         onClick={() => setExpanded((prev) => {
@@ -230,10 +221,11 @@ export function ConnectedSitesSection() {
                                             if (next.has(site.id)) next.delete(site.id); else next.add(site.id);
                                             return next;
                                         })}
-                                        style={ACTION_BTN}
+                                        size="sm"
+                                        variant="secondary"
                                     >
                                         {isOpen ? 'Hide' : 'Permissions'}
-                                    </button>
+                                    </Button>
                                     <Button
                                         size="sm"
                                         variant="danger"
@@ -254,10 +246,9 @@ export function ConnectedSitesSection() {
                                             Block
                                         </Button>
                                     ) : null}
-                                </div>
                             </div>
                             {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
-                        </div>
+                        </FormSection>
                     );
                 })
             )}
@@ -330,9 +321,12 @@ function BlocklistAuditPanel({ confirm }) {
 
     if (entries === null) return null;
     return (
-        <div style={SITE_BLOCK}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span style={ROW_VALUE}>Site block history</span>
+        <FormSection
+            headingLevel="h3"
+            title="Site block history"
+            description="Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly."
+        >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                     type="button"
                     onClick={onClear}
@@ -343,11 +337,6 @@ function BlocklistAuditPanel({ confirm }) {
                     {clearing ? 'Clearing…' : 'Clear history'}
                 </Button>
             </div>
-            <span style={ROW_HINT}>
-                Shows the 50 most recent changes, with the newest last. Use
-                this history to spot a site that was blocked or unblocked
-                unexpectedly.
-            </span>
             {entries.length === 0 ? (
                 <EmptyState
                     title="No site block history"
@@ -355,6 +344,7 @@ function BlocklistAuditPanel({ confirm }) {
                     titleAs="p"
                 />
             ) : (
+                // The style guide has no compact audit-list primitive, so this remains a semantic list.
                 <ul
                     style={{
                         margin: 0,
@@ -377,6 +367,7 @@ function BlocklistAuditPanel({ confirm }) {
                                 fontSize: 'var(--xc-text-xs)',
                             }}
                         >
+                            {/* Native list items preserve audit-log list semantics because the kit has no list primitive. */}
                             <span style={{ color: 'var(--xc-text-muted)', minWidth: '6.5rem' }}>
                                 {formatLastUsed(new Date(entry.at).toISOString())}
                             </span>
@@ -397,7 +388,7 @@ function BlocklistAuditPanel({ confirm }) {
                 </ul>
             )}
             {error ? <Status text={error} tone="error" /> : null}
-        </div>
+        </FormSection>
     );
 }
 
@@ -476,7 +467,6 @@ function SignThrottlePanel() {
         ? formatWindowSeconds(currentWindowMs)
         : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
 
-    const FIELD = { ...INPUT, width: '5rem' };
     const throttleErrorTarget = /^Burst /i.test(error || '')
         ? { id: 'sign-throttle-burst', label: 'Burst' }
         : /^Window /i.test(error || '')
@@ -484,21 +474,17 @@ function SignThrottlePanel() {
             : undefined;
     const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
-        <div style={SITE_BLOCK}>
-            <span style={ROW_VALUE}>Sign-request throttle</span>
-            <span style={ROW_HINT}>
-                Limits how many signing requests a single site can make in a
-                short window; anything over the limit is rejected until the
-                window resets. Lower numbers harden against abuse; higher
-                numbers help during heavy normal use. Defaults:{' '}
-                {SIGN_THROTTLE_DEFAULT_BURST} per{' '}
-                {SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.
-            </span>
-            <span style={ROW_HINT}>
+        <FormSection
+            headingLevel="h3"
+            title="Sign-request throttle"
+            description={`Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: ${SIGN_THROTTLE_DEFAULT_BURST} per ${SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.`}
+        >
+            <p style={ROW_HINT}>
                 Currently in effect: <strong>{effectiveBurst}</strong> per{' '}
                 <strong>{effectiveWindowSec} s</strong>.
-            </span>
+            </p>
             <form
+                aria-label="Sign-request throttle controls"
                 onSubmit={onApply}
                 style={{
                     display: 'flex',
@@ -508,72 +494,72 @@ function SignThrottlePanel() {
                     gap: 'var(--xc-space-2)',
                 }}
             >
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                    <span style={{ color: 'var(--xc-text-muted)' }}>Burst</span>
-                    <input
-                        id="sign-throttle-burst"
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="next"
-                        min={SIGN_THROTTLE_BURST_MIN}
-                        max={SIGN_THROTTLE_BURST_MAX}
-                        step={1}
-                        value={burstInput}
-                        onChange={(e) => {
-                            setBurstInput(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
-                        aria-label="Sign-throttle burst (max requests per window)"
-                        style={FIELD}
-                    />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                    <span style={{ color: 'var(--xc-text-muted)' }}>Window (seconds)</span>
-                    <input
-                        id="sign-throttle-window"
-                        type="number"
-                        inputMode="numeric"
-                        enterKeyHint="go"
-                        min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
-                        max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
-                        step={0.001}
-                        value={windowSecondsInput}
-                        onChange={(e) => {
-                            setWindowSecondsInput(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
-                        aria-label="Sign-throttle window in seconds"
-                        style={FIELD}
-                    />
-                </label>
-                <button
+                <Input
+                    id="sign-throttle-burst"
+                    label="Burst"
+                    type="number"
+                    inputMode="numeric"
+                    enterKeyHint="next"
+                    min={SIGN_THROTTLE_BURST_MIN}
+                    max={SIGN_THROTTLE_BURST_MAX}
+                    step={1}
+                    value={burstInput}
+                    onChange={(e) => {
+                        setBurstInput(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
+                    aria-label="Sign-throttle burst (max requests per window)"
+                    style={{ width: '5rem' }}
+                />
+                <Input
+                    id="sign-throttle-window"
+                    label="Window (seconds)"
+                    type="number"
+                    inputMode="numeric"
+                    enterKeyHint="go"
+                    min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
+                    max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
+                    step={0.001}
+                    value={windowSecondsInput}
+                    onChange={(e) => {
+                        setWindowSecondsInput(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
+                    aria-label="Sign-throttle window in seconds"
+                    style={{ width: '5rem' }}
+                />
+                <Button
                     type="submit"
                     disabled={submitting}
-                    style={{ ...ACTION_BTN, padding: 'var(--xc-space-2)' }}
+                    size="sm"
+                    variant="primary"
                 >
                     {submitting ? 'Applying…' : 'Apply'}
-                </button>
+                </Button>
             </form>
             <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
-        </div>
+        </FormSection>
     );
 }
 
 function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
     return (
-        <div style={{ ...SITE_BLOCK, borderColor: 'var(--xc-border)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                <span style={ROW_VALUE}>Blocked sites</span>
-                <span style={ROW_HINT}>
+        <FormSection
+            headingLevel="h3"
+            title="Blocked sites"
+            description={(
+                <>
                     Blocked sites cannot connect or ask you to sign until you
                     unblock them. To block every subdomain, use a pattern like{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
                     and add{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}
                     separately to block the main site too.
-                </span>
+                </>
+            )}
+        >
                 {blocked.length === 0 ? (
                     <EmptyState
                         title="No blocked sites"
@@ -581,12 +567,14 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         titleAs="p"
                     />
                 ) : (
+                    // The style guide has no compact origin-list primitive, so this remains a semantic list.
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
                             <li
                                 key={origin}
                                 style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
                             >
+                                {/* Native list items preserve blocked-origin list semantics because the kit has no list primitive. */}
                                 <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{origin}</span>
                                 <Button
                                     type="button"
@@ -603,7 +591,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     </ul>
                 )}
                 <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
-                    <input
+                    <Input
                         type="text"
                         enterKeyHint="go"
                         autoCapitalize="off"
@@ -613,10 +601,6 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         onChange={(e) => setManualBlock(e.target.value)}
                         placeholder="https://example.com or *.example.com"
                         aria-label="Origin or wildcard to block"
-                        style={{
-                            ...INPUT,
-                            flex: 1,
-                        }}
                     />
                     <Button
                         type="submit"
@@ -628,8 +612,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                         Block
                     </Button>
                 </form>
-            </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -653,9 +636,11 @@ function PermissionsSummary({ permissions }) {
             ) : (
                 <div>
                     <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
+                    {/* The style guide has no compact permission-list primitive, so this remains a semantic list. */}
                     <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
                         {Object.entries(actions).map(([action, perm]) => (
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
+                                {/* Native list items preserve permission-list semantics because the kit has no list primitive. */}
                                 {actionDisplayLabel(action)}
                                 {': '}
                                 <span style={{ color: permColor(perm) }}>{permissionLabel(perm)}</span>

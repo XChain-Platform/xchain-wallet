@@ -1,14 +1,4 @@
-/* §20 / Cluster X Step 3 - extracted from Send.module.css so non-Send
- * action surfaces can render the same watcher-mode result UI. Visual
- * idiom matches the broadcast-success card. */
-
-.successTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-3);
-    color: var(--xc-success);
-    overflow-wrap: anywhere;
-}
+/* §20 / Cluster X Step 3 result details shared by watcher-mode action surfaces. */
 
 .successLabel {
     font-size: var(--xc-text-xs);
@@ -17,21 +7,6 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin: 0 0 var(--xc-space-1);
-}
-
-.successCard {
-    display: flex;
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    align-items: stretch;
-    padding: var(--xc-space-4);
-    border: 1px solid var(--xc-success, #2c7a3d);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
 }
 
 .successHint {
@@ -94,29 +69,6 @@
     display: flex;
     align-items: stretch;
     gap: var(--xc-space-2);
-}
-
-.successLink {
-    align-self: flex-start;
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-text);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    font-family: inherit;
-    text-decoration: underline;
-    padding: var(--xc-space-1) 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.successLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
 }
 
 .hint {

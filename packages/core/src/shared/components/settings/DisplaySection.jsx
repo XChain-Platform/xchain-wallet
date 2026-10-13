@@ -24,7 +24,14 @@
 // without a separate `messaging.getTokenInfo` round-trip.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    Icon,
+    Input,
+    SectionHeader,
+    Select,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useSupportedChains } from '../../hooks/useSupportedChains.js';
@@ -40,24 +47,11 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { INPUT, ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
 
-const SECTION_HEADER = {
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 600,
-    color: 'var(--xc-text)',
-    marginTop: 'var(--xc-space-3)',
-    marginBottom: 'var(--xc-space-1)',
-};
-const SECTION_HINT = {
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-xs)',
-    lineHeight: 1.3,
-    marginBottom: 'var(--xc-space-2)',
-};
 const KEY_TEXT = {
     color: 'var(--xc-text)',
     fontFamily: 'var(--xc-font-mono, monospace)',
@@ -73,8 +67,6 @@ const ACTIONS = {
     gap: 'var(--xc-space-1)',
     flexShrink: 0,
 };
-const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
-
 export function DisplaySection() {
     const { messaging } = useMessaging();
     const { settings, loading, error, update } = useSettings();
@@ -315,7 +307,7 @@ export function DisplaySection() {
 
     return (
         <div style={STACK}>
-            <h3 style={SECTION_HEADER}>Balance display</h3>
+            <SectionHeader as="h3" title="Balance display" />
             <ToggleRow
                 label="Hide small balances"
                 hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
@@ -328,17 +320,17 @@ export function DisplaySection() {
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
                 </div>
-                <select
+                <Select
                     aria-label="Small-balance threshold"
                     value={settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT}
                     onChange={(e) => updateDisplay('smallBalanceThreshold', { smallBalanceThreshold: e.target.value })}
-                    style={SELECT}
                 >
+                    {/* Native options remain because Select owns the listbox control, not its choices. */}
                     <option value="dust">Network dust (recommended)</option>
                     <option value="0.0001">Less than 0.0001</option>
                     <option value="0.01">Less than 0.01</option>
                     <option value="1">Less than 1</option>
-                </select>
+                </Select>
                 <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
             <div style={ROW}>
@@ -346,23 +338,24 @@ export function DisplaySection() {
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
                 </div>
-                <select
+                <Select
                     aria-label="Balance number format"
                     value={settings.numberFormat || NUMBER_FORMAT_DEFAULT}
                     onChange={(e) => updateDisplay('numberFormat', { numberFormat: e.target.value })}
-                    style={SELECT}
                 >
+                    {/* Native options remain because Select owns the listbox control, not its choices. */}
                     <option value="full">1,234.50000000</option>
                     <option value="trim">1,234.5</option>
                     <option value="plain">1234.50000000</option>
-                </select>
+                </Select>
                 <DisplaySaveError error={saveError} controlKey="numberFormat" />
             </div>
 
-            <h3 style={SECTION_HEADER}>Row affordances</h3>
-            <p style={SECTION_HINT}>
-                Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active.
-            </p>
+            <SectionHeader
+                as="h3"
+                title="Row affordances"
+                description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
+            />
             <ToggleRow
                 label="Show pin button on rows"
                 hint="Display a star on each balance row for pinning or unpinning the token on Home."
@@ -378,30 +371,31 @@ export function DisplaySection() {
             />
             <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
 
-            <h3 style={SECTION_HEADER}>Watched tokens ({watched.length})</h3>
-            <p style={SECTION_HINT}>
-                Add a token by chain and ticker to keep it in Balances even when its balance is zero.
-            </p>
+            <SectionHeader
+                as="h3"
+                title={`Watched tokens (${watched.length})`}
+                description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
+            />
             <form style={ROW} onSubmit={addWatchedToken}>
-                <select
+                <Select
                     aria-label="Token chain"
                     value={watchChainId}
                     onChange={(event) => setWatchChainId(event.target.value)}
-                    style={SELECT}
                 >
+                    {/* Native options remain because Select owns the listbox control, not its choices. */}
                     {chains.map((chain) => (
                         <option key={chain.id} value={chain.id}>
                             {chain.displayName} ({chain.networkKind})
                         </option>
                     ))}
-                </select>
-                <input
+                </Select>
+                <Input
                     aria-label="Token ticker"
                     value={watchTicker}
                     onChange={(event) => setWatchTicker(event.target.value)}
                     placeholder="Ticker"
                     autoComplete="off"
-                    style={{ ...INPUT, flex: 1, minWidth: 120 }}
+                    style={{ minWidth: 120 }}
                 />
                 <Button type="submit" size="sm" variant="secondary" icon={null} disabled={watching}>
                     {watching ? 'Checking…' : 'Watch token'}
@@ -425,19 +419,20 @@ export function DisplaySection() {
 
             {(pinned.length > 0 || hidden.length > 0) ? (
                 <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
-                    <input
-                        ref={tokenSearchRef}
-                        type="search"
-                        value={tokenQuery}
-                        onChange={(event) => setTokenQuery(event.target.value)}
-                        onKeyDown={handleTokenSearchKeyDown}
-                        placeholder="Search token lists"
-                        aria-label="Search pinned and hidden tokens"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        style={{ ...INPUT, flex: 1, minWidth: 0 }}
-                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <Input
+                            ref={tokenSearchRef}
+                            type="search"
+                            value={tokenQuery}
+                            onChange={(event) => setTokenQuery(event.target.value)}
+                            onKeyDown={handleTokenSearchKeyDown}
+                            placeholder="Search token lists"
+                            aria-label="Search pinned and hidden tokens"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    </div>
                     {tokenQuery ? (
                         <Button size="sm" variant="ghost" icon={null} onClick={clearTokenSearch} aria-label="Clear settings token search">
                             <Icon.XIcon />
@@ -447,19 +442,22 @@ export function DisplaySection() {
             ) : null}
 
             <div ref={tokenListsRef} style={{ display: 'contents' }}>
-                <h3 style={SECTION_HEADER}>Pinned tokens ({pinned.length})</h3>
-                <p style={SECTION_HINT}>
-                    Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin.
-                </p>
+                <SectionHeader
+                    as="h3"
+                    title={`Pinned tokens (${pinned.length})`}
+                    description="Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin."
+                />
                 <DisplaySaveError error={saveError} controlKey="pinnedTokens" />
                 {pinned.length === 0 ? (
-                    <div style={ROW}>
-                        <span style={EMPTY_HINT}>No pinned tokens. Tap the star on a balance row to pin it.</span>
-                    </div>
+                    <EmptyState
+                        title="No pinned tokens. Tap the star on a balance row to pin it."
+                        titleAs="p"
+                    />
                 ) : filteredPinned.length === 0 ? (
-                    <div style={ROW} role="status">
-                        <span style={EMPTY_HINT}>No pinned tokens match "{debouncedTokenQuery.trim()}".</span>
-                    </div>
+                    <EmptyState
+                        title={`No pinned tokens match "${debouncedTokenQuery.trim()}".`}
+                        titleAs="p"
+                    />
                 ) : (
                     filteredPinned.map((key) => {
                         const idx = pinned.indexOf(key);
@@ -502,19 +500,22 @@ export function DisplaySection() {
                     })
                 )}
 
-                <h3 style={SECTION_HEADER}>Hidden tokens ({hidden.length})</h3>
-                <p style={SECTION_HINT}>
-                    Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.
-                </p>
+                <SectionHeader
+                    as="h3"
+                    title={`Hidden tokens (${hidden.length})`}
+                    description={'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.'}
+                />
                 <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
                 {hidden.length === 0 ? (
-                    <div style={ROW}>
-                        <span style={EMPTY_HINT}>No hidden tokens. Tap the hide affordance on a balance row to hide it.</span>
-                    </div>
+                    <EmptyState
+                        title="No hidden tokens. Tap the hide affordance on a balance row to hide it."
+                        titleAs="p"
+                    />
                 ) : filteredHidden.length === 0 ? (
-                    <div style={ROW} role="status">
-                        <span style={EMPTY_HINT}>No hidden tokens match "{debouncedTokenQuery.trim()}".</span>
-                    </div>
+                    <EmptyState
+                        title={`No hidden tokens match "${debouncedTokenQuery.trim()}".`}
+                        titleAs="p"
+                    />
                 ) : (
                     <>
                         {filteredHidden.map((key) => (
@@ -543,10 +544,11 @@ export function DisplaySection() {
                 )}
             </div>
 
-            <h3 style={SECTION_HEADER}>List preferences</h3>
-            <p style={SECTION_HINT}>
-                Remember the last selected chain filter for each balance and history list until you reset every list to "show all."
-            </p>
+            <SectionHeader
+                as="h3"
+                title="List preferences"
+                description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
+            />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved chain filters</span>
@@ -559,7 +561,7 @@ export function DisplaySection() {
                 </Button>
             </div>
 
-            <h3 style={SECTION_HEADER}>Defaults</h3>
+            <SectionHeader as="h3" title="Defaults" />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
