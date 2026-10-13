@@ -16,6 +16,9 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 
 const showToast = vi.fn();
+const { qrToDataURL } = vi.hoisted(() => ({
+    qrToDataURL: vi.fn(async () => 'data:image/png;base64,iVBORw0KGgo='),
+}));
 
 vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => ({ showToast, dismissToast: () => {}, clearToasts: () => {} }),
@@ -24,7 +27,7 @@ vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
 // jsdom has no canvas, so the real encoder cannot draw the QR; a fixed PNG
 // data URL lets the Copy and Share buttons enable.
 vi.mock('qrcode', () => ({
-    default: { toDataURL: async () => 'data:image/png;base64,iVBORw0KGgo=' },
+    default: { toDataURL: qrToDataURL },
 }));
 
 const { Receive } = await import('../../../packages/core/src/shared/routes/Receive.jsx');
@@ -69,6 +72,7 @@ async function clickWhenEnabled(name) {
 let consoleError;
 beforeEach(() => {
     showToast.mockClear();
+    qrToDataURL.mockClear();
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -82,6 +86,34 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('copies the same BIP21 payment request that the QR encodes', async () => {
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        renderReceive();
+
+        const amount = await screen.findByRole('textbox', { name: /^Amount/ });
+        fireEvent.change(amount, { target: { value: '0.00000001' } });
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('amount=0.00000001'),
+        )).toBe(true));
+        const paymentRequest = qrToDataURL.mock.calls.findLast(
+            ([value]) => value.includes('amount=0.00000001'),
+        )[0];
+
+        expect(paymentRequest).toMatch(
+            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001$/,
+        );
+        fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
+
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(paymentRequest));
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Payment request copied to clipboard.',
+        });
+    });
+
     it('shows plain copy-failure text and logs the browser message', async () => {
         stubBrowser({
             write: vi.fn(async () => { throw new Error(BROWSER_TEXT); }),
