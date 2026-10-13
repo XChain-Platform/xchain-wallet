@@ -41,6 +41,7 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
@@ -322,8 +323,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 <p style={explainParagraphStyle}>
                     These 12 words are the only way to restore your new BIP39
                     wallet. Write them down on paper and store them safely.
-                    Never save them in email, cloud storage, or a photo. Anyone
-                    who has these words can spend your funds.
+                    {' '}{RECOVERY_PHRASE_WARNING}
                 </p>
                 {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
                 <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>

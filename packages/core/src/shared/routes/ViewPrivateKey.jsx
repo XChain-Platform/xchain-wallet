@@ -14,6 +14,7 @@ import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Scr
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { configureClipboardAutoClear } from '../clipboard.js';
+import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './ViewPrivateKey.module.css';
 
 const REVEAL_TIMEOUT_MS = 30_000;
@@ -181,9 +182,8 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     <li>
                         This is the private key for
                         {' '}<AddressText address={address.address} />.
-                        Anyone with it can spend the funds controlled by this address.
                     </li>
-                    <li>Never share it with anyone, including XChain support.</li>
+                    <li>{PRIVATE_KEY_WARNING}</li>
                     <li>
                         If you are screen-sharing or recording, <strong>stop now</strong>{' '}
                         before you reveal the key.

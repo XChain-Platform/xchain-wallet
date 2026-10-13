@@ -18,6 +18,7 @@ import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -364,8 +365,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
-                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
+                            ? `Write these ${wordCount === 24 ? 'twenty-four' : 'twelve'} words down on paper and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`
+                            : `Write these ${wordCount} words down and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`}
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />

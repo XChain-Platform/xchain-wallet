@@ -53,6 +53,17 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-approve').textContent)
             .toBe('Approve Send 5 JDOG to bc1qxyz');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
+        expect(screen.queryByTestId('contract-call-warning')).toBeNull();
+    });
+
+    it('uses a short warning only when approving a contract call', () => {
+        render(<ConfirmActionModal {...base({
+            decoded: { summary: 'Call contract #21', details: [], warnings: [] },
+        })} />);
+
+        expect(screen.getByTestId('contract-call-warning')).toHaveTextContent(
+            'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.',
+        );
     });
 
     it('orders and labels the review as recipient, amount, fee, then total', () => {

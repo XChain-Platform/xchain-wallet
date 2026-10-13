@@ -82,6 +82,10 @@ describe('CreateWallet security options', () => {
         expect(words).toHaveLength(24);
         expect(words[0].textContent).toBe('1abandon');
         expect(words[23].textContent).toBe('24actual');
+        expect(screen.getByText(/Never share your recovery phrase/)).toHaveTextContent(
+            'Never share your recovery phrase. Anyone with it can spend your funds.',
+        );
+        expect(screen.queryByText(/ONLY way/)).toBeNull();
     });
 
     it('warns that the enabled BIP39 passphrase is required and exact', async () => {

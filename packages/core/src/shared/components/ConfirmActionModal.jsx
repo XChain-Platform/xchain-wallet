@@ -38,6 +38,7 @@ import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
+import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -129,6 +130,8 @@ export function ConfirmActionModal({
     const resolvedApproveLabel = approveLabel || (variant === 'action'
         ? `${defaultApproveLabel} ${headlineText}`
         : headlineText);
+    const isContractCall = variant === 'action'
+        && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
         label: detail.label === 'Destination'
@@ -272,6 +275,12 @@ export function ConfirmActionModal({
 
                     {variant === 'action' && reviewDecoded ? (
                         <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
+                    ) : null}
+
+                    {isContractCall ? (
+                        <p className={styles.hwNote} data-testid="contract-call-warning">
+                            {CONTRACT_CALL_WARNING}
+                        </p>
                     ) : null}
 
                     {/* The wallet can hold several addresses per chain, so the
