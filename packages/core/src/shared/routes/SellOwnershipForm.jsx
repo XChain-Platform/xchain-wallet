@@ -579,13 +579,14 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         <FormPage
             label={`Sell ${tokenUpper} name`}
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
                     {validationError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{validationError}</p>
+                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
                     ) : null}
                     {formError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{formError}</p>
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
                     ) : null}
                 </>
             ) : null}

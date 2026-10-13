@@ -199,10 +199,12 @@ function isRequiredFailure(hay, role) {
     }
     if (role === 'device') {
         return /devicepassword is required/.test(hay)
+            || /password is required.*this device (?:will )?unlock/.test(hay)
             || hay.includes(RESTORE_PASSWORD_LABELS.device.fresh.toLowerCase())
             || hay.includes(RESTORE_PASSWORD_LABELS.device.add.toLowerCase());
     }
     return /backuppassword is required/.test(hay)
+        || /(?:importbackupfile|restorefrombackuppointer): password is required/.test(hay)
         || hay.includes(RESTORE_PASSWORD_LABELS.file.toLowerCase());
 }
 

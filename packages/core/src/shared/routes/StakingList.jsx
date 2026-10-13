@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -114,6 +114,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [stateByChain, setStateByChain] = useState(
         /** @type {Record<string, ChainState>} */ ({}),
     );
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [stakingReload, setStakingReload] = useState(0);
 
     // In-page filters: free-text search + network dropdown, mirroring
     // the dispensers / contacts toolbars.
@@ -133,7 +135,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     const chainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
@@ -276,7 +278,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             });
         }
         return () => { cancelled = true; };
-    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId]);
+    }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload]);
 
     // PC-47: chain tip per chain, for the cooldown countdown. One cheap read
     // per chain; a failure leaves the height null and every countdown falls
@@ -378,15 +380,35 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     );
 
     if (addressesError) {
-        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setAddressesError(null);
+                        setAddressesByChain(null);
+                        setAddressesReload((value) => value + 1);
+                    },
+                }}
+            >
+                {addressesError}
+            </StatusMessage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading staking positions">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
     if (chainsWithAddresses.length === 0) {
         return wrap(
             <EmptyState
-                title="No addresses yet on a chain that supports staking. Use Receive to generate one first. Staking into a contract works on Bitcoin, Litecoin and Dogecoin; validator staking is Bitcoin-only."
+                title="No staking address"
+                body="Contract staking supports Bitcoin, Litecoin, and Dogecoin; validator staking supports Bitcoin."
                 titleAs="p"
             />,
         );
@@ -396,6 +418,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         <>
             <input
                 type="search"
+                enterKeyHint="search"
+                autoCapitalize="off"
                 className={local.search}
                 placeholder="Search"
                 value={query}
@@ -430,19 +454,40 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 </div>
             ) : null}
             {loadErrors.length > 0 ? (
-                <StatusMessage variant="error" className={styles.entryDescription}>
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setStateByChain({});
+                            setStakingReload((value) => value + 1);
+                        },
+                    }}
+                >
                     Couldn't load some staking data. {loadErrors.join('; ')}
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>Loading…</p>
+                <div role="status" aria-label="Loading staking positions">
+                    <Skeleton.List rows={5} />
+                </div>
+            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+                null
             ) : visibleRows.length === 0 ? (
                 <EmptyState
                     title={allRows.length === 0
                         ? (loadErrors.length > 0
-                            ? 'No staking positions could be loaded. Try again later.'
-                            : 'Nothing staked yet. Use the + button to create your first stake.')
-                        : 'No staking positions match the current filter.'}
+                            ? "Staking positions unavailable"
+                            : "Nothing staked yet")
+                        : "No matching stakes"}
+                    body={allRows.length === 0
+                        ? (loadErrors.length > 0
+                            ? "No staking positions could be loaded, so try again later."
+                            : "Staking positions created by this wallet appear here.")
+                        : "Try a different search or network filter."}
+                    actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? "New stake" : undefined}
+                    onAction={allRows.length === 0 && loadErrors.length === 0 ? onNewStake : undefined}
                     titleAs="p"
                 />
             ) : (

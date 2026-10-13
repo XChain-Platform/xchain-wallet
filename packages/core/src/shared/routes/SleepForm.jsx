@@ -616,7 +616,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <Input
                     label="Resume at block"
                     hint={resumeBlockEstimate ? `Actions resume at this block. Est. ${resumeBlockEstimate}.` : 'Block height when actions resume. Must be a future block.'}
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={resumeBlockInput}
                     onChange={(e) => setResumeBlockInput(e.target.value)}
                     autoComplete="off"

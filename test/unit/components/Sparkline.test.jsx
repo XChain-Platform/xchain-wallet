@@ -15,12 +15,12 @@ import {
 } from '../../../packages/core/src/shared/components/Sparkline.jsx';
 
 describe('Sparkline', () => {
-    it.each([null, '1,2', {}, [], [1]])('renders nothing for an unusable series', (series) => {
+    it.each([null, '1,2', {}, [], [NaN, Infinity]])('renders nothing for an unusable series', (series) => {
         const { container } = render(<Sparkline series={series} />);
         expect(container.firstChild).toBeNull();
     });
 
-    it('renders the scaled points and an accessible data summary', () => {
+    it('renders scaled points inside the viewBox and an accessible data summary', () => {
         render(<Sparkline series={[1, 3]} />);
 
         const image = screen.getByRole('img', {
@@ -28,7 +28,7 @@ describe('Sparkline', () => {
         });
         expect(image.tagName).toBe('svg');
         expect(image.querySelector('polyline')?.getAttribute('points'))
-            .toBe('0.00,100.00 100.00,0.00');
+            .toBe('1.00,99.00 99.00,1.00');
     });
 
     it('includes range context and formatted falling values in its summary', () => {
@@ -46,20 +46,29 @@ describe('Sparkline', () => {
         );
     });
 
-    it('uses the positive stroke for rising and flat series', () => {
+    it('uses semantic theme tokens for rising, falling, and flat series', () => {
         const { container, rerender } = render(<Sparkline series={[1, 3]} />);
         expect(container.querySelector('polyline')?.getAttribute('stroke'))
-            .toBe('var(--xc-success, #14b86c)');
+            .toBe('var(--xc-success)');
 
         act(() => rerender(<Sparkline series={[2, 2]} />));
         expect(container.querySelector('polyline')?.getAttribute('stroke'))
-            .toBe('var(--xc-success, #14b86c)');
+            .toBe('var(--xc-text-muted)');
+        expect(container.querySelector('polyline')?.getAttribute('points'))
+            .toBe('1.00,50.00 99.00,50.00');
+
+        act(() => rerender(<Sparkline series={[3, 1]} />));
+        expect(container.querySelector('polyline')?.getAttribute('stroke'))
+            .toBe('var(--xc-danger)');
+        expect(screen.getByRole('img', { name: /^Price trend\. .*Change -2 / })).toBeInTheDocument();
     });
 
-    it('uses the negative stroke for a falling series', () => {
-        const { container } = render(<Sparkline series={[3, 1]} />);
-        expect(container.querySelector('polyline')?.getAttribute('stroke'))
-            .toBe('var(--xc-danger, #d93838)');
+    it('renders a centered mark for one finite point and ignores invalid samples', () => {
+        const { container } = render(<Sparkline series={[NaN, 42, Infinity]} />);
+
+        expect(container.querySelector('polyline')?.getAttribute('points'))
+            .toBe('48.00,50.00 52.00,50.00');
+        expect(screen.getByRole('img', { name: /^Price trend\. .*Change 0 \(0\.00%\)/ })).toBeInTheDocument();
     });
 });
 

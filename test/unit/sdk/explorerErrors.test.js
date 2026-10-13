@@ -76,14 +76,13 @@ describe('explorerErrorCode', () => {
             .toBe('EXPLORER_BAD_FEEQUOTE');
     });
 
-    it('does not claim the websocket or programming-error codes', () => {
-        // Same SDKExplorerError class, different failures, and their sentences
-        // would be different ones. Claiming them here would put "nothing was
-        // spent" on an error that has nothing to do with a submit.
-        expect(explorerErrorCode(codedError('WS_CONNECTION_FAILED', 'WebSocket connection failed: x'))).toBe(null);
-        expect(explorerErrorCode(codedError('WS_TIMEOUT', 'No response for request id: 4'))).toBe(null);
-        expect(explorerErrorCode(codedError('INVALID_NETWORK', 'Unknown network: nope. Valid: ...'))).toBe(null);
-        expect(isExplorerError(codedError('WS_TIMEOUT', 'No response for request id: 4'))).toBe(false);
+    it('claims every code emitted by the explorer and websocket clients', () => {
+        expect(explorerErrorCode(codedError('WS_CONNECTION_FAILED', 'WebSocket connection failed: x')))
+            .toBe('WS_CONNECTION_FAILED');
+        expect(explorerErrorCode(codedError('WS_TIMEOUT', 'No response for request id: 4'))).toBe('WS_TIMEOUT');
+        expect(explorerErrorCode(codedError('INVALID_NETWORK', 'Unknown network: nope. Valid: ...')))
+            .toBe('INVALID_NETWORK');
+        expect(isExplorerError(codedError('WS_TIMEOUT', 'No response for request id: 4'))).toBe(true);
     });
 
     it('ignores errors that are not the explorer client at all', () => {

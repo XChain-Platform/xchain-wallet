@@ -21,6 +21,7 @@ import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
+import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { installShellErrorCapture } from './errorCapture.js';
 
 // Register the crash hook before anything else can throw.
@@ -57,4 +58,13 @@ if (!container) {
 // there, because neither can proxy its own traffic.
 setShellCapabilities({ socksProxy: true });
 
-createRoot(container).render(<App />);
+createRoot(container).render(
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100dvh)' }}>
+        {/* The application menu is available before unlock, so update check
+            results stay mounted above every renderer state. */}
+        <DesktopUpdateBanner />
+        <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
+            <App />
+        </div>
+    </div>,
+);

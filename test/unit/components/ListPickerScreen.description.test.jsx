@@ -41,9 +41,8 @@ describe('ListPickerScreen description detail', () => {
     it('renders an empty result through the shared list page and empty state', async () => {
         renderPicker([]);
 
-        const title = await screen.findByText(
-            'No address lists published from this chain’s addresses yet. Create one in My Lists first.',
-        );
+        const title = await screen.findByText('No address lists yet');
+        expect(screen.getByText('Address lists published from this chain appear here.')).toBeTruthy();
         expect(title.tagName).toBe('P');
         expect(title.parentElement.className).toMatch(/wrap/);
         expect(title.parentElement.parentElement.className).toMatch(/page/);

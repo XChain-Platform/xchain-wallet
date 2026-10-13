@@ -34,7 +34,7 @@
 // and the app-state stream. The rule is to register only what is used (§1, the
 // bridge boundary), and what is used here is one event and one method.
 //
-// NATIVE VALIDATION IS DEFENCE IN DEPTH, NOT THE GATE. Only the two shapes the
+// NATIVE VALIDATION IS DEFENCE IN DEPTH, NOT THE GATE. Only claimed link shapes
 // app claims are forwarded; anything else is dropped without reaching JS. The
 // real invariants - never bypass the unlock screen, never auto-advance into a
 // signing or connect flow, re-display every extracted parameter for
@@ -69,6 +69,7 @@ final class XChainLinkInbox {
     static let event = "xchainUrlOpen"
 
     private static let schemeApp = "xchain"
+    private static let coinSchemes = Set(["bitcoin", "litecoin", "dogecoin"])
     private static let schemeWeb = "https"
     private static let hostWeb = "xchain.io"
 
@@ -148,7 +149,7 @@ final class XChainLinkInbox {
               let parsed = URLComponents(string: raw),
               let scheme = parsed.scheme?.lowercased() else { return nil }
 
-        if scheme == Self.schemeApp { return raw }
+        if scheme == Self.schemeApp || Self.coinSchemes.contains(scheme) { return raw }
         if scheme == Self.schemeWeb, parsed.host?.lowercased() == Self.hostWeb { return raw }
 
         // An http:// link, another host, or a scheme some other app aimed at us.

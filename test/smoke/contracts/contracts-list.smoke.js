@@ -122,7 +122,7 @@ assert.ok(
     'ContractsList must not freeze the chain list at module scope; the registry hot-swaps after import',
 );
 assert.ok(
-    /need an\s*\n?\s*address on a chain that supports them/.test(listSrc),
+    /Contracts require an address on a chain that supports them/.test(listSrc),
     'ContractsList explains the no-address state without naming a single coin',
 );
 // Action labels are names, not sentence parts: a parenthesised list of them or
@@ -148,7 +148,7 @@ assert.ok(
     'ContractsList surfaces the empty "My interactions" state per chain',
 );
 assert.ok(
-    /No contracts indexed on this chain/.test(listSrc),
+    /Contracts indexed on this chain appear here/.test(listSrc),
     'ContractsList surfaces the empty "Browse all" state per chain',
 );
 assert.ok(
