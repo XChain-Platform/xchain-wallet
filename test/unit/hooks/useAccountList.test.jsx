@@ -77,7 +77,7 @@ describe('useAccountList input handling', () => {
         mocked.messaging.listAccounts.mockReturnValue(response.promise);
         const { result } = renderHook(() => useAccountList('wallet-a'));
 
-        await act(() => response.resolve({ accounts: [] }));
+        await act(async () => { response.resolve({ accounts: [] }); });
         expect(mocked.messaging.listAccounts).toHaveBeenCalledWith('wallet-a');
         expect(result.current).toEqual([]);
     });
@@ -87,7 +87,7 @@ describe('useAccountList input handling', () => {
         mocked.messaging.listAccounts.mockReturnValue(response.promise);
         const { result } = renderHook(() => useAccountList('wallet-a'));
 
-        await act(() => response.reject(new Error('unavailable')));
+        await act(async () => { response.reject(new Error('unavailable')); });
         expect(mocked.messaging.listAccounts).toHaveBeenCalledWith('wallet-a');
         expect(result.current).toEqual([]);
     });
