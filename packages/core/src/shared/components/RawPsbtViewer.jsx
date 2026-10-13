@@ -31,8 +31,7 @@ import { useToast } from './ToastHost.jsx';
  *     PSBT parser (BIP-174); until then the section reads "(parser not
  *     wired yet)" so the disclosure remains honest about its limits.
  *
- * Read-only. The Copy button copies the displayed payload (PSBT hex
- * when present, otherwise the action-fields JSON) to the clipboard.
+ * Read-only. Each displayed payload has its own clipboard control.
  *
  * @param {object} props
  * @param {boolean} props.developerMode
@@ -40,7 +39,10 @@ import { useToast } from './ToastHost.jsx';
  * @param {Record<string, unknown>} [props.actionFields]
  */
 export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
-    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const [copyState, setCopyState] = useState(/** @type {{ target: string|null, status: 'idle'|'copied'|'failed' }} */ ({
+        target: null,
+        status: 'idle',
+    }));
     const haptic = useHapticFeedback();
     const { announce } = useToast();
 
@@ -51,15 +53,20 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     if (!hasPsbt && !hasFields) return null;
 
     const fieldsJson = hasFields ? safeJson(actionFields) : '';
-    const copyTarget = hasPsbt ? psbtHex : fieldsJson;
-
-    async function handleCopy() {
-        const { ok } = await copyText(copyTarget);
-        setCopyState(ok ? 'copied' : 'failed');
+    async function handleCopy(target, value) {
+        const { ok } = await copyText(value);
+        setCopyState({ target, status: ok ? 'copied' : 'failed' });
         announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
-        setTimeout(() => setCopyState('idle'), 1500);
+        setTimeout(() => setCopyState((current) => current.target === target
+            ? { target: null, status: 'idle' }
+            : current), 1500);
+    }
+
+    function copyLabel(target, label) {
+        if (copyState.target !== target || copyState.status === 'idle') return `Copy ${label}`;
+        return copyState.status === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable';
     }
 
     return (
@@ -80,6 +87,14 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             spellCheck={false}
                             aria-label="Unsigned transaction hex"
                         />
+                        <button
+                            type="button"
+                            className={styles.copyBtn}
+                            onClick={() => handleCopy('psbt', psbtHex)}
+                            aria-live="polite"
+                        >
+                            {copyLabel('psbt', 'unsigned transaction hex')}
+                        </button>
                     </section>
                 ) : null}
 
@@ -87,6 +102,14 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     <section className={styles.section} aria-label="Action fields">
                         <p className={styles.label}>Action fields</p>
                         <pre className={styles.json}>{fieldsJson}</pre>
+                        <button
+                            type="button"
+                            className={styles.copyBtn}
+                            onClick={() => handleCopy('fields', fieldsJson)}
+                            aria-live="polite"
+                        >
+                            {copyLabel('fields', 'action fields')}
+                        </button>
                     </section>
                 ) : null}
 
@@ -97,17 +120,6 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     </p>
                 </section>
 
-                <button
-                    type="button"
-                    className={styles.copyBtn}
-                    onClick={handleCopy}
-                >
-                    {copyState === 'copied'
-                        ? 'Copied'
-                        : copyState === 'failed'
-                            ? 'Copy failed: clipboard unavailable'
-                            : `Copy ${hasPsbt ? 'unsigned transaction hex' : 'action fields'}`}
-                </button>
             </div>
         </details>
     );

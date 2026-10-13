@@ -65,6 +65,9 @@
     width: 100%;
     resize: vertical;
     min-height: 4em;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
     word-break: break-all;
     white-space: pre-wrap;
 }
@@ -78,9 +81,10 @@
     border-radius: var(--xc-radius-sm);
     padding: var(--xc-space-2);
     margin: 0;
-    overflow-x: auto;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
     white-space: pre-wrap;
-    word-break: break-word;
+    word-break: break-all;
 }
 
 .placeholder {
