@@ -178,7 +178,7 @@ import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -3270,7 +3270,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
                         />
                         <p className={styles.balanceHint} aria-live="polite">
-                            {t('send.memoCount', { used: trimmedMemo.length, max: MAX_MEMO_LENGTH })}
+                            {t('send.memoCount', { used: utf8ByteLength(trimmedMemo), max: MAX_MEMO_LENGTH })}
                         </p>
                     </>
                 )}

@@ -81,7 +81,7 @@ export const en = {
     'send.review.signOn': 'Sign on {device}',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}: send',
-    'send.memoCount': '{used} / {max} characters',
+    'send.memoCount': '{used} / {max} bytes',
     'send.advanced.label': 'Advanced send choices',
     'send.advanced.none': 'None',
     'send.advanced.feeBumping': 'Fee bumping',
