@@ -54,6 +54,10 @@ const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
 const HOLDER_WINDOW_SIZE = 100;
 
+function callAsync(callback) {
+    return Promise.resolve().then(callback);
+}
+
 /**
  * §27.6 token detail page (G071).
  *
@@ -87,7 +91,17 @@ const HOLDER_WINDOW_SIZE = 100;
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
-export function TokenDetail({
+export function TokenDetail(props) {
+    const assetScope = JSON.stringify([
+        props.walletId,
+        props.chainId,
+        props.tick,
+        props.kind || 'token',
+    ]);
+    return <TokenDetailContent key={assetScope} {...props} />;
+}
+
+function TokenDetailContent({
     walletId,
     chainId,
     tick,
@@ -128,7 +142,7 @@ export function TokenDetail({
         setTokenMissing(false);
         if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
-        messaging.getTokenInfo({ chainId, tick })
+        callAsync(() => messaging.getTokenInfo({ chainId, tick }))
             .then((info) => { if (!cancelled) setTokenMissing(info == null); })
             .catch(() => { /* A read failure is not proof that the token is gone. */ });
         return () => { cancelled = true; };
@@ -197,11 +211,11 @@ export function TokenDetail({
         setHoldersPage(0);
         setHoldersTotal(null);
         setHoldersHasMore(false);
-        messaging.getHoldersForToken({
+        callAsync(() => messaging.getHoldersForToken({
             chainId,
             tick,
             opts: { page: 1, limit: HOLDERS_PAGE_SIZE },
-        })
+        }))
             .then((resp) => {
                 if (cancelled) return;
                 const list = uniqueRows(extractHolderRows(resp), holderIdentity);
@@ -227,11 +241,11 @@ export function TokenDetail({
         const before = holders || [];
         setHoldersLoadingMore(true);
         setHoldersMoreError(null);
-        messaging.getHoldersForToken({
+        callAsync(() => messaging.getHoldersForToken({
             chainId,
             tick,
             opts: { page: nextPage, limit: HOLDERS_PAGE_SIZE },
-        }).then((resp) => {
+        })).then((resp) => {
             if (requestId !== holdersRequestId.current) return;
             const pageRows = extractHolderRows(resp);
             const page = explorerPage(resp, pageRows, nextPage, HOLDERS_PAGE_SIZE);
@@ -261,7 +275,7 @@ export function TokenDetail({
         setGatedGroups(null);
         setGatedLoading(true);
         setGatedError(null);
-        messaging.listGatedContent({ chainId, tick })
+        callAsync(() => messaging.listGatedContent({ chainId, tick }))
             .then((resp) => {
                 if (cancelled) return;
                 setGatedGroups(Array.isArray(resp) ? resp : []);
@@ -723,7 +737,7 @@ function useSupplyHistory({ messaging, chainId, tick, skip }) {
     useEffect(() => {
         if (skip || typeof messaging?.getSupplyHistory !== 'function') return undefined;
         let cancelled = false;
-        Promise.resolve(messaging.getSupplyHistory({ chainId, tick }))
+        callAsync(() => messaging.getSupplyHistory({ chainId, tick }))
             .then((resp) => {
                 if (cancelled) return;
                 const list = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
@@ -1788,7 +1802,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
             return;
         }
         setAddressesLoading(true);
-        messaging.getAddressesByChain(walletId)
+        callAsync(() => messaging.getAddressesByChain(walletId))
             .then((byChain) => {
                 const list = (byChain && byChain[chainId]) ? byChain[chainId] : [];
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');

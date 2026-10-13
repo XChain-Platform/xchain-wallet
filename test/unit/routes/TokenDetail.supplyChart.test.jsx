@@ -11,7 +11,7 @@
 // TokenDetail draws a supply-over-time chart from getSupplyHistory.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -68,6 +68,79 @@ describe('TokenDetail supply chart', () => {
         cleanup();
         renderDetail({ withHistory: false });
         expect(screen.queryByText('Supply over time')).toBeNull();
+    });
+
+    it('removes the previous token chart while the next token history loads', async () => {
+        let resolveNext;
+        const nextHistory = new Promise((resolve) => { resolveNext = resolve; });
+        const getSupplyHistory = vi.fn(({ tick }) => tick === 'OLD'
+            ? Promise.resolve([{ height: 1, supply: 10 }, { height: 2, supply: 20 }])
+            : nextHistory);
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory,
+        };
+        const tree = (tick) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={CHAIN}
+                    tick={tick}
+                    kind="token"
+                    quantity="1"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>
+        );
+        const view = render(tree('OLD'));
+        expect(await screen.findByRole('img', { name: /Supply of OLD over time/ })).toBeTruthy();
+
+        view.rerender(tree('NEW'));
+        expect(screen.queryByRole('img', { name: /Supply of OLD over time/ })).toBeNull();
+        expect(screen.queryByRole('img', { name: /Supply of NEW over time/ })).toBeNull();
+
+        await act(async () => {
+            resolveNext([{ height: 3, supply: 30 }, { height: 4, supply: 40 }]);
+        });
+        expect(await screen.findByRole('img', { name: /Supply of NEW over time/ })).toBeTruthy();
+    });
+
+    it('contains synchronous supply and native-price bridge failures', async () => {
+        const supplyFailure = vi.fn(() => { throw new Error('supply bridge unavailable'); });
+        const tokenMessaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: supplyFailure,
+        };
+        render(
+            <MessagingProvider shell="web" messaging={tokenMessaging}>
+                <TokenDetail walletId="w1" chainId={CHAIN} tick="THROW" kind="token" quantity="1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(supplyFailure).toHaveBeenCalled());
+        expect(screen.queryByText('Supply over time')).toBeNull();
+
+        cleanup();
+        const getNativePricesRequest = vi.fn(() => { throw new Error('price bridge unavailable'); });
+        const nativeMessaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getNativePricesRequest,
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={nativeMessaging}>
+                <TokenDetail walletId="w1" chainId={CHAIN} tick="BTC" kind="native" quantity="1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(getNativePricesRequest).toHaveBeenCalled());
+        expect(screen.getByText('No market data available for this network.')).toBeTruthy();
     });
 });
 
