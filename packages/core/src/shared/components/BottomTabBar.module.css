@@ -93,6 +93,8 @@
 .scrim {
     position: fixed;
     inset: 0;
+    /* safe-area-backdrop: this layer only paints and catches outside taps;
+       the adjacent sheet owns the content insets. */
     background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
     z-index: 60;
 }
@@ -110,7 +112,10 @@
     z-index: 70;
     max-height: 70vh;
     overflow-y: auto;
-    padding: var(--xc-space-2) 0 env(safe-area-inset-bottom, var(--xc-space-3));
+    padding: var(--xc-space-2)
+        env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, var(--xc-space-3))
+        env(safe-area-inset-left, 0px);
     box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
 }
 
