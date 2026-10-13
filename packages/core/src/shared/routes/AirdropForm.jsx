@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -877,7 +877,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         ...hwDispatch, software: 'airdropAction', hardware: 'airdropActionHw',
     });
     // Which leg the confirm page is showing, so its decoded intent matches.
-    const [confirmLeg, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
+    const [, setConfirmLeg] = useState(/** @type {'LIST'|'AIRDROP'} */ ('LIST'));
 
     function sourceDescriptor() {
         return {

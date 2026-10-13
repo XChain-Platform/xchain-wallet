@@ -27,7 +27,6 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
-import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';

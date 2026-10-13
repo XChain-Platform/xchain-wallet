@@ -10,11 +10,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, CopyButton, EmptyState, FeeSelector, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
-    branding as brandingLib,
 } from '@xchain-wallet/core';
 import {
     estimateNativeSendFeeTiers,
@@ -25,7 +24,6 @@ import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import { tickerColor } from '../components/BalanceList.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { dataUrlToBlob } from '../dataUrl.js';
@@ -417,7 +415,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // so the QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
-    const [reqTick, setReqTick] = useState(() => {
+    const [reqTick] = useState(() => {
         if (!prefill?.tick || !prefill?.chainId) return '';
         const desc = chainRegistry.get(prefill.chainId);
         const nativeTicker = nativeTickerFor(desc);

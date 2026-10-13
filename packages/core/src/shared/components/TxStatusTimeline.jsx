@@ -255,8 +255,3 @@ export function TxStatusTimeline({
         </ol>
     );
 }
-
-function short(s) {
-    if (typeof s !== 'string' || s.length <= 14) return s;
-    return `${s.slice(0, 8)}…${s.slice(-6)}`;
-}

@@ -1337,20 +1337,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
     };
 
-    const toggleChain = (cid) => {
-        // §23.5 / G052: persist the new filter set so the user's
-        // choice survives navigation. Capture the post-toggle Set
-        // inside the updater so the write reflects the new state
-        // even if React batches multiple toggles.
-        setEnabledChains((prev) => {
-            const next = new Set(prev);
-            if (next.has(cid)) next.delete(cid);
-            else next.add(cid);
-            writeChainSet(historyChainFilterKey(walletId), next);
-            return next;
-        });
-    };
-
     // "Remove from history" on a failed local record. The host refuses
     // anything but a failed record, so this cannot make a live send vanish.
     // The row closes and the list re-reads; a refused or failed delete
@@ -3648,11 +3634,6 @@ function peerCacheKey(chainId, actionIndex) {
     return `${chainId}:${actionIndex}`;
 }
 
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
 // Longer middle-ellipsis truncation used in the ActionDetail "Source"
 // table cell. The cell has more horizontal room than the row meta so
 // we can show more of each end before collapsing.
@@ -3679,33 +3660,6 @@ function StatusPill({ status }) {
 
 function formatTimestamp(ts) {
     return formatLocalDateTime(ts) || '-';
-}
-
-/**
- * Best-effort one-line summary for a row. Different ACTIONs join in
- * different fields; we surface the most useful per-action shape, then
- * fall back to a generic descriptor.
- */
-function summarizeRow(row, action) {
-    if (!row) return action;
-    if (action === 'SEND') {
-        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
-        const tick = row.tick ?? row.TICK ?? row.token;
-        const dest = row.destination ?? row.DESTINATION ?? row.recipient;
-        if (amt != null && tick && dest) return `${amt} ${tick} → ${shorten(String(dest))}`;
-    }
-    if (action === 'ISSUE') {
-        const tick = row.tick ?? row.TICK;
-        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
-        if (tick && amt != null) return `Issued ${amt} ${tick}`;
-    }
-    if (action === 'LINK') {
-        const c1 = row.coin1 || row.COIN1;
-        const c2 = row.coin2 || row.COIN2;
-        if (c1 && c2) return `Link ${c1} ↔ ${c2}`;
-    }
-    if (row.memo || row.MEMO) return String(row.memo || row.MEMO);
-    return action;
 }
 
 // Field names whose values are financial amounts the privacy toggle

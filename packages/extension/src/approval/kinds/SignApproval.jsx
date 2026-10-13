@@ -13,7 +13,6 @@ import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui'
 import {
     registry as registryLib,
     decoder as decoderLib,
-    schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
@@ -1145,16 +1144,4 @@ function CoSignIntentSummary({ loading, error, preview }) {
             ) : null}
         </div>
     );
-}
-
-function formatSats(value) {
-    const n = Number(value || 0);
-    return `${n.toLocaleString()} sats`;
-}
-
-function ellipsizeMiddle(s, head = 12, tail = 8) {
-    const str = String(s ?? '');
-    return str.length > head + tail + 1
-        ? `${str.slice(0, head)}…${str.slice(-tail)}`
-        : str;
 }
