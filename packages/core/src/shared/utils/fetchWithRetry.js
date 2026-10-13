@@ -78,8 +78,7 @@ function headerValue(headers, name) {
 }
 
 function retryAfterMs(response, nowMs) {
-    if (response?.status !== 429) return 0;
-    const value = headerValue(response.headers, 'retry-after');
+    const value = headerValue(response?.headers, 'retry-after');
     if (value == null) return 0;
     const seconds = Number(String(value).trim());
     if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
