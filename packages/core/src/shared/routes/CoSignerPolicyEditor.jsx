@@ -279,7 +279,7 @@ function previewActions(text) {
 
 const legendStyle = { fontWeight: 600, padding: '0 var(--xc-space-2)' };
 const helpStyle = { fontSize: '0.85em', color: 'var(--xc-text-muted)', margin: '0 0 var(--xc-space-2) 0' };
-const rowStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
+const rowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
 const pickerStyle = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(10rem, 1fr))',

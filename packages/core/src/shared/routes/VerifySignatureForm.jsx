@@ -71,7 +71,7 @@ export function VerifySignatureForm({ onBack }) {
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
         if (typeof messaging.verifyMessageRequest !== 'function') {
-            setError('messaging.verifyMessageRequest is not available in this shell.');
+            setError('Signature verification is not available in this app.');
             return;
         }
         setBusy(true);

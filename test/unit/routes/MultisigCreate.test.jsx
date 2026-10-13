@@ -66,6 +66,12 @@ async function pickLocalAddress() {
 afterEach(() => cleanup());
 
 describe('MultisigCreate local cosigner', () => {
+    it('describes Bitcoin support without exposing internal specification text', async () => {
+        await mount(mkMessaging());
+        expect(screen.getByText(/currently available only on Bitcoin networks/i)).toBeTruthy();
+        expect(screen.queryByText(/§10\.3/)).toBeNull();
+    });
+
     it('auto-fills the master fingerprint from the unlocked wallet', async () => {
         const messaging = mkMessaging();
         await mount(messaging);
