@@ -91,18 +91,36 @@ describe('startup theme', () => {
         expect(html).toContain('html[data-xc-theme="light"] body');
     });
 
-    it('starts native status bars with contrast for the white splash', () => {
+    it('keeps native system bars legible through launch and per-screen iOS presentation', () => {
         const config = JSON.parse(readFileSync(resolve('packages/mobile/capacitor.config.json'), 'utf8'));
-        const androidStyles = readFileSync(
+        const androidLightStyles = readFileSync(
             resolve('packages/mobile/android/app/src/main/res/values/styles.xml'),
             'utf8',
         );
+        const androidDarkStyles = readFileSync(
+            resolve('packages/mobile/android/app/src/main/res/values-night/styles.xml'),
+            'utf8',
+        );
         const iosInfo = readFileSync(resolve('packages/mobile/ios/App/App/Info.plist'), 'utf8');
+        const iosQrScanner = readFileSync(
+            resolve('packages/mobile/ios/App/App/vault/VaultQrScannerViewController.swift'),
+            'utf8',
+        );
 
-        expect(config.plugins.SystemBars.style).toBe('LIGHT');
-        expect(androidStyles).toContain('<item name="android:statusBarColor">#FFFFFF</item>');
-        expect(androidStyles).toContain('<item name="android:windowLightStatusBar">true</item>');
-        expect(iosInfo).toMatch(/<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDarkContent<\/string>/);
+        expect(config.plugins.SystemBars.style).toBe('DEFAULT');
+        for (const [styles, color, lightContent] of [
+            [androidLightStyles, '#FFFFFF', 'true'],
+            [androidDarkStyles, '#0B0F17', 'false'],
+        ]) {
+            expect(styles).toContain(`<item name="android:statusBarColor">${color}</item>`);
+            expect(styles).toContain(`<item name="android:navigationBarColor">${color}</item>`);
+            expect(styles).toContain(`<item name="android:windowLightStatusBar">${lightContent}</item>`);
+            expect(styles).toContain(`<item name="android:windowLightNavigationBar">${lightContent}</item>`);
+        }
+        expect(iosInfo).toMatch(/<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDefault<\/string>/);
+        expect(iosQrScanner).toMatch(
+            /override var preferredStatusBarStyle: UIStatusBarStyle \{ \.lightContent \}/,
+        );
     });
 
     it('keeps native launch screens bounded, theme-aware, and tied to shell readiness', () => {

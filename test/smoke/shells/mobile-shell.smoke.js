@@ -106,8 +106,8 @@ assert.equal(
 );
 assert.equal(
     capConfig.plugins?.SystemBars?.style,
-    'LIGHT',
-    'the native status bar starts with dark content over the white splash',
+    'DEFAULT',
+    'native system bars start with content that contrasts with the active splash appearance',
 );
 
 // --- 2a. Native splash configuration ---------------------------------
