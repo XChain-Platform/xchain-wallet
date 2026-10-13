@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ScanRoute } from '../../../packages/core/src/shared/routes/ScanRoute.jsx';
 import { encodeXcwChunks } from '../../../packages/core/src/uri/psbtQr.js';
 
+const scanner = vi.hoisted(() => ({ onFrame: null }));
+
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const actual = await importOriginal();
-    return { ...actual, QrScanner: () => null };
+    return {
+        ...actual,
+        QrScanner: ({ onFrame }) => {
+            scanner.onFrame = onFrame;
+            return null;
+        },
+    };
 });
 
 const RAW_TRANSACTION = '0200000001'
@@ -184,6 +192,19 @@ function submit(input, onClassified = vi.fn()) {
 afterEach(() => cleanup());
 
 describe('ScanRoute classified results', () => {
+    it('applies only the first result when two frames arrive before rerender', () => {
+        const onClassified = vi.fn();
+        render(<ScanRoute onClassified={onClassified} onBack={vi.fn()} />);
+
+        act(() => {
+            scanner.onFrame(BTC);
+            scanner.onFrame(LTC);
+        });
+
+        expect(onClassified).toHaveBeenCalledOnce();
+        expect(onClassified).toHaveBeenCalledWith(expect.objectContaining({ address: BTC }));
+    });
+
     it.each(ROUTING_CASES)('routes $name to its destination', ({ input, outcome }) => {
         const onClassified = submit(input);
         expect(onClassified).toHaveBeenCalledOnce();

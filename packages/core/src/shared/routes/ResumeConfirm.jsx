@@ -97,7 +97,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
 
     const start = useCallback(async () => {
         try {
-            const { method, base } = flowsLib.resumeDispatch(session, { isHw: hw });
+            const { base } = flowsLib.resumeDispatch(session, { isHw: hw });
             const res = await confirmAction.confirm({
                 chainId,
                 source: base.from?.address || session?.request?.from?.address,
@@ -125,11 +125,12 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 // mid-resume deliberately leaves it stored - the user has not
                 // finished with it, and it is still resumable.
                 onApprove: (_creds, built) => {
+                    const approvedDispatch = flowsLib.resumeDispatch(session, { isHw: hw });
                     // The shared mapping, so a stored TAPROOT pair keeps its
                     // reveal and recovery record and is not refused unsigned.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(built);
-                    return messaging[method]({
-                        ...base,
+                    return messaging[approvedDispatch.method]({
+                        ...approvedDispatch.base,
                         prebuiltPsbt,
                         ...(hw
                             ? { signerId: fromAddress?.signerId }
