@@ -61,6 +61,7 @@
     justify-content: center;
     gap: var(--xc-space-2);
     min-width: 0;
+    overflow: hidden;
 }
 
 .titleIcon {
@@ -84,6 +85,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+    max-width: 100%;
 }
 
 .trailing {
@@ -108,6 +110,7 @@
     appearance: none;
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);
+    min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
     border-radius: 50%;
     border: 1px solid var(--xc-border-strong);

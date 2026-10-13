@@ -34,6 +34,10 @@ import { getNativeVault } from './nativeVault.js';
 const START_FAILURES = new Set(['denied', 'unavailable', 'busy', 'stopped']);
 const CLOSE_REASONS = new Set(['cancelled', 'interrupted', 'error']);
 
+// One native camera view serves the whole SPA. Rejecting overlap here keeps a
+// second consumer from receiving frames while its native start reports busy.
+let scanActive = false;
+
 /**
  * The start-failure reason a plugin rejection carries, or 'error'.
  *
@@ -83,6 +87,8 @@ export async function startNativeQrScan(onValue, onClosed) {
     if (!plugin || typeof plugin.qrScanStart !== 'function' || typeof plugin.addListener !== 'function') {
         throw startError('unavailable');
     }
+    if (scanActive) throw startError('busy');
+    scanActive = true;
 
     // 'open' until stop() runs or the view closes itself; nothing is
     // delivered after that.
@@ -93,6 +99,13 @@ export async function startNativeQrScan(onValue, onClosed) {
         handles.forEach(removeListener);
         handles = [];
     };
+    const finish = () => {
+        if (!open) return false;
+        open = false;
+        scanActive = false;
+        detach();
+        return true;
+    };
 
     try {
         handles.push(plugin.addListener('qrFrame', (event) => {
@@ -100,29 +113,24 @@ export async function startNativeQrScan(onValue, onClosed) {
             if (open && typeof value === 'string' && value.length > 0) onValue(value);
         }));
         handles.push(plugin.addListener('qrScanClosed', (event) => {
-            if (!open) return;
-            open = false;
-            detach();
+            if (!finish()) return;
             const reason = CLOSE_REASONS.has(event?.reason) ? event.reason : 'error';
             onClosed(reason);
         }));
     } catch (_err) {
-        detach();
+        finish();
         throw startError('unavailable');
     }
 
     try {
         await plugin.qrScanStart({});
     } catch (err) {
-        open = false;
-        detach();
+        finish();
         throw startError(startFailureReason(err));
     }
 
     return function stop() {
-        if (!open) return;
-        open = false;
-        detach();
+        if (!finish()) return;
         Promise.resolve()
             .then(() => plugin.qrScanStop?.({}))
             .catch(() => { /* nothing open, or the bridge is gone */ });

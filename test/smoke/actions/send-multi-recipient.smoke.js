@@ -97,9 +97,9 @@ assert.match(form, /const isMultiSend = extraLegs\.length > 0;/, 'Send tracks ex
 const legsPayloads = form.match(/\.\.\.\(isMultiSend \? \{ legs: sendLegs \} : \{\}\)/g) || [];
 assert.equal(legsPayloads.length, 2,
     'both submit paths (confirm-modal and the legacy review/watcher path) send legs, and only when multi');
-assert.match(form, /\+ Add recipient/, 'the form offers an add-recipient control');
-assert.match(form, /Remove recipient \$\{i \+ 2\}/, 'each added row can be removed');
-assert.match(form, /aria-label=\{`Recipient \$\{i \+ 2\} address`\}/,
+assert.match(form, /t\('send\.recipient\.add'\)/, 'the form offers an add-recipient control');
+assert.match(form, /t\('send\.recipient\.removeLabel'/, 'each added row can be removed');
+assert.match(form, /aria-label=\{t\('send\.recipient\.addressLabel'/,
     'added rows carry row-qualified accessible names (three identical "To" fields otherwise)');
 assert.match(form, /nativeMultiSendBlock/, 'the form mirrors the native refusal before submit');
 assert.match(form, /gatedMultiSendBlock/, 'the form mirrors the gated refusal before submit');

@@ -93,6 +93,19 @@
     position: relative;
 }
 
+.routeFocusTarget:focus {
+    outline: none;
+}
+
+/* The route container takes focus from code, so it shows no ring on screen,
+   but forced-colors mode gets a system-colour ring so focus is never lost. */
+@media (forced-colors: active) {
+    .routeFocusTarget:focus {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}
+
 /* compact tier (< 640px): the bottom tab bar owns navigation.
    FullLayoutWithNav already withholds the nav slot here, so this rule is
    the belt-and-braces for any shell that renders a sidebar anyway. */
@@ -101,13 +114,13 @@
 }
 
 /* §24.3 / G054: when a bottom-tab bar is supplied (compact tier only),
-   give the main pane enough bottom-padding to clear the fixed 56px bar
+   give the main pane enough bottom-padding to clear the scalable bar
    (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
    no viewport-keyed media query because a narrow frame inside a wide
    window should still surface the bar. */
 
 .layoutWithBottomBar > .main {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0));
     /* The bar pays the home-indicator inset, so the Screen above it does not. */
     --xc-screen-safe-bottom: 0px;
 }
@@ -116,6 +129,14 @@
    its slot is not held either. */
 :global(html[data-xc-keyboard='open']) .layoutWithBottomBar > .main {
     padding-bottom: 0;
+}
+
+/* Match the short-landscape tab row so an invisible 12px spacer does not
+   remain below the route after the visible bar becomes shorter. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .layoutWithBottomBar > .main {
+        padding-bottom: calc(44px + env(safe-area-inset-bottom, 0));
+    }
 }
 
 .bottomBarSlot {

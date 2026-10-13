@@ -45,6 +45,7 @@ import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import styles from './MarketTrading.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -720,7 +721,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
+            <div className={styles.sideToggle} role="group" aria-label="Order side">
                 <button
                     type="button"
                     onClick={() => setSide('buy')}
@@ -762,20 +763,22 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     Sell {tick1}
                 </button>
             </div>
-            <Input
-                label={`Price (${tick2})`}
-                value={price}
-                onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
-                inputMode="decimal"
-                autoComplete="off"
-            />
-            <Input
-                label={`Size (${tick1})`}
-                value={size}
-                onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
-                inputMode="decimal"
-                autoComplete="off"
-            />
+            <div className={styles.priceAmountFields} role="group" aria-label="Price and amount">
+                <Input
+                    label={`Price (${tick2})`}
+                    value={price}
+                    onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+                <Input
+                    label={`Size (${tick1})`}
+                    value={size}
+                    onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+            </div>
             <div style={{
                 display: 'flex',
                 flexDirection: 'column',

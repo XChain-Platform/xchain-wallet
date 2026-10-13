@@ -57,7 +57,7 @@ describe('Home offline behavior', () => {
         };
         mountHome(messaging, onSend);
 
-        await waitFor(() => expect(screen.getByText('BTC')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
         expect(screen.getByText(/Last synced/)).toBeTruthy();
 
         // A failed background read leaves the last successful rows and sync
@@ -66,7 +66,7 @@ describe('Home offline behavior', () => {
         vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        expect(screen.getByText('BTC')).toBeTruthy();
+        expect(screen.getByText('BTC · Bitcoin')).toBeTruthy();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
 
         setNavigatorOnline(false);

@@ -138,16 +138,23 @@ export const BALANCE_POLL_INTERVAL_MS = 20000;
 // below builds BOTH: `native` from `/address/` (getAddress) and `tokens` from
 // `/balances/` (getBalances). Without this a funded wallet shows "No coins yet".
 
-// `/address/` returns balances.confirmed as a plain decimal string; convert to
-// a base-unit (satoshi) integer string at 8-decimal native scale, BigInt-exact.
+// `/address/` returns confirmed and pending as separate decimal strings.
+// Preserve that distinction while converting both to base-unit integer strings
+// at 8-decimal native scale, BigInt-exact. `quantity` remains confirmed and is
+// the only amount spendability and fiat calculations consume.
 function nativeFromAddress(addrResp, nativeTicker) {
-    const confirmed = addrResp && addrResp.balances && addrResp.balances.confirmed;
+    const balances = addrResp && addrResp.balances;
+    const confirmed = atomicFromHumanAmount(balances?.confirmed, 8);
     if (confirmed == null || !nativeTicker) return null;
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(confirmed).trim());
-    if (!m) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    const sats = (BigInt(m[1]) * 100000000n + BigInt(frac)).toString();
-    return { tick: nativeTicker, quantity: sats, divisibility: 8 };
+    const pending = balances?.pending == null
+        ? null
+        : atomicFromHumanAmount(balances.pending, 8);
+    return {
+        tick: nativeTicker,
+        quantity: confirmed,
+        divisibility: 8,
+        ...(pending == null ? {} : { pendingQuantity: pending }),
+    };
 }
 
 // `/balances/` returns { data: [...token rows], total }. Map the rows to the
