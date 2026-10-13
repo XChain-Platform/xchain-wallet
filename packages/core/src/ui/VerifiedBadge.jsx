@@ -78,25 +78,25 @@ const BADGE_SPEC = {
     verified: {
         glyph: '✓',
         label: 'Verified',
-        title: 'Independently checked against the network’s signed record; this value is proven',
+        title: 'The wallet independently checked this value against the network',
         bg: 'var(--xc-success-bg)', fg: 'var(--xc-success)', border: 'var(--xc-success)', // green
     },
     failed: {
         glyph: '✕',
         label: 'Proof failed',
-        title: 'The server could not prove this value; do not trust it',
+        title: 'The network check failed. Do not trust this value',
         bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)', border: 'var(--xc-danger-fg)', // red
     },
     unavailable: {
         glyph: '∘',
         label: 'Unverified',
-        title: 'No proof available to verify this value',
+        title: 'The wallet could not check this value against the network',
         bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)', border: 'var(--xc-border-strong)', // slate
     },
     pending: {
         glyph: '…',
         label: 'Verifying',
-        title: 'Checking this value against the network’s signed record',
+        title: 'The wallet is checking this value against the network',
         bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)', border: 'var(--xc-border-strong)', // slate
     },
 };
@@ -109,9 +109,9 @@ const BADGE_SPEC = {
 // jargon into the user-facing info tip.
 const REASON_TEXT = {
     NOT_YET_CHECKPOINTED: 'this transaction is too new to verify yet',
-    CHECKPOINT_PRE_COMMITMENT: 'the network does not publish proofs for this block yet',
-    SPV_UNSUPPORTED: 'this connection cannot serve proofs',
-    CHECKPOINT_QUORUM_FAILED: 'the network’s proof for this value didn’t check out',
+    CHECKPOINT_PRE_COMMITMENT: 'the network cannot check this transaction yet',
+    SPV_UNSUPPORTED: 'this connection cannot check the value',
+    CHECKPOINT_QUORUM_FAILED: 'the network check did not match',
 };
 
 function humanizeReason(reason) {

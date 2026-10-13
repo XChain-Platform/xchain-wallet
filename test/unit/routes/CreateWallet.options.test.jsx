@@ -99,9 +99,10 @@ describe('CreateWallet security options', () => {
             /Capitalization and spaces matter/,
         );
         fireEvent.focus(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
-        expect(await screen.findByRole('tooltip')).toHaveTextContent(
-            /not one of the recovery words.*missing or different passphrase opens a different wallet/i,
-        );
+        const tip = (await screen.findByRole('tooltip')).textContent;
+        expect(tip).toMatch(/extra secret combines with your recovery phrase/i);
+        expect(tip).toMatch(/hardware wallets handle it on the device/i);
+        expect(tip.match(/[.!?](?:\s|$)/g)).toHaveLength(2);
 
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 

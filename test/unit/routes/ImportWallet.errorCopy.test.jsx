@@ -60,19 +60,19 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
     });
 });
 
-// §15.6: the passphrase is captured once and stored on the wallet
-// record, so the BIP39 passphrase InfoTip must say so rather than
-// implying the user will be asked for it again.
-describe('the BIP39 passphrase InfoTip on import describes storage, not re-entry', () => {
-    it('says the wallet stores the passphrase and will not ask again on this device', () => {
+// The passphrase is captured once and stored on the wallet record, while
+// hardware signers collect their passphrase on the device.
+describe('the BIP39 passphrase InfoTip on import', () => {
+    it('briefly explains storage and hardware-wallet entry', () => {
         render(
             <MessagingProvider shell="web" messaging={{}}>
                 <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />
             </MessagingProvider>,
         );
         fireEvent.click(screen.getByRole('button', { name: 'BIP39 passphrase help' }));
-        expect(screen.getByRole('tooltip')).toHaveTextContent(
-            'the wallet stores it, protected by your password, and will not ask for it again on this device',
-        );
+        const tip = screen.getByRole('tooltip').textContent;
+        expect(tip).toMatch(/stays behind your password here/i);
+        expect(tip).toMatch(/hardware wallets request it on the device/i);
+        expect(tip.match(/[.!?](?:\s|$)/g)).toHaveLength(2);
     });
 });

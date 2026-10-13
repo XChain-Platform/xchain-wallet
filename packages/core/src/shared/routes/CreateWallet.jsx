@@ -504,7 +504,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span>Use a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
-                        label="An optional secret string, sometimes called a 13th or 25th word, that derives a different wallet from the same recovery phrase. It is not one of the recovery words. Every character, space, and capital letter matters. The wallet stores it on this device, protected by your password, but you must provide it when restoring elsewhere. A missing or different passphrase opens a different wallet without an error. Hardware wallets handle it on the device itself."
+                        label="This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device."
                     />
                 </label>
                 {showPassphrase ? (
