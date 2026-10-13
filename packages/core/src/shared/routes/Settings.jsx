@@ -135,11 +135,15 @@ export function Settings({
         {
             id: 'this-wallet',
             title: 'This Wallet',
-            description: 'Wallet name, switch / rename, remove wallet.',
-            keywords: 'wallet name remove rename migrate bip39 delete destroy',
+            description: 'Wallet name, extended public keys, switch / rename, remove wallet.',
+            keywords: 'wallet name xpub extended public key watch only export remove rename migrate bip39 delete destroy',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved, onBusyChange: setWalletManagementBusy },
+            props: {
+                activeWallet, onOpenWalletPicker, activeAccount,
+                onWalletRemoved: handleWalletRemoved,
+                onBusyChange: setWalletManagementBusy,
+            },
             summary: walletLabel,
         },
         {
