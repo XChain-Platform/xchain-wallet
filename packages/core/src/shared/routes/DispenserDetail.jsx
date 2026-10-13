@@ -71,6 +71,7 @@ import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
 import { copyText } from '../clipboard.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -2071,7 +2072,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                     <span className={local.dispensePaid}>
                                         {e.kind === 'dispense'
                                             ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
-                                            : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
+                                            : (e.row.expiration ? `expires ${formatUnixDate(e.row.expiration)}` : `#${e.row.action_index}`)}
                                         {refused ? <InvalidMarker row={e.row} /> : null}
                                     </span>
                                     <span className={local.dispenseWhen}>
@@ -2100,7 +2101,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                     {d.valid ? null : <InvalidMarker row={d} />}
                                 </span>
                                 <span className={local.dispenseWhen}>
-                                    {relativeTime(d.timestamp || d.block_time)}
+                                    {formatRelativeTime(d.timestamp || d.block_time)}
                                 </span>
                             </div>
                         </li>
@@ -2333,42 +2334,11 @@ function formatNum(v) {
     return frac != null ? `${grouped}.${frac}` : grouped;
 }
 
-// Human-readable "X ago". Accepts unix seconds or ms; '' for invalid
-// input so the row just omits the time. (Same shape as TxStatusTimeline's.)
-function relativeTime(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
-}
-
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
 // date-time with the zone named, so it reads against the edit field's
 // local-time entry. '' for unparseable input so callers can omit the row.
 export function formatUnixDate(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    try {
-        return new Date(ms).toLocaleString(undefined, {
-            year: 'numeric', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-        });
-    } catch {
-        return new Date(ms).toUTCString();
-    }
+    return formatLocalDateTime(ts) || '';
 }
 
 // The close-window banner copy. Escrow returns to whichever address closed

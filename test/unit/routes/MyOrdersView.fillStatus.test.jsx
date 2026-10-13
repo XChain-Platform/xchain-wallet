@@ -26,6 +26,7 @@ import { render, cleanup, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyOrdersView, deriveStatus, fillStateOf } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -261,7 +262,7 @@ describe('MyOrdersView: fills', () => {
         const reads = calls.filter((c) => c.method === 'getOrderDetail').map((c) => c.args.actionIndex);
         expect(reads.sort()).toEqual(['710', '711']);
         const row = rowFor(section(utils, 'Open orders'), 711);
-        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
+        expect(within(row).getByText(`Expires ${formatLocalDateTime(FUTURE)}`)).toBeTruthy();
     });
 
     it('falls back to the feeds when the detail read fails or lacks a state block', async () => {

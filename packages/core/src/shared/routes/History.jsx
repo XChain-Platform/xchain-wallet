@@ -66,7 +66,7 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
-import { formatLocalDateTime, formatRelativeDateTime } from '../utils/dateTimeFormat.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -3483,12 +3483,7 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    return formatLocalDateTime(ts);
-}
-
-// Human-readable "X ago" from a unix timestamp (seconds or ms).
-function formatRelativeTime(ts) {
-    return formatRelativeDateTime(ts);
+    return formatLocalDateTime(ts) || '-';
 }
 
 /**

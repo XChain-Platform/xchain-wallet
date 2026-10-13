@@ -42,6 +42,7 @@ import {
     priceTokenRows,
 } from '../hooks/useFiatRate.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { formatRelativeTime } from '../utils/dateTime.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -473,16 +474,6 @@ function shortenAddress(s) {
     return `${s.slice(0, 6)}…${s.slice(-4)}`;
 }
 
-function relativeTime(epochSec) {
-    if (!epochSec) return '';
-    const now = Math.floor(Date.now() / 1000);
-    const d = now - epochSec;
-    if (d < 60) return `${Math.max(1, d)}s ago`;
-    if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-    if (d < 86_400) return `${Math.floor(d / 3600)}h ago`;
-    return `${Math.floor(d / 86_400)}d ago`;
-}
-
 // Format a satoshi-string amount using the tick's divisibility. Plain
 // string math, no BigInt; these are demo values and stay small.
 function formatAmount(raw, divisibility) {
@@ -608,7 +599,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                         )}
                         {entry.timestamp ? (
                             <span className={styles.rowRelativeTime}>
-                                {relativeTime(entry.timestamp)}
+                                {formatRelativeTime(entry.timestamp)}
                             </span>
                         ) : null}
                     </div>
@@ -832,7 +823,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     )}
                                     {p.timestamp ? (
                                         <span className={styles.rowRelativeTime}>
-                                            {relativeTime(p.timestamp)}
+                                            {formatRelativeTime(p.timestamp)}
                                         </span>
                                     ) : null}
                                 </div>
