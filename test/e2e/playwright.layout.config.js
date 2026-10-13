@@ -13,12 +13,18 @@
 //
 //     pnpm --dir test/e2e exec playwright test --config playwright.layout.config.js
 //     ... --project=iphone-17-pro          one venue only
+//     LAYOUT_PORT=5342 ...                  own dev server, when another tree holds 5173
 //
 // Sizes are the CSS viewports of real devices. The Android ones are what the
 // app's WebView gets, measured on an LG K51 (720 px at density 1.75, below a
 // 54 px status bar).
 
 import { defineConfig, devices } from '@playwright/test';
+
+// strictPort below: a busy port fails the run instead of silently measuring
+// whichever tree's server already answers there.
+const PORT = Number(process.env.LAYOUT_PORT) || 5173;
+const BASE_URL = `http://localhost:${PORT}`;
 
 const phone = (browserName, width, height, deviceScaleFactor) => ({
     browserName,
@@ -37,7 +43,7 @@ export default defineConfig({
     retries: 0,
     reporter: 'list',
     use: {
-        baseURL: 'http://localhost:5173',
+        baseURL: BASE_URL,
         trace: 'off',
         video: 'off',
         screenshot: 'off',
@@ -50,8 +56,8 @@ export default defineConfig({
         { name: 'ipad-11', use: { ...devices['iPad Pro 11'] } },
     ],
     webServer: {
-        command: 'pnpm -C ../../packages/web dev',
-        url: 'http://localhost:5173',
+        command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
+        url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         stdout: 'pipe',
