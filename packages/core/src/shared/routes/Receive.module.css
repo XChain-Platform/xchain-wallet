@@ -169,7 +169,7 @@
     margin-bottom: var(--xc-space-3);
 }
 
-@media (max-width: 420px) {
+@media (max-width: 480px) {
     .labelEditor {
         grid-template-columns: 1fr;
     }

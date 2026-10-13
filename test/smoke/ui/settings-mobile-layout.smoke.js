@@ -31,8 +31,8 @@ assert.equal(
     2,
     'list and drilldown Settings pages share the responsive layout scope',
 );
-assert.match(css, /@media \(max-width: 360px\)/,
-    'mobile Settings rules cover the 320px viewport');
+assert.match(css, /@media \(max-width: 480px\)/,
+    'mobile Settings rules cover font-scaled phone viewports');
 assert.match(css, /input:not\(\[type='checkbox'\]\):not\(\[type='radio'\]\):not\(\[type='range'\]\)/,
     'fixed-width text and number inputs are selected without stretching toggles');
 assert.match(css, /width: 100% !important;/,

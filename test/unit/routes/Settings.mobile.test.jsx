@@ -224,7 +224,7 @@ describe('Settings at a 320px viewport', () => {
     });
 
     it('stacks wide controls and clamps actions at the narrow breakpoint', () => {
-        const narrow = mediaBlock(settingsCss, '(max-width: 360px)');
+        const narrow = mediaBlock(settingsCss, '(max-width: 480px)');
 
         expect(narrow).toMatch(/:is\([\s\S]*select,[\s\S]*textarea,[\s\S]*input:not/);
         expect(narrow).toMatch(/flex:\s*1 1 100% !important;[\s\S]*width:\s*100% !important;/);

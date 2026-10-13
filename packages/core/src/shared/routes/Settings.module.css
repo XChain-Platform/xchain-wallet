@@ -8,7 +8,9 @@
     position: static;
 }
 
-@media (max-width: 360px) {
+/* Native font scaling does not affect media-query width, so phone controls
+   reflow at their full viewport width as their labels grow. */
+@media (max-width: 480px) {
     /* Text fields and selects take their own line instead of consuming the
        label's readable width. Toggle and radio controls remain alongside it. */
     .page :is(
