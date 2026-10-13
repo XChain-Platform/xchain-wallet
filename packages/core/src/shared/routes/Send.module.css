@@ -67,7 +67,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -302,7 +302,7 @@
     padding: 1px var(--xc-space-2);
     border-radius: 999px;
     background: color-mix(in srgb, var(--xc-accent-primary, #2563eb) 14%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-xs);
     font-weight: 600;
 }
@@ -574,7 +574,7 @@
     align-self: flex-start;
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     cursor: pointer;
     font-size: var(--xc-text-xs);
     font-family: inherit;

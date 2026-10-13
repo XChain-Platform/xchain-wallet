@@ -214,7 +214,7 @@ export function ConnectedSitesSection() {
                                         <button
                                             type="button"
                                             onClick={() => onBlock(site.origin)}
-                                            style={{ ...ACTION_BTN, color: 'var(--xc-error, #c33)', borderColor: 'var(--xc-error, #c33)' }}
+                                            style={{ ...ACTION_BTN, color: 'var(--xc-danger-fg)', borderColor: 'var(--xc-danger-fg)' }}
                                         >
                                             Block
                                         </button>
@@ -331,7 +331,7 @@ function BlocklistAuditPanel() {
                             <span style={{ color: 'var(--xc-text-muted)', minWidth: '6.5rem' }}>
                                 {formatLastUsed(new Date(entry.at).toISOString())}
                             </span>
-                            <span style={{ color: entry.action === 'add' ? 'var(--xc-error, #c33)' : 'var(--xc-text)' }}>
+                            <span style={{ color: entry.action === 'add' ? 'var(--xc-danger-fg)' : 'var(--xc-text)' }}>
                                 {entry.action === 'add' ? 'block' : 'unblock'}
                             </span>
                             <span style={{ color: 'var(--xc-text)', flex: 1, wordBreak: 'break-all', textAlign: 'right' }}>
@@ -551,7 +551,7 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     <button
                         type="submit"
                         disabled={!manualBlock.trim()}
-                        style={{ ...ACTION_BTN, color: 'var(--xc-error, #c33)', borderColor: 'var(--xc-error, #c33)' }}
+                        style={{ ...ACTION_BTN, color: 'var(--xc-danger-fg)', borderColor: 'var(--xc-danger-fg)' }}
                     >
                         Block
                     </button>
@@ -607,7 +607,7 @@ function PermRow({ label, text }) {
 
 function permColor(perm) {
     if (perm === 'always') return 'var(--xc-success, #2a8)';
-    if (perm === 'never') return 'var(--xc-error, #c33)';
+    if (perm === 'never') return 'var(--xc-danger-fg)';
     return 'var(--xc-text-muted)';
 }
 

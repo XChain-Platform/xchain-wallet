@@ -2797,7 +2797,7 @@ function RecipientsBlock({ entry }) {
                 <Button type="button" variant="secondary" size="sm" onClick={load}>
                     {isDividend ? 'Show holders' : 'Show recipients'}
                 </Button>
-                {error ? <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
             </div>
         );
     }
@@ -2884,7 +2884,7 @@ function RecipientsBlock({ entry }) {
                 </div>
             ) : null}
             {error ? (
-                <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
+                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
             ) : null}
         </div>
     );

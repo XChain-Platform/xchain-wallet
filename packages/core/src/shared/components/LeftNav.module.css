@@ -179,7 +179,7 @@
 .itemActive {
     background: var(--xc-surface);
     font-weight: 600;
-    color: var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
     box-shadow: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
 }
 

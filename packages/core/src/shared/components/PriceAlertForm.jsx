@@ -176,7 +176,7 @@ export function PriceAlertForm({
                     This alert will fire on the next check.
                 </span>
             ) : null}
-            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger)' }}>{err}</span> : null}
+            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}
         </div>
     );
 }

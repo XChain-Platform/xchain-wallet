@@ -112,7 +112,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -147,7 +147,7 @@
 .updateLink {
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     text-decoration: none;
 }
 .updateLink:hover { text-decoration: underline; }

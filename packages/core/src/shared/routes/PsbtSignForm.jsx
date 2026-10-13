@@ -826,7 +826,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
+                <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
                     {loadError}
                 </div>
             </Screen>
@@ -907,7 +907,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         queued-transactions banner, where you can retry without signing again.
                     </div>
                 ) : broadcastState === 'error' ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
+                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)' }}>
                         {broadcastError}
                     </div>
                 ) : signedPsbtHex ? (
@@ -1218,7 +1218,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     </div>
                 ) : null}
                 {parseError ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
+                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
                         {parseError}
                     </div>
                 ) : null}

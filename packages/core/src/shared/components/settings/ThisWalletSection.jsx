@@ -38,8 +38,8 @@ const ACTION_BTN = {
 };
 const DESTRUCTIVE_BTN = {
     ...ACTION_BTN,
-    color: 'var(--xc-error, #c33)',
-    borderColor: 'var(--xc-error, #c33)',
+    color: 'var(--xc-danger-fg)',
+    borderColor: 'var(--xc-danger-fg)',
 };
 
 /**
@@ -186,10 +186,10 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             gap: 'var(--xc-space-2)',
             padding: 'var(--xc-space-3)',
             background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-error, #c33)',
+            border: '1px solid var(--xc-danger-fg)',
             borderRadius: 'var(--xc-radius-md)',
         }}>
-            <div style={{ color: 'var(--xc-error, #c33)', fontWeight: 600 }}>
+            <div style={{ color: 'var(--xc-danger-fg)', fontWeight: 600 }}>
                 Permanent deletion
             </div>
             <div style={ROW_HINT}>
@@ -225,8 +225,8 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     disabled={!matches || busy}
                     style={{
                         ...DESTRUCTIVE_BTN,
-                        background: matches && !busy ? 'var(--xc-error, #c33)' : 'transparent',
-                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-error, #c33)',
+                        background: matches && !busy ? 'var(--xc-danger-fg)' : 'transparent',
+                        color: matches && !busy ? 'var(--xc-on-accent)' : 'var(--xc-danger-fg)',
                         opacity: matches && !busy ? 1 : 0.6,
                         cursor: matches && !busy ? 'pointer' : 'not-allowed',
                     }}

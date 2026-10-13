@@ -67,7 +67,7 @@
 
 .lockBadgeLocked {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .lockBadgeUnlocked {
@@ -230,7 +230,7 @@
 
 .manageBtnDanger {
     border-color: var(--xc-danger, #DC2626);
-    color: var(--xc-danger, #DC2626);
+    color: var(--xc-danger-fg, #DC2626);
 }
 
 .manageIcon {
@@ -238,7 +238,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -246,7 +246,7 @@
 
 .manageBtnDanger .manageIcon {
     background: color-mix(in srgb, var(--xc-danger, #DC2626) 12%, transparent);
-    color: var(--xc-danger, #DC2626);
+    color: var(--xc-danger-fg, #DC2626);
 }
 
 .manageIcon > svg {
@@ -305,7 +305,7 @@
     outline-offset: -2px;
 }
 
-.manageMoreItemDanger { color: var(--xc-danger, #DC2626); }
+.manageMoreItemDanger { color: var(--xc-danger-fg, #DC2626); }
 
 .manageMoreItemIcon {
     flex: 0 0 auto;
@@ -314,10 +314,10 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
-.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger, #DC2626); }
+.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger-fg, #DC2626); }
 
 /* ───── Tabs - match TokenDetail's pattern. ───── */
 
@@ -360,7 +360,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -448,7 +448,7 @@ button.row:hover:not(:disabled) {
     align-self: center;
     background: transparent;
     border: 0;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     cursor: pointer;
@@ -626,7 +626,7 @@ button.row:hover:not(:disabled) {
 
 .histStatusOpen {
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .histStatusPending {
@@ -670,7 +670,7 @@ button.row:hover:not(:disabled) {
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;

@@ -78,7 +78,7 @@
 }
 
 .filterBadge {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-md);
     line-height: 1;
 }
@@ -181,7 +181,7 @@
 .chainPickerOption:hover { background: var(--xc-bg-muted); }
 .chainPickerOptionActive {
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-weight: 600;
 }
 
@@ -208,7 +208,7 @@
 }
 
 .chainPickerOptionActive .checkboxOptionIcon {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 /* Bottom row of the filter card. Additional details disclosure on
@@ -396,7 +396,7 @@
     appearance: none;
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     cursor: pointer;
@@ -572,7 +572,7 @@
 
 .statusPillError {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .statusPillPending {
@@ -609,7 +609,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;
@@ -775,7 +775,7 @@
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-family: inherit;
     font-size: 12px;
     font-weight: 700;
@@ -833,7 +833,7 @@
 }
 
 .copyIconButton:hover {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     background: var(--xc-bg-muted);
 }
 
@@ -887,7 +887,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -983,7 +983,7 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 /* ───── Detail page tab strip ───── */
@@ -1019,7 +1019,7 @@
 }
 
 .detailTabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -1149,7 +1149,7 @@
 }
 
 .error {
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
     margin: 0;
 }
@@ -1167,7 +1167,7 @@
 .rbfError {
     flex-basis: 100%;
     margin: 0;
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-xs);
     line-height: 1.3;
 }
@@ -1226,7 +1226,7 @@
 
 .saveContactError {
     margin: 0;
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-xs);
     line-height: 1.3;
 }
@@ -1355,7 +1355,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-danger, #d93838) 18%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
     font-weight: 700;
 }
 

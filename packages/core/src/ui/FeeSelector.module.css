@@ -37,7 +37,7 @@
    renders; when it does it gets a neutral white chip. */
 .etaLow {
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .etaNormal {

@@ -49,7 +49,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -193,7 +193,7 @@
 .slashAmount {
     font-weight: 600;
     white-space: nowrap;
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Status pill in the hero, tinted per state (mirrors the list chips). */

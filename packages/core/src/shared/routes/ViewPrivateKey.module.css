@@ -1,13 +1,13 @@
 .warningTitle {
     font-size: var(--xc-text-xl);
     font-weight: 700;
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     margin: 0 0 var(--xc-space-3);
 }
 
 .errorText {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     margin: var(--xc-space-3) 0 0;
 }
 
@@ -86,7 +86,7 @@
     padding: var(--xc-space-3);
     font-family: inherit;
     font-size: var(--xc-text-sm);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     background: var(--xc-bg-muted);
     border: 1px dashed var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
