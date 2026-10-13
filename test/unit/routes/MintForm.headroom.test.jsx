@@ -68,7 +68,9 @@ function mountMint({ maxSupply = '5000', totalSupply = '5000', mintMax = null, d
                 },
             }],
         }),
-        composeForConfirm: vi.fn(),
+        // These tests stop at the compose call, so compose stays pending
+        // rather than resolving to a value no host returns.
+        composeForConfirm: vi.fn(() => new Promise(() => {})),
         preflight: vi.fn(),
     };
     render(
