@@ -18,11 +18,11 @@
 // bottom tab bar had to be JS-gated in the first place. Measuring the
 // container makes one rule work everywhere.
 //
-// The first render has nothing to measure yet, so it seeds from the
-// viewport: correct for the common full-window case, corrected on mount
-// for everything else.
+// The first render has nothing to measure yet, so it starts compact and a
+// layout effect measures before paint. This keeps a narrow embedded container
+// from briefly receiving a sidebar selected from the wider viewport.
 
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { tierForWidth } from './breakpoints.js';
 
 function viewportWidth() {
@@ -36,9 +36,9 @@ function viewportWidth() {
  */
 export function useLayoutTier() {
     const ref = useRef(null);
-    const [tier, setTier] = useState(() => tierForWidth(viewportWidth()));
+    const [tier, setTier] = useState('compact');
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const el = ref.current;
         // A 0-width box means "not laid out yet" (or jsdom, which has no
         // layout at all), so fall back to the viewport rather than pinning

@@ -14,6 +14,9 @@ import { NoticeModal } from '../../../packages/core/src/shared/components/Notice
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
 const UI_DIR = join(process.cwd(), 'packages/core/src/ui');
+const KEYBOARD_DIR = join(process.cwd(), 'packages/core/src/shared/keyboard');
+const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
+const STYLE_DIR = join(process.cwd(), 'packages/core/src/shared/styles');
 const VIEWPORT = { width: 320, height: 568 };
 
 const css = (name) => readFileSync(join(COMPONENT_DIR, name), 'utf8');
@@ -225,5 +228,37 @@ describe('320x568 modal layout contracts', () => {
         expect(extensionCss).toMatch(/html\s*\{[^}]*width:\s*min\(360px,\s*100vw\)/s);
         expect(extensionCss).toMatch(/html\[data-xc-extension-surface='sidepanel'\]\s*\{[^}]*width:\s*100%/s);
         expect(extensionCss).toMatch(/body,\s*#xchain-popup-root\s*\{[^}]*max-width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden/s);
+    });
+
+    it('bounds desktop dialogs to their actual overlay and viewport', () => {
+        const shortcut = readFileSync(join(KEYBOARD_DIR, 'ShortcutHelp.module.css'), 'utf8');
+        const shortcutOverlay = rule(shortcut, '.overlay');
+        const shortcutPanel = rule(shortcut, '.panel');
+        expect(shortcutOverlay).toMatch(/box-sizing:\s*border-box/);
+        expect(shortcutOverlay).toMatch(/padding-block:\s*min\(/);
+        expect(shortcutPanel).toMatch(/box-sizing:\s*border-box/);
+        expect(shortcutPanel).toMatch(/max-height:\s*100%/);
+        expect(shortcutPanel).toMatch(/min-height:\s*0/);
+        expect(rule(shortcut, '.body')).toMatch(/min-height:\s*0/);
+        expect(rule(shortcut, '.body')).toMatch(/overflow-y:\s*auto/);
+
+        const contacts = readFileSync(join(ROUTE_DIR, 'ContactsList.module.css'), 'utf8');
+        expect(rule(contacts, '.modalOverlay')).toMatch(/box-sizing:\s*border-box/);
+        const contactCard = rule(contacts, '.modalCard');
+        expect(contactCard).toMatch(/box-sizing:\s*border-box/);
+        expect(contactCard).toMatch(/max-height:\s*100%/);
+        expect(contactCard).toMatch(/min-height:\s*0/);
+        expect(contactCard).toMatch(/overflow-y:\s*auto/);
+    });
+});
+
+describe('desktop live resize contracts', () => {
+    it('measures the container before paint and softens the rail-to-full resize', () => {
+        const tierSource = readFileSync(join(STYLE_DIR, 'useLayoutTier.js'), 'utf8');
+        const layout = css('LeftNav.module.css');
+        expect(tierSource).toMatch(/useLayoutEffect\(\(\) => \{/);
+        expect(tierSource).toMatch(/useState\('compact'\)/);
+        expect(layout).toMatch(/\.sidebar\s*\{[^}]*transition:\s*flex-basis 120ms ease-out/s);
+        expect(layout).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.sidebar\s*\{[^}]*transition:\s*none/s);
     });
 });

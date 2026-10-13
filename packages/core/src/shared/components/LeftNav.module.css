@@ -49,6 +49,7 @@
     min-width: 0;
     height: 100%;
     overflow: hidden;
+    transition: flex-basis 120ms ease-out;
 }
 
 .main {
@@ -337,6 +338,12 @@
     .itemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
     }
 }
 
