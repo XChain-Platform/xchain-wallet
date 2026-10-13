@@ -824,7 +824,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SwapForm,
             props: { initialChainId: CHAIN },
-            actionLabel: 'Swap',
+            actionLabel: 'Review',
             steps: [
                 // Give and get must differ: SwapForm rejects a same-ticker pair.
                 openTokenField('Give token:'), pickToken('XCHAIN'),

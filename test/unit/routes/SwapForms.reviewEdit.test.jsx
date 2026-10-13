@@ -24,6 +24,7 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -33,17 +34,25 @@ const address = (id, value) => ({
 const BTC_ADDRESS = address('btc-a', 'bc1qexample');
 const DOGE_ADDRESS = address('doge-a', 'DExample');
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
-function messaging() {
+function messaging({ walletMode = 'watcher', divisibility = {} } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getNewestAddress: vi.fn().mockResolvedValue(BTC_ADDRESS),
         getWalletBalances: vi.fn().mockResolvedValue({}),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
+        getTokenInfo: vi.fn().mockImplementation(({ chainId, tick }) => Promise.resolve({
+            chainId,
+            tick,
+            divisibility: divisibility[`${chainId}:${tick}`] ?? null,
+        })),
     };
     return new Proxy(base, {
         get(target, prop) {
@@ -89,6 +98,11 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
+        expect(screen.getByText('1 ALPHA = 1.5 BETA')).toBeInTheDocument();
+        expect(screen.getByText(/The give side is escrowed until this offer is matched/)).toBeInTheDocument();
+        expect(screen.getByText('Give chain')).toBeInTheDocument();
+        expect(screen.getByText('Get chain')).toBeInTheDocument();
+        expect(screen.getByText('Protocol fee')).toBeInTheDocument();
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('2');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('3');
@@ -110,6 +124,11 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
         const edit = await screen.findByRole('button', { name: 'Edit' });
+        expect(screen.getByText('1 ALPHA = 1.25 BETA')).toBeInTheDocument();
+        expect(screen.getByText('Give chain')).toBeInTheDocument();
+        expect(screen.getByText('Get chain')).toBeInTheDocument();
+        expect(screen.getByText('Protocol fee')).toBeInTheDocument();
+        expect(screen.getByText(/Paid transaction fees are not refunded/)).toBeInTheDocument();
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('5');
@@ -151,5 +170,76 @@ describe('swap review editing', () => {
 
         expect(await screen.findByText('ownership of ALPHA')).toBeInTheDocument();
         expect(screen.getByText('ownership of BETA')).toBeInTheDocument();
+    });
+
+    it('validates each same-chain token amount against its own precision', async () => {
+        const msg = messaging({ divisibility: {
+            [`${BTC}:ALPHA`]: 0,
+            [`${BTC}:BETA`]: 2,
+        } });
+        render(
+            <MessagingProvider shell="desktop" messaging={msg}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        await waitFor(() => expect(msg.getTokenInfo).toHaveBeenCalledWith({
+            chainId: BTC,
+            tick: 'ALPHA',
+            demo: false,
+        }));
+        setAmount('Give amount (ALPHA)', '1.5');
+        setAmount('Get amount (BETA)', '1.25');
+
+        expect(await screen.findByText('Give amount must be a whole number because ALPHA is indivisible.'))
+            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    });
+
+    it('validates cross-chain token precision on the chain for each leg', async () => {
+        const msg = messaging({ divisibility: {
+            [`${DOGE}:ALPHA`]: 2,
+            [`${BTC}:BETA`]: 0,
+        } });
+        render(
+            <MessagingProvider shell="desktop" messaging={msg}>
+                <CrossChainSwapForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Give token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Give token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select give token' }));
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        await waitFor(() => expect(msg.getTokenInfo).toHaveBeenCalledWith({
+            chainId: BTC,
+            tick: 'BETA',
+            demo: false,
+        }));
+        setAmount('Give amount (ALPHA)', '1.25');
+        setAmount('Get amount (BETA)', '2.5');
+
+        expect(await screen.findByText('Get amount must be a whole number because BETA is indivisible.'))
+            .toBeInTheDocument();
+        expect(msg.getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'ALPHA', demo: false });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    });
+
+    it('labels the full-wallet action as review and uses narrow-safe form sections', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging({ walletMode: 'full' })}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('button', { name: 'Review' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
+        expect(screen.getByRole('region', { name: 'You give' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'You get' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Timing and fees' })).toBeInTheDocument();
     });
 });
