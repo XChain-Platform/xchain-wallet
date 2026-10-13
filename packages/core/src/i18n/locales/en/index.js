@@ -71,7 +71,7 @@ export const en = {
     'adsNotice.continue': 'Continue',
     'alerts.title': 'Alerts',
     'alerts.close': 'Close alerts',
-    'alerts.empty': "No alerts. You're all caught up.",
+    'alerts.empty': 'No alerts. Wallet activity, security, and price changes appear here.',
     'backupReminder.backupNow': 'Back up now',
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
@@ -117,7 +117,9 @@ export const en = {
 
     // --- alerts --------------------------------------------------
     'alerts.empty.title': 'No alerts',
-    'alerts.empty.body': "You're all caught up.",
+    'alerts.empty.body': 'Wallet activity, security, and price changes appear here.',
+    'alerts.empty.action': 'Manage notifications',
+    'alerts.notificationsTitle': 'Notifications',
     'alerts.unreadCount': '{count} unread',
     'alerts.markAllRead': 'Mark all read',
     'alerts.clear': 'Clear alerts',
@@ -756,6 +758,7 @@ export const en = {
     'history.empty.noActivityTitle': 'No activity yet',
     'history.empty.noActivityBody':
         'Activity appears here after you send or receive on a selected chain.',
+    'history.empty.startReceiving': 'Start receiving',
     'history.filters.label': 'History filters',
     'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
     'history.filters.searchLabel': 'Search history',

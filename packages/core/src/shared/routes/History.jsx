@@ -1962,6 +1962,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={crossChainOnly
                             ? t('history.empty.noCrossChainBody')
                             : t('history.empty.noActivityBody')}
+                        actionLabel={!crossChainOnly && onReceive
+                            ? t('history.empty.startReceiving')
+                            : undefined}
+                        onAction={!crossChainOnly ? onReceive : undefined}
+                        actionIcon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
