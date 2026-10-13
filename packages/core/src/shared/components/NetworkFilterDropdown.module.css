@@ -9,14 +9,13 @@
  * contact legal@dankest.llc. */
 
 /* Custom network dropdown: trigger button + absolute popover. The wrapper
-   is a flex item so min-width:0 overrides the default min-width:auto,
-   letting it shrink to match a sibling search box at exactly 50%. */
-/* The floor fits the icon, a short label and the caret; below it the
-   toolbar wraps the filter onto its own line rather than clipping the
-   caret, which a 375px iPhone did on several list screens. */
+   shares the toolbar row with a search box, but never below the width of
+   the icon, "All Networks" and the caret: under that the toolbar wraps the
+   filter onto its own line instead of cutting the label to "All Netwo..."
+   or clipping the caret (both seen on 375 to 411px phones, 2026-10-12). */
 .networkWrap {
     flex: 1 1 0;
-    min-width: 8.5rem;
+    min-width: 10.5rem;
     position: relative;
     box-sizing: border-box;
 }
