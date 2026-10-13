@@ -90,6 +90,17 @@ afterEach(() => {
 });
 
 describe('UnionListForm', () => {
+    it('explains that a member list is required when Review is pressed empty', async () => {
+        const messaging = mount();
+        const review = await screen.findByRole('button', { name: 'Review' });
+
+        expect(review.disabled).toBe(false);
+        fireEvent.click(review);
+
+        expect(await screen.findByText('Choose at least one member list.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('locks the picker to the first type and excludes union lists', async () => {
         mount({
             owned: [row(101, 1), row(102, 2), row(103, 3)],
