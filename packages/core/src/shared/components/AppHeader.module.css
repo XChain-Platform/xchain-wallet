@@ -28,6 +28,19 @@
     flex-wrap: nowrap;
 }
 
+/* Compact shells keep every global action available on a second row. The
+   header grows with that row instead of widening the 320px content area. */
+:global([data-xc-tier='compact']) .bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+:global([data-xc-tier='compact']) .right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
    ratio. Matches `.brandLogoPopup` in Home.module.css (about 36px tall). */
 .logo {
