@@ -37,10 +37,10 @@
 // this wallet holds the token, which is the same exposure as the existing
 // incoming-receipt notifications.
 
+import { taggedLogger } from './taggedLogger.js';
+
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const SEEN_CAP_PER_CHAIN = 500; // prune guard; open polls per chain stay far below this
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 export class GovernancePollWatcher {
     /**
@@ -82,7 +82,7 @@ export class GovernancePollWatcher {
         this._loadSeen = typeof loadSeen === 'function' ? loadSeen : null;
         this._saveSeen = typeof saveSeen === 'function' ? saveSeen : null;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'governance');
 
         this._timer = null;
         this._ticking = false;

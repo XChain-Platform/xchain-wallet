@@ -64,6 +64,7 @@ import {
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
 import { randomUUID } from '../util/uuid.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
 
@@ -71,8 +72,6 @@ const DEFAULT_INTERVAL_MS = 60 * 1000;
 // block payment for long; with the 60s default this is a 3-minute
 // takeover window, inside the spec's 15-minute bound for 5-min cycles).
 const LEASE_CYCLES = 3;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 /** PendingTx statuses that mean "a payment may already be in flight". */
 const ATTEMPTED_STATUSES = new Set([
@@ -112,6 +111,9 @@ export class CoinpayAutopayWatcher {
      * @param {import('../registry/index.js').ChainRegistry} deps.chainRegistry
      * @param {(walletId: string) => (object | null)} deps.getSigner
      *   pre-unlocked SoftwareSigner lookup (SignerPool.get); null = cannot sign
+     * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
+     *   read live settings before delivery so the incoming-receipts toggle
+     *   gates every CoinPay status notification
      * @param {{ reserve: Function, release: Function }} [deps.reservationLedger]
      * the host-shared ledger; optional so tests / degraded shells run without it
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
@@ -126,6 +128,7 @@ export class CoinpayAutopayWatcher {
         sdkRegistry,
         chainRegistry,
         getSigner,
+        getSettings,
         reservationLedger,
         notify,
         shellKind,
@@ -138,6 +141,7 @@ export class CoinpayAutopayWatcher {
         if (!sdkRegistry) throw new Error('CoinpayAutopayWatcher: sdkRegistry is required');
         if (!chainRegistry) throw new Error('CoinpayAutopayWatcher: chainRegistry is required');
         if (typeof getSigner !== 'function') throw new Error('CoinpayAutopayWatcher: getSigner is required');
+        if (typeof getSettings !== 'function') throw new Error('CoinpayAutopayWatcher: getSettings is required');
         if (typeof notify !== 'function') throw new Error('CoinpayAutopayWatcher: notify is required');
         if (!['desktop', 'extension', 'web'].includes(shellKind)) {
             throw new Error('CoinpayAutopayWatcher: shellKind must be desktop | extension | web');
@@ -147,12 +151,13 @@ export class CoinpayAutopayWatcher {
         this._sdkRegistry = sdkRegistry;
         this._chainRegistry = chainRegistry;
         this._getSigner = getSigner;
+        this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
         this._notify = notify;
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'coinpay');
         this._coinpayAction = coinpayAction || defaultCoinpayAction;
 
         this._instanceId = randomUUID();
@@ -641,6 +646,14 @@ export class CoinpayAutopayWatcher {
     async _notifyOnce(matchIndex, reason, payload) {
         const key = `${matchIndex}:${reason}`;
         if (this._notified.has(key)) return;
+        let settings;
+        try {
+            settings = await this._getSettings();
+        } catch (e) {
+            this._log.error('CoinpayAutopayWatcher: getSettings failed', e);
+            return;
+        }
+        if (settings?.notifications?.incomingReceipts !== true) return;
         this._notified.add(key);
         try {
             await this._notify(payload);
