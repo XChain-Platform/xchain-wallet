@@ -83,6 +83,7 @@ export function Settings({
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
+    const [walletManagementBusy, setWalletManagementBusy] = useState(false);
 
     const { settings } = useSettings();
 
@@ -97,24 +98,28 @@ export function Settings({
 
     const handleWalletRemoved = useCallback(async (removedWalletId) => {
         clearActiveWallet();
-        if (typeof messaging?.listWallets !== 'function') {
-            throw new Error('Could not refresh the wallet list.');
-        }
+        try {
+            // Require a fresh list before selecting a replacement wallet.
+            if (typeof messaging?.listWallets !== 'function') {
+                throw new Error('Could not refresh the wallet list.');
+            }
+            const listed = await messaging.listWallets();
+            const wallets = Array.isArray(listed) ? listed : listed?.wallets;
+            // Reject unknown response shapes so an empty-looking result cannot wipe a real vault.
+            if (!Array.isArray(wallets)) {
+                throw new Error('Could not refresh the wallet list.');
+            }
 
-        const listed = await messaging.listWallets();
-        const wallets = Array.isArray(listed) ? listed : listed?.wallets;
-        if (!Array.isArray(wallets)) {
-            throw new Error('Could not refresh the wallet list.');
+            const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
+            if (nextWallet) {
+                writeActiveWallet(nextWallet.id);
+            } else {
+                await wipeWalletStorage();
+            }
+        } finally {
+            // Reload even when fallback selection fails so no live screen keeps the removed wallet selected.
+            reload();
         }
-
-        const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
-        if (nextWallet) {
-            writeActiveWallet(nextWallet.id);
-        } else {
-            await wipeWalletStorage();
-        }
-
-        reload();
     }, [messaging, reload]);
 
     const walletLabel = activeWallet?.name || 'No wallet';
@@ -129,7 +134,7 @@ export function Settings({
             keywords: 'wallet name remove rename migrate bip39 delete destroy',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved },
+            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved, onBusyChange: setWalletManagementBusy },
             summary: walletLabel,
         },
         {
@@ -328,6 +333,7 @@ export function Settings({
             const subpageHeader = (
                 <PageHeader
                     onBack={() => setSubpageId(null)}
+                    backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel="Back to settings"
                     title={section.title}
                 />

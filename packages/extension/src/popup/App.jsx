@@ -379,6 +379,14 @@ function AppInner() {
     const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
     );
+    const [walletPickerReturnView, setWalletPickerReturnView] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
+    );
+    const openWalletPicker = (returnView = /** @type {'home' | 'settings'} */ ('home')) => {
+        setWalletPickerReturnView(returnView);
+        if (returnView === 'settings') setSettingsInitialSection('this-wallet');
+        setUnlockedView('wallet-picker');
+    };
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -2369,7 +2377,7 @@ function AppInner() {
                             setWalletDetailsId(id);
                             setUnlockedView('wallet-details');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(walletPickerReturnView)}
                     />
                 );
             }
@@ -2380,7 +2388,7 @@ function AppInner() {
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
                         activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
-                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        onOpenWalletPicker={() => openWalletPicker('settings')}
                         onOpenAccountPicker={
                             activeWalletId ? () => {
                                 setAccountPickerBackTo('settings');
@@ -2406,10 +2414,11 @@ function AppInner() {
                             setWalletDetailsId(null);
                             setUnlockedView('wallet-picker');
                         }}
-                        onRename={() => {
-                            setWalletRenameTarget({ id: walletDetailsId, name: '' });
+                        onRename={(wallet) => {
+                            setWalletRenameTarget({ id: wallet.id, name: wallet.name });
                             setUnlockedView('wallet-rename');
                         }}
+                        onExited={refresh}
                         onMigrateToBip39={() => {
                             setMigrateLegacyWalletId(walletDetailsId);
                             setUnlockedView('migrate-bip39');
@@ -2424,11 +2433,11 @@ function AppInner() {
                         initialName={walletRenameTarget.name}
                         onBack={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                         onRenamed={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                     />
                 );
@@ -2571,7 +2580,7 @@ function AppInner() {
                             setActionDetailReturnTo('home');
                             setUnlockedView('action-detail');
                         } : undefined}
-                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        onOpenWalletPicker={() => openWalletPicker()}
                         onOpenAccountPicker={activeWalletId ? () => {
                             setAccountPickerBackTo('home');
                             setUnlockedView('account-picker');
