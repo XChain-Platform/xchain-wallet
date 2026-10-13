@@ -205,6 +205,7 @@ export function BottomTabBar({
                         className={styles.sheet}
                     >
                         <div className={styles.handle} aria-hidden="true" />
+                        <h2 className={styles.sheetTitle}>More</h2>
                         {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.sheetList} role="list">
                             {sheetRows.map((row) => {
@@ -284,7 +285,7 @@ export function BottomTabBar({
                                         <span className={styles.sheetIcon} aria-hidden="true">
                                             <Icon.LockIcon />
                                         </span>
-                                        <span>Lock</span>
+                                        <span>Lock wallet</span>
                                     </button>
                                 </li>
                             ) : null}

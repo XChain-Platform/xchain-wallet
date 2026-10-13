@@ -123,7 +123,7 @@
     overflow-y: auto;
     padding: var(--xc-space-2)
         env(safe-area-inset-right, 0px)
-        env(safe-area-inset-bottom, var(--xc-space-3))
+        calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3)))
         env(safe-area-inset-left, 0px);
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
@@ -134,6 +134,13 @@
     margin: var(--xc-space-2) auto var(--xc-space-3);
     border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
+}
+
+.sheetTitle {
+    margin: 0;
+    padding: 0 var(--xc-space-4) var(--xc-space-2);
+    font-size: var(--xc-text-lg);
+    line-height: 1.25;
 }
 
 .sheetList {

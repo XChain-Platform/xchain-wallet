@@ -19,7 +19,7 @@
 //      The "More" button toggles a bottom sheet via aria-expanded.
 //   3. The sheet lists Receive + the rest of the §24.2 nav (DEX,
 //      Dispensers, Contracts, Messaging, Contacts) plus the optional
-//      footer items (Switch wallet / Settings / Lock); Contracts is
+//      footer items (Switch wallet / Settings / Lock wallet); Contracts is
 //      gated on hasVmAddress (DEPLOY sits in COMMON_ACTIONS, so the
 //      row is not BTC-exclusive).
 //   4. CSS module declares a scalable absolutely positioned bar that respects
@@ -77,10 +77,12 @@ assert.ok(/requiresVm:\s*true[\s\S]*?hasVmAddress/.test(barSrc),
     'Contracts row requires hasVmAddress to render');
 assert.ok(!/requiresBtc|hasBtcAddress/.test(barSrc),
     'BottomTabBar no longer carries a BTC gate for the Contracts row');
-for (const label of ['Switch wallet', 'Settings', 'Lock']) {
+for (const label of ['Switch wallet', 'Settings', 'Lock wallet']) {
     assert.ok(barSrc.includes(`>${label}</span>`),
         `Bottom sheet footer renders ${label} when callback supplied`);
 }
+assert.ok(/<h2 className=\{styles\.sheetTitle\}>More<\/h2>/.test(barSrc),
+    'Bottom sheet has a visible accessible heading');
 
 // Esc closes the sheet.
 assert.ok(/e\.key === 'Escape'[\s\S]*?setSheetOpen\(false\)/.test(barSrc),
@@ -100,6 +102,8 @@ assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
     '.bar respects the iOS safe-area inset');
 assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*70vh/.test(cssSrc),
     '.sheet caps at 70vh so the route stays partially visible');
+assert.ok(/calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/.test(cssSrc),
+    '.sheet keeps base bottom padding in addition to the safe-area inset');
 
 // --- 5. FullLayoutWithNav slot + App.jsx wiring -------------------------
 
@@ -159,5 +163,5 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp], ['extensio
 }
 
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; scalable absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + labelled More sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock wallet; scalable absolute bar and padded sheet with safe-area insets; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
 );
