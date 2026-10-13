@@ -71,6 +71,7 @@ import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.j
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { coinFamiliesForUser } from '../../core/src/registry/visibility.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
+import { t } from '../../core/src/i18n/index.js';
 
 const APP_CHAIN_REGISTRY = defaultRegistry();
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
@@ -1797,7 +1798,7 @@ function AppInner() {
                     <ViewPrivateKey
                         walletId={activeWalletId}
                         address={privateKeyAddress}
-                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
+                        renderQR={({ value }) => <KeyQR value={value} alt={t('shell.privateKeyQr')} />}
                         onBack={() => {
                             setPrivateKeyAddress(null);
                             setUnlockedView('addresses');
@@ -2956,13 +2957,13 @@ function AppInner() {
                     </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
-                            title="Message sent"
+                            title={t('shell.messageSent')}
                             onClose={() => setMessageSentNotice(false)}
                         />
                     ) : null}
                     {deepLinkNotice ? (
                         <NoticeModal
-                            title="Cannot open link"
+                            title={t('shell.cannotOpenLink')}
                             message={deepLinkNotice}
                             onClose={() => setDeepLinkNotice(null)}
                         />
@@ -2971,7 +2972,7 @@ function AppInner() {
                         <div
                             role="dialog"
                             aria-modal="true"
-                            aria-label="Scan a QR code"
+                            aria-label={t('scan.scannerAlt')}
                             style={{
                                 position: 'absolute',
                                 inset: 0,
@@ -3028,6 +3029,6 @@ function AppInner() {
             );
         }
         default:
-            return <Loading error={`unknown state "${status.state}"`} />;
+            return <Loading error={t('shell.unknownState', { state: status.state })} />;
     }
 }

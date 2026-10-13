@@ -43,6 +43,7 @@ import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
 import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
+import { t } from '../../core/src/i18n/index.js';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
 import { ImportWallet } from '@xchain-wallet/core/shared/routes/ImportWallet.jsx';
@@ -1408,8 +1409,8 @@ function AppInner() {
                     <ReceivePicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        title="Select coin or token"
-                        backLabel="Back to markets"
+                        title={t('shell.markets.selectAsset')}
+                        backLabel={t('shell.markets.back')}
                         hideOwnFilter
                         onBack={() => setUnlockedView('markets')}
                         onSelect={(sel) => {
@@ -1794,7 +1795,7 @@ function AppInner() {
                     <ViewPrivateKey
                         walletId={activeWalletId}
                         address={privateKeyAddress}
-                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
+                        renderQR={({ value }) => <KeyQR value={value} alt={t('shell.privateKeyQr')} />}
                         onBack={() => {
                             setPrivateKeyAddress(null);
                             setUnlockedView('addresses');
@@ -2751,13 +2752,13 @@ function AppInner() {
                     </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
-                            title="Message sent"
+                            title={t('shell.messageSent')}
                             onClose={() => setMessageSentNotice(false)}
                         />
                     ) : null}
                     {deepLinkNotice ? (
                         <NoticeModal
-                            title="Cannot open link"
+                            title={t('shell.cannotOpenLink')}
                             message={deepLinkNotice}
                             onClose={() => setDeepLinkNotice(null)}
                         />
@@ -2778,7 +2779,7 @@ function AppInner() {
             );
         }
         default:
-            return <Loading error={`unknown state "${status.state}"`} />;
+            return <Loading error={t('shell.unknownState', { state: status.state })} />;
     }
 }
 

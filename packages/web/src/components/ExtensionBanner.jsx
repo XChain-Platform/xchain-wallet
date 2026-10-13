@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
+import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
 
@@ -64,16 +65,15 @@ export function ExtensionBanner() {
         return (
             <div role="status" className={styles.banner} data-state="active">
                 <span className={styles.label}>
-                    <strong>Using your extension wallet.</strong>
-                    {' '}Signing and account access route through the XChain
-                    Wallet extension on this site.
+                    <strong>{t('extensionBanner.activeTitle')}</strong>
+                    {' '}{t('extensionBanner.activeBody')}
                 </span>
                 <button
                     type="button"
                     className={styles.dismiss}
                     onClick={disable}
                 >
-                    Switch back
+                    {t('extensionBanner.switchBack')}
                 </button>
             </div>
         );
@@ -82,9 +82,8 @@ export function ExtensionBanner() {
     return (
         <div role="status" className={styles.banner} data-state="offer">
             <span className={styles.label}>
-                <strong>XChain Wallet extension detected.</strong>
-                {' '}Use your extension wallet on this site instead of the
-                web app.
+                <strong>{t('extensionBanner.detectedTitle')}</strong>
+                {' '}{t('extensionBanner.detectedBody')}
                 {error ? (
                     <span role="alert" className={styles.error}>
                         {' '}{error}
@@ -98,15 +97,17 @@ export function ExtensionBanner() {
                     onClick={enable}
                     disabled={connecting}
                 >
-                    {connecting ? 'Connecting…' : 'Use extension wallet'}
+                    {connecting
+                        ? t('extensionBanner.connecting')
+                        : t('extensionBanner.useExtension')}
                 </button>
                 <button
                     type="button"
                     className={styles.dismiss}
                     onClick={dismiss}
-                    aria-label="Dismiss extension notice"
+                    aria-label={t('extensionBanner.dismissLabel')}
                 >
-                    Not now
+                    {t('extensionBanner.notNow')}
                 </button>
             </span>
         </div>
