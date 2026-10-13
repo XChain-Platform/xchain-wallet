@@ -14,6 +14,7 @@ import {
     ChainBadge,
     EmptyState,
     Icon,
+    InfoTip,
     Input,
     ListPage,
     PageHeader,
@@ -1816,12 +1817,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
-                        title={t('history.filters.fiatHelp')}
                     >
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
                             : t('history.filters.showFiat')}
                     </button>
+                    <InfoTip
+                        aria={t('history.filters.fiatHelp')}
+                        label={t('history.filters.fiatHelp')}
+                        placement="bottom"
+                    />
                     <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
                         <button
                             type="button"

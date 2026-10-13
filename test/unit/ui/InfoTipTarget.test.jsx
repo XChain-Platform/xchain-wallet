@@ -69,6 +69,25 @@ describe('InfoTip target (slice 2)', () => {
         expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
+    it('does not activate a form control when the help button is inside its label', () => {
+        render(
+            <label>
+                <input type="checkbox" />
+                Enable advanced option
+                <InfoTip aria="Advanced option help" label="Explanation" />
+            </label>,
+        );
+        const checkbox = screen.getByRole('checkbox');
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Advanced option help' }), {
+            pointerType: 'touch',
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced option help' }));
+
+        expect(checkbox).not.toBeChecked();
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Explanation');
+    });
+
     it('opens from the keyboard and closes on Escape', () => {
         render(<InfoTip aria="More info" label="Explanation" />);
         const trigger = screen.getByRole('button', { name: 'More info' });
@@ -164,6 +183,11 @@ describe('InfoTip target (slice 2)', () => {
     it('lets long tooltip text wrap inside the viewport', () => {
         expect(infoTipCss).toMatch(/max-width:\s*min\(260px,\s*calc\(100vw/);
         expect(infoTipCss).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
+    it('uses a physical center anchor for viewport correction in RTL layouts', () => {
+        expect(infoTipCss).toMatch(/\.bubble\s*\{[^}]*\bleft:\s*50%/s);
+        expect(infoTipCss).not.toMatch(/\.bubble\s*\{[^}]*inset-inline-start:/s);
     });
 });
 
