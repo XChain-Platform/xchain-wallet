@@ -117,6 +117,20 @@ describe('quoteMaxSendable', () => {
         expect(Number(probed.value)).toBe(BALANCE);
     });
 
+    it('prices only the outputs selected by coin control', async () => {
+        const selectedBalance = 20_000_000;
+        const h = makeHarness({
+            createTx: encoderThatRefuses({ available: selectedBalance }),
+        });
+        const selected = [{ value: selectedBalance, txid: '11'.repeat(32), vout: 0 }];
+        const quote = await quoteMaxSendable(ARGS(h, {
+            encoderOpts: { pubkey: 'pub', change: 'src-address', utxos: selected },
+        }));
+        expect(quote.inputSats).toBe(String(selectedBalance));
+        expect(quote.maxSats).toBe(String(selectedBalance - REAL_FEE));
+        expect(h.sdk.encoder.getUTXOs).not.toHaveBeenCalled();
+    });
+
     it('leaves room for the outputs the compose pipeline adds on top of the payment', async () => {
         const donation = 5_000;
         const h = makeHarness({

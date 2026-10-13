@@ -18,6 +18,7 @@ import {
     waitFor,
 } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
 import { PrivacySection } from '../../../packages/core/src/shared/components/settings/PrivacySection.jsx';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { useSettings } from '../../../packages/core/src/shared/hooks/useSettings.js';
@@ -92,6 +93,8 @@ function LivePrivacyView() {
     return (
         <>
             <PrivacySection />
+            {/* Hide small balances moved to the Display panel; it still persists privacy.hideSmallBalances. */}
+            <DisplaySection />
             <BalanceList
                 rows={LIST_ROWS}
                 hideSmallBalances={settings.privacy.hideSmallBalances === true}
@@ -167,7 +170,7 @@ describe('Privacy setting hints', () => {
         await screen.findByRole('switch', { name: 'Hide small balances' });
 
         expect(screen.getByText(/Imported-key and watch-only sends keep the spending address/)).toBeTruthy();
-        expect(screen.getByText(/Collapse unpinned dust balances in Coins and Tokens/)).toBeTruthy();
+        expect(screen.getByText(/Collapse balances below the selected threshold into an expandable section/)).toBeTruthy();
         expect(screen.getByText(/Blur the entire wallet display/)).toBeTruthy();
         expect(screen.getByText(/batch label and contact edits/)).toBeTruthy();
         expect(screen.getByText(/OS or in-app reduced-motion settings suppress haptics/)).toBeTruthy();

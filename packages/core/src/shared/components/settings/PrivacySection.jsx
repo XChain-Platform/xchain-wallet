@@ -11,6 +11,17 @@
 // PrivacySection (§35.1 Privacy panel). Every switch describes its live
 // consumer, including shell limits and the behavior of default-on fields.
 // Form-draft retention is a select because it has more than two states.
+//
+// (operator ruling a, 2026-08-11): the "Clipboard auto-clear
+// (seconds)" input that used to sit at the bottom of this panel is gone.
+// Its only consumer was ViewPrivateKey's post-copy wipe timer, and
+// a later change made key material uncopyable on every shell, so the control
+// wrote `settings.privacy.clipboardAutoClearSeconds` and nothing read it.
+// A privacy control that governs nothing is worse than an absent one: it
+// tells the user they hold a protection they do not hold. The schema
+// field stays (see schemas/settings.js) because dropping it would be a
+// stored-settings migration for no gain, and because a future copy path
+// can claim it back.
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
@@ -67,12 +78,6 @@ export function PrivacySection() {
                 hint="For HD wallets, use the next internal change address when a send can derive one. Imported-key and watch-only sends keep the spending address. Rotated leftovers appear in the address list as “Change #N”."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
-            />
-            <ToggleRow
-                label="Hide small balances"
-                hint="Collapse unpinned dust balances in Coins and Tokens behind an expandable “Show small balances” row. Native coins use per-chain thresholds; indivisible tokens always stay visible."
-                checked={settings.privacy.hideSmallBalances}
-                onChange={(v) => onToggle('hideSmallBalances', v)}
             />
             <ToggleRow
                 label="Blur sensitive data on blur"

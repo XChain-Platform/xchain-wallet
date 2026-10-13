@@ -12,7 +12,7 @@ describe('LinkForm themed errors', () => {
             'packages/core/src/shared/routes/LinkForm.jsx',
             'utf8',
         );
-        expect(source).toContain("color: 'var(--xc-danger)'");
+        expect(source).toContain("color: 'var(--xc-danger-fg)'");
         expect(source).not.toContain("color: '#ef5350'");
     });
 });

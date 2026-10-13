@@ -100,7 +100,7 @@ assert.ok(/import \{ DisplaySection \} from '\.\.\/components\/settings\/Display
     'Settings.jsx imports DisplaySection');
 assert.ok(/id: 'display',[\s\S]{0,400}?Component: DisplaySection/.test(settingsSrc),
     'Settings.jsx registers a display section bound to DisplaySection');
-assert.ok(/keywords: 'display pinned hidden tokens reorder unhide bulk star'/.test(settingsSrc),
+assert.ok(/keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star'/.test(settingsSrc),
     'display section ships search keywords so it surfaces in Settings search');
 assert.ok(/summary: displaySummary\(settings\)/.test(settingsSrc),
     'display section renders the displaySummary in the list view');
