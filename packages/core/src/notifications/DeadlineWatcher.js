@@ -82,7 +82,7 @@ export class DeadlineWatcher {
      * @param {() => Promise<import('./getActiveAddresses.js').ActiveAddress[]>} deps.getActiveAddresses
      * @param {(chainId: string) => import('../sdk/SDKRegistry.js').XChainSDKLike} deps.getSdkForChain
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
      * @param {(chainId: string) => (string | null)} [deps.coinForChain]  chain -> coin, for the block-interval conversion
      * @param {() => Promise<object | null>} [deps.loadSeen]
      * @param {(seen: object) => (void | Promise<void>)} [deps.saveSeen]
@@ -130,6 +130,7 @@ export class DeadlineWatcher {
         /** @type {Map<string, Set<string>>} chainId -> announced `kind:actionIndex` keys */
         this._seen = new Map();
         this._seenLoaded = false;
+        this._seenDirty = false;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -151,6 +152,7 @@ export class DeadlineWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._seenDirty = false;
         this._addressPoll.reset();
     }
 
@@ -212,11 +214,13 @@ export class DeadlineWatcher {
                     this._log.warn(`DeadlineWatcher: chain ${chainId} tick failed`, e);
                 }
             }
-            if (changed && this._saveSeen) {
+            if (changed && this._saveSeen) this._seenDirty = true;
+            if (this._seenDirty && this._saveSeen) {
                 try {
                     const out = {};
                     for (const [chainId, ids] of this._seen.entries()) out[chainId] = Array.from(ids);
                     await this._saveSeen(out);
+                    this._seenDirty = false;
                 } catch (e) {
                     this._log.warn('DeadlineWatcher: saveSeen failed', e);
                 }
@@ -252,11 +256,6 @@ export class DeadlineWatcher {
         }
 
         const fresh = due.filter((d) => !seen.has(d.key));
-        for (const d of fresh) {
-            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(d.key);
-            changed = true;
-        }
         this._seen.set(chainId, seen);
         if (fresh.length === 0) return changed;
 
@@ -264,17 +263,25 @@ export class DeadlineWatcher {
         fresh.sort((a, b) => a.remaining - b.remaining);
 
         if (fresh.length > MAX_NOTIFICATIONS_PER_TICK) {
-            await this._safeNotify({
+            const delivered = await this._safeNotify({
                 kind: 'deadline-summary',
                 title: `${fresh.length} deadlines approaching`,
                 body: `${fresh.length} items on ${chainLabel} expire or close within ${describeWindow(this._windowSeconds)}. Your ${LABEL_BY_KIND[fresh[0].kind]} is first, ${fresh[0].remainingText}.`,
                 data: { chainId, count: fresh.length, kinds: fresh.map((d) => d.kind) },
             });
+            if (delivered) {
+                for (const d of fresh) {
+                    if (seen.size >= SEEN_CAP_PER_CHAIN) break;
+                    seen.add(d.key);
+                    changed = true;
+                }
+            }
             return changed;
         }
 
         for (const d of fresh) {
-            await this._safeNotify({
+            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
+            const delivered = await this._safeNotify({
                 kind: 'deadline',
                 title: `${LABEL_BY_KIND[d.kind][0].toUpperCase()}${LABEL_BY_KIND[d.kind].slice(1)} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
                 body: d.body(chainLabel),
@@ -287,6 +294,10 @@ export class DeadlineWatcher {
                     ...(d.endBlock != null ? { endBlock: d.endBlock } : {}),
                 },
             });
+            if (delivered) {
+                seen.add(d.key);
+                changed = true;
+            }
         }
         return changed;
     }
@@ -439,9 +450,10 @@ export class DeadlineWatcher {
 
     async _safeNotify(n) {
         try {
-            await this._notify(n);
+            return await this._notify(n) !== false;
         } catch (e) {
             this._log.error('DeadlineWatcher: notify failed', e);
+            return false;
         }
     }
 }

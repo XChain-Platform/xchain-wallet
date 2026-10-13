@@ -63,7 +63,7 @@ export class DispenserEscrowWatcher {
      * @param {() => Promise<import('./getActiveAddresses.js').ActiveAddress[]>} deps.getActiveAddresses
      * @param {(chainId: string) => import('../sdk/SDKRegistry.js').XChainSDKLike} deps.getSdkForChain
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
      * @param {() => Promise<object | null>} [deps.loadSeen]
      * @param {(seen: object) => (void | Promise<void>)} [deps.saveSeen]
      * @param {number} [deps.intervalMs]
@@ -108,6 +108,7 @@ export class DispenserEscrowWatcher {
         /** @type {Map<string, Set<string>>} chainId -> announced `actionIndex:bucket` keys */
         this._seen = new Map();
         this._seenLoaded = false;
+        this._seenDirty = false;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -129,6 +130,7 @@ export class DispenserEscrowWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._seenDirty = false;
         this._addressPoll.reset();
     }
 
@@ -187,11 +189,13 @@ export class DispenserEscrowWatcher {
                     this._log.warn(`DispenserEscrowWatcher: chain ${chainId} tick failed`, e);
                 }
             }
-            if (changed && this._saveSeen) {
+            if (changed && this._saveSeen) this._seenDirty = true;
+            if (this._seenDirty && this._saveSeen) {
                 try {
                     const out = {};
                     for (const [chainId, ids] of this._seen.entries()) out[chainId] = Array.from(ids);
                     await this._saveSeen(out);
+                    this._seenDirty = false;
                 } catch (e) {
                     this._log.warn('DispenserEscrowWatcher: saveSeen failed', e);
                 }
@@ -276,17 +280,13 @@ export class DispenserEscrowWatcher {
         }
 
         const fresh = low.filter((d) => !seen.has(`${d.actionIndex}:${d.bucket}`));
-        for (const d of fresh) {
-            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(`${d.actionIndex}:${d.bucket}`);
-            changed = true;
-        }
         this._seen.set(chainId, seen);
 
         for (const d of fresh) {
+            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
             const empty = d.bucket === 'empty';
             try {
-                await this._notify({
+                const delivered = await this._notify({
                     kind: 'dispenser-escrow',
                     title: empty ? `${d.giveTick} dispenser is empty` : `${d.giveTick} dispenser is running low`,
                     body: empty
@@ -304,6 +304,10 @@ export class DispenserEscrowWatcher {
                         intent: 'refill',
                     },
                 });
+                if (delivered !== false) {
+                    seen.add(`${d.actionIndex}:${d.bucket}`);
+                    changed = true;
+                }
             } catch (e) {
                 this._log.error('DispenserEscrowWatcher: notify failed', e);
             }
