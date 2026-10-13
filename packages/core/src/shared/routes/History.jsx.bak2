@@ -1,0 +1,4204 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Button,
+    ChainBadge,
+    EmptyState,
+    Icon,
+    ListPage,
+    PageHeader,
+    Screen,
+    Skeleton,
+    StatusMessage,
+    VerifiedBadge,
+} from '@xchain-wallet/core/ui';
+import { registry as registryLib } from '@xchain-wallet/core';
+import * as branding from '@xchain-wallet/core/branding/branding.js';
+import {
+    isEntryReplaceable,
+    isReplaceCallAvailable,
+    replaceFromHistoryEntry,
+    cancelUndoSnapshot,
+    undoCancel,
+} from '../../flows/rbfReplace.js';
+import { rbfFailureMessage } from '../utils/rbfFailureMessage.js';
+import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { useFiatRate } from '../hooks/useFiatRate.js';
+import { useActionProofVerification } from '../hooks/useProofVerification.js';
+import { formatFiat } from '../components/BalanceList.jsx';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { useToast } from '../components/ToastHost.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
+import { groupHistoryEntries } from '../utils/historyGrouping.js';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
+import {
+    compareMergedEntries,
+    mempoolRowToEntry,
+    mergePendingEntries,
+    pendingDisplayState,
+    pendingTxToEntry,
+} from '../utils/pendingHistory.js';
+import { t } from '../../i18n/index.js';
+import { humanizeError } from '../utils/humanizeError.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { TxStatusTimeline } from '../components/TxStatusTimeline.jsx';
+import { StalenessLabel } from '../components/StalenessLabel.jsx';
+import { flows as flowsLib } from '@xchain-wallet/core';
+import {
+    applyHistoryFilters,
+    classifyEntryAction,
+    classifyEntryStatus,
+    ACTION_TYPE_OPTIONS,
+    STATUS_OPTIONS,
+} from '../utils/historyFilter.js';
+import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
+import { contractDisplayLabel } from './contractResponseShape.js';
+import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
+import { copyText } from '../clipboard.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { transactionReceiptText } from '../utils/transactionReceipt.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
+import styles from './History.module.css';
+
+const HISTORY_CHAIN_FILTER_KEY = 'history';
+const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+const HISTORY_PAGE_SIZE = 100;
+
+function historyChainFilterKey(walletId) {
+    return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
+}
+
+function groupingModeStorageKey(walletId) {
+    return `${GROUPING_MODE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readPersistedGroupingMode(walletId) {
+    try {
+        const v = globalThis.localStorage?.getItem(groupingModeStorageKey(walletId));
+        return v === 'flat' ? 'flat' : 'grouped';
+    } catch {
+        return 'grouped';
+    }
+}
+
+function writePersistedGroupingMode(walletId, mode) {
+    try {
+        globalThis.localStorage?.setItem(groupingModeStorageKey(walletId), mode);
+    } catch { /* best-effort */ }
+}
+
+const chainRegistry = registryLib.defaultRegistry();
+
+// LINK action coin field is a ticker (e.g. "BTC", "DOGE", "LTC"). The
+// chain registry's descriptor.coin is the lowercase coin name. This
+// map covers every coin descriptor bundled in this wallet today;
+// unknown tickers degrade to "render the raw coin code without
+// chainId resolution," which keeps the row visible without crashing
+// when the platform adds a coin before the wallet does.
+const COIN_TICKER_TO_NAME = {
+    BTC: 'bitcoin',
+    DOGE: 'dogecoin',
+    LTC: 'litecoin',
+};
+
+/**
+ * M2.3: one copy table for every pending state, read by the row badge
+ * and by the detail panel that row opens. Two tables would eventually
+ * disagree, and a row reading "pending" above a panel saying the network
+ * never saw the transaction teaches the user to believe neither.
+ *
+ * `pendingDisplayState` decides which entry applies; nothing here reads
+ * the raw fields itself.
+ */
+const PENDING_COPY = {
+    'awaiting-network': {
+        row: 'pending.row.awaitingNetwork',
+        headline: 'pending.detail.awaitingNetwork',
+        help: 'pending.detail.awaitingNetworkHelp',
+    },
+    seen: {
+        row: 'pending.row.seen',
+        headline: 'pending.detail.seen',
+        help: 'pending.detail.seenHelp',
+    },
+    'not-seen': {
+        row: 'pending.row.notSeen',
+        headline: 'pending.detail.notSeen',
+        help: 'pending.detail.notSeenHelp',
+    },
+    dropped: {
+        row: 'pending.row.dropped',
+        headline: 'pending.detail.dropped',
+        help: 'pending.detail.droppedHelp',
+    },
+    replaced: {
+        row: 'pending.row.replaced',
+        headline: 'pending.detail.replaced',
+        help: 'pending.detail.replacedHelp',
+    },
+    // The block is proven and no explorer row will ever take the entry's
+    // place. The headline says what the block settled: a plain coin transfer
+    // has no action to speak of, an action-carrying transaction the service
+    // recorded nothing for had no effect beyond the coins it moved. Which
+    // one applies is `confirmedCopyFor`'s call, from the entry's own tick.
+    confirmed: {
+        row: 'pending.row.confirmed',
+        headline: 'pending.detail.confirmed',
+        help: 'pending.detail.confirmedHelp',
+    },
+    // The wallet gave up before the network took the send (compose, sign or
+    // broadcast threw). The only record of it is the wallet's own, so the
+    // row is the one place the user can learn the send never happened.
+    failed: {
+        row: 'pending.row.failed',
+        headline: 'pending.detail.failed',
+        help: 'pending.detail.failedHelp',
+    },
+};
+
+/** The `confirmed` copy for a transaction that carried an action the service did not record. */
+const CONFIRMED_NO_EFFECT_COPY = {
+    row: 'pending.row.confirmed',
+    headline: 'pending.detail.confirmedNoEffect',
+    help: 'pending.detail.confirmedNoEffectHelp',
+};
+
+/**
+ * The states where something has gone wrong enough that the user should
+ * pick the row out of a list without reading it (M2 acceptance test 3).
+ * Healthy pending and "nothing has ever reported this" must not look
+ * alike.
+ */
+const PENDING_WARNING_STATES = new Set(['not-seen', 'dropped', 'failed']);
+
+/**
+ * The pending state of an entry, or null when there is nothing to
+ * describe. A blockless row carrying no pending metadata (an older
+ * shell, a synthesized demo row) gets no state rather than a guessed
+ * one: every state is a claim about the network, and for those rows we
+ * hold no evidence for any of them.
+ *
+ * @param {{ pending?: object } | null | undefined} entry
+ */
+function pendingStateOf(entry) {
+    return entry?.pending ? pendingDisplayState(entry, Date.now()) : null;
+}
+
+/**
+ * Did this local record move the chain's own coin and nothing else? The
+ * record's `tick` is the ticker the send moved; a plain transfer carries the
+ * native one, an action-carrying transaction carries a token's or none.
+ *
+ * @param {{ chainId?: string, raw?: { tick?: string } } | null | undefined} entry
+ */
+function isNativeCoinMovement(entry) {
+    const coin = coinOfChainId(entry?.chainId);
+    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    const tick = String(entry?.raw?.tick || '').toUpperCase();
+    return Boolean(nativeTicker) && tick === nativeTicker;
+}
+
+/**
+ * The copy for a pending state, with the one state that has two voices
+ * resolved: a confirmed entry speaks of a settled transfer or of an action
+ * that had no effect.
+ *
+ * @param {string} state
+ * @param {object} entry
+ */
+function pendingCopyFor(state, entry) {
+    if (state === 'confirmed' && !isNativeCoinMovement(entry)) return CONFIRMED_NO_EFFECT_COPY;
+    return PENDING_COPY[state];
+}
+
+/**
+ * The handle History keeps on the row the user opened, alongside its
+ * key. Lowercased because the pending side normalizes hashes and the
+ * confirmed feed does not.
+ *
+ * @param {{ chainId?: string, txHash?: string } | null | undefined} entry
+ */
+function rememberedSelection(entry) {
+    return {
+        chainId: String(entry?.chainId || ''),
+        txHash: String(entry?.txHash || '').toLowerCase(),
+    };
+}
+
+/**
+ * SEND wire layouts, mirrored from the SDK's `parseActionString`
+ * (`xchain-sdk/src/x402.js`). The wallet cannot import it: the SDK is a
+ * host-side dependency and `@xchain-wallet/core` ships without it.
+ *
+ * The exact segment count is part of the contract, not a shortcut. A
+ * memo containing a pipe shifts every field after it, so a layout that
+ * merely required "at least N segments" would pair one output's amount
+ * with another output's destination.
+ */
+const SEND_WIRE_LAYOUTS = {
+    0: { count: 6,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 5 }] },
+    1: { count: 8,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 7 },
+                              { tick: 2, amount: 5, destination: 6, memo: 7 }] },
+    2: { count: 9,  outputs: [{ tick: 2, amount: 3, destination: 4, memo: 8 },
+                              { tick: 5, amount: 6, destination: 7, memo: 8 }] },
+    3: { count: 10, outputs: [{ tick: 2, amount: 3, destination: 4, memo: 5 },
+                              { tick: 6, amount: 7, destination: 8, memo: 9 }] },
+};
+
+const ACTION_NAME_RE = /^[A-Z_]{2,32}$/;
+
+/**
+ * The SDK's `isPosNum` (`xchain-sdk/src/x402.js`), the gate every output
+ * of `parseActionString` passes: a bare decimal above zero, with no
+ * sign, no exponent and no surrounding whitespace. Another hand-copy for
+ * the same reason the layouts are, and it drifts as easily.
+ *
+ * The SDK settles "above zero" through a bignumber; the shape settles it
+ * here, since a string of digits is zero exactly when none of them is
+ * 1-9. Asking a JS number instead would answer in the wrong arithmetic
+ * and there is no third party to hand the parsed value to anyway.
+ *
+ * @param {unknown} v
+ */
+function isWireAmount(v) {
+    const s = String(v);
+    return /^\d+(\.\d+)?$/.test(s) && /[1-9]/.test(s);
+}
+
+/**
+ * What a pending transaction is about to do, read off its action data
+ * (I-9). SEND v0-v3 is the only layout anything on this platform can
+ * parse, so it is the only one this claims to understand. Every other
+ * action shows its raw segments under its own name; deriving per-output
+ * amounts for one would be inventing them.
+ *
+ * Amounts travel as the strings the wire carried. Nothing here does
+ * arithmetic on them, so there is no precision to lose.
+ *
+ * @param {{ pending?: { data?: string | null }, raw?: object, action?: string }} entry
+ * @returns {{ kind: 'send' | 'segments' | 'local' | 'none', action: string,
+ *             outputs: Array<{tick: string, amount: string, destination: string, memo: string}>,
+ *             segments: string[] }}
+ */
+function describePendingAction(entry) {
+    const none = { kind: /** @type {'none'} */ ('none'), action: '', outputs: [], segments: [] };
+    const data = entry?.pending?.data;
+    if (typeof data !== 'string' || data === '') {
+        // Nothing network-reported. Our own record of a send still knows
+        // what we asked for, and the panel labels it as ours.
+        const raw = entry?.raw || {};
+        const amount = raw.amount == null ? '' : String(raw.amount);
+        const tick = raw.tick ? String(raw.tick) : '';
+        if (!amount || !tick) return none;
+        return {
+            kind: /** @type {'local'} */ ('local'),
+            action: String(entry?.action || ''),
+            outputs: [{ tick, amount, destination: String(raw.destination || ''), memo: '' }],
+            segments: [],
+        };
+    }
+
+    const segments = data.normalize('NFC').split('|');
+    const wireAction = String(segments[0] || '').trim().toUpperCase();
+    const action = ACTION_NAME_RE.test(wireAction)
+        ? wireAction
+        : String(entry?.action || '').toUpperCase();
+    const asSegments = {
+        kind: /** @type {'segments'} */ ('segments'), action, outputs: [], segments,
+    };
+    if (wireAction !== 'SEND') return asSegments;
+
+    const layout = SEND_WIRE_LAYOUTS[Number(String(segments[1] || '').trim())];
+    if (!layout || segments.length !== layout.count) return asSegments;
+    const outputs = [];
+    for (const map of layout.outputs) {
+        const amount = String(segments[map.amount] || '');
+        // Matched the count but the amount position holds something that
+        // is not an amount: not a SEND we understand, and the segments
+        // are the honest answer. Whitespace is not trimmed away first
+        // because the SDK does not trim either, and this has to fail
+        // wherever the SDK fails or the two disagree about what the
+        // network will accept.
+        if (!isWireAmount(amount)) return asSegments;
+        outputs.push({
+            tick: String(segments[map.tick] || '').toUpperCase(),
+            amount,
+            destination: String(segments[map.destination] || ''),
+            memo: String(segments[map.memo] || '').trim(),
+        });
+    }
+    return { kind: /** @type {'send'} */ ('send'), action, outputs, segments };
+}
+
+/**
+ * M2.5: which verb the row annotation uses, keyed by the direction the
+ * merge already decided (I-9). A null direction is not in the table on
+ * purpose: it means neither party was identified as ours, and a plus or
+ * a minus there would put a sign on money the wallet cannot attribute.
+ */
+const PENDING_AMOUNT_COPY = {
+    out: 'pending.amount.sending',
+    in: 'pending.amount.receiving',
+};
+
+/**
+ * M2.5: what a pending transaction is about to move, or null when the
+ * wallet cannot say.
+ *
+ * Null is the answer for every action but SEND v0-v3 and our own record
+ * of a send. A MINT carries its supply at the same segment offset a SEND
+ * carries its amount, so reading it positionally would invent a figure
+ * rather than report one, which is the whole point of I-9. The decode
+ * comes from `describePendingAction`, which yields outputs for nothing
+ * else; the kind check below states that contract rather than enforcing
+ * it a second time.
+ *
+ * Amount strings are the wire's own, untouched: a value too large or too
+ * precise for a JS number reaches the screen intact because nothing here
+ * parses one.
+ *
+ * @param {any} entry
+ * @returns {{ direction: 'in' | 'out' | null,
+ *             outputs: Array<{ tick: string, amount: string }> } | null}
+ */
+function pendingAmountAnnotation(entry) {
+    if (!entry?.pending) return null;
+    const desc = describePendingAction(entry);
+    if (desc.kind !== 'send' && desc.kind !== 'local') return null;
+    const outputs = desc.outputs.filter((o) => o.amount !== '' && o.tick !== '');
+    if (outputs.length === 0) return null;
+    return { direction: entry.pending.direction ?? null, outputs };
+}
+
+/**
+ * History route: §23 unified timeline + §23.5 cross-chain thread
+ * rendering.
+ *
+ * Read-only view that aggregates `getHistory(addr, 'address')` across
+ * the wallet's addresses on every chain the wallet uses. Per row:
+ *   - action label / amount / source / block / timestamp
+ *   - 🔗 badge if the row is one side of a LINK pairing
+ *   - vertical connector between two rows when both sides of a pair
+ *     are visible in the current filtered view
+ *
+ * Click a row → opens an inline detail card. For LINK-threaded rows
+ * the card renders side-by-side with the peer ACTION fetched via
+ * `messaging.getActionByIndex`, matching the §23.5 dual-side layout.
+ *
+ * Filters:
+ *   - Chain chips (toggle each chainId on/off)
+ *   - "Cross-chain only": keep only entries that are part of a LINK
+ *     pairing (regardless of whether both peers are in the result set)
+ *
+ * Wallet addresses are resolved up-front via
+ * `messaging.getAddressesByChain(walletId)`. Per (chain, address) we
+ * fan out two parallel reads (`getAddressHistory` + `getLinksForAddress`)
+ * and merge into a flat `entries` list. A LINK is recorded on-chain by
+ * the broadcasting side only, so each row's `link` is threaded from
+ * whichever side of the pairing we saw, and applies to BOTH the local
+ * action and its peer action when the peer is also in the wallet's
+ * history (typical case: cross-chain LINK between two addresses owned
+ * by the same wallet).
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, history is scoped to that account's addresses
+ * @param {() => void} props.onBack
+ * @param {() => void} [props.onReceive]   surfaces a Receive CTA in the empty-state nudges (G077)
+ * @param {string} [props.initialSearchQuery]   pre-populates the search box on mount; lets TokenDetail open History scoped to one tick (G071)
+ * @param {{ chainId?: string, actionIndex?: string, txHash?: string } | null} [props.initialFocus]
+ *        when set, the matching entry is auto-selected and scrolled into
+ *        view as soon as it loads. §24.6 / Cluster Y FOLLOWUP 4; used
+ *        by the desktop detach-pending-tx path.
+ */
+export function History({ walletId, accountId, onBack, onReceive, onSelectEntry, initialSearchQuery = '', initialChainCoin = '', initialFocus = null }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const isFull = variant === 'full';
+    const { showToast } = useToast();
+
+    const [addressesByChain, setAddressesByChain] = useState(
+        /** @type {Record<string, any[]> | null} */ (null),
+    );
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+    const historyLoadedRef = useRef(false);
+    historyLoadedRef.current = historyLoaded;
+    const [refreshing, setRefreshing] = useState(false);
+    const [addressesReload, setAddressesReload] = useState(0);
+    // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
+    // history+links fan-out completion. Surfaces as a "Last synced …"
+    // hint in the filter bar so the user can spot stale views.
+    const [historyFetchedAt, setHistoryFetchedAt] = useState(
+        /** @type {number | null} */ (null),
+    );
+    const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
+    // §28.3 "Indexed" timeline stage: per-chain indexer watermark
+    // (latest processed block index) keyed by chainId. Fetched once per
+    // loaded chain via messaging.getIndexerWatermark; threaded into the
+    // TxStatusTimeline so a confirmed row can show whether the indexer has
+    // caught up to its block.
+    const [indexerWatermarkByChainId, setIndexerWatermarkByChainId] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
+    const [enabledChains, setEnabledChains] = useState(/** @type {Set<string>} */ (new Set()));
+    const [crossChainOnly, setCrossChainOnly] = useState(false);
+    const [multisigOnly, setMultisigOnly] = useState(false);
+    const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
+    const [groupingMode, setGroupingModeState] = useState(
+        /** @type {'grouped' | 'flat'} */ (() => readPersistedGroupingMode(walletId)),
+    );
+    const setGroupingMode = (mode) => {
+        setGroupingModeState(mode);
+        writePersistedGroupingMode(walletId, mode);
+    };
+    const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
+    const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
+    const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
+    const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
+    // Default to the last 30 days so a fresh History view surfaces
+    // recent activity without the user having to pick a range. ISO
+    // YYYY-MM-DD format matches what <input type="date"> expects.
+    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
+    const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
+    const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+    // The export modal controls only the file representation. Row selection
+    // remains owned by the History filters so the file matches the list.
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
+    const [exportColumns, setExportColumns] = useState(
+        /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
+    );
+    const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
+    // M2.3: the open row is remembered by TRANSACTION as well as by key.
+    // A pending entry is keyed on its hash and a confirmed one on its
+    // action index, so the key of the row the user is reading changes at
+    // the moment the transaction confirms, and changes again if a shallow
+    // reorg reassigns that index. Without a second handle the detail
+    // closes itself exactly when it finally has something new to say.
+    const selectedTxRef = useRef(/** @type {{ chainId: string, txHash: string } | null} */ (null));
+    const [peerCache, setPeerCache] = useState(
+        /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
+    );
+    // §24.6 / Cluster Y FOLLOWUP 4; once a detached-window's initial
+    // route resolves, ref-flag this so we don't re-select on every
+    // re-render or after the user manually navigates away from the row.
+    const initialFocusFiredRef = useRef(false);
+    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Step 1: resolve the wallet's addresses grouped by chainId.
+    useEffect(() => {
+        setAddressesByChain(null);
+        setEntries([]);
+        setHistoryFetchedAt(null);
+        setLoadingChains(new Set());
+        setRefreshing(false);
+        setLoadError(null);
+        setIndexerWatermarkByChainId({});
+        setMultisigAddress(null);
+        setSelectedKey(null);
+        selectedTxRef.current = null;
+        setPeerCache({});
+        setExpandedGroups(new Set());
+        setGroupingModeState(readPersistedGroupingMode(walletId));
+        observedAtRef.current.clear();
+        lastMempoolSeenRef.current.clear();
+        rememberedMempoolRef.current.clear();
+        initialFocusFiredRef.current = false;
+        let cancelled = false;
+        setLoadError(null);
+        setAddressesByChain(null);
+        setHistoryLoaded(false);
+        messaging.getAddressesByChain(walletId, accountId)
+            .then((byChain) => {
+                if (cancelled) return;
+                setAddressesByChain(byChain || {});
+                const all = new Set(
+                    Object.entries(byChain || {})
+                        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+                        .map(([cid]) => cid),
+                );
+                // When the caller asked us to scope to a specific coin
+                // family (e.g. arrived from the Bitcoin TokenDetail's
+                // History button), narrow enabledChains to only those
+                // chains. One-shot override: we deliberately skip the
+                // remembered-set restore and don't persist this scope,
+                // so revisiting History via the menu reverts to the
+                // user's last manually-chosen filter.
+                if (initialChainCoin) {
+                    const scoped = new Set(
+                        [...all].filter((cid) => chainRegistry.get(cid)?.coin === initialChainCoin),
+                    );
+                    setEnabledChains(scoped.size > 0 ? scoped : all);
+                    return;
+                }
+                // §23.5 / G052: restore the user's last chain-filter
+                // choice if one is stored, intersected with the wallet's
+                // currently-active chains so a removed chain doesn't
+                // leave a stale entry. Falls back to "all enabled".
+                const remembered = readChainSet(historyChainFilterKey(walletId), all);
+                setEnabledChains(remembered ?? all);
+            })
+            .catch((err) => {
+                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            });
+        return () => { cancelled = true; };
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
+
+    // §22 Multisig-only filter (Step 22). Resolve the wallet's
+    // multisig receive address up-front so the chip can filter
+    // entries by exact match without re-running deriveMultisigAddress
+    // on every render. Best-effort: silently leaves the chip
+    // disabled when no multisig is configured or when the BTC chain
+    // isn't in the registry.
+    useEffect(() => {
+        let cancelled = false;
+        const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+        if (!btcChain) return undefined;
+        setMultisigAddress(null);
+        messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
+            .then((r) => {
+                if (cancelled) return;
+                if (r && typeof r.address === 'string') setMultisigAddress(r.address);
+            })
+            .catch(() => { /* no multisig configured; chip stays disabled */ });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    // M2.1: pending rows have to keep the same timestamp between polls or
+    // they would jump around the list, so the moment WE first saw each one is
+    // remembered here rather than recomputed. It is only ever a fallback: a
+    // row the network has actually seen carries `first_seen` instead.
+    const observedAtRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Read inside the fetch effect, which must not re-run when the list it
+    // produces changes, so the current list travels by ref rather than by dep.
+    const entriesRef = useRef(/** @type {HistoryEntry[]} */ ([]));
+    entriesRef.current = entries;
+    const rememberObservedAt = (chainId, txHash, nowMs) => {
+        const key = `${chainId}:${String(txHash || '').toLowerCase()}`;
+        const seen = observedAtRef.current.get(key);
+        if (seen != null) return seen;
+        observedAtRef.current.set(key, nowMs);
+        return nowMs;
+    };
+    // M2.2 needs to tell "the network never saw this" apart from "the network
+    // saw it and no longer does", and the difference is only visible ACROSS
+    // polls: once the mempool row is gone, the read that would have carried it
+    // is simply absent. So the last poll that did list each transaction is
+    // remembered here, and travels to the entry that outlives the row.
+    const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Incoming transactions have no local PendingTx record to keep them in
+    // the list after they leave the mempool. Retain the last network entry so
+    // a successful later read can show it as dropped until confirmation takes
+    // its place. A failed read keeps the last known state and proves nothing
+    // about whether the transaction remains in the mempool.
+    const rememberedMempoolRef = useRef(/** @type {Map<string, any>} */ (new Map()));
+
+    // One re-fetch rule for this mount, on the same interval the beat below
+    // runs at: a `focus` bump only buys something once the rows are older than
+    // one beat, and a user flicking between windows used to land a full
+    // history fan-out per switch. See flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(flowsLib.BALANCE_POLL_INTERVAL_MS));
+
+    // M2.1: History had no cadence of its own; a confirmed row only ever
+    // appeared because the route remounted. Pending rows need one, so the
+    // fetch below re-runs on the same 20s beat Home already uses for
+    // balances, plus on focus, plus on mount. The tick is what re-triggers
+    // it; the fetch itself decides whether to show the loading state.
+    const [refreshTick, setRefreshTick] = useState(0);
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        // The addresses or the wallet just changed, so the rows on screen no
+        // longer describe what is being fetched: no earlier bump may hold off
+        // the next one.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        // Every bump costs a full fan-out per (chain, address), and the fan-out
+        // effect below now owns the throttle end to end: it claims the
+        // in-flight slot when it starts and restarts the window where it lands.
+        // So the bump no longer notes a success of its own (asking for a
+        // fan-out is not the same as having had one) and only has to decide
+        // whether to ask at all. It skips while one is still running: a read
+        // the SDK is holding open on a `Retry-After` can sit for up to 60 s,
+        // and a 20 s beat firing through it would put three whole fan-outs
+        // against the bucket the first one is waiting on.
+        const bump = () => {
+            if (throttle.isInFlight()) return;
+            setRefreshTick((n) => n + 1);
+        };
+        const id = setInterval(() => {
+            // A hidden tab is not watching; polling it only burns the shared
+            // rate limit the explorer zone is sized against.
+            if (typeof document !== 'undefined' && document.hidden) return;
+            bump();
+        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        if (typeof window === 'undefined') return () => clearInterval(id);
+        // A refocus is worth a fan-out only when the rows are already an
+        // interval old; a burst of window switches used to cost one each.
+        // `start()` rather than `claim()`: the fan-out this bump asks for is
+        // what releases the slot, when it lands, so the focus must claim the
+        // slot and leave it claimed. The fan-out effect re-marks it with its
+        // own `reset(); start()` a tick later, which is harmless.
+        const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
+        window.addEventListener('focus', onFocus);
+        return () => {
+            clearInterval(id);
+            window.removeEventListener('focus', onFocus);
+        };
+    }, [addressesByChain, walletId]);
+
+    // Step 2: fan out history + links + unconfirmed rows + our own in-flight
+    // sends per (chain, address). Merge results into a single sorted list.
+    useEffect(() => {
+        if (!addressesByChain) return;
+        const chainsToLoad = Object.entries(addressesByChain)
+            .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+            .map(([cid]) => cid);
+        if (chainsToLoad.length === 0) {
+            setEntries([]);
+            setHistoryLoaded(true);
+            setHistoryFetchedAt(null);
+            setRefreshing(false);
+            // Nothing to fetch, so nothing lands below to release the slot a
+            // focus may have claimed on the way here. `fail()` rather than
+            // `succeed()`: no read happened, so the window must not move.
+            pollThrottleRef.current.fail();
+            return;
+        }
+        let cancelled = false;
+        // This fan-out owns the throttle's in-flight slot from here until it
+        // lands below. `reset(); start()` rather than a plain `start()`,
+        // because `start()` marks the slot only when the WINDOW has aged, and
+        // the fan-outs that run regardless of the window (the mount, and the
+        // one a beat asked for) arrive with a window younger than the interval
+        // by the previous fan-out's own latency. Those would run unmarked, and
+        // the next beat would stack a second fan-out on one still waiting out a
+        // 429. Clearing the window first makes the claim unconditional.
+        const throttle = pollThrottleRef.current;
+        throttle.reset();
+        throttle.start();
+        setRefreshing(true);
+        // A background refresh must not blank the list it is refreshing; the
+        // loading state belongs to the first load only.
+        if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
+
+        // Cluster J FOLLOWUP 1: for the demo wallet, replace the SDK
+        // fetch with synthesized fixture data so the History view
+        // isn't an empty wasteland during the demo. Real history rows
+        // arrive once the user exits demo mode + funds the wallet.
+        const isDemo = flowsLib.isDemoWallet(walletId);
+        const optionalRows = (promise) => promise
+            .then((response) => extractRows(response))
+            .catch((err) => {
+                // An initial load can still show confirmed rows when an older
+                // explorer lacks an optional channel. A refresh keeps every
+                // shown row when any channel fails, because an empty fallback
+                // is indistinguishable from pending activity disappearing.
+                if (historyLoadedRef.current) throw err;
+                return [];
+            });
+
+        const tasks = [];
+        for (const cid of chainsToLoad) {
+            for (const a of addressesByChain[cid]) {
+                if (isDemo) {
+                    tasks.push(Promise.resolve({
+                        chainId: cid,
+                        address: a.address,
+                        addressLabel: a.label || '',
+                        history: flowsLib.synthesizeDemoHistory(cid, a.address),
+                        links: flowsLib.synthesizeDemoLinks(),
+                    }));
+                    continue;
+                }
+                tasks.push(
+                    Promise.all([
+                        messaging.getAddressHistory({ chainId: cid, address: a.address })
+                            .then((r) => extractRows(r)),
+                        optionalRows(messaging.getLinksForAddress({ chainId: cid, address: a.address })),
+                        // M2.1: both pending sources. Each degrades to [] on
+                        // the initial load, so an explorer without the
+                        // unconfirmed surface still shows confirmed history.
+                        // Refresh failures preserve the complete shown list.
+                        typeof messaging.getAddressMempool === 'function'
+                            ? messaging.getAddressMempool({ chainId: cid, address: a.address })
+                                .then((r) => ({ rows: extractRows(r), ok: true }))
+                                .catch((err) => {
+                                    // A refresh keeps every shown row when the read fails.
+                                    if (historyLoadedRef.current) throw err;
+                                    return { rows: [], ok: false };
+                                })
+                            : Promise.resolve({ rows: [], ok: false }),
+                        typeof messaging.getPendingTxsForAddress === 'function'
+                            ? optionalRows(messaging.getPendingTxsForAddress({ chainId: cid, address: a.address }))
+                            : Promise.resolve([]),
+                    ]).then(([history, links, mempoolRead, pendingTxs]) => (
+                        {
+                            chainId: cid,
+                            address: a.address,
+                            addressLabel: a.label || '',
+                            history,
+                            links,
+                            mempool: mempoolRead.rows,
+                            mempoolReadOk: mempoolRead.ok,
+                            pendingTxs,
+                        }
+                    )),
+                );
+            }
+        }
+
+        Promise.all(tasks).then((perAddrResults) => {
+            if (cancelled) return;
+            // The fan-out landed: release the slot and restart the window from
+            // here, so the next beat may ask for another and a refocus in
+            // between is dropped as too fresh. Every task catches to [], so
+            // this chain never rejects and there is no failure path to release
+            // the slot on. A cancelled fan-out deliberately releases nothing:
+            // it was replaced by a newer run of this effect, and that run took
+            // the slot for itself.
+            throttle.succeed();
+            // Build a (chainId, action_index) -> link record map so
+            // history rows can identify their peer cheaply. The protocol
+            // records a LINK on the broadcasting chain only, so the peer
+            // side is threaded here too, keyed off the SAME link row.
+            // The local key is always set (it is that chain's own LINK
+            // record); the peer key is set only when absent, so a chain's
+            // own LINK always wins over another chain's guess about it,
+            // regardless of which perAddrResults entry runs first.
+            /** @type {Map<string, { peerChainId: string | null, peerCoinTicker: string, peerActionIndex: string, linkActionIndex: string }>} */
+            const linkMap = new Map();
+            for (const r of perAddrResults) {
+                for (const link of r.links) {
+                    const sides = sidesFromLink(link, r.chainId);
+                    if (!sides) continue;
+                    const linkActionIndex = String(link.action_index ?? link.actionIndex ?? '');
+                    linkMap.set(keyFor(sides.local.chainId, sides.local.actionIndex), {
+                        peerChainId: sides.peer.chainId,
+                        peerCoinTicker: sides.peer.coinTicker,
+                        peerActionIndex: String(sides.peer.actionIndex),
+                        linkActionIndex,
+                    });
+                    // Peer chain unresolved (e.g. not a chain this wallet
+                    // supports): nothing to key the peer entry on.
+                    if (sides.peer.chainId == null) continue;
+                    const peerKey = keyFor(sides.peer.chainId, sides.peer.actionIndex);
+                    if (linkMap.has(peerKey)) continue;
+                    linkMap.set(peerKey, {
+                        peerChainId: sides.local.chainId,
+                        peerCoinTicker: sides.local.coinTicker,
+                        peerActionIndex: String(sides.local.actionIndex),
+                        linkActionIndex,
+                    });
+                }
+            }
+
+            /** @type {HistoryEntry[]} */
+            const all = [];
+            for (const r of perAddrResults) {
+                for (const row of r.history) {
+                    const aIdx = String(row.action_index ?? row.actionIndex ?? '');
+                    if (!aIdx) continue;
+                    // Normalized through the shared helper rather than inline,
+                    // so the standalone detail page can rebuild the SAME entry
+                    // from the same row when a pending action confirms under it.
+                    const entry = normalizeHistoryRow(row, {
+                        chainId: r.chainId,
+                        address: r.address,
+                        link: linkMap.get(keyFor(r.chainId, aIdx)) || null,
+                    });
+                    if (entry) all.push({ ...entry, receiveLabel: r.addressLabel });
+                }
+            }
+            // M2.1: build the pending side, then reconcile it against the
+            // confirmed side by transaction hash. A hash present on both is
+            // the SAME transaction that has just confirmed, and the confirmed
+            // record replaces the pending one in place rather than joining it.
+            const ownAddresses = new Set();
+            for (const cid of Object.keys(addressesByChain || {})) {
+                for (const a of (addressesByChain[cid] || [])) {
+                    if (a && a.address) ownAddresses.add(String(a.address).toLowerCase());
+                }
+            }
+            const nowMs = Date.now();
+            /** @type {any[]} */
+            const pendingCandidates = [];
+            const currentMempoolKeys = new Set();
+            const successfulMempoolScopes = new Set();
+            for (const r of perAddrResults) {
+                const scope = `${r.chainId}:${String(r.address || '').toLowerCase()}`;
+                if (r.mempoolReadOk) successfulMempoolScopes.add(scope);
+                for (const row of (r.mempool || [])) {
+                    const hash = String(row?.tx_hash ?? row?.txHash ?? '');
+                    if (!hash) continue;
+                    const key = `${r.chainId}:${hash.toLowerCase()}`;
+                    currentMempoolKeys.add(key);
+                    lastMempoolSeenRef.current.set(key, nowMs);
+                    const baseEntry = mempoolRowToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        row,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
+                    });
+                    const entry = baseEntry ? { ...baseEntry, receiveLabel: r.addressLabel } : baseEntry;
+                    pendingCandidates.push(entry);
+                    if (entry) rememberedMempoolRef.current.set(key, entry);
+                }
+                for (const record of (r.pendingTxs || [])) {
+                    // A failed record may have no txid (it died before
+                    // signing); its own id then keys the observation memory.
+                    const identity = record?.txid || (record?.status === 'failed' && record?.id ? `ptx-${record.id}` : null);
+                    if (!identity) continue;
+                    const key = `${r.chainId}:${String(identity).toLowerCase()}`;
+                    // A native send never has a mempool row above to refresh
+                    // its sighting from; the host's own read of the UTXO set
+                    // is that sighting, on the same clock.
+                    if (record.networkSeenNow) lastMempoolSeenRef.current.set(key, nowMs);
+                    pendingCandidates.push({ ...pendingTxToEntry({
+                        chainId: r.chainId,
+                        address: r.address,
+                        pendingTx: record,
+                        ownAddresses,
+                        observedAtMs: rememberObservedAt(r.chainId, identity, nowMs),
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
+                    }), receiveLabel: r.addressLabel });
+                }
+            }
+            for (const [key, entry] of rememberedMempoolRef.current) {
+                if (currentMempoolKeys.has(key)) continue;
+                const scope = `${entry.chainId}:${String(entry.address || '').toLowerCase()}`;
+                if (!successfulMempoolScopes.has(scope)) {
+                    pendingCandidates.push(entry);
+                    continue;
+                }
+                const remembered = {
+                    ...entry,
+                    pending: {
+                        ...entry.pending,
+                        origin: 'remembered',
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key)
+                            ?? entry.pending.lastMempoolSeenMs
+                            ?? entry.pending.observedAtMs,
+                    },
+                };
+                rememberedMempoolRef.current.set(key, remembered);
+                pendingCandidates.push(remembered);
+            }
+            const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
+            // Forget the observation times of transactions that are no longer
+            // pending, so the map tracks the mempool rather than growing with
+            // every transaction the wallet has ever made.
+            const liveKeys = new Set(merged.pending.map((e) => (
+                `${e.chainId}:${e.txHash || `ptx-${e.pending?.pendingTxId}`}`.toLowerCase()
+            )));
+            for (const key of [...observedAtRef.current.keys()]) {
+                if (!liveKeys.has(key)) observedAtRef.current.delete(key);
+            }
+            for (const key of [...lastMempoolSeenRef.current.keys()]) {
+                if (!liveKeys.has(key)) lastMempoolSeenRef.current.delete(key);
+            }
+            for (const key of [...rememberedMempoolRef.current.keys()]) {
+                if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
+            }
+            merged.entries.sort(compareMergedEntries);
+            setEntries(merged.entries);
+            setLoadingChains(new Set());
+            setHistoryFetchedAt(Date.now());
+            setHistoryLoaded(true);
+            setRefreshing(false);
+        }).catch((err) => {
+            if (cancelled) return;
+            throttle.fail();
+            setLoadingChains(new Set());
+            setRefreshing(false);
+            if (historyLoadedRef.current) {
+                showToast({
+                    message: humanizeError(err, 'refresh history').message,
+                    variant: 'error',
+                });
+            } else {
+                setHistoryLoaded(true);
+                setLoadError('Could not load history. Try again.');
+            }
+        });
+
+        return () => { cancelled = true; };
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId]);
+
+    // Lowercase set of every wallet address across every chain. Used by
+    // the action-type filter to discriminate Send (wallet is source)
+    // from Receive (wallet is destination).
+    const walletAddressSet = useMemo(() => {
+        const s = new Set();
+        for (const cid of Object.keys(addressesByChain || {})) {
+            for (const a of (addressesByChain[cid] || [])) {
+                if (a && a.address) s.add(String(a.address).toLowerCase());
+            }
+        }
+        return s;
+    }, [addressesByChain]);
+
+    const activeChainIds = Object.entries(addressesByChain || {})
+        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+        .map(([cid]) => cid);
+
+    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation counts on confirmed rows.
+    // The polled indexer watermark advances even when this wallet has no new
+    // activity. Loaded rows remain a fallback and cover a watermark that lags
+    // the history response during ingestion.
+    const chainTipByChainId = useMemo(() => {
+        /** @type {Record<string, number>} */
+        const tips = { ...indexerWatermarkByChainId };
+        for (const e of entries) {
+            if (!e || !e.chainId) continue;
+            // A record the wallet proved into a block names that block in
+            // its meta rather than in blockIndex; it is as real a lower
+            // bound for the tip as any explorer row.
+            const b = Number(e.blockIndex || e.pending?.confirmedBlockIndex || 0);
+            if (b <= 0) continue;
+            if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
+        }
+        return tips;
+    }, [entries, indexerWatermarkByChainId]);
+
+    // §28.3: fetch the indexer watermark (latest processed block)
+    // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
+    // indexer progress rather than the confirmed-implies-indexed fallback.
+    // Best-effort: a null/failed watermark for a chain is simply omitted, and
+    // the timeline degrades gracefully. Demo wallets skip the probe (there is
+    // no real explorer behind synthesized history).
+    useEffect(() => {
+        if (!addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        const chains = Object.entries(addressesByChain)
+            .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+            .map(([cid]) => cid);
+        if (chains.length === 0) return undefined;
+        let cancelled = false;
+        Promise.all(
+            chains.map((cid) =>
+                messaging.getIndexerWatermark({ chainId: cid })
+                    .then((r) => ({ cid, watermark: r && r.watermark != null ? Number(r.watermark) : null }))
+                    .catch(() => ({ cid, watermark: null })),
+            ),
+        ).then((results) => {
+            if (cancelled) return;
+            const next = {};
+            for (const { cid, watermark } of results) {
+                if (Number.isFinite(watermark) && watermark > 0) next[cid] = watermark;
+            }
+            setIndexerWatermarkByChainId(next);
+        });
+        return () => { cancelled = true; };
+    }, [addressesByChain, messaging, walletId, refreshTick]);
+
+    const visibleEntries = useMemo(() => {
+        let list = entries.filter((e) => enabledChains.has(e.chainId));
+        if (crossChainOnly) list = list.filter((e) => Boolean(e.link));
+        if (multisigOnly && multisigAddress) {
+            const lower = multisigAddress.toLowerCase();
+            list = list.filter((e) => {
+                const a = (e.address || e.source || e.dest || '').toLowerCase();
+                return a === lower;
+            });
+        }
+        return applyHistoryFilters(list, {
+            searchQuery,
+            actionTypes: actionTypeFilter,
+            statusSet: statusFilter,
+            dateFromMs: localDayStartMs(dateFrom),
+            // dateTo is interpreted as end-of-day so a "to: 2026-04-27"
+            // pick includes everything that happened that day.
+            dateToMs: localDayEndMs(dateTo),
+            walletAddresses: walletAddressSet,
+        });
+    }, [
+        entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress,
+        searchQuery, actionTypeFilter, statusFilter, dateFrom, dateTo,
+        walletAddressSet,
+    ]);
+
+    // §7/§8: SPV action verification. Verify only visible, confirmed
+    // entries that carry a numeric action index (an unconfirmed action has
+    // no checkpointable block yet). Off for demo wallets and when the user
+    // opts out via `verifyProofs` (default on). The map is keyed by
+    // entry.key; EntryRow badges from it.
+    const proofSettings = useSettings();
+    const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
+    const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
+        && !flowsLib.isDemoWallet(walletId);
+    // History-local fiat toggle, persisted on the Settings record
+    // (same nested-patch pattern as the other §35 settings writes) so the
+    // choice survives navigation and syncs across shells.
+    const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
+    const fiatCurrency = proofSettings.settings?.fiatCurrency || 'USD';
+    // Context shortcuts share the trigger's empty-view guard. A disabled
+    // button must not have a keyboard path that opens the same action.
+    useScreenShortcuts({
+        keys: {
+            '/': () => { searchInputRef.current?.focus(); },
+            e: () => {
+                if (visibleEntries.length > 0) setExportModalOpen(true);
+            },
+        },
+    });
+    const toggleShowFiatInHistory = async () => {
+        if (fiatToggleBusy) return;
+        setFiatToggleBusy(true);
+        try {
+            await proofSettings.update({ showFiatInHistory: !showFiatInHistory });
+        } catch {
+            // Best-effort; the toggle simply won't persist this time.
+        } finally {
+            setFiatToggleBusy(false);
+        }
+    };
+    const verifyItems = useMemo(
+        () => visibleEntries
+            .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
+            .map((e) => ({ key: e.key, chainId: e.chainId, actionIndex: e.actionIndex })),
+        [visibleEntries],
+    );
+    const actionVerifyMap = useActionProofVerification({
+        messaging,
+        items: verifyItems,
+        enabled: verifyProofsEnabled,
+    });
+
+    const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
+    const filtersActive = Boolean(
+        searchQuery
+        || actionTypeFilter.size > 0
+        || statusFilter.size > 0
+        || dateFrom
+        || dateTo
+        || chainFilterActive
+        || crossChainOnly
+        || multisigOnly
+    );
+
+    const toggleSetMember = (setter) => (id) => {
+        setter((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const clearAllFilters = () => {
+        // Snapshot the active filter set so the §37.2 Undo toast can
+        // restore exactly what the user had before pressing Clear.
+        const snapshot = {
+            searchQuery,
+            actionTypeFilter: new Set(actionTypeFilter),
+            statusFilter: new Set(statusFilter),
+            dateFrom,
+            dateTo,
+            enabledChains: new Set(enabledChains),
+            chainFilterActive,
+            crossChainOnly,
+            multisigOnly,
+        };
+        const hadAny = Boolean(filtersActive);
+        setSearchQuery('');
+        setActionTypeFilter(new Set());
+        setStatusFilter(new Set());
+        setDateFrom('');
+        setDateTo('');
+        setEnabledChains(new Set(activeChainIds));
+        setCrossChainOnly(false);
+        setMultisigOnly(false);
+        writeChainSet(historyChainFilterKey(walletId), null);
+        if (hadAny) {
+            showToast({
+                message: 'Filter cleared',
+                actionLabel: 'Undo',
+                onAction: () => {
+                    setSearchQuery(snapshot.searchQuery);
+                    setActionTypeFilter(snapshot.actionTypeFilter);
+                    setStatusFilter(snapshot.statusFilter);
+                    setDateFrom(snapshot.dateFrom);
+                    setDateTo(snapshot.dateTo);
+                    setEnabledChains(snapshot.enabledChains);
+                    setCrossChainOnly(snapshot.crossChainOnly);
+                    setMultisigOnly(snapshot.multisigOnly);
+                    writeChainSet(
+                        historyChainFilterKey(walletId),
+                        snapshot.chainFilterActive ? snapshot.enabledChains : null,
+                    );
+                },
+            });
+        }
+    };
+
+    const updateDateFrom = (value) => {
+        setDateFrom(value);
+        if (value && dateTo && value > dateTo) setDateTo(value);
+    };
+
+    const updateDateTo = (value) => {
+        setDateTo(value);
+        if (value && dateFrom && value < dateFrom) setDateFrom(value);
+    };
+
+    // For drawing the vertical connector: an entry is "threaded with
+    // the entry above it" iff both sides are linked AND the row above
+    // is its peer (same linkActionIndex). We render the connector on
+    // the lower row in the visible list (DESC order: lower = older).
+    const connectorByKey = useMemo(() => {
+        /** @type {Set<string>} */
+        const set = new Set();
+        for (let i = 1; i < visibleEntries.length; i += 1) {
+            const cur = visibleEntries[i];
+            const prev = visibleEntries[i - 1];
+            if (!cur.link || !prev.link) continue;
+            if (
+                cur.link.linkActionIndex
+                && cur.link.linkActionIndex === prev.link.linkActionIndex
+            ) {
+                set.add(cur.key);
+            }
+        }
+        return set;
+    }, [visibleEntries]);
+
+    // §28.2 activity-feed grouping. Computed AFTER all filters so a
+    // group only collapses when both leader and members survive the
+    // current filter set; otherwise members render as ungrouped rows.
+    const groupedItems = useMemo(
+        () => groupHistoryEntries(visibleEntries, groupingMode),
+        [visibleEntries, groupingMode],
+    );
+
+    // Filtering and grouping still run over the complete result set, while the
+    // DOM grows in bounded steps. This keeps exports and group membership exact
+    // without making the browser lay out thousands of row buttons at once.
+    const listScope = useMemo(() => [
+        groupingMode,
+        searchQuery,
+        dateFrom,
+        dateTo,
+        crossChainOnly ? 'cross-chain' : '',
+        multisigOnly ? 'multisig' : '',
+        [...enabledChains].sort().join(','),
+        [...actionTypeFilter].sort().join(','),
+        [...statusFilter].sort().join(','),
+    ].join('\u0000'), [
+        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        enabledChains, actionTypeFilter, statusFilter,
+    ]);
+    const [listWindow, setListWindow] = useState(() => ({
+        scope: '',
+        count: HISTORY_PAGE_SIZE,
+    }));
+    const [groupMemberLimits, setGroupMemberLimits] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
+    const visibleItemCount = listWindow.scope === listScope
+        ? listWindow.count
+        : HISTORY_PAGE_SIZE;
+    const renderedItems = groupedItems.slice(0, visibleItemCount);
+
+    useEffect(() => {
+        setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
+        setGroupMemberLimits({});
+    }, [listScope]);
+
+    const showMoreItems = () => {
+        setListWindow((prev) => {
+            const current = prev.scope === listScope ? prev.count : HISTORY_PAGE_SIZE;
+            return {
+                scope: listScope,
+                count: Math.min(groupedItems.length, current + HISTORY_PAGE_SIZE),
+            };
+        });
+    };
+
+    const showMoreGroupMembers = (groupKey, memberCount) => {
+        setGroupMemberLimits((prev) => ({
+            ...prev,
+            [groupKey]: Math.min(
+                memberCount,
+                (prev[groupKey] || HISTORY_PAGE_SIZE) + HISTORY_PAGE_SIZE,
+            ),
+        }));
+    };
+
+    // §24.6 / Cluster Y FOLLOWUP 4: auto-select the entry matching
+    // `initialFocus` once entries have loaded, then scroll it into
+    // view. Fires at most once per History mount so a user who
+    // explicitly de-selects the row doesn't get the row re-selected
+    // on every re-render.
+    useEffect(() => {
+        if (initialFocusFiredRef.current) return;
+        if (!initialFocus) return;
+        if (entries.length === 0) return;
+        const match = entries.find((e) => {
+            if (initialFocus.chainId && e.chainId !== initialFocus.chainId) return false;
+            if (initialFocus.actionIndex && String(e.actionIndex) !== String(initialFocus.actionIndex)) return false;
+            // Case-insensitive because the two sides are normalized
+            // differently by design: a merged pending entry carries a
+            // lowercased hash (it is the merge key), while a caller like the
+            // send success card hands us the txid exactly as the node
+            // returned it. An exact compare would fail silently, landing the
+            // user on an unfocused list with nothing to explain why.
+            if (initialFocus.txHash
+                && String(e.txHash).toLowerCase() !== String(initialFocus.txHash).toLowerCase()) {
+                return false;
+            }
+            return true;
+        });
+        if (!match) return;
+        initialFocusFiredRef.current = true;
+        selectedTxRef.current = rememberedSelection(match);
+        setSelectedKey(match.key);
+        const itemIndex = groupedItems.findIndex((item) => (
+            item.kind === 'entry'
+                ? item.entry.key === match.key
+                : item.members.some((entry) => entry.key === match.key)
+        ));
+        if (itemIndex >= visibleItemCount) {
+            setListWindow({ scope: listScope, count: itemIndex + 1 });
+        }
+        // Defer scrollIntoView until after the row's <li> has rendered;
+        // looking up the DOM node by `data-history-key` keeps the
+        // selector decoupled from React's internals.
+        if (typeof window !== 'undefined') {
+            setTimeout(() => {
+                const node = document.querySelector(
+                    `[data-history-key="${cssEscape(match.key)}"]`,
+                );
+                if (node && typeof node.scrollIntoView === 'function') {
+                    node.scrollIntoView({ block: 'center', behavior: 'auto' });
+                }
+            }, 0);
+        }
+    }, [entries, initialFocus, groupedItems, listScope, visibleItemCount]);
+
+    // M2.3 handoff: the open row's key has just stopped existing, which
+    // is what confirming looks like from here (the pending entry is
+    // dropped and the confirmed one arrives under a different key). Point
+    // the selection at the entry carrying the same transaction so the
+    // detail upgrades in place instead of closing. A shallow reorg that
+    // reassigns the action index lands here for the same reason, and gets
+    // the same answer, because the transaction hash is the one handle
+    // that survives both.
+    //
+    // A key that matches nothing at all is deliberately left alone: an
+    // empty poll must not close a card the user is reading.
+    useEffect(() => {
+        if (!selectedKey) return;
+        const tracked = selectedTxRef.current;
+        if (!tracked?.txHash) return;
+        if (entries.some((e) => e.key === selectedKey)) return;
+        const match = entries.find((e) => e.chainId === tracked.chainId
+            && String(e.txHash || '').toLowerCase() === tracked.txHash);
+        if (match) setSelectedKey(match.key);
+    }, [entries, selectedKey]);
+
+    const toggleGroupExpanded = (groupKey) => {
+        setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(groupKey)) next.delete(groupKey);
+            else next.add(groupKey);
+            return next;
+        });
+    };
+
+    const toggleChain = (cid) => {
+        // §23.5 / G052: persist the new filter set so the user's
+        // choice survives navigation. Capture the post-toggle Set
+        // inside the updater so the write reflects the new state
+        // even if React batches multiple toggles.
+        setEnabledChains((prev) => {
+            const next = new Set(prev);
+            if (next.has(cid)) next.delete(cid);
+            else next.add(cid);
+            writeChainSet(historyChainFilterKey(walletId), next);
+            return next;
+        });
+    };
+
+    // "Remove from history" on a failed local record. The host refuses
+    // anything but a failed record, so this cannot make a live send vanish.
+    // The row closes and the list re-reads; a refused or failed delete
+    // leaves the row in place, which is the honest outcome.
+    const dismissFailedPending = async (pendingTxId) => {
+        if (typeof messaging?.dismissFailedPendingTx !== 'function') return;
+        try {
+            await messaging.dismissFailedPendingTx({ pendingTxId });
+        } catch {
+            return;
+        }
+        selectedTxRef.current = null;
+        setSelectedKey(null);
+        setRefreshTick((n) => n + 1);
+    };
+
+    const onRowClick = (entry) => {
+        // When the parent shell wired the navigation callback, send the
+        // selected entry up so it can route to the standalone ActionDetail
+        // page. Falls back to the legacy inline expand for builds /
+        // contexts where no handler is provided.
+        if (typeof onSelectEntry === 'function') {
+            onSelectEntry(entry);
+            return;
+        }
+        const closing = selectedKey === entry.key;
+        selectedTxRef.current = closing ? null : rememberedSelection(entry);
+        setSelectedKey(closing ? null : entry.key);
+        if (entry.link?.peerChainId && entry.link.peerActionIndex) {
+            const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
+            if (!peerCache[pKey]) {
+                setPeerCache((prev) => ({
+                    ...prev,
+                    [pKey]: { loading: true, action: null, error: null },
+                }));
+                messaging.getActionByIndex({
+                    chainId: entry.link.peerChainId,
+                    actionIndex: entry.link.peerActionIndex,
+                })
+                    .then((action) => {
+                        setPeerCache((prev) => ({
+                            ...prev,
+                            [pKey]: { loading: false, action, error: null },
+                        }));
+                    })
+                    .catch((err) => {
+                        setPeerCache((prev) => ({
+                            ...prev,
+                            [pKey]: {
+                                loading: false,
+                                action: null,
+                                error: err?.message || String(err),
+                            },
+                        }));
+                    });
+            }
+        }
+    };
+
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            backLabel="Back to home"
+            title="History"
+            trailing={(
+                <button
+                    type="button"
+                    className={refreshing ? styles.refreshing : undefined}
+                    aria-label={refreshing ? 'Refreshing history' : 'Refresh history'}
+                    title={refreshing ? 'Refreshing history' : 'Refresh history'}
+                    disabled={refreshing || !historyLoaded}
+                    onClick={() => {
+                        const throttle = pollThrottleRef.current;
+                        if (throttle.isInFlight()) return;
+                        throttle.reset();
+                        throttle.start();
+                        setRefreshing(true);
+                        setRefreshTick((n) => n + 1);
+                    }}
+                >
+                    <Icon.RefreshIcon />
+                </button>
+            )}
+        />
+    );
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            {children}
+        </Screen>
+    );
+
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setHistoryLoaded(false);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
+            </ListPage>,
+        );
+    }
+    if (!addressesByChain) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label={t('history.loading')}>
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
+    }
+    if (activeChainIds.length === 0) {
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('history.empty.noAddressesBody')}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
+                    onAction={onReceive}
+                    icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
+            </ListPage>,
+        );
+    }
+
+    return wrap(
+        <ListPage toolbar={(
+            <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
+                <input
+                    ref={searchInputRef}
+                    type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className={styles.searchInput}
+                    placeholder={t('history.filters.searchPlaceholder')}
+                    aria-label={t('history.filters.searchLabel')}
+                    value={searchQuery}
+                    onChange={(ev) => setSearchQuery(ev.target.value)}
+                    autoComplete="off"
+                />
+
+                <div className={styles.dateRow}>
+                    <input
+                        type="date"
+                        aria-label={t('history.filters.fromDate')}
+                        value={dateFrom}
+                        max={dateTo || undefined}
+                        onChange={(ev) => updateDateFrom(ev.target.value)}
+                        className={styles.dateInput}
+                    />
+                    <span className={styles.dateSep}>→</span>
+                    <input
+                        type="date"
+                        aria-label={t('history.filters.toDate')}
+                        value={dateTo}
+                        min={dateFrom || undefined}
+                        onChange={(ev) => updateDateTo(ev.target.value)}
+                        className={styles.dateInput}
+                    />
+                </div>
+
+                <div className={styles.filterFooter}>
+                    <button
+                        type="button"
+                        className={`${styles.filterDisclosure} ${moreFiltersOpen ? styles.filterDisclosureActive : ''}`}
+                        onClick={() => setMoreFiltersOpen((v) => !v)}
+                        aria-expanded={moreFiltersOpen}
+                        aria-controls="history-more-filters"
+                    >
+                        <span>{t('history.filters.additionalDetails')}</span>
+                        {moreFiltersOpen
+                            ? <DoubleChevron direction="up" />
+                            : <DoubleChevron direction="down" />}
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.filterDisclosure} ${showFiatInHistory ? styles.filterDisclosureActive : ''}`}
+                        aria-pressed={showFiatInHistory}
+                        onClick={toggleShowFiatInHistory}
+                        disabled={fiatToggleBusy}
+                        aria-busy={fiatToggleBusy}
+                        title={t('history.filters.fiatHelp')}
+                    >
+                        {showFiatInHistory
+                            ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
+                            : t('history.filters.showFiat')}
+                    </button>
+                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={groupingMode === 'grouped'}
+                            onClick={() => setGroupingMode('grouped')}
+                            className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
+                        >{t('history.filters.grouped')}</button>
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={groupingMode === 'flat'}
+                            onClick={() => setGroupingMode('flat')}
+                            className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
+                        >{t('history.filters.flat')}</button>
+                    </div>
+                </div>
+
+                {moreFiltersOpen ? (
+                    <div
+                        id="history-more-filters"
+                        className={styles.morePanel}
+                        role="group"
+                        aria-label={t('history.filters.advanced')}
+                    >
+                        <ChainPicker
+                            activeChainIds={activeChainIds}
+                            chainRegistry={chainRegistry}
+                            enabledChains={enabledChains}
+                            onChange={(next) => {
+                                setEnabledChains(next);
+                                writeChainSet(historyChainFilterKey(walletId), next);
+                            }}
+                        />
+
+                        <CheckboxPicker
+                            options={ACTION_TYPE_OPTIONS}
+                            selected={actionTypeFilter}
+                            onToggle={toggleSetMember(setActionTypeFilter)}
+                            allLabel={t('history.filters.allActionTypes')}
+                            summaryNoun={t('history.filters.actionType')}
+                            iconForId={actionTypeIcon}
+                            menuHeader={t('history.filters.actionTypes')}
+                        />
+
+                        <CheckboxPicker
+                            options={STATUS_OPTIONS}
+                            selected={statusFilter}
+                            onToggle={toggleSetMember(setStatusFilter)}
+                            allLabel={t('history.filters.allStatuses')}
+                            summaryNoun={t('history.filters.status')}
+                            menuHeader={t('history.filters.statusHeader')}
+                        />
+
+                        <CheckboxPicker
+                            options={[
+                                { id: 'crosschain', label: 'Cross-chain only' },
+                            ]}
+                            selected={new Set([
+                                ...(crossChainOnly ? ['crosschain'] : []),
+                            ])}
+                            onToggle={(id) => {
+                                if (id === 'crosschain') setCrossChainOnly((v) => !v);
+                            }}
+                            allLabel={t('history.filters.noSpecialFilters')}
+                            summaryNoun={t('history.filters.filter')}
+                            iconForId={specialFilterIcon}
+                            menuHeader={t('history.filters.special')}
+                        />
+
+                        {multisigAddress ? (
+                            <button
+                                type="button"
+                                className={`${styles.chip} ${multisigOnly ? styles.chipActive : ''}`}
+                                aria-pressed={multisigOnly}
+                                onClick={() => setMultisigOnly((v) => !v)}
+                            >
+                                {t('history.filters.multisigOnly')}
+                            </button>
+                        ) : null}
+
+                    </div>
+                ) : null}
+            </div>
+        )}>
+
+            {exportModalOpen ? (
+                <ExportModal
+                    onClose={() => setExportModalOpen(false)}
+                    format={exportFormat}
+                    setFormat={setExportFormat}
+                    columns={exportColumns}
+                    setColumns={setExportColumns}
+                    fiatCurrency={fiatCurrency}
+                    visibleCount={visibleEntries.length}
+                    onConfirm={() => {
+                        runExport({
+                            entries: visibleEntries,
+                            scope: chainScopeLabel(enabledChains, activeChainIds),
+                            format: exportFormat,
+                            columns: Array.from(exportColumns),
+                            fiatCurrency,
+                        });
+                        setExportModalOpen(false);
+                    }}
+                />
+            ) : null}
+
+            {!historyLoaded || loadingChains.size > 0 ? (
+                <div role="status" aria-label={t('history.loading')}>
+                    <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                </div>
+            ) : null}
+
+            {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
+                filtersActive && entries.length > 0 ? (
+                    <EmptyState
+                        title={t('history.empty.noMatchesTitle')}
+                        body={t('history.empty.noMatchesBody')}
+                        actionLabel={t('history.empty.clearFilters')}
+                        onAction={clearAllFilters}
+                    />
+                ) : (
+                    <EmptyState
+                        title={crossChainOnly
+                            ? t('history.empty.noCrossChainTitle')
+                            : t('history.empty.noActivityTitle')}
+                        body={crossChainOnly
+                            ? t('history.empty.noCrossChainBody')
+                            : t('history.empty.noActivityBody')}
+                    />
+                )
+            ) : null}
+
+            {historyFetchedAt ? (
+                <div className={styles.resultsHeader}>
+                    {historyFetchedAt && loadingChains.size === 0 ? (
+                        <StalenessLabel lastSyncedAt={historyFetchedAt} />
+                    ) : <span />}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                        {visibleEntries.length === 0 ? (
+                            <span
+                                id="history-export-disabled-reason"
+                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
+                            >
+                                {entries.length > 0
+                                    ? t('history.export.noMatchingRows')
+                                    : t('history.export.noRows')}
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={styles.exportTrigger}
+                            aria-haspopup="dialog"
+                            aria-expanded={exportModalOpen}
+                            aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                            onClick={() => setExportModalOpen(true)}
+                            disabled={visibleEntries.length === 0}
+                        >
+                            {t('history.export.open')}
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
+            <ul className={styles.timeline}>
+                {renderedItems.map((item) => {
+                    if (item.kind === 'group') {
+                        const expanded = expandedGroups.has(item.key);
+                        const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
+                        const renderedMembers = item.members.slice(0, memberLimit);
+                        return (
+                            <li key={item.key}>
+                                <div className={`${styles.groupCardWrap} ${expanded ? styles.groupCardWrapExpanded : ''}`}>
+                                    <GroupCard
+                                        item={item}
+                                        expanded={expanded}
+                                        onToggle={() => toggleGroupExpanded(item.key)}
+                                    />
+                                    {expanded ? (
+                                        <ul className={styles.groupMembers}>
+                                            {renderedMembers.map((entry) => (
+                                                <EntryRow
+                                                    key={entry.key}
+                                                    entry={entry}
+                                                    selected={selectedKey === entry.key}
+                                                    showConnector={
+                                                        item.subkind === 'link-pair'
+                                                            ? false
+                                                            : connectorByKey.has(entry.key)
+                                                    }
+                                                    onClick={() => onRowClick(entry)}
+                                                    peerCache={peerCache}
+                                                    isFull={isFull}
+                                                    chainTip={chainTipByChainId[entry.chainId]}
+                                                    indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
+                                                    walletId={walletId}
+                                                    verify={actionVerifyMap[entry.key]}
+                                                    showFiatInHistory={showFiatInHistory}
+                                                    fiatCurrency={fiatCurrency}
+                                                    walletAddresses={walletAddressSet}
+                                                    onDismissFailed={dismissFailedPending}
+                                                />
+                                            ))}
+                                            {memberLimit < item.members.length ? (
+                                                <li className={styles.groupPagination}>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        icon={null}
+                                                        onClick={() => showMoreGroupMembers(
+                                                            item.key,
+                                                            item.members.length,
+                                                        )}
+                                                    >
+                                                        {t('history.showMoreGroupEntries', {
+                                                            shown: Math.min(memberLimit, item.members.length).toLocaleString('en-US'),
+                                                            total: item.members.length.toLocaleString('en-US'),
+                                                        })}
+                                                    </Button>
+                                                </li>
+                                            ) : null}
+                                        </ul>
+                                    ) : null}
+                                </div>
+                            </li>
+                        );
+                    }
+                    const entry = item.entry;
+                    return (
+                        <EntryRow
+                            key={entry.key}
+                            entry={entry}
+                            selected={selectedKey === entry.key}
+                            showConnector={connectorByKey.has(entry.key)}
+                            onClick={() => onRowClick(entry)}
+                            peerCache={peerCache}
+                            isFull={isFull}
+                            chainTip={chainTipByChainId[entry.chainId]}
+                            indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
+                            walletId={walletId}
+                            verify={actionVerifyMap[entry.key]}
+                            showFiatInHistory={showFiatInHistory}
+                            fiatCurrency={fiatCurrency}
+                            walletAddresses={walletAddressSet}
+                            onDismissFailed={dismissFailedPending}
+                        />
+                    );
+                })}
+            </ul>
+            {visibleItemCount < groupedItems.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {t('history.itemsShown', {
+                            shown: Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US'),
+                            total: groupedItems.length.toLocaleString('en-US'),
+                        })}
+                    </span>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={null}
+                        onClick={showMoreItems}
+                    >
+                        {t('history.showMore')}
+                    </Button>
+                </div>
+            ) : null}
+        </ListPage>,
+    );
+}
+
+/**
+ * Inline detail card. For LINK-threaded entries we render two
+ * `detailSide` blocks side-by-side; for everything else, one block.
+ */
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed }) {
+    const { messaging, shell } = useMessaging();
+    const { showToast } = useToast();
+    const { settings } = useSettings();
+    const [balancesHidden] = useBalancesHidden();
+    const rbfConfirm = useConfirmModal();
+    const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
+
+    // Fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
+    // returns null for anything that isn't unambiguously a native-coin SEND
+    // (in particular, a token SEND carrying a non-native tick), so a token
+    // amount never gets priced against the coin's rate - the exact bug this
+    // deliberately avoids replicating (in the old numbering).
+    const nativeAmount = showFiatInHistory ? nativeAmountFieldOf(entry) : null;
+    const entryCoin = coinOfChainId(entry?.chainId);
+    const fiatRate = useFiatRate({
+        chainCoin: nativeAmount != null ? entryCoin : null,
+        fiatCurrency: fiatCurrency || 'USD',
+    });
+    const nativeFiatValue = nativeAmount != null && fiatRate
+        ? coinToFiatExact(nativeAmount, fiatRate)
+        : null;
+
+    // ───── More-menu / Save-as-contact state ─────
+    // Contacts are fetched once so the "already a contact" check can run
+    // synchronously when deciding whether to expose the Save-as-contact
+    // option in the More dropdown.
+    const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
+    const [contactsLoaded, setContactsLoaded] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const [contactSaveStage, setContactSaveStage] = useState(
+        /** @type {'hidden' | 'editing' | 'saving' | 'saved'} */ ('hidden'),
+    );
+    const [contactName, setContactName] = useState('');
+    const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
+    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+
+    // ───── RBF (Speed up / Cancel) state ─────
+    // Exposed through the More menu now instead of as a standalone
+    // button cluster below the tabs. The status message renders inline
+    // between the action row and the tabs so the user sees the result
+    // of their tap without scrolling.
+    const [rbfBusy, setRbfBusy] = useState(/** @type {'speedup' | 'cancel' | null} */ (null));
+    const [rbfError, setRbfError] = useState(/** @type {string | null} */ (null));
+    const [rbfDone, setRbfDone] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => {
+                if (cancelled) return;
+                setContacts(Array.isArray(rows) ? rows : []);
+                setContactsLoaded(true);
+            })
+            .catch(() => { if (!cancelled) setContactsLoaded(true); });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onClick = (e) => {
+            if (moreWrapRef.current?.contains(e.target)) return;
+            setMoreOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [moreOpen]);
+
+    // M2.3: a pending entry has no block, so the LINK pairing it would
+    // render has not been indexed either. Suppressed outright rather
+    // than left to render an empty peer block that reads like a failed
+    // fetch. It comes back on its own when the confirmed entry replaces
+    // this one, because that entry carries the link record.
+    const isLinked = Boolean(entry.link) && Number(entry.blockIndex) > 0;
+    const peerKey = entry.link?.peerChainId && entry.link?.peerActionIndex
+        ? peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex)
+        : null;
+    const peer = peerKey ? peerCache[peerKey] : null;
+    const rbfDescriptor = chainRegistry.get(entry.chainId);
+    const replaceable = isEntryReplaceable(entry, { descriptor: rbfDescriptor });
+    // §24.6 / Cluster Y FOLLOWUP 4: desktop-only "Open in new window"
+    // affordance for pending (mempool-only) entries. The detached
+    // window opens directly on this row via the History `initialFocus`
+    // prop and keeps its own auto-lock + last-view memory because the
+    // shared MessageHost stays singleton across windows. Surfaces on
+    // desktop only; extension popup + web SPA have no equivalent
+    // multi-window primitive.
+    const isPending = !entry.blockIndex;
+    const detachAvailable = shell === 'desktop'
+        && isPending
+        && typeof globalThis.xchainWalletWindow?.openDetached === 'function';
+
+    const detailRows = basicDetailRows(
+        entry,
+        chainTip,
+        nativeAmount,
+        nativeFiatValue,
+        balancesHidden,
+        fiatCurrency,
+    );
+    const explorerButtons = explorerLinksFor(entry, settings);
+
+    const fullRows = fullDetailRows(entry, balancesHidden);
+    // Redact entry + peer raw payloads before stringifying. Cheap walk;
+    // returns the same shape so the JSON pretty-printer indents identically.
+    const rawForDisplay = balancesHidden ? redactAmountFields(entry.raw) : entry.raw;
+    const detailTabs = [
+        { id: 'status',  label: 'Status'  },
+        { id: 'details', label: 'Details' },
+        { id: 'raw',     label: 'Raw'     },
+    ];
+
+    // Compute Save-as-contact saveability + assemble the More menu so
+    // the rightmost button on the explorer row reads as a single
+    // entry-point for follow-up actions instead of being buried below
+    // the tab panels.
+    const contactPeer = peerAddressOfEntry(entry);
+    const contactPeerCoin = coinOfChainId(entry?.chainId);
+    const contactPeerIsSelf = Boolean(entry?.address && contactPeer === entry.address);
+    const contactAlreadySaved = Boolean(contactPeer && contacts.some((c) =>
+        Array.isArray(c?.entries) && c.entries.some((e) => e?.address === contactPeer),
+    ));
+    const canSaveContact = contactsLoaded
+        && Boolean(contactPeer)
+        && !contactPeerIsSelf
+        && !contactAlreadySaved
+        && Boolean(contactPeerCoin)
+        && contactSaveStage !== 'saved';
+    async function runRbf(strategy) {
+        if (rbfBusy) return;
+        setMoreOpen(false);
+        setRbfBusy(strategy);
+        setRbfError(null);
+        setRbfDone(null);
+        try {
+            const quote = await replaceFromHistoryEntry({
+                messaging, entry, strategy, walletId, descriptor: rbfDescriptor, preview: true,
+            });
+            const ticker = tickerForCoin(rbfDescriptor?.coin);
+            const confirmed = await rbfConfirm.confirm({
+                title: strategy === 'cancel' ? 'Cancel this transaction?' : 'Speed up this transaction?',
+                message: `Old fee: ${quote.originalFee} ${ticker}. `
+                    + `New fee: ${quote.replacementFee} ${ticker}. `
+                    + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
+                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast speed up',
+                danger: strategy === 'cancel',
+            });
+            if (!confirmed) return;
+            const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
+            setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
+            // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
+            // The undo is a THIRD transaction replacing the cancel and
+            // re-issuing the spend, so it is only offered while the
+            // cancel is still in the mempool; `cancelUndoSnapshot`
+            // returns null when the pair cannot support one.
+            if (strategy === 'cancel') {
+                const snapshot = cancelUndoSnapshot({ entry, result: res, walletId });
+                if (snapshot) {
+                    showToast({
+                        message: 'Transaction cancelled',
+                        actionLabel: 'Undo',
+                        onAction: async () => {
+                            setRbfError(null);
+                            try {
+                                const undone = await undoCancel({ messaging, snapshot });
+                                setRbfDone(`Re-sent: ${undone?.replacementTxHash || 'pending'}`);
+                            } catch (undoErr) {
+                                setRbfError(rbfFailureMessage(undoErr, 'Could not undo the cancellation.'));
+                            }
+                        },
+                    });
+                }
+            }
+        } catch (err) {
+            setRbfError(rbfFailureMessage(err, "Couldn't speed up or cancel this transaction. Try again later."));
+        } finally {
+            setRbfBusy(null);
+        }
+    }
+
+    const moreOptions = [];
+    if (canSaveContact) {
+        moreOptions.push({
+            id: 'save-contact',
+            label: 'Save as contact',
+            icon: <Icon.UsersIcon />,
+            onClick: () => {
+                setMoreOpen(false);
+                setContactSaveStage('editing');
+                setContactName('');
+                setContactSaveError(null);
+            },
+        });
+    }
+    // A transaction we have already replaced still satisfies the field
+    // contract `isEntryReplaceable` checks (it has a hash, no block, and
+    // an allowlisted action), so the offer has to be withdrawn here.
+    // Replacing a replacement bumps the fee on a transaction the network
+    // has already dropped, spends a fee, and moves nothing.
+    if (isReplaceCallAvailable(messaging) && replaceable.ok && !entry.pending?.replaced) {
+        moreOptions.push({
+            id: 'rbf-speedup',
+            label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
+            icon: <Icon.ForwardIcon />,
+            disabled: rbfBusy !== null,
+            onClick: () => runRbf('speedup'),
+        });
+        moreOptions.push({
+            id: 'rbf-cancel',
+            label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
+            icon: <Icon.XIcon />,
+            disabled: rbfBusy !== null,
+            onClick: () => runRbf('cancel'),
+        });
+    }
+    // Receipt sharing is deliberately narrower than the detail payload. The
+    // user opts into these six public transaction facts, never addresses,
+    // memos, contact data, wallet identifiers, or arbitrary raw fields.
+    const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'copy-receipt',
+        label: 'Copy receipt',
+        icon: <Icon.CopyIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const { ok } = await copyText(receipt);
+            showToast({
+                message: ok ? 'Transaction receipt copied.' : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'default' : 'error',
+            });
+        },
+    });
+
+    async function handleSaveContact(event) {
+        event.preventDefault();
+        const trimmed = contactName.trim();
+        if (!trimmed) {
+            setContactSaveError('Name is required.');
+            return;
+        }
+        setContactSaveStage('saving');
+        setContactSaveError(null);
+        const entry = { chain: contactPeerCoin, address: contactPeer, label: '' };
+        try {
+            // The same person seen on another chain: add this address to the
+            // contact that already carries the name, not a second contact.
+            const existing = findContactByName(contacts, trimmed);
+            if (existing) {
+                await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) });
+            } else {
+                await messaging.saveContact({ input: { name: trimmed, notes: '', entries: [entry] } });
+            }
+            setContactSaveStage('saved');
+        } catch (err) {
+            setContactSaveError(err?.message || 'Save failed.');
+            setContactSaveStage('editing');
+        }
+    }
+
+    return (
+        <div className={styles.detailContainer} role="region" aria-label={t('history.detail.label')}>
+            {/* M2.3: the pending branch. First, because on a pending
+                entry the thing the user came to find out is what is
+                happening to it, and because the warning states have to
+                be impossible to scroll past. Disappears of its own
+                accord when the confirmed entry replaces this one. */}
+            {isPending ? (
+                <PendingDetailPanel
+                    entry={entry}
+                    balancesHidden={balancesHidden}
+                    onDismissFailed={onDismissFailed}
+                />
+            ) : null}
+
+            {/* Basic details hero: concise summary at the top of the
+                page. Flush variant: zero card padding so the table's
+                row-divider lines run all the way to the card edges,
+                with horizontal cell padding restoring the inner gutter
+                so text doesn't crowd the border. */}
+            <section className={`${styles.detailSection} ${styles.detailSectionFlush}`}>
+                <table className={styles.detailsTable}>
+                    <tbody>
+                        {detailRows.map(([label, value]) => (
+                            <tr key={label}>
+                                <th scope="row">{label}</th>
+                                <td>{value}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </section>
+
+            {/* Action row: explorer links followed by a "More" button
+                that drops down a list of follow-up actions (e.g. Save
+                as contact, Speed up, Cancel). The More button always
+                renders so users get a consistent place to look across
+                every action type; when no actions apply, the menu
+                surfaces a placeholder message instead.
+
+                The row also renders with no explorer links when an entry
+                has neither an action index nor a transaction id. Keeping
+                the More menu independent preserves Speed up and Cancel for
+                incomplete pending records. */}
+            {explorerButtons.length > 0 || moreOptions.length > 0 ? (
+                <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
+                    {explorerButtons.map((link) => (
+                        <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.detailAction}
+                        >
+                            {link.iconImg ? (
+                                <img
+                                    src={link.iconImg}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className={styles.detailActionFavicon}
+                                />
+                            ) : (
+                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
+                            )}
+                            <span>{link.label} <span aria-hidden="true">↗</span></span>
+                        </a>
+                    ))}
+                    <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
+                        <button
+                            type="button"
+                            className={styles.detailAction}
+                            aria-haspopup="menu"
+                            aria-expanded={moreOpen}
+                            onClick={() => setMoreOpen((o) => !o)}
+                        >
+                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                            <span>{t('history.detail.more')}</span>
+                        </button>
+                        {moreOpen ? (
+                            <div className={styles.moreMenu} role="menu">
+                                {moreOptions.length > 0 ? (
+                                    moreOptions.map((opt) => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.moreMenuItem}
+                                            onClick={opt.onClick}
+                                            disabled={Boolean(opt.disabled)}
+                                        >
+                                            {opt.icon ? (
+                                                <span className={styles.moreMenuItemIcon} aria-hidden="true">
+                                                    {opt.icon}
+                                                </span>
+                                            ) : null}
+                                            <span>{opt.label}</span>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.moreMenuItem}
+                                        disabled
+                                    >
+                                        <span>{t('history.detail.noAdditionalActions')}</span>
+                                    </button>
+                                )}
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
+
+            {/* RBF status: surfaces the outcome of Speed up / Cancel
+                picked from the More menu. Sits between the action row
+                and the tab strip so the user sees the result without
+                scrolling, mirroring the inline save-contact form. */}
+            {rbfError ? (
+                <StatusMessage variant="error" className={styles.rbfError}>{rbfError}</StatusMessage>
+            ) : null}
+            {rbfDone ? (
+                <p className={styles.rbfDone} role="status">{rbfDone}</p>
+            ) : null}
+
+            {/* Inline Save-as-contact form. Shown when the user picks
+                "Save as contact" from the More menu, sits between the
+                action buttons and the tab strip so the user doesn't
+                lose the page context the way the bottom-of-card prompt
+                did. */}
+            {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
+                    <label className={styles.saveContactLabel}>
+                        {t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
+                        <input
+                            type="text"
+                            enterKeyHint="go"
+                            className={styles.saveContactInput}
+                            value={contactName}
+                            onChange={(e) => setContactName(e.target.value)}
+                            autoFocus
+                            maxLength={80}
+                            placeholder={t('history.contact.name')}
+                        />
+                    </label>
+                    {contactSaveError ? (
+                        <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
+                    ) : null}
+                    <div className={styles.saveContactActions}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setContactSaveStage('hidden');
+                                setContactName('');
+                                setContactSaveError(null);
+                            }}
+                            disabled={contactSaveStage === 'saving'}
+                        >
+                            {t('common.cancel')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            loading={contactSaveStage === 'saving'}
+                        >
+                            {t('history.contact.save')}
+                        </Button>
+                    </div>
+                </form>
+            ) : null}
+
+            {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
+            <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
+                {detailTabs.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDetailTab === t.id ? 'true' : 'false'}
+                        className={`${styles.detailTab} ${activeDetailTab === t.id ? styles.detailTabActive : ''}`}
+                        onClick={() => setActiveDetailTab(t.id)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
+            <section
+                className={`${styles.detailSection} ${activeDetailTab === 'details' ? styles.detailSectionFlush : ''}`}
+                role="tabpanel"
+            >
+                {/* Details tab: full field dump (every value associated
+                    with the action), as opposed to the curated hero
+                    table at the top. */}
+                {activeDetailTab === 'details' ? (
+                    <table className={styles.detailsTable}>
+                        <tbody>
+                            {fullRows.map(([label, value]) => (
+                                <tr key={label}>
+                                    <th scope="row">{label}</th>
+                                    <td>{value}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : null}
+
+                {activeDetailTab === 'status' ? (
+                    <TxStatusTimeline entry={entry} chainTip={chainTip} indexerWatermark={indexerWatermark} />
+                ) : null}
+
+                {activeDetailTab === 'raw' ? (
+                    <>
+                        <div className={styles.rawJsonWrap}>
+                            <span className={styles.rawJsonCopy}>
+                                <CopyIconButton
+                                    value={decodeActionToText(rawForDisplay)}
+                                    label={t('history.detail.copyRawJson')}
+                                />
+                            </span>
+                            <pre className={styles.detailDecoded}>
+                                {decodeActionToText(rawForDisplay)}
+                            </pre>
+                        </div>
+                        {isLinked ? (
+                            <div className={styles.detailPeerBlock}>
+                                <h4 className={styles.detailSectionHeading}>
+                                    {t('history.detail.peerHeading', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}
+                                </h4>
+                                {peer?.loading ? (
+                                    <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
+                                ) : peer?.error ? (
+                                    <p className={styles.error}>{t('history.detail.peerError', { error: peer.error })}</p>
+                                ) : peer?.action ? (
+                                    <div className={styles.rawJsonWrap}>
+                                        <span className={styles.rawJsonCopy}>
+                                            <CopyIconButton
+                                                value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
+                                                label={t('history.detail.copyPeerRawJson')}
+                                            />
+                                        </span>
+                                        <pre className={styles.detailDecoded}>
+                                            {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
+                                        </pre>
+                                    </div>
+                                ) : (
+                                    <p className={styles.empty}>{t('history.detail.peerUnavailable', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}</p>
+                                )}
+                            </div>
+                        ) : null}
+                    </>
+                ) : null}
+            </section>
+
+            {/* Interactive widgets appended below the static sections.
+                Save-as-contact and Speed up / Cancel moved up to the
+                More button in the action row; recipient bulk-save
+                stays here because it's a per-row affordance for
+                DIVIDEND / AIRDROP entries with its own UI. */}
+            <RecipientsBlock entry={entry} />
+            {detachAvailable ? (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                        globalThis.xchainWalletWindow.openDetached({
+                            initialView: 'history',
+                            initialContext: {
+                                walletId,
+                                chainId: entry.chainId,
+                                actionIndex: entry.actionIndex,
+                                txHash: entry.txHash,
+                            },
+                        }).catch(() => { /* main returns ok:false on failure */ });
+                    }}
+                >
+                    {t('history.detail.openNewWindow')}
+                </Button>
+            ) : null}
+            {rbfConfirm.request ? (
+                <ConfirmModal
+                    {...rbfConfirm.request}
+                    onConfirm={rbfConfirm.onConfirm}
+                    onCancel={rbfConfirm.onCancel}
+                />
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * Split a failed record's stored error into safe prose and the raw text for a
+ * collapsed disclosure. The shared humanizer keeps flow prefixes, SDK strings
+ * and unclassified node text out of the primary explanation.
+ *
+ * @param {unknown} stored
+ * @returns {{ reason: string | null, details: string }}
+ */
+function failedReasonOf(stored) {
+    const raw = stored == null ? '' : String(stored).trim();
+    if (!raw) {
+        return {
+            reason: "Couldn't send this transaction. The wallet did not record a specific reason.",
+            details: '',
+        };
+    }
+    const h = humanizeError(raw, 'send this transaction');
+    return { reason: h.message, details: raw };
+}
+
+/**
+ * M2.3 pending branch of the detail card. Everything a user can be told
+ * honestly about a transaction that has been sent and not yet indexed:
+ * which of the five states it is in, when the network first reported it,
+ * what it is about to do, and the one sentence that has to survive every
+ * rewrite of this panel, that nothing has validated it yet.
+ *
+ * Deliberately absent: any SPV or LINK section. Both need an indexed
+ * action, and rendering them empty reads as a fetch that failed rather
+ * than as a stage that has not happened.
+ *
+ * @param {{ entry: any, balancesHidden?: boolean }} props
+ */
+function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
+    const state = pendingStateOf(entry);
+    const copy = state ? pendingCopyFor(state, entry) : null;
+    const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const settled = state === 'confirmed';
+    const failed = state === 'failed';
+    const meta = entry?.pending || null;
+    const failure = failed ? failedReasonOf(meta?.error) : null;
+    const desc = describePendingAction(entry);
+    const amountOf = (value) => (balancesHidden ? '•••••' : value);
+
+    return (
+        <section
+            className={`${styles.pendingPanel} ${warning ? styles.pendingPanelWarning : ''}`}
+            aria-label={t(settled
+                ? 'pending.detail.confirmedSectionLabel'
+                : failed ? 'pending.detail.failedSectionLabel' : 'pending.detail.sectionLabel')}
+        >
+            {copy ? (
+                <>
+                    <p className={styles.pendingHeadline}>{t(copy.headline)}</p>
+                    <p className={styles.pendingHelp}>{t(copy.help)}</p>
+                </>
+            ) : null}
+            {/* The honesty line (§7). A mempool sighting is not
+                acceptance: the indexer can still reject this action when
+                the block lands, so it renders in every pending state. A
+                proven block is the one thing that retires it, and the
+                block takes its place. A failure has nothing left to
+                validate; the recorded reason takes the line instead. */}
+            {settled ? (
+                meta?.confirmedBlockIndex ? (
+                    <p className={styles.pendingTiming}>
+                        {t('pending.detail.confirmedBlock', { block: meta.confirmedBlockIndex.toLocaleString() })}
+                    </p>
+                ) : null
+            ) : failed ? (
+                <>
+                    {failure?.reason ? (
+                        <p className={styles.pendingNotValidated}>{failure.reason}</p>
+                    ) : null}
+                    {failure?.details ? (
+                        <details className={styles.pendingTiming}>
+                            <summary>{t('pending.detail.technicalDetails')}</summary>
+                            <code>{failure.details}</code>
+                        </details>
+                    ) : null}
+                    {typeof onDismissFailed === 'function' && meta?.pendingTxId ? (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => onDismissFailed(meta.pendingTxId)}
+                        >
+                            {t('pending.detail.dismissFailed')}
+                        </Button>
+                    ) : null}
+                </>
+            ) : (
+                <p className={styles.pendingNotValidated}>{t('pending.detail.notValidated')}</p>
+            )}
+
+            {meta?.firstSeenMs ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.firstSeen', { when: formatRelativeTime(meta.firstSeenMs) })}
+                </p>
+            ) : null}
+            {meta?.broadcastAtMs ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.broadcastAt', { when: formatRelativeTime(meta.broadcastAtMs) })}
+                </p>
+            ) : null}
+            {meta?.replaced && meta.replacementTxHash ? (
+                <p className={styles.pendingTiming}>
+                    {t('pending.detail.replacementTx', {
+                        txHash: shortenAddress(meta.replacementTxHash),
+                    })}
+                </p>
+            ) : null}
+
+            {/* A settled record with nothing decodable has nothing to
+                promise under this heading: "not reported yet" would say
+                more data is coming, and none is. */}
+            {settled && desc.kind === 'none' ? null : (
+                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+            )}
+            {desc.kind === 'send' || desc.kind === 'local' ? (
+                <ul className={styles.pendingOutputs}>
+                    {desc.outputs.map((o, i) => (
+                        <li key={`${o.destination}:${i}`}>
+                            {t('pending.detail.sendOutput', {
+                                amount: amountOf(o.amount),
+                                tick: o.tick,
+                                destination: o.destination,
+                            })}
+                            {o.memo ? (
+                                <span className={styles.pendingMemo}>
+                                    {' '}{t('pending.detail.memo', { memo: o.memo })}
+                                </span>
+                            ) : null}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+            {/* The note promises data the network has "not reported yet";
+                for a settled transaction nothing more is coming, so the
+                outputs stand on their own. */}
+            {desc.kind === 'local' && !settled ? (
+                <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
+            ) : null}
+            {desc.kind === 'segments' ? (
+                <>
+                    <p className={styles.pendingHelp}>
+                        {t('pending.detail.undecodable', { action: actionDisplayLabel(desc.action) })}
+                    </p>
+                    <ul className={styles.pendingSegments}>
+                        {desc.segments.map((seg, i) => (
+                            <li key={`${i}:${seg}`}><code>{seg}</code></li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
+            {desc.kind === 'none' ? (
+                <p className={styles.pendingHelp}>{t('pending.detail.noData')}</p>
+            ) : null}
+        </section>
+    );
+}
+
+function capitalize(s) {
+    if (typeof s !== 'string' || s.length === 0) return '';
+    return s[0].toUpperCase() + s.slice(1);
+}
+
+/**
+ * Build the rows shown in the "Action details" table at the top of
+ * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
+ * are skipped so the table only shows what's actually populated.
+ */
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency) {
+    if (!entry) return [];
+    const rows = [];
+
+    // Action: just the colored bubble. The action number now lives
+    // on its own "Index" row below Block.
+    rows.push(['Action', (
+        <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
+    )]);
+
+    // Fiat-display toggle. Only rendered when the caller resolved a
+    // native-coin amount for this entry (see nativeAmountFieldOf) - token
+    // amounts never reach here, so there's no coin-rate-on-token bug to
+    // replicate.
+    if (nativeAmount != null) {
+        rows.push(['Amount', (
+            <span>
+                {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
+                {nativeFiatValue != null ? (
+                    <span className={styles.rowRelativeTime}>
+                        {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
+                    </span>
+                ) : null}
+            </span>
+        )]);
+    }
+
+    // Status: second, so success / failure is visible immediately.
+    const status = classifyEntryStatus(entry);
+    const statusLabel = status === 'confirmed' ? 'Confirmed'
+        : status === 'failed' ? 'Failed'
+        : 'Pending';
+    const statusColorClass = status === 'confirmed' ? styles.statusPillSuccess
+        : status === 'failed' ? styles.statusPillError
+        : styles.statusPillPending;
+    rows.push(['Status', (
+        <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
+    )]);
+
+    // Network uses the same badge as list rows so custom chain names and
+    // non-mainnet kinds come from the descriptor rather than id parsing.
+    if (entry.chainId) {
+        const descriptor = chainRegistry.get(entry.chainId);
+        rows.push(['Network', (
+            <span className={styles.copyableValue}>
+                {descriptor
+                    ? <ChainBadge descriptor={descriptor} size="sm" />
+                    : <span>{entry.chainId}</span>}
+            </span>
+        )]);
+    }
+    // Hero stays minimal: Action, Status, Network, Time only. Block,
+    // Index, Tx hash, Source, Destination, Amount, Memo, and every
+    // per-action field live in the Details tab below.
+    if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
+    return rows;
+}
+
+/**
+ * Inline value + small copy-icon button. Used in the ActionDetail
+ * table for fields a user typically needs to paste somewhere else
+ * (action_index, tx_hash, source / destination addresses).
+ */
+function CopyableValue({ display, fullValue, ariaLabel }) {
+    return (
+        <span className={styles.copyableValue}>
+            <CopyIconButton value={fullValue} label={ariaLabel} />
+            <span className={styles.copyableText}>{display}</span>
+        </span>
+    );
+}
+
+const DETAIL_FIELD_LABELS = Object.freeze({
+    action: 'Action',
+    action_index: 'Action number',
+    address: 'Wallet address',
+    block_index: 'Block',
+    chain: 'Chain',
+    chain_id: 'Chain',
+    destination: 'To',
+    source: 'From',
+    time: 'Time',
+    timestamp: 'Time',
+    tx_hash: 'Transaction ID',
+});
+
+/** Turn a protocol field name into the label shown in the Details table. */
+function detailFieldLabel(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
+    if (DETAIL_FIELD_LABELS[normalized]) return DETAIL_FIELD_LABELS[normalized];
+    const words = normalized.replace(/_+/g, ' ').trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Field';
+}
+
+/** Translate wire enum values while leaving identifiers and free text intact. */
+function detailValue(value, key) {
+    if (typeof value !== 'string') return value;
+    const normalizedKey = String(key || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+    if (!/(^|_)(status|state|side|direction|type)$/.test(normalizedKey)) return value;
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) return value;
+    const words = value.toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function copyLabelForDetailField(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    if (/(^|_)(tx_hash|txid|transaction_id)$/.test(normalized)) return 'Copy transaction ID';
+    if (normalized === 'source' || normalized === 'from') return 'Copy from address';
+    if (normalized === 'destination' || normalized === 'to') return 'Copy to address';
+    if (normalized.includes('address')) return `Copy ${detailFieldLabel(key).toLowerCase()}`;
+    return null;
+}
+
+function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
+    const [copied, setCopied] = useState(false);
+    const { showToast } = useToast();
+    const haptic = useHapticFeedback();
+    const handleClick = async (event) => {
+        event.stopPropagation();
+        const text = String(value ?? '');
+        const { ok } = await copyText(text);
+        if (ok) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+            haptic.tap();
+            return;
+        }
+        showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
+    };
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            className={styles.copyIconButton}
+            aria-label={copied ? t('history.copy.copied') : label}
+            title={copied ? t('history.copy.copiedTitle') : label}
+        >
+            {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
+        </button>
+    );
+}
+
+/**
+ * Comprehensive field-by-field dump shown in the Details tab. Lists
+ * every entry-level identifier plus every key in `entry.raw`, in a
+ * stable order so the user can scan all values associated with the
+ * transaction in one place. The curated hero table at the top of the
+ * page covers the most-relevant fields; this is the long-form view.
+ */
+function fullDetailRows(entry, balancesHidden = false) {
+    if (!entry) return [];
+    const rows = [];
+    const raw = entry.raw || {};
+
+    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
+    if (entry.actionIndex) {
+        rows.push(['Action number', (
+            <CopyableValue
+                display={formatDecimalAmount(entry.actionIndex)}
+                fullValue={String(entry.actionIndex)}
+                ariaLabel={t('history.copy.actionNumber')}
+            />
+        )]);
+    }
+    // Split chainId (e.g. 'bitcoin-regtest') into two rows so the
+    // chain family and network kind read separately.
+    if (entry.chainId) {
+        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
+        if (coin) rows.push(['Chain', capitalize(coin)]);
+        rows.push(['Network', capitalize(network)]);
+    }
+    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
+    else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
+    if (entry.timestamp) {
+        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    }
+    if (entry.txHash) {
+        rows.push(['Transaction ID', (
+            <CopyableValue
+                display={entry.txHash}
+                fullValue={entry.txHash}
+                ariaLabel={t('history.copy.transactionId')}
+            />
+        )]);
+    }
+    if (entry.source) {
+        rows.push(['From', (
+            <CopyableValue
+                display={entry.source}
+                fullValue={entry.source}
+                ariaLabel={t('history.copy.fromAddress')}
+            />
+        )]);
+    }
+    if (entry.address) {
+        rows.push(['Wallet address', (
+            <CopyableValue
+                display={entry.address}
+                fullValue={entry.address}
+                ariaLabel={t('history.copy.walletAddress')}
+            />
+        )]);
+    }
+
+    // Every other raw key, sorted alphabetically. Skip the
+    // entry-level fields we already surfaced above so we don't print
+    // the same datum twice (matched by snake_case and camelCase).
+    // `params` is also skipped because the synth fixtures nest the
+    // same fields there as at the top level; would render twice.
+    const skipKeys = new Set([
+        'action', 'ACTION',
+        'action_index', 'actionIndex', 'ACTION_INDEX',
+        'chain_id', 'chainId', 'CHAIN_ID',
+        'block_index', 'blockIndex', 'BLOCK_INDEX',
+        'timestamp', 'block_time', 'BLOCK_TIME',
+        'tx_hash', 'txHash', 'TX_HASH',
+        'source', 'SOURCE',
+        'address', 'ADDRESS',
+        'params', 'PARAMS',
+    ]);
+    const rawKeys = Object.keys(raw).sort();
+    for (const k of rawKeys) {
+        if (skipKeys.has(k)) continue;
+        const v = raw[k];
+        let display;
+        if (isEmptyDetailValue(v)) {
+            display = '-';
+        } else if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
+            display = '•••••';
+        } else if (isRemovedAccessListValue(k, v)) {
+            display = 'none';
+        } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
+            display = '0 (protocol placeholder; price set by oracle)';
+        } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
+            display = formatNumberWithCommas(v);
+        }
+        else if (typeof v === 'object') {
+            try { display = JSON.stringify(v); } catch { display = String(v); }
+        } else if (typeof v === 'string') {
+            display = detailValue(String(v), k);
+        } else {
+            display = String(v);
+        }
+        const copyLabel = copyLabelForDetailField(k);
+        rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
+            <CopyableValue
+                display={display}
+                fullValue={String(v ?? '')}
+                ariaLabel={copyLabel}
+            />
+        ) : display]);
+    }
+
+    return rows;
+}
+
+function isEmptyDetailValue(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
+    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
+}
+
+function isRemovedAccessListValue(key, value) {
+    return ['allow_list', 'ALLOW_LIST', 'block_list', 'BLOCK_LIST'].includes(key)
+        && Number(value) === 0;
+}
+
+function isOraclePricedGetAmount(entry, raw, key, value) {
+    const action = entry.action || raw.action || raw.ACTION;
+    const oracle = raw.oracle_address ?? raw.ORACLE_ADDRESS;
+    return String(action || '').toUpperCase() === 'DISPENSER'
+        && (key === 'get_amount' || key === 'GET_AMOUNT')
+        && Boolean(String(oracle || '').trim())
+        && Number(value) === 0;
+}
+
+// Thousands-separated formatting that handles strings of digits (which
+// is how the explorer / synth data delivers large integer amounts) as
+// well as JS numbers. Uses BigInt for pure-integer strings so values
+// past Number.MAX_SAFE_INTEGER still round-trip correctly.
+function formatNumberWithCommas(value) {
+    return formatDecimalAmount(value);
+}
+
+/**
+ * Per-chain block-explorer link list. Demo entries (synthesized
+ * tx hashes) get no links since they wouldn't resolve. Always
+ * surfaces the XChain explorer when an action index or transaction id
+ * is available.
+ */
+function explorerLinksFor(entry, settings) {
+    const links = [];
+    if (!entry) return links;
+    const txHash = entry.txHash;
+    const [coin = '', network = 'mainnet'] = String(entry.chainId || '').split('-');
+
+    // XChain actions have their own detail page. Plain transfers keep the
+    // third-party transaction links below when that network has coverage.
+    const hasActionIndex = entry.actionIndex != null && entry.actionIndex !== '';
+    const xchainUrl = hasActionIndex ? explorerPageUrl({
+        chainId: entry.chainId,
+        kind: 'action',
+        value: entry.actionIndex,
+        settings,
+    }) : null;
+    if (xchainUrl) {
+        links.push({
+            id: 'xchain',
+            label: 'XChain',
+            iconImg: branding.faviconUrl(),
+            url: xchainUrl,
+        });
+    }
+
+    // External chain explorers: only mainnet and testnet have
+    // working third-party coverage. Regtest is local-only; suppress
+    // external links so they don't render mainnet URLs that 404.
+    if (!txHash) return links;
+    if (network !== 'mainnet' && network !== 'testnet') return links;
+
+    if (coin === 'bitcoin') {
+        // Mempool.space serves Bitcoin testnet under `/testnet4/`
+        // (current testnet variant). Blockstream.info still indexes
+        // the legacy `/testnet/` (testnet3) endpoint, so testnet
+        // links there may not resolve for testnet4 hashes; kept
+        // anyway as a second affordance.
+        const mempoolPath = network === 'testnet' ? 'testnet4/' : '';
+        const blockstreamPath = network === 'testnet' ? 'testnet/' : '';
+        links.push({
+            id: 'mempool',
+            label: 'Mempool',
+            iconImg: 'https://mempool.space/resources/favicons/favicon.ico',
+            url: `https://mempool.space/${mempoolPath}tx/${txHash}`,
+        });
+        links.push({
+            id: 'blockstream',
+            label: 'Blockstream',
+            iconImg: 'https://blockstream.info/favicon.ico',
+            url: `https://blockstream.info/${blockstreamPath}tx/${txHash}`,
+        });
+    } else if (coin === 'litecoin') {
+        // LitecoinSpace mirrors mempool.space's URL scheme (it's a
+        // fork); mainnet has no prefix, testnet is `/testnet/`.
+        // Blockchair covers mainnet only.
+        const litecoinSpacePath = network === 'testnet' ? 'testnet/' : '';
+        links.push({
+            id: 'litecoinspace',
+            label: 'LitecoinSpace',
+            iconImg: 'https://litecoinspace.org/favicon.ico',
+            url: `https://litecoinspace.org/${litecoinSpacePath}tx/${txHash}`,
+        });
+        if (network === 'mainnet') {
+            links.push({
+                id: 'blockchair',
+                label: 'Blockchair',
+                iconImg: 'https://blockchair.com/favicon.ico',
+                url: `https://blockchair.com/litecoin/transaction/${txHash}`,
+            });
+        }
+    } else if (coin === 'dogecoin') {
+        // No reliable third-party DOGE testnet explorer at time of
+        // writing; show external links on mainnet only.
+        if (network === 'mainnet') {
+            links.push({
+                id: 'blockchair',
+                label: 'Blockchair',
+                iconImg: 'https://blockchair.com/favicon.ico',
+                url: `https://blockchair.com/dogecoin/transaction/${txHash}`,
+            });
+            links.push({
+                id: 'blockcypher',
+                label: 'BlockCypher',
+                iconImg: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
+                url: `https://live.blockcypher.com/doge/tx/${txHash}`,
+            });
+        }
+    }
+    return links;
+}
+
+/**
+ * §31.4 / Cluster O FOLLOWUP 2: recipient list for DIVIDEND / AIRDROP
+ * rows. The recipient set is derived (holders of TICK for DIVIDEND, the
+ * referenced LIST's ITEM array for AIRDROP), so the user has to opt in
+ * to the fetch by clicking Show recipients. Once loaded, a "Save N as
+ * one contact" affordance bulk-saves the addresses into a single
+ * Contact record with N entries; the address-book grouping that
+ * matches the data model best (one DIVIDEND / AIRDROP = one address
+ * book).
+ *
+ * @param {{ entry: any }} props
+ */
+function RecipientsBlock({ entry }) {
+    const { messaging } = useMessaging();
+    const action = String(entry?.action || '').toUpperCase();
+    const isDividend = action === 'DIVIDEND';
+    const isAirdrop = action === 'AIRDROP';
+    const supported = isDividend || isAirdrop;
+
+    const [stage, setStage] = useState(/** @type {'idle' | 'loading' | 'loaded' | 'saving' | 'saved'} */ ('idle'));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [recipients, setRecipients] = useState(/** @type {object[]} */ ([]));
+    const [snapshotNote, setSnapshotNote] = useState(/** @type {string | null} */ (null));
+    const [name, setName] = useState('');
+
+    if (!supported) return null;
+    if (typeof messaging?.getDividendRecipients !== 'function'
+        && typeof messaging?.getAirdropRecipients !== 'function') {
+        // No host wiring; degrade silently.
+        return null;
+    }
+
+    const coin = coinOfChainId(entry?.chainId);
+    if (!coin) return null;
+
+    const tick = String(entry?.raw?.TICK || entry?.raw?.tick || '').trim();
+    const listIdx = String(entry?.raw?.LIST_ACTION_INDEX || entry?.raw?.list_action_index || '').trim();
+    const defaultName = isDividend
+        ? `${actionDisplayLabel('DIVIDEND')} #${entry?.actionIndex || '?'}${tick ? ` (${tick})` : ''} holders`
+        : `${actionDisplayLabel('AIRDROP')} #${entry?.actionIndex || '?'}${listIdx ? ` (list #${listIdx})` : ''} recipients`;
+
+    async function load() {
+        setStage('loading');
+        setError(null);
+        try {
+            const r = isDividend
+                ? await messaging.getDividendRecipients({
+                    chainId: entry.chainId,
+                    actionIndex: String(entry.actionIndex),
+                    tick: tick || undefined,
+                })
+                : await messaging.getAirdropRecipients({
+                    chainId: entry.chainId,
+                    actionIndex: String(entry.actionIndex),
+                    listActionIndex: listIdx || undefined,
+                });
+            setRecipients(Array.isArray(r?.recipients) ? r.recipients : []);
+            setSnapshotNote(typeof r?.snapshotNote === 'string' ? r.snapshotNote : null);
+            setName(defaultName);
+            setStage('loaded');
+        } catch (err) {
+            setError(err?.message || 'Failed to load recipients.');
+            setStage('idle');
+        }
+    }
+
+    async function handleSaveAll() {
+        if (recipients.length === 0) return;
+        if (!name.trim()) {
+            setError('Name is required.');
+            return;
+        }
+        setStage('saving');
+        setError(null);
+        try {
+            await messaging.saveContact({
+                input: {
+                    name: name.trim(),
+                    notes: '',
+                    entries: recipients
+                        .map((r) => r?.address)
+                        .filter((a) => typeof a === 'string' && a.length > 0)
+                        .map((address) => ({ chain: coin, address, label: '' })),
+                },
+            });
+            setStage('saved');
+        } catch (err) {
+            setError(err?.message || 'Save failed.');
+            setStage('loaded');
+        }
+    }
+
+    const blockStyle = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--xc-space-1)',
+        marginTop: 'var(--xc-space-2)',
+    };
+    const headingStyle = { color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' };
+
+    if (stage === 'idle') {
+        return (
+            <div style={blockStyle}>
+                <Button type="button" variant="secondary" size="sm" onClick={load}>
+                    {isDividend
+                        ? t('history.recipients.showHolders')
+                        : t('history.recipients.showRecipients')}
+                </Button>
+                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+            </div>
+        );
+    }
+    if (stage === 'loading') {
+        return (
+            <div style={blockStyle}>
+                <span style={headingStyle}>{isDividend
+                    ? t('history.recipients.loadingHolders')
+                    : t('history.recipients.loadingRecipients')}</span>
+            </div>
+        );
+    }
+    if (stage === 'saved') {
+        return (
+            <div style={blockStyle}>
+                <span style={headingStyle} role="status">
+                    {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
+                </span>
+            </div>
+        );
+    }
+
+    // stage === 'loaded' or 'saving'
+    return (
+        <div style={blockStyle}>
+            <span style={headingStyle}>
+                {isDividend
+                    ? t('history.recipients.holderCount', { count: recipients.length })
+                    : t('history.recipients.recipientCount', { count: recipients.length })}
+            </span>
+            {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
+            {recipients.length > 0 ? (
+                <div style={{
+                    border: '1px solid var(--xc-border)',
+                    borderRadius: 'var(--xc-radius-sm)',
+                    padding: 'var(--xc-space-1)',
+                    fontFamily: 'monospace',
+                    fontSize: 'var(--xc-text-xs)',
+                    color: 'var(--xc-text)',
+                }}>
+                    {recipients.slice(0, 20).map((r, i) => (
+                        <div key={`${r.address}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-1)' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</span>
+                            {r.balance !== undefined ? <span style={{ color: 'var(--xc-text-muted)' }}>{r.balance}</span> : null}
+                        </div>
+                    ))}
+                    {recipients.length > 20 ? (
+                        <div style={{ color: 'var(--xc-text-muted)', marginTop: 'var(--xc-space-1)' }}>
+                            {t('history.recipients.moreNotShown', { count: recipients.length - 20 })}
+                        </div>
+                    ) : null}
+                </div>
+            ) : (
+                <EmptyState
+                    title={isDividend
+                        ? t('history.recipients.noHoldersFound')
+                        : t('history.recipients.noRecipientsFound')}
+                    body={isDividend
+                        ? t('history.recipients.noHoldersBody')
+                        : t('history.recipients.noRecipientsBody')}
+                    titleAs="p"
+                />
+            )}
+            {recipients.length > 0 ? (
+                <div style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        maxLength={120}
+                        aria-label={t('history.contact.name')}
+                        disabled={stage === 'saving'}
+                        style={{
+                            flex: 1,
+                            minWidth: 200,
+                            background: 'var(--xc-bg)',
+                            color: 'var(--xc-text)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-sm)',
+                            padding: 'var(--xc-space-1) var(--xc-space-2)',
+                            fontSize: 'var(--xc-text-sm)',
+                        }}
+                    />
+                    <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        loading={stage === 'saving'}
+                        onClick={handleSaveAll}
+                    >
+                        {t('history.recipients.saveAsContact', { count: recipients.length })}
+                    </Button>
+                </div>
+            ) : null}
+            {error ? (
+                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * Pull the peer-side address out of a history entry. Cluster O
+ * FOLLOWUP 2: extended to action-kind-aware extractors so MESSAGE
+ * incoming rows and ORDER_MATCH fill rows surface a usable counterparty
+ * (the v0.207.0 implementation only handled the SEND case cleanly;
+ * RECEIVE / MESSAGE-incoming / fill rows fell through to either a
+ * self-address or null).
+ *
+ * Returns null when no salient peer address is on the row payload;
+ * the caller suppresses the single-peer "Save as contact" prompt.
+ *
+ * DIVIDEND / AIRDROP rows have their *derived* recipient lists handled
+ * by `<RecipientsBlock>` instead; those need an SDK round-trip
+ * (holdersFor / listByActionIndex) to materialize the peer set.
+ *
+ * @param {any} entry
+ * @returns {string | null}
+ */
+function peerAddressOfEntry(entry) {
+    const raw = entry?.raw || {};
+    const self = entry?.address;
+    const isSelf = (a) => typeof self === 'string' && self.length > 0 && a === self;
+    const action = String(entry?.action || '').toUpperCase();
+
+    // ORDER_MATCH / fill rows carry both sides of the trade. The peer
+    // is whichever address isn't the wallet's own. Different explorer
+    // shapes use different field names; try them in priority order.
+    if (action === 'ORDER_MATCH' || action === 'ORDER_FILL' || action === 'ORDERFILL') {
+        const candidates = [
+            raw.tx0_address, raw.TX0_ADDRESS,
+            raw.tx1_address, raw.TX1_ADDRESS,
+            raw.give_address, raw.GIVE_ADDRESS,
+            raw.get_address, raw.GET_ADDRESS,
+            raw.destination, raw.DESTINATION,
+            raw.source, raw.SOURCE,
+        ];
+        for (const a of candidates) {
+            if (typeof a === 'string' && a.length > 0 && !isSelf(a)) return a;
+        }
+        return null;
+    }
+
+    // SEND / RECEIVE / MESSAGE / generic: destination if it isn't
+    // the wallet's own address (we received), otherwise source if
+    // that isn't ours either (we sent).
+    const dest = raw.destination ?? raw.DESTINATION ?? raw.recipient ?? raw.RECIPIENT;
+    if (typeof dest === 'string' && dest.length > 0 && !isSelf(dest)) return dest;
+    const src = raw.source ?? raw.SOURCE;
+    if (typeof src === 'string' && src.length > 0 && !isSelf(src)) return src;
+    return null;
+}
+
+/**
+ * Map a chainId like "bitcoin-mainnet" / "litecoin-regtest" to the
+ * coin family ("bitcoin" / "litecoin") that the contacts schema
+ * expects. Returns null when the chainId is malformed.
+ *
+ * @param {string | undefined} chainId
+ * @returns {string | null}
+ */
+function coinOfChainId(chainId) {
+    if (typeof chainId !== 'string' || !chainId.includes('-')) return null;
+    const [coin] = chainId.split('-', 1);
+    return coin || null;
+}
+
+// Coin family -> native ticker, used to gate the History fiat
+// toggle to genuinely native-coin amounts.
+const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
+
+/**
+ * Resolve an exact native-coin amount for `entry`, or `null` when the
+ * amount can't be trusted to price against the chain's own coin rate.
+ *
+ * IMPORTANT (old-numbering): a SEND action carries a
+ * `tick` for BOTH native-coin sends and token sends. Only a SEND whose
+ * `tick` is absent or matches the chain's own native ticker (BTC/DOGE/LTC)
+ * is a native-coin movement; a token SEND (tick = a protocol asset ticker)
+ * must never be priced with the coin's fiat rate, so this returns null for
+ * those. This is the deliberate fix for the known latent bug elsewhere in
+ * the app that conflates token amounts with the coin rate - don't
+ * replicate it here.
+ *
+ * @param {import('./History.jsx').HistoryEntry | null | undefined} entry
+ * @returns {string | null}
+ */
+function nativeAmountFieldOf(entry) {
+    if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    const coin = coinOfChainId(entry.chainId);
+    const nativeTicker = coin ? NATIVE_TICKER_BY_COIN[coin] : null;
+    if (!nativeTicker) return null;
+    const raw = entry.raw || {};
+    const tick = raw.tick ?? raw.TICK ?? raw.token;
+    if (tick && String(tick).toUpperCase() !== nativeTicker) return null; // token movement
+    const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    if (amt == null) return null;
+    const amount = String(amt).trim();
+    return /^-?\d+(\.\d+)?$/.test(amount) ? amount : null;
+}
+
+/**
+ * M2.3: the meta-line label for a row with no block. It used to be the
+ * flat word "unconfirmed", which was the wrong vocabulary (§7 fixes
+ * "pending" for anything a user reads) and, worse, was the same word for
+ * a healthy send and for one no node has ever reported.
+ *
+ * The warning treatment is the list-level half of M2 acceptance test 3:
+ * a transaction the network has not seen has to be findable in a long
+ * list without opening it.
+ *
+ * @param {{ entry: any }} props
+ */
+function PendingRowLabel({ entry }) {
+    const state = pendingStateOf(entry);
+    const warning = state != null && PENDING_WARNING_STATES.has(state);
+    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.generic');
+    return (
+        <span
+            className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}
+            data-pending-state={state || 'pending'}
+        >
+            {warning ? <span aria-hidden="true">⚠</span> : null}
+            {label}
+        </span>
+    );
+}
+
+/**
+ * M2.5: what the pending row moves, on the row itself. Until now a
+ * pending entry named its action, its state and its counterparty and
+ * said nothing about the value at stake, so the list gave the user no
+ * way to tell a dust send from their rent without opening every row.
+ *
+ * Renders nothing rather than a placeholder when no amount can be stood
+ * behind. A blank says the wallet does not know; a zero would say the
+ * transaction moves nothing, which is a different and false claim.
+ *
+ * The phrasing is a verb still in progress, and the accessible name
+ * carries the pre-validation caveat for a reader who never sees the
+ * styling. Neither is decoration: this figure sits inches from settled
+ * amounts in the same list, and the indexer can still reject the action
+ * when its block lands.
+ *
+ * @param {{ entry: any }} props
+ */
+function PendingAmountLabel({ entry }) {
+    const [balancesHidden] = useBalancesHidden();
+    const annotation = pendingAmountAnnotation(entry);
+    if (!annotation) return null;
+    const amounts = annotation.outputs
+        .map((o) => t('pending.amount.entry', {
+            amount: balancesHidden ? '•••••' : o.amount,
+            tick: o.tick,
+        }))
+        .join(t('pending.amount.separator'));
+    const summary = t(
+        PENDING_AMOUNT_COPY[annotation.direction] || 'pending.amount.moving',
+        { amounts },
+    );
+    const caveat = t('pending.amount.caveat', { summary });
+    return (
+        <span
+            className={styles.pendingAmount}
+            data-pending-amount={annotation.direction || 'unknown'}
+            aria-label={caveat}
+            title={caveat}
+        >
+            {summary}
+        </span>
+    );
+}
+
+/**
+ * One history row. Used both for top-level entries and for member rows
+ * inside an expanded group card.
+ */
+// Which actions name a contract on their payload. XEXEC is deliberately not
+// here: its payload carries no contract index at all, only an
+// `execute_action_index` one hop away, so there is nothing to label from.
+const CONTRACT_ACTIONS = new Set(['DEPLOY', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']);
+
+/**
+ * "Escrow v1.0.0 (C:BTC:12)" for a history row that touched a contract, or ''
+ * for every other row.
+ *
+ * The four payloads carry the contract's `contract_meta_name` and
+ * `contract_meta_version` beside its index (`deployed_contract_index` on a
+ * DEPLOY, which is not necessarily the DEPLOY's own action under deferred
+ * assembly; `contract_index` on the rest), so a user reading their history sees
+ * WHICH contract they funded rather than a bare number. `normalizeHistoryRow`
+ * has already lifted the payload out of `details`, so these read off `raw`.
+ *
+ * @param {any} entry
+ * @returns {string}
+ */
+function contractRowLabel(entry) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (!CONTRACT_ACTIONS.has(action)) return '';
+    const raw = entry.raw || {};
+    const idx = raw.deployed_contract_index ?? raw.contract_index ?? raw.contract_action_index;
+    if (idx === null || idx === undefined || String(idx) === '') return '';
+    return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
+}
+
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
+    const d = chainRegistry.get(entry.chainId);
+    const receiveLabel = entry.receiveLabel
+        && classifyEntryAction(entry, walletAddresses) === 'receive'
+        ? entry.receiveLabel
+        : '';
+    return (
+        <li data-history-key={entry.key}>
+            <button
+                type="button"
+                onClick={onClick}
+                className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
+                aria-expanded={selected}
+            >
+                {showConnector ? (
+                    <span className={styles.connector} aria-hidden="true" />
+                ) : null}
+                <span className={styles.rowHeader}>
+                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
+                    <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
+                    {entry.link ? (
+                        <span
+                            className={styles.crosschainBadge}
+                            title={t('history.row.linkedTo', {
+                                ticker: entry.link.peerCoinTicker,
+                                index: entry.link.peerActionIndex,
+                            })}
+                        >
+                            🔗
+                        </span>
+                    ) : null}
+                    <StatusPill status={classifyEntryStatus(entry)} />
+                    {verify ? (
+                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                    ) : null}
+                </span>
+                <span className={styles.rowSourceAddress} title={entry.source || undefined}>
+                    {entry.source || '-'}
+                </span>
+                {receiveLabel ? (
+                    <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
+                ) : null}
+                {contractRowLabel(entry) ? (
+                    <span className={styles.rowContractLabel}>
+                        {contractRowLabel(entry)}
+                    </span>
+                ) : null}
+                <span className={styles.rowMeta}>
+                    {entry.blockIndex ? (
+                        <>
+                            <span>{t('history.row.block', {
+                                block: formatDecimalAmount(entry.blockIndex),
+                            })}</span>
+                            {chainTip ? (
+                                <span className={styles.confirmationsPill}>
+                                    {t('history.row.confirmations', {
+                                        count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+                                    })}
+                                </span>
+                            ) : null}
+                        </>
+                    ) : (
+                        <>
+                            <PendingRowLabel entry={entry} />
+                            <PendingAmountLabel entry={entry} />
+                        </>
+                    )}
+                    {entry.timestamp ? (
+                        <span
+                            className={styles.rowRelativeTime}
+                            title={formatTimestamp(entry.timestamp)}
+                        >
+                            {formatRelativeTime(entry.timestamp)}
+                        </span>
+                    ) : null}
+                </span>
+            </button>
+            {selected ? (
+                <DetailCard
+                    entry={entry}
+                    peerCache={peerCache}
+                    isFull={isFull}
+                    chainTip={chainTip}
+                    indexerWatermark={indexerWatermark}
+                    walletId={walletId}
+                    showFiatInHistory={showFiatInHistory}
+                    fiatCurrency={fiatCurrency}
+                    onDismissFailed={onDismissFailed}
+                />
+            ) : null}
+        </li>
+    );
+}
+
+/**
+ * Collapsed group card (§28.2). Renders a single summary row that
+ * expands to reveal its member entries when clicked.
+ */
+function GroupCard({ item, expanded, onToggle }) {
+    const [balancesHidden] = useBalancesHidden();
+    const d = chainRegistry.get(item.leader.chainId);
+    // §28.3: link-pair groups span two chains; surface both badges so
+    // the user sees the cross-chain relationship without expanding.
+    // Other subkinds keep their single-chain header.
+    const isLinkPair = item.subkind === 'link-pair';
+    const peer = isLinkPair ? item.members[0] : null;
+    const peerDescriptor = peer ? chainRegistry.get(peer.chainId) : null;
+    const newest = item.members[0];
+    // Only issue-mint group summaries embed a financial amount
+    // ("Launched TICK (supply 12345)"); strip the supply parenthetical
+    // when privacy mode is on. Other subkinds carry counts or
+    // chain-link metadata that aren't amounts.
+    const displaySummary = (balancesHidden && item.subkind === 'issue-mint')
+        ? stripSupplyParenthetical(item.summary)
+        : item.summary;
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
+            aria-expanded={expanded}
+        >
+            <span className={styles.rowHeader}>
+                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
+                {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
+                    <>
+                        <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
+                        <ChainBadge descriptor={peerDescriptor} size="sm" />
+                    </>
+                ) : null}
+                <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
+                {!isLinkPair ? (
+                    <span className={styles.groupCount}>{item.members.length}</span>
+                ) : null}
+            </span>
+            <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
+            <span className={styles.rowMeta}>
+                {newest?.timestamp ? (
+                    <span title={formatTimestamp(newest.timestamp)}>
+                        {t('history.group.latest', { when: formatRelativeTime(newest.timestamp) })}
+                    </span>
+                ) : '-'}
+                <span className={styles.groupChevron} aria-hidden="true">
+                    <DoubleChevron direction={expanded ? 'up' : 'down'} />
+                </span>
+            </span>
+        </button>
+    );
+}
+
+// Humanized labels (the badge CSS uppercases visually); raw opcodes like
+// DISPENSER/ORDER route through the shared display map so the copy stays in
+// the house voice if the styling ever changes.
+function groupBadgeLabel(subkind) {
+    if (subkind === 'issue-mint') return 'Launch';
+    if (subkind === 'dispenser-dispense') return actionDisplayLabel('DISPENSER');
+    if (subkind === 'order-fills') return actionDisplayLabel('ORDER');
+    if (subkind === 'link-pair') return actionDisplayLabel('LINK');
+    if (subkind === 'batch') return actionDisplayLabel('BATCH');
+    return 'Group';
+}
+
+/** @typedef {{
+ *   key: string,
+ *   chainId: string,
+ *   address: string,
+ *   actionIndex: string,
+ *   action: string,
+ *   blockIndex: number,
+ *   timestamp: number,
+ *   txHash: string,
+ *   source: string,
+ *   raw: any,
+ *   link: { peerChainId: string | null, peerCoinTicker: string, peerActionIndex: string, linkActionIndex: string } | null
+ * }} HistoryEntry
+ */
+
+function extractRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.rows)) return resp.rows;
+    return [];
+}
+
+/**
+ * Given a LINK row and the chainId we read it from, identify which
+ * (coin, action_index) is the local side and which is the peer.
+ * Returns null if the row doesn't expose enough metadata.
+ */
+function sidesFromLink(link, localChainId) {
+    if (!link) return null;
+    const coin1 = link.coin1 || link.COIN1;
+    const coin2 = link.coin2 || link.COIN2;
+    const idx1 = link.coin1_action_index ?? link.COIN1_ACTION_INDEX;
+    const idx2 = link.coin2_action_index ?? link.COIN2_ACTION_INDEX;
+    if (!coin1 || !coin2 || idx1 == null || idx2 == null) return null;
+
+    const localDescriptor = chainRegistry.get(localChainId);
+    const localCoinName = localDescriptor?.coin || null;
+    const c1Name = COIN_TICKER_TO_NAME[String(coin1).toUpperCase()] || null;
+    const c2Name = COIN_TICKER_TO_NAME[String(coin2).toUpperCase()] || null;
+
+    const networkKind = localDescriptor?.networkKind || 'mainnet';
+    const c1ChainId = c1Name ? chainRegistry.chainIdFor(c1Name, networkKind) : null;
+    const c2ChainId = c2Name ? chainRegistry.chainIdFor(c2Name, networkKind) : null;
+
+    // Local side is whichever (coin, networkKind) maps to localChainId.
+    const c1IsLocal = c1ChainId === localChainId
+        || (localCoinName && c1Name === localCoinName);
+    const c2IsLocal = c2ChainId === localChainId
+        || (localCoinName && c2Name === localCoinName);
+
+    if (c1IsLocal && !c2IsLocal) {
+        return {
+            local: { chainId: localChainId, coinTicker: String(coin1), actionIndex: idx1 },
+            peer: { chainId: c2ChainId, coinTicker: String(coin2), actionIndex: idx2 },
+        };
+    }
+    if (c2IsLocal && !c1IsLocal) {
+        return {
+            local: { chainId: localChainId, coinTicker: String(coin2), actionIndex: idx2 },
+            peer: { chainId: c1ChainId, coinTicker: String(coin1), actionIndex: idx1 },
+        };
+    }
+    // Same-chain LINK (rare but possible): treat side1 as local, side2
+    // as peer so the connector still draws.
+    if (c1IsLocal && c2IsLocal) {
+        return {
+            local: { chainId: localChainId, coinTicker: String(coin1), actionIndex: idx1 },
+            peer: { chainId: localChainId, coinTicker: String(coin2), actionIndex: idx2 },
+        };
+    }
+    return null;
+}
+
+function keyFor(chainId, actionIndex) {
+    return `${chainId}:${actionIndex}`;
+}
+
+// Bare-bones CSS.escape replacement; we control the input shape (a
+// chainId + ':' + actionIndex + ':' + address triple), so the only
+// reliably-problematic chars are `:` and quotes; escape every non-
+// alphanumeric to a backslash form rather than depending on
+// `CSS.escape` (jsdom 25+ has it, but older renderers might not).
+function cssEscape(s) {
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+}
+
+function peerCacheKey(chainId, actionIndex) {
+    return `${chainId}:${actionIndex}`;
+}
+
+function shorten(addr) {
+    if (!addr || addr.length <= 12) return addr;
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+// Longer middle-ellipsis truncation used in the ActionDetail "Source"
+// table cell. The cell has more horizontal room than the row meta so
+// we can show more of each end before collapsing.
+function shortenAddress(addr) {
+    if (!addr) return '';
+    if (addr.length <= 26) return addr;
+    return `${addr.slice(0, 16)}…${addr.slice(-8)}`;
+}
+
+/**
+ * Per-row success / error / pending indicator. Reads the entry's
+ * classified status and renders a colored pill so the user can scan a
+ * long list and pick out failures at a glance.
+ */
+function StatusPill({ status }) {
+    if (status === 'confirmed') {
+        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title={t('history.status.confirmed')}>{t('history.status.confirmed')}</span>;
+    }
+    if (status === 'failed') {
+        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title={t('history.status.failed')}>{t('history.status.failed')}</span>;
+    }
+    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title={t('history.status.pending')}>{t('history.status.pending')}</span>;
+}
+
+function formatTimestamp(ts) {
+    return formatLocalDateTime(ts) || '-';
+}
+
+/**
+ * Best-effort one-line summary for a row. Different ACTIONs join in
+ * different fields; we surface the most useful per-action shape, then
+ * fall back to a generic descriptor.
+ */
+function summarizeRow(row, action) {
+    if (!row) return action;
+    if (action === 'SEND') {
+        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
+        const tick = row.tick ?? row.TICK ?? row.token;
+        const dest = row.destination ?? row.DESTINATION ?? row.recipient;
+        if (amt != null && tick && dest) return `${amt} ${tick} → ${shorten(String(dest))}`;
+    }
+    if (action === 'ISSUE') {
+        const tick = row.tick ?? row.TICK;
+        const amt = row.amount ?? row.AMOUNT ?? row.quantity;
+        if (tick && amt != null) return `Issued ${amt} ${tick}`;
+    }
+    if (action === 'LINK') {
+        const c1 = row.coin1 || row.COIN1;
+        const c2 = row.coin2 || row.COIN2;
+        if (c1 && c2) return `Link ${c1} ↔ ${c2}`;
+    }
+    if (row.memo || row.MEMO) return String(row.memo || row.MEMO);
+    return action;
+}
+
+// Field names whose values are financial amounts the privacy toggle
+// should opaque. Matched case-insensitively against both snake_case and
+// camelCase variants. Keep this conservative: only known amount-bearing
+// keys, not address / index / status fields.
+const AMOUNT_KEY_RE = /^(amount|quantity|supply|max_supply|maxSupply|give_amount|giveAmount|get_amount|getAmount|give_remaining|giveRemaining|get_remaining|getRemaining|escrow_quantity|escrowQuantity|mainchainrate|dispense_quantity|dispenseQuantity|dispense_count|dispenseCount|fee|fee_per_kb|feePerKb)$/i;
+
+// Drop the "(supply 12345)" tail from an issue-mint group summary when
+// privacy mode is on. Matches the format emitted by historyGrouping's
+// `summarizeGroup`: anything else is returned unchanged.
+function stripSupplyParenthetical(summary) {
+    if (typeof summary !== 'string') return summary;
+    return summary.replace(/\s*\(supply [^)]+\)\s*$/, '');
+}
+
+/**
+ * Recursively replace amount-field values with `'•••••'`. Object / array
+ * traversal is preserved so the rest of the structure stays readable
+ * when the redacted result is JSON.stringify'd into the Raw tab or
+ * fed into the Details table. Returns the input unchanged when it
+ * contains no amount fields, so the React identity stays stable.
+ */
+function redactAmountFields(value) {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(redactAmountFields);
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+            out[k] = AMOUNT_KEY_RE.test(k) ? '•••••' : redactAmountFields(v);
+        }
+        return out;
+    }
+    return value;
+}
+
+/** Render the row's raw fields as pretty-printed JSON for the detail card. */
+function decodeActionToText(row) {
+    if (!row) return '(no data)';
+    try {
+        return JSON.stringify(row, null, 2);
+    } catch (err) {
+        return String(err);
+    }
+}
+
+/* ───── §28.5 / G081 history export ───────────────────────────────── */
+
+/**
+ * Multi-select dropdown: same trigger button as ChainPicker but the
+ * popover contains a checkbox per option. The button summary shows
+ * "All <label>" when nothing's filtered (everything passes), a single
+ * option's label when one is selected, or "N selected" otherwise.
+ */
+/** Per-action-type icon lookup. Maps each option id to an Icon
+ *  element from the shared ui library. */
+function actionTypeIcon(id) {
+    switch (id) {
+        case 'send':       return <Icon.SendIcon />;
+        case 'receive':    return <Icon.ReceiveIcon />;
+        case 'issue':      return <Icon.PlusIcon />;
+        case 'mint':       return <Icon.TokenIcon />;
+        case 'destroy':    return <Icon.TrashIcon />;
+        case 'sweep':      return <Icon.DownloadIcon />;
+        case 'dispenser':  return <Icon.MarketIcon />;
+        case 'dispense':   return <Icon.DownloadIcon />;
+        case 'order':      return <Icon.MarketIcon />;
+        case 'swap':       return <Icon.SwapIcon />;
+        case 'dividend':   return <Icon.DollarIcon />;
+        case 'broadcast':  return <Icon.BroadcastIcon />;
+        case 'message':    return <Icon.MessageIcon />;
+        case 'crosschain': return <Icon.LinkIcon />;
+        default:           return null;
+    }
+}
+
+function specialFilterIcon(id) {
+    if (id === 'crosschain') return <Icon.LinkIcon />;
+    if (id === 'multisig') return <Icon.KeyIcon />;
+    return null;
+}
+
+function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, iconForId, menuHeader }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (wrapRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    // Empty filter = "no constraint" (everything passes). Match the
+    // existing applyHistoryFilters semantics so this matches the prior
+    // chip-toggle behavior exactly.
+    const isAll = selected.size === 0;
+    const summary = isAll
+        ? allLabel
+        : selected.size === 1
+            ? (options.find((o) => o.id === Array.from(selected)[0])?.label || `1 ${summaryNoun}`)
+            : `${selected.size} ${summaryNoun}s`;
+
+    return (
+        <div ref={wrapRef} className={styles.chainPickerWrap}>
+            <button
+                type="button"
+                className={styles.chainPickerBtn}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                <span className={styles.chainPickerLeft}>{summary}</span>
+                <SingleChevron direction="down" />
+            </button>
+            {open ? (
+                <ul className={styles.chainPickerMenu} role="listbox" aria-multiselectable="true">
+                    {menuHeader ? (
+                        <li className={styles.checkboxMenuHeader} aria-hidden="true">
+                            {menuHeader}
+                        </li>
+                    ) : null}
+                    {options.map((opt) => {
+                        const active = selected.has(opt.id);
+                        const icon = typeof iconForId === 'function' ? iconForId(opt.id) : null;
+                        return (
+                            <li key={opt.id}>
+                                <label
+                                    className={`${styles.chainPickerOption} ${active ? styles.chainPickerOptionActive : ''}`}
+                                    role="option"
+                                    aria-selected={active}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={active}
+                                        onChange={() => onToggle(opt.id)}
+                                    />
+                                    {icon ? <span className={styles.checkboxOptionIcon} aria-hidden="true">{icon}</span> : null}
+                                    <span>{opt.label}</span>
+                                </label>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+        </div>
+    );
+}
+
+/** Single chevron: render via SVG so the line weight matches the
+ * surrounding text and stays crisp at any size. */
+function SingleChevron({ direction = 'down' }) {
+    const points = direction === 'up' ? '3,8 6,5 9,8' : '3,5 6,8 9,5';
+    return (
+        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <polyline
+                points={points}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
+/** Two chevrons stacked, both pointing the same way. */
+function DoubleChevron({ direction = 'down' }) {
+    const top = direction === 'up' ? '3,6 6,3 9,6' : '3,3 6,6 9,3';
+    const bot = direction === 'up' ? '3,11 6,8 9,11' : '3,8 6,11 9,8';
+    return (
+        <svg viewBox="0 0 12 14" width="12" height="14" aria-hidden="true">
+            <polyline
+                points={top}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <polyline
+                points={bot}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
+/** Format a date N days ago in local time as YYYY-MM-DD for the
+ *  native <input type="date"> control. */
+/**
+ * The date inputs speak in the user's own days. `isoDateDaysAgo` builds its
+ * string from LOCAL calendar components and `<input type="date">` shows the
+ * user a local day, but `Date.parse('2026-08-27')` is UTC midnight by spec.
+ * Reading the two the same way is the whole point of these helpers.
+ *
+ * The asymmetry was not cosmetic. West of UTC, "today" as a UTC-parsed day
+ * ends BEFORE the current moment for as long as the local date lags the UTC
+ * date: in US Pacific that is every evening from 17:00 until midnight, and
+ * for those seven hours the default 30-day window silently hid everything
+ * that had just happened, which is exactly the moment a pending transaction
+ * needs to be visible.
+ *
+ * @param {string} iso  `YYYY-MM-DD`, or empty for no bound
+ * @returns {number | null}
+ */
+function localDayStartMs(iso) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!parts) return null;
+    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), 0, 0, 0, 0).getTime();
+}
+
+/**
+ * End of the local day named by `iso`, inclusive.
+ *
+ * @param {string} iso
+ * @returns {number | null}
+ */
+function localDayEndMs(iso) {
+    const start = localDayStartMs(iso);
+    if (start == null) return null;
+    const d = new Date(start);
+    d.setDate(d.getDate() + 1);
+    return d.getTime() - 1;
+}
+
+function isoDateDaysAgo(days) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function chainScopeLabel(enabledChains, activeChainIds) {
+    if (!enabledChains) return 'all';
+    const total = activeChainIds.length;
+    if (enabledChains.size === 0 || enabledChains.size === total) return 'all';
+    return Array.from(enabledChains).sort().join('+');
+}
+
+/**
+ * Custom chain picker: full-width button that opens a popover with
+ * each option rendered as its chain logo + display name. Used instead
+ * of a native <select> because browsers don't render HTML / images
+ * inside <option> elements.
+ */
+function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onClick = (e) => {
+            if (wrapRef.current?.contains(e.target)) return;
+            setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        window.addEventListener('mousedown', onClick);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onClick);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    const isAll = enabledChains.size === activeChainIds.length || enabledChains.size === 0;
+    const selectedId = isAll ? null : Array.from(enabledChains)[0];
+    const selectedDesc = selectedId ? chainRegistry.get(selectedId) : null;
+
+    const choose = (id) => {
+        const next = id === 'all'
+            ? new Set(activeChainIds)
+            : new Set([id]);
+        onChange(next);
+        setOpen(false);
+    };
+
+    return (
+        <div ref={wrapRef} className={styles.chainPickerWrap}>
+            <button
+                type="button"
+                className={styles.chainPickerBtn}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                <span className={styles.chainPickerLeft}>
+                    {selectedDesc ? (
+                        <img
+                            src={branding.chainIconSmallUrl(selectedDesc.id)}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.chainPickerIcon}
+                        />
+                    ) : (
+                        <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
+                    )}
+                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
+                </span>
+                <SingleChevron direction="down" />
+            </button>
+            {open ? (
+                <ul className={styles.chainPickerMenu} role="listbox">
+                    <li>
+                        <button
+                            type="button"
+                            role="option"
+                            aria-selected={isAll}
+                            className={`${styles.chainPickerOption} ${isAll ? styles.chainPickerOptionActive : ''}`}
+                            onClick={() => choose('all')}
+                        >
+                            <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
+                            <span>{t('history.filters.allChains')}</span>
+                        </button>
+                    </li>
+                    {activeChainIds.map((cid) => {
+                        const d = chainRegistry.get(cid);
+                        const isSel = selectedId === cid;
+                        return (
+                            <li key={cid}>
+                                <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSel}
+                                    className={`${styles.chainPickerOption} ${isSel ? styles.chainPickerOptionActive : ''}`}
+                                    onClick={() => choose(cid)}
+                                >
+                                    <img
+                                        src={branding.chainIconSmallUrl(cid)}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className={styles.chainPickerIcon}
+                                    />
+                                    <span>{d?.displayName || cid}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : null}
+        </div>
+    );
+}
+
+function runExport({ entries, scope, format, columns, fiatCurrency }) {
+    if (!Array.isArray(entries) || entries.length === 0) return;
+    const filename = flowsLib.buildExportFilename({ scope, format });
+    const fileContent = format === 'csv'
+        ? flowsLib.entriesToCsv(entries, { columns, fiatCurrency })
+        : flowsLib.entriesToJson(entries, { scope, columns, fiatCurrency });
+    const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
+    const blob = new Blob([fileContent], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ───── Cluster I FOLLOWUP 5 - export modal ───────────────────────── */
+
+const MODAL_SCRIM = {
+    position: 'fixed',
+    inset: 0,
+    padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
+    background: 'rgba(0, 0, 0, 0.45)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+};
+const MODAL_CARD = {
+    background: 'var(--xc-bg)',
+    color: 'var(--xc-text)',
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-md)',
+    padding: 'var(--xc-space-3)',
+    width: 'min(420px, 90vw)',
+    maxHeight: '80vh',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-3)',
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25)',
+};
+const MODAL_FIELDSET = {
+    border: '1px solid var(--xc-border)',
+    borderRadius: 'var(--xc-radius-sm)',
+    padding: 'var(--xc-space-2)',
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-1)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const MODAL_LEGEND = {
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-xs)',
+    padding: '0 var(--xc-space-1)',
+};
+const MODAL_LABEL = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--xc-space-2)',
+    fontSize: 'var(--xc-text-sm)',
+};
+const MODAL_ACTIONS = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+};
+
+function ExportModal({
+    onClose,
+    format, setFormat,
+    columns, setColumns,
+    fiatCurrency,
+    visibleCount,
+    onConfirm,
+}) {
+    // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
+    // closing hands focus back to the opener.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
+    useBackHandler(onClose);
+    useEffect(() => {
+        function onKey(e) { if (e.key === 'Escape') onClose(); }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const toggleColumn = (col) => {
+        const next = new Set(columns);
+        if (next.has(col)) next.delete(col);
+        else next.add(col);
+        setColumns(next);
+    };
+
+    return (
+        <div
+            style={MODAL_SCRIM}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+            role="presentation"
+            tabIndex={-1}
+        >
+            <div
+                ref={dialogRef}
+                style={MODAL_CARD}
+                role="dialog"
+                aria-modal="true"
+                aria-label={t('history.export.title')}
+            >
+                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-format"
+                            value="csv"
+                            checked={format === 'csv'}
+                            onChange={() => setFormat('csv')}
+                        />
+                        {t('history.export.csv')}
+                    </label>
+                    <label style={MODAL_LABEL}>
+                        <input
+                            type="radio"
+                            name="export-format"
+                            value="json"
+                            checked={format === 'json'}
+                            onChange={() => setFormat('json')}
+                        />
+                        {t('history.export.json')}
+                    </label>
+                </fieldset>
+
+                <fieldset style={MODAL_FIELDSET}>
+                    <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
+                    {flowsLib.EXPORT_COLUMNS.map((col) => {
+                        const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                        const label = col === 'fiatCurrency'
+                            ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                            : detail.label;
+                        return (
+                            <label key={col} style={MODAL_LABEL} title={detail.description}>
+                                <input
+                                    type="checkbox"
+                                    checked={columns.has(col)}
+                                    onChange={() => toggleColumn(col)}
+                                />
+                                <span>
+                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
+                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
+                                        {detail.description}
+                                    </span>
+                                </span>
+                            </label>
+                        );
+                    })}
+                </fieldset>
+
+                <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                    {t('history.export.rowCount', { count: visibleCount })}
+                </p>
+
+                <div style={MODAL_ACTIONS}>
+                    <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
+                    <button
+                        type="button"
+                        className={styles.chip}
+                        onClick={onConfirm}
+                        disabled={visibleCount === 0 || columns.size === 0}
+                    >
+                        {t('history.export.confirm')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
