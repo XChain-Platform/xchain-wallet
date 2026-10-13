@@ -102,27 +102,35 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [current, setCurrent] = useState(/** @type {any} */ (null));
     const [currentError, setCurrentError] = useState(/** @type {string | null} */ (null));
     const [reviewBaseline, setReviewBaseline] = useState(/** @type {any} */ (null));
-    const prefilled = useRef(false);
-    // A pick made before the mount-time read returns is the user's answer, so
-    // it ends the prefill: a slow explorer read must not overwrite it.
-    const pick = (setter) => (value) => {
-        prefilled.current = true;
+    const touched = useRef({ fee: false, requireMemo: false, dispenser: false });
+    const initialPrefillOpen = useRef(true);
+    // Each choice is independent: a slow read may still prefill untouched
+    // fields, but it never overwrites a field the user has picked.
+    const pick = (field, setter) => (value) => {
+        touched.current[field] = true;
         setter(value);
     };
 
     useEffect(() => {
         let cancelled = false;
         if (!chainId || !address) return undefined;
+        initialPrefillOpen.current = true;
+        setCurrent(null);
+        setCurrentError(null);
         messaging.getAddressPreferences({ chainId, address })
             .then((prefs) => {
                 if (cancelled) return;
                 setCurrent(prefs);
-                if (!prefilled.current) {
-                    prefilled.current = true;
-                    // 0 and 2 share the donate-to-protocol effect; the form
-                    // writes the explicit value.
+                if (!initialPrefillOpen.current) return;
+                // 0 and 2 share the donate-to-protocol effect; the form
+                // writes the explicit value.
+                if (!touched.current.fee) {
                     setFeePref(Number(prefs.feePreference) === 1 ? '1' : '2');
+                }
+                if (!touched.current.requireMemo) {
                     setRequireMemo(Number(prefs.requireMemo) === 1);
+                }
+                if (!touched.current.dispenser) {
                     setDispPref(Number(prefs.dispenserPreference) === 2 ? '2' : '1');
                 }
             })
@@ -177,8 +185,20 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     async function handleReview(event) {
         event.preventDefault();
         setFormError(null);
+        initialPrefillOpen.current = false;
         try {
             const fresh = await messaging.getAddressPreferences({ chainId, address });
+            // Every ADDRESS write carries all three values. Refresh fields the
+            // user did not touch so an external update is preserved.
+            if (!touched.current.fee) {
+                setFeePref(Number(fresh.feePreference) === 1 ? '1' : '2');
+            }
+            if (!touched.current.requireMemo) {
+                setRequireMemo(Number(fresh.requireMemo) === 1);
+            }
+            if (!touched.current.dispenser) {
+                setDispPref(Number(fresh.dispenserPreference) === 2 ? '2' : '1');
+            }
             setReviewBaseline(fresh);
             setStage('review');
         } catch (err) {
@@ -388,7 +408,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         type="radio"
                         name="feePref"
                         checked={feePref === '2'}
-                        onChange={() => pick(setFeePref)('2')}
+                        onChange={() => pick('fee', setFeePref)('2')}
                     />
                     <span>Donate to protocol development (default)</span>
                 </label>
@@ -397,7 +417,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         type="radio"
                         name="feePref"
                         checked={feePref === '1'}
-                        onChange={() => pick(setFeePref)('1')}
+                        onChange={() => pick('fee', setFeePref)('1')}
                     />
                     <span>{feePreferenceLabel(1)}</span>
                 </label>
@@ -408,7 +428,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     <input
                         type="checkbox"
                         checked={requireMemo}
-                        onChange={(e) => pick(setRequireMemo)(e.target.checked)}
+                        onChange={(e) => pick('requireMemo', setRequireMemo)(e.target.checked)}
                     />
                     <span>Require a memo on any send to this address</span>
                 </label>
@@ -420,7 +440,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         type="radio"
                         name="dispPref"
                         checked={dispPref === '1'}
-                        onChange={() => pick(setDispPref)('1')}
+                        onChange={() => pick('dispenser', setDispPref)('1')}
                     />
                     <span>Only this address may open dispensers (default)</span>
                 </label>
@@ -429,7 +449,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         type="radio"
                         name="dispPref"
                         checked={dispPref === '2'}
-                        onChange={() => pick(setDispPref)('2')}
+                        onChange={() => pick('dispenser', setDispPref)('2')}
                     />
                     <span>Anyone may open a dispenser funded by this address</span>
                 </label>

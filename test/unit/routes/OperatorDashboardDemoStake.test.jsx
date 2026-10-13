@@ -54,7 +54,7 @@ afterEach(() => {
 describe('OperatorDashboard demo wallet staking', () => {
     it('shows the synthesized stake without querying the indexer', async () => {
         const { methods } = mount(DEMO_ID);
-        await waitFor(() => expect(screen.getByText(/^Amount:/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/^Total amount staked:/)).toBeTruthy());
         expect(screen.queryByText(/No active stake on this address/)).toBeNull();
         expect(methods.getStakesForAddress).not.toHaveBeenCalled();
     });

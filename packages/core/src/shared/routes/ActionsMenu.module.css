@@ -36,7 +36,7 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .entryIcon > svg {
@@ -107,7 +107,7 @@
 
 .statusPillError {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .statusPillPending {

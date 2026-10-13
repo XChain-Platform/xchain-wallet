@@ -46,7 +46,6 @@ describe('governance screen narrow layout', () => {
         'GovernancePolls.jsx',
         'BetFeedsList.jsx',
         'MyBets.jsx',
-        'OracleConsole.jsx',
         'BetFeedDetail.jsx',
         'OracleRecord.jsx',
     ])('%s wraps every space-between user-data row', (file) => {
@@ -55,6 +54,13 @@ describe('governance screen narrow layout', () => {
         ));
         expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
+    });
+
+    it('wraps Oracle Console market headers through its phone layout styles', () => {
+        const source = route('OracleConsole.jsx');
+        const css = route('OracleConsole.module.css');
+        expect(source).toContain('className={consoleStyles.marketHeader}');
+        expect(css).toMatch(/\.marketHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
     });
 
     it('uses the wrapping section header template for contract detail groups', () => {

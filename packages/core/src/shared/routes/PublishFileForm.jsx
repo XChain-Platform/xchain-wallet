@@ -32,6 +32,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { MEMO_HINT } from '../utils/memoLimit.js';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -111,9 +112,11 @@ export function PublishFileForm({ walletId, onBack }) {
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileReadIdRef = useRef(0);
 
     // Gated mode: ticks this wallet owns (issuer-only protocol rule).
     const [ownedTokens, setOwnedTokens] = useState(/** @type {any[] | null} */ (null));
+    const [ownedTokensError, setOwnedTokensError] = useState(/** @type {string | null} */ (null));
     const [gatePick, setGatePick] = useState(
         /** @type {{ chainId: string, tick: string, ownerAddress: string } | null} */ (null),
     );
@@ -151,7 +154,11 @@ export function PublishFileForm({ walletId, onBack }) {
     // switch to Encrypted mode (same aggregation MyTokens uses).
     useEffect(() => {
         if (mode !== 'gated' || ownedTokens !== null || !addressesByChain) return undefined;
-        if (typeof messaging.getOwnedTokens !== 'function') { setOwnedTokens([]); return undefined; }
+        if (typeof messaging.getOwnedTokens !== 'function') {
+            setOwnedTokens([]);
+            setOwnedTokensError('This wallet cannot look up tokens for gated publishing.');
+            return undefined;
+        }
         let cancelled = false;
         const calls = [];
         for (const [cid, addrs] of Object.entries(addressesByChain)) {
@@ -163,18 +170,19 @@ export function PublishFileForm({ walletId, onBack }) {
                     messaging.getOwnedTokens({ chainId: cid, address })
                         .then((rows) => (Array.isArray(rows) ? rows : []).map((r) => ({
                             ...r, chainId: cid, ownerAddress: address,
-                        })))
-                        .catch(() => []),
+                        })).filter((r) => typeof r.tick === 'string' && r.tick.length > 0))
+                        .then((rows) => ({ rows, failed: false }))
+                        .catch(() => ({ rows: [], failed: true })),
                 );
             }
         }
         if (calls.length === 0) { setOwnedTokens([]); return undefined; }
-        Promise.all(calls).then((batches) => {
+        Promise.all(calls).then((results) => {
             if (cancelled) return;
             const seen = new Set();
             const merged = [];
-            for (const batch of batches) {
-                for (const row of batch) {
+            for (const result of results) {
+                for (const row of result.rows) {
                     const key = `${row.chainId}:${row.tick}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -183,6 +191,13 @@ export function PublishFileForm({ walletId, onBack }) {
             }
             merged.sort((a, b) => a.tick.localeCompare(b.tick));
             setOwnedTokens(merged);
+            if (results.some((result) => result.failed)) {
+                setOwnedTokensError(
+                    results.every((result) => result.failed)
+                        ? 'Could not look up tokens for gated publishing. Check your connection and reopen this screen.'
+                        : 'Some token ownership checks failed. The list below may be incomplete.',
+                );
+            }
         });
         return () => { cancelled = true; };
     }, [mode, ownedTokens, addressesByChain, messaging]);
@@ -274,8 +289,10 @@ export function PublishFileForm({ walletId, onBack }) {
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
+        const readId = ++fileReadIdRef.current;
         setFileMeta(null);
-        const type = file.type || 'application/octet-stream';
+        const { type, error: typeError } = publishFileType(file);
+        if (typeError) { setFormError(typeError); return; }
         const cap = publicCapFor(file.name, type);
         if (file.size === 0) { setFormError('That file is empty.'); return; }
         if (file.size > cap) {
@@ -288,10 +305,25 @@ export function PublishFileForm({ walletId, onBack }) {
         }
         const reader = new FileReader();
         reader.onload = () => {
-            const bytes = new Uint8Array(/** @type {ArrayBuffer} */ (reader.result));
+            if (readId !== fileReadIdRef.current) return;
+            if (!(reader.result instanceof ArrayBuffer)) {
+                setFormError('Could not read that file.');
+                return;
+            }
+            const bytes = new Uint8Array(reader.result);
+            if (bytes.length === 0) { setFormError('That file is empty.'); return; }
+            if (bytes.length > cap) {
+                setFormError(
+                    `That file is ${bytes.length.toLocaleString()} bytes; with this metadata the `
+                    + `on-chain ceiling is ${cap.toLocaleString()} bytes.`,
+                );
+                return;
+            }
             setFileMeta({ name: file.name || 'file', type, bytes });
         };
-        reader.onerror = () => setFormError('Could not read that file.');
+        reader.onerror = () => {
+            if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
+        };
         reader.readAsArrayBuffer(file);
     }
 
@@ -589,6 +621,7 @@ export function PublishFileForm({ walletId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
                 label="Review publish"
@@ -623,6 +656,13 @@ export function PublishFileForm({ walletId, onBack }) {
                     </>
                 )}
             >
+                {reviewPreviewUrl ? (
+                    <img
+                        src={reviewPreviewUrl}
+                        alt={`Preview of ${fileMeta?.name || 'file'}`}
+                        style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                    />
+                ) : null}
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -675,6 +715,7 @@ export function PublishFileForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
     const capHint = publicCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream');
+    const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
 
     return wrap(
         <FormPage
@@ -735,6 +776,8 @@ export function PublishFileForm({ walletId, onBack }) {
                 <div style={{ marginTop: 'var(--xc-space-3)' }}>
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
+                    ) : ownedTokensError && ownedTokens.length === 0 ? (
+                        <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
                     ) : ownedTokens.length === 0 ? (
                         <p className={styles.hint}>
                             This wallet doesn't own any tokens. Only a token's
@@ -745,6 +788,9 @@ export function PublishFileForm({ walletId, onBack }) {
                         </p>
                     ) : (
                         <>
+                            {ownedTokensError ? (
+                                <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                            ) : null}
                             <p className={styles.hint}>
                                 Pick the token whose holders can unlock the file:
                             </p>
@@ -801,14 +847,23 @@ export function PublishFileForm({ walletId, onBack }) {
                         </Button>
                     </div>
                     {fileMeta ? (
-                        <dl className={styles.detailsList}>
-                            <dt className={styles.detailsLabel}>File</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.name}</dd>
-                            <dt className={styles.detailsLabel}>Type</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.type}</dd>
-                            <dt className={styles.detailsLabel}>Size</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
-                        </dl>
+                        <>
+                            {previewUrl ? (
+                                <img
+                                    src={previewUrl}
+                                    alt={`Preview of ${fileMeta.name}`}
+                                    style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                                />
+                            ) : null}
+                            <dl className={styles.detailsList}>
+                                <dt className={styles.detailsLabel}>File</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.name}</dd>
+                                <dt className={styles.detailsLabel}>Type</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.type}</dd>
+                                <dt className={styles.detailsLabel}>Size</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                            </dl>
+                        </>
                     ) : (
                         <p className={styles.hint}>
                             Up to about {capHint.toLocaleString()} bytes with the

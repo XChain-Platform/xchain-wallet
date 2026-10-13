@@ -59,6 +59,7 @@ import {
     sealBroadcastQueueStore,
 } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
+import { startLabelSyncRestoreTask } from '../../extension/src/background/labelSyncRestoreTasks.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
@@ -118,6 +119,7 @@ import {
 import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
+import { installNativeQrScanner } from './storage/nativeQrScanner.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
@@ -1068,6 +1070,8 @@ export async function getSessionStatus() {
     try {
         // First, so the unlock and onboarding derivations run natively.
         installNativeKdfProvider();
+        // The iPhone WebView cannot read QR codes; its shell scans natively.
+        installNativeQrScanner();
         if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
@@ -1409,7 +1413,7 @@ export async function createWalletLocal(req) {
  * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
  *
  * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
- * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string, walletId: string, labelSyncToken: string | null }>}
  */
 export async function importMnemonicLocal(req) {
     const password = req?.password;
@@ -1502,18 +1506,21 @@ export async function importMnemonicLocal(req) {
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
         // explorer can only cost the restore, never the import.
-        const labelSync = await restoreLabelSyncBestEffort({
-            flowsNs,
-            vault: v,
-            walletId: result.wallet.id,
-            password,
-            bip39Passphrase,
-            masterKey,
-            masterKeyKdfParams: kdfParams,
-            chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
-                ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
-                : activeChainIds,
-        });
+        const labelSyncToken = origin === 'created'
+            ? null
+            : startLabelSyncRestoreTask({
+                walletId: result.wallet.id,
+                run: () => restoreLabelSyncBestEffort({
+                    flowsNs,
+                    vault: v,
+                    walletId: result.wallet.id,
+                    password,
+                    bip39Passphrase,
+                    chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
+                        ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
+                        : activeChainIds,
+                }),
+            });
         // `walletId` rides along because the fresh-install caller may need to
         // keep working with the wallet it just made: the pairing lane
         // imports the shared phrase here and then asks the host to derive that
@@ -1524,7 +1531,7 @@ export async function importMnemonicLocal(req) {
             format: result.format,
             walletName: result.wallet.name,
             walletId: result.wallet.id,
-            labelSync,
+            labelSyncToken,
         };
     } catch (err) {
         if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
@@ -1542,13 +1549,10 @@ export async function importMnemonicLocal(req) {
  * and turns it into a `null` result the import screen reads as "nothing
  * restored" rather than "the import failed".
  *
- * `masterKey` is the import's own key, lent for the seed decrypt and
- * zeroed by the caller.
- *
- * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, masterKey: Uint8Array, masterKeyKdfParams: object, chainIds: string[] }} opts
+ * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, chainIds: string[] }} opts
  */
 async function restoreLabelSyncBestEffort({
-    flowsNs, vault: v, walletId, password, bip39Passphrase, masterKey, masterKeyKdfParams, chainIds,
+    flowsNs, vault: v, walletId, password, bip39Passphrase, chainIds,
 }) {
     if (typeof flowsNs?.restoreLabelSyncAfterImport !== 'function') return null;
     try {
@@ -1559,8 +1563,6 @@ async function restoreLabelSyncBestEffort({
             bip39Passphrase,
             chainIds,
             sdkRegistry,
-            masterKey,
-            masterKeyKdfParams,
         });
     } catch (err) {
         console.error('[xchain-wallet/web] label-sync restore skipped:', err);
@@ -1614,6 +1616,9 @@ export async function importBackupLocal(req) {
     const meta = createMetaBackend();
     const lease = await acquireWebVaultLease();
     let masterKey = null;
+    // This call's own copy of the key the restored wallet is now sealed under.
+    let deviceKey = null;
+    let deviceKdfParams = null;
     let sessionStarted = false;
     // What THIS call put into module state, so a failure tears down only that.
     let openedVault = null;
@@ -1634,6 +1639,13 @@ export async function importBackupLocal(req) {
             walletPassword,
             devicePassword: password,
             mode: 'fresh',
+            // Core zeroes the lent buffer when this returns, so keep a copy;
+            // the finally below zeroes it whether or not the restore succeeds.
+            onDeviceKey: (key, params) => {
+                if (deviceKey) deviceKey.fill(0);
+                deviceKey = key.slice();
+                deviceKdfParams = params;
+            },
         };
         // Nothing is persisted or unlocked until the merge has actually
         // succeeded: a wrong wallet password leaves the install fresh and
@@ -1658,10 +1670,11 @@ export async function importBackupLocal(req) {
             password,
             chainRegistry,
             sdkRegistry,
-            // Matches only a wallet sealed under the vault's own params. The
-            // re-key gives a restored wallet a fresh salt, so today it derives.
-            masterKey,
-            masterKeyKdfParams: kdfParams,
+            // The re-key's own key: same password, same params as the restored
+            // seal, so the wallet skips a second Argon2id round. The vault key
+            // serves only when nothing was re-sealed (no key material to pool).
+            masterKey: deviceKey ?? masterKey,
+            masterKeyKdfParams: deviceKey ? deviceKdfParams : kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1687,6 +1700,7 @@ export async function importBackupLocal(req) {
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
+        if (deviceKey) deviceKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }

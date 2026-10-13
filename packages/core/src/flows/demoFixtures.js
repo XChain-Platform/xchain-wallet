@@ -33,19 +33,15 @@ function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-// Real icon URLs mirrored from DEMO_TIS_BY_TICK in tokenInfo.js so the
-// Home / SendPicker / TokenDetail rows show the published artwork
-// instead of the colored-letter placeholder. Tickers that don't appear
-// here fall back to `nftImg(...)`.
-const DEMO_TOKEN_ICONS = {
-    // Matches the icon in demoExampleTis.json so the holdings tile and the
-    // token-info gallery show the same artwork.
-    EXAMPLE: 'https://placehold.co/128x128/1E90C7/FFFFFF/png?text=EX',
-    PEPECREATURE: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png',
-    RAREPEPE: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png',
-    PEPECASH: 'https://rarepepedirectory.com/pepe/PEPECASH.png',
-    XCP: 'https://counterparty.io/static/images/counterparty-logo.png',
-    DOGINAL: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png',
+// Inline tiles keep demo holdings available under the app's `img-src 'self'`
+// policy and avoid third-party requests from an otherwise synthetic wallet.
+export const DEMO_TOKEN_ICONS = {
+    EXAMPLE: nftImg('EX', '#1E90C7', '#7B2C8F'),
+    PEPECREATURE: nftImg('PEPE', '#15803D', '#713F12'),
+    RAREPEPE: nftImg('RARE', '#166534', '#854D0E'),
+    PEPECASH: nftImg('CASH', '#16A34A', '#A16207'),
+    XCP: nftImg('XCP', '#1E90C7', '#7B2C8F'),
+    DOGINAL: nftImg('DOGE', '#EAB308', '#92400E'),
 };
 //
 // Demo wallets are real BIP39 wallets. They have real addresses on

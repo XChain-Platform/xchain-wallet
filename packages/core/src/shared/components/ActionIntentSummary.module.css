@@ -42,6 +42,7 @@
     margin: 0;
     text-align: end;
     overflow-wrap: anywhere;
+    font-weight: 600;
 }
 
 .warnings {
@@ -82,6 +83,7 @@
 .deltaValues {
     font-family: var(--xc-font-mono);
     overflow-wrap: anywhere;
+    font-weight: 700;
 }
 
 /* "could not be simulated" notes: never render as a confident number. */

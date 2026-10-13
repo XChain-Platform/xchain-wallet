@@ -25,7 +25,7 @@
 // exactly as broken as `return null` did.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, cleanup } from '@testing-library/react';
+import { render, screen, within, act, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { DemoBanner } from '../../../packages/core/src/shared/components/DemoBanner.jsx';
@@ -56,7 +56,20 @@ beforeEach(() => {
     exitDemoWallet.mockClear();
     exitDemoWallet.mockResolvedValue({ reloaded: false });
 });
-afterEach(() => { cleanup(); clearDemoWalletId(); });
+afterEach(() => {
+    cleanup();
+    clearDemoWalletId();
+    vi.unstubAllGlobals();
+});
+
+function setNarrowViewport(narrow) {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+        matches: narrow,
+        media: '(max-width: 599px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+    })));
+}
 
 describe('DemoBanner: the demo disclosure on Home', () => {
     it('renders nothing for a real wallet', () => {
@@ -93,28 +106,95 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         expect(screen.getByRole('status').textContent).toMatch(/Auto-wipes in/);
     });
 
-    it('offers the exit affordance, and pressing it runs the shared teardown', async () => {
+    it('starts collapsed on a narrow viewport and expands its details on request', async () => {
+        setNarrowViewport(true);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+
+        const toggle = screen.getByRole('button', { name: 'Details' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('button', { name: /exit demo/i })).toBeNull();
+
+        await act(async () => { toggle.click(); });
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
+    });
+
+    it('starts fully expanded on a wide viewport', () => {
+        setNarrowViewport(false);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+
+        expect(screen.getByRole('button', { name: 'Details' }))
+            .toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
+    });
+
+    it('opens an explicit danger confirmation that names the demo data being destroyed', () => {
+        setNarrowViewport(false);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+
+        const trigger = screen.getByRole('button', { name: /exit demo/i });
+        expect(trigger.className).toMatch(/danger/);
+        fireEvent.click(trigger);
+
+        const dialog = screen.getByRole('dialog', { name: /exit demo and delete its data/i });
+        expect(dialog).toHaveTextContent(/permanently deletes the demo wallet/i);
+        expect(dialog).toHaveTextContent(/sample accounts, addresses, and history/i);
+        expect(exitDemoWallet).not.toHaveBeenCalled();
+        expect(within(dialog).getByRole('button', { name: /exit demo/i }).className).toMatch(/danger/);
+    });
+
+    it('cancels the confirmation without running the teardown', () => {
+        setNarrowViewport(false);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+        fireEvent.click(screen.getByRole('button', { name: /exit demo/i }));
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(exitDemoWallet).not.toHaveBeenCalled();
+    });
+
+    it('shows a busy state, completes the confirmed teardown, and refreshes into onboarding', async () => {
+        setNarrowViewport(false);
         markDemoWallet('demo-1');
         const onExited = vi.fn();
+        let resolveExit;
+        exitDemoWallet.mockReturnValueOnce(new Promise((resolve) => { resolveExit = resolve; }));
         mount({ activeWalletId: 'demo-1', onExited });
 
-        const button = screen.getByRole('button', { name: /exit demo/i });
-        await act(async () => { button.click(); });
+        fireEvent.click(screen.getByRole('button', { name: /exit demo/i }));
+        const dialog = screen.getByRole('dialog');
+        const confirm = within(dialog).getByRole('button', { name: /exit demo/i });
+        fireEvent.click(confirm);
+
+        expect(dialog).toHaveAttribute('aria-busy', 'true');
+        expect(confirm).toBeDisabled();
+        expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+        resolveExit({ reloaded: false });
+        await waitFor(() => expect(onExited).toHaveBeenCalledTimes(1));
 
         expect(exitDemoWallet).toHaveBeenCalledTimes(1);
         expect(exitDemoWallet.mock.calls[0][0]).toMatchObject({ walletId: 'demo-1' });
-        expect(onExited).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('surfaces a failed exit instead of leaving the button silently dead', async () => {
+    it('surfaces a failed exit in the dialog and re-enables retry and cancel', async () => {
         markDemoWallet('demo-1');
         exitDemoWallet.mockRejectedValueOnce(new Error('vault is busy'));
         mount({ activeWalletId: 'demo-1' });
 
-        await act(async () => {
-            screen.getByRole('button', { name: /exit demo/i }).click();
-        });
-        expect(screen.getByRole('alert').textContent).toContain('vault is busy');
+        fireEvent.click(screen.getByRole('button', { name: /exit demo/i }));
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: /exit demo/i }));
+
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent('vault is busy');
+        expect(within(dialog).getByRole('button', { name: /exit demo/i })).toBeEnabled();
+        expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
     });
 
     it('still auto-wipes an expired demo, which is what the null-rendering version was kept alive to do', async () => {

@@ -24,7 +24,7 @@
 // read fails or that has no members is left out.
 
 import { useEffect, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { contactsPickerStyles as styles } from './ContactsPickerScreen.jsx';
 import { currentListItems, currentListMemberCount } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
@@ -98,6 +98,11 @@ export function ListPickerScreen({
                     seen.add(key);
                     return true;
                 });
+                // A rejected LIST action cannot enforce an access filter and
+                // must not be offered as a bindable allow-list or block-list.
+                // Pending lists are not rejected and stay selectable.
+                uniq = uniq.filter((row) => !row.status
+                    || ['valid', 'pending'].includes(String(row.status).trim().toLowerCase()));
                 if (filterType) {
                     const keep = await Promise.all(uniq.map(async (row) => {
                         if (String(row.type) === String(filterType)) return true;
@@ -150,69 +155,75 @@ export function ListPickerScreen({
     const header = <PageHeader onBack={onBack} title={title} />;
 
     if (loadError) {
-        return <Screen variant={variant} header={header}><StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage></Screen>;
+        return <Screen variant={variant} header={header}><ListPage><StatusMessage variant="error" className={styles.abEmpty}>{loadError}</StatusMessage></ListPage></Screen>;
     }
     if (!rows) {
-        return <Screen variant={variant} header={header}><div className={styles.abEmpty}>Loading lists…</div></Screen>;
+        return <Screen variant={variant} header={header}><ListPage><div className={styles.abEmpty}>Loading lists…</div></ListPage></Screen>;
     }
     if (rows.length === 0) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={styles.abEmpty}>
-                    {filterType === '2'
-                        ? 'No address lists published from this chain’s addresses yet. Create one in My Lists first.'
-                        : 'No lists published from this chain’s addresses yet.'}
-                </div>
+                <ListPage>
+                    <EmptyState
+                        title={filterType === '2'
+                            ? 'No address lists published from this chain’s addresses yet. Create one in My Lists first.'
+                            : 'No lists published from this chain’s addresses yet.'}
+                        titleAs="p"
+                        role={null}
+                    />
+                </ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant} header={header}>
-            <ul className={styles.abList}>
-                {rows.map((row) => {
-                    const idx = String(row.action_index ?? '?');
-                    const isTick = String(row.type) === '1';
-                    const isUnion = String(row.type) === '3';
-                    const status = String(row.status || '');
-                    const count = counts[idx];
-                    const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
-                    const titleLabel = typeof row.name === 'string' && row.name.length > 0
-                        ? listLabel(idx, row.name)
-                        : `${kind} list #${idx}`;
-                    const rawDescription = descriptions[idx] || row.description;
-                    const description = typeof rawDescription === 'string' && rawDescription.length > 0
-                        ? neutralizeControlText(rawDescription)
-                        : '';
-                    const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
-                    return (
-                        <li key={idx}>
-                            <button
-                                type="button"
-                                className={styles.abRow}
-                                onClick={() => onSelect({
-                                    actionIndex: idx,
-                                    type: String(row.type),
-                                    memberCount: count ?? null,
-                                    ...(typeof row.name === 'string' && row.name.length > 0
-                                        ? { name: row.name }
-                                        : {}),
-                                })}
-                            >
-                                <span className={styles.abName}>
-                                    {titleLabel}
-                                    {status && status !== 'valid' ? ` (${status})` : ''}
-                                </span>
-                                <span className={styles.abAddr}>
-                                    {description && count !== undefined
-                                        ? `${countText} · ${description}`
-                                        : countText}
-                                </span>
-                            </button>
-                        </li>
-                    );
-                })}
-            </ul>
+            <ListPage>
+                <ul className={styles.abList}>
+                    {rows.map((row) => {
+                        const idx = String(row.action_index ?? '?');
+                        const isTick = String(row.type) === '1';
+                        const isUnion = String(row.type) === '3';
+                        const status = String(row.status || '');
+                        const count = counts[idx];
+                        const kind = isUnion ? 'Union' : isTick ? 'Token' : 'Address';
+                        const titleLabel = typeof row.name === 'string' && row.name.length > 0
+                            ? listLabel(idx, row.name)
+                            : `${kind} list #${idx}`;
+                        const rawDescription = descriptions[idx] || row.description;
+                        const description = typeof rawDescription === 'string' && rawDescription.length > 0
+                            ? neutralizeControlText(rawDescription)
+                            : '';
+                        const countText = count === undefined ? 'counting…' : count == null ? 'members unavailable' : `${count} member${count === 1 ? '' : 's'}`;
+                        return (
+                            <li key={idx}>
+                                <button
+                                    type="button"
+                                    className={styles.abRow}
+                                    onClick={() => onSelect({
+                                        actionIndex: idx,
+                                        type: String(row.type),
+                                        memberCount: count ?? null,
+                                        ...(typeof row.name === 'string' && row.name.length > 0
+                                            ? { name: row.name }
+                                            : {}),
+                                    })}
+                                >
+                                    <span className={styles.abName}>
+                                        {titleLabel}
+                                        {status && status !== 'valid' ? ` (${status})` : ''}
+                                    </span>
+                                    <span className={styles.abAddr}>
+                                        {description && count !== undefined
+                                            ? `${countText} · ${description}`
+                                            : countText}
+                                    </span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </ListPage>
         </Screen>
     );
 }

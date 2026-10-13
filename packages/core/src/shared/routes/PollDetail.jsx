@@ -56,6 +56,23 @@ function extractRows(resp) {
     return [];
 }
 
+function extractPoll(resp) {
+    if (!resp) return null;
+    if (Array.isArray(resp)) return resp[0] || null;
+    if (Array.isArray(resp.data)) return resp.data[0] || null;
+    if (resp.data && typeof resp.data === 'object') return resp.data;
+    if (resp.row && typeof resp.row === 'object') return resp.row;
+    return typeof resp === 'object' ? resp : null;
+}
+
+function statusLabel(status) {
+    if (status === 'failed_quorum') return 'Did not pass';
+    if (status === 'finalized') return 'Decided';
+    if (status === 'open' || !status) return 'Open';
+    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /**
  * VOTE poll detail: the poll definition, its frozen per-option results (once
  * finalized), and, while the poll is open, an inline cast-ballot form (VOTE v1).
@@ -103,7 +120,12 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         ])
             .then(([p, r]) => {
                 if (cancelled) return;
-                setPoll(p || null);
+                const loadedPoll = extractPoll(p);
+                if (!loadedPoll) {
+                    setLoadError('Poll not found.');
+                    return;
+                }
+                setPoll(loadedPoll);
                 setResults(extractRows(r));
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load poll.'); });
@@ -267,6 +289,17 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        if (isSplit) {
+            const enteredShares = Object.values(splitShares).filter((share) => String(share).trim() !== '');
+            if (enteredShares.some((share) => !Number.isFinite(Number(share)) || Number(share) <= 0)) {
+                setFormError('Each split share must be a positive number.');
+                return;
+            }
+            if (enteredShares.length > maxSel) {
+                setFormError(`Choose no more than ${maxSel} option${maxSel === 1 ? '' : 's'}.`);
+                return;
+            }
+        }
         const ballot = buildBallot();
         if (!ballot.length) { setFormError('Choose at least one option.'); return; }
         setFormError(null);
@@ -364,7 +397,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
             {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}
             <dt className={styles.detailsLabel}>Status</dt>
-            <dd className={styles.detailsValue}>{poll.poll_status || 'open'}</dd>
+            <dd className={styles.detailsValue}>{statusLabel(poll.poll_status)}</dd>
             <dt className={styles.detailsLabel}>Mode</dt>
             <dd className={styles.detailsValue}>{poll.tally_mode || 'approval'} / {poll.weight_mode || 'balance'}</dd>
             <dt className={styles.detailsLabel}>Closes at block</dt>
@@ -378,24 +411,31 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         </dl>
     );
 
-    // Finalized results table (frozen per-option tally).
-    const resultsBlock = results && results.length ? (
+    // Frozen results are unavailable while voting is open and can be absent
+    // briefly after close while the indexer finalizes the poll.
+    const resultsBlock = (
         <div style={{ marginTop: '0.75rem' }}>
             <SectionHeader title="Results" />
-            <table style={{ width: '100%', fontSize: '0.85rem' }}>
-                <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
-                <tbody>
-                    {results.map((r) => (
-                        <tr key={String(r.option_index)}>
-                            <td>{r.option_index}: {options[r.option_index] ?? ''}</td>
-                            <td style={{ textAlign: 'right' }}>{String(r.total_weight ?? '0')}</td>
-                            <td style={{ textAlign: 'right' }}>{String(r.voter_count ?? '0')}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            {results && results.length ? (
+                <table style={{ width: '100%', fontSize: '0.85rem' }}>
+                    <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
+                    <tbody>
+                        {results.map((r) => (
+                            <tr key={String(r.option_index)}>
+                                <td>{r.option_index}: {options[r.option_index] ?? ''}</td>
+                                <td style={{ textAlign: 'right' }}>{String(r.total_weight ?? '0')}</td>
+                                <td style={{ textAlign: 'right' }}>{String(r.voter_count ?? '0')}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            ) : (
+                <p className={styles.hint}>
+                    {isOpen ? 'Final results appear after voting closes.' : 'No finalized results are available.'}
+                </p>
+            )}
         </div>
-    ) : null;
+    );
 
     // The confirm page, rendered in place of the poll while the
     // single-encode pipeline is live. The intent is decoded from the params
@@ -490,7 +530,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     label="Cast ballot"
                     onSubmit={handleReview}
                     status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-                    actions={<Button type="submit" variant="primary" disabled={!fromAddress}>Vote</Button>}
+                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>Vote</Button>}
                 >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
@@ -505,12 +545,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                                 </div>
                             ) : (
                                 <label key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                    <input type="checkbox" checked={approvalChoices.has(i)} onChange={() => toggleApproval(i)} />
+                                    <input type="checkbox" checked={approvalChoices.has(i)}
+                                        disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
+                                        onChange={() => toggleApproval(i)} />
                                     <span>{i}: {label}</span>
                                 </label>
                             )
                         ))}
                     </div>
+                    {options.length === 0 ? <p className={styles.hint}>This poll has no voting options.</p> : null}
                     <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     {feeTiers ? (
                         <FeeSelector

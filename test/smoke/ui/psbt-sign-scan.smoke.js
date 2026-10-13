@@ -18,11 +18,10 @@
 //   - `handleScannerFrame` routes XCW frames through the collector,
 //     emits the assembled hex into setPasted on completion, and
 //     auto-closes the scanner.
-//   - BBQr frames append newline-separated to the paste textarea so
-//     the existing paste pipeline assembles them.
+//   - BBQr frames collect by index so repeated camera reads do not inflate
+//     progress, then the existing paste pipeline assembles them.
 //   - Single hex / base64 frames close the scanner immediately.
-//   - The XCW progress label surfaces receivedCount / total once the
-//     first frame lands.
+//   - XCW, BBQr, and UR scans surface progress after the first frame.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -84,8 +83,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /setPasted\(hex\);[\s\S]+?setScannerOpen\(false\)/,
-    'on completion, hex flows into setPasted and scanner closes',
+    /const decoded = normalizePsbtInput\(hex\);[\s\S]+?setPasted\(decoded\);[\s\S]+?setScannerOpen\(false\)/,
+    'on completion, validated hex flows into setPasted and scanner closes',
 );
 assert.match(
     formSrc,
@@ -99,13 +98,18 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /setPasted\(\(cur\) => \(cur\.length > 0 \? `\$\{cur\}\\n\$\{text\}` : text\)\)/,
-    'BBQr frames append newline-separated to the paste textarea',
+    /bbqrFramesRef\.current\.set\(parsed\.index, trimmedFrame\)/,
+    'BBQr progress counts unique frame indexes',
 );
 assert.match(
     formSrc,
-    /if \(fmt === 'hex' \|\| fmt === 'base64'\)/,
-    'single-frame hex/base64 has its own branch',
+    /if \(received === parsed\.total\)[\s\S]+?normalizePsbtInput\(frames\.join\('\\n'\)\)/,
+    'a complete BBQr frame set is assembled through the normal input decoder',
+);
+assert.match(
+    formSrc,
+    /const decoded = normalizePsbtInput\(text\)/,
+    'single-frame hex/base64 routes through the normal input decoder',
 );
 
 // ─── 3. UI mount ────────────────────────────────────────────────────────
@@ -122,8 +126,13 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /XCW frames received: \{xcwCollector\.receivedCount\} of \{xcwCollector\.total\}/,
-    'XCW progress label surfaces receivedCount / total',
+    /`\$\{scanProgress\.format\} frames received: \$\{scanProgress\.received\} of \$\{scanProgress\.total\}`/,
+    'XCW and BBQr progress labels surface received / total',
+);
+assert.match(
+    formSrc,
+    /`UR decoding progress: \$\{scanProgress\.percent\}%`/,
+    'UR progress label surfaces decoder progress',
 );
 
 // ─── 4. open-scanner reset ──────────────────────────────────────────────

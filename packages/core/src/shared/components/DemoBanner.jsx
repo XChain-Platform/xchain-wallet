@@ -8,12 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from './DemoExitConfirm.jsx';
 import styles from './DemoBanner.module.css';
+
+const NARROW_VIEWPORT = '(max-width: 599px)';
 
 /**
  * §25.2 / G059: persistent banner shown across the unlocked tree when
@@ -44,11 +47,23 @@ import styles from './DemoBanner.module.css';
  */
 export function DemoBanner({ activeWalletId, onExited }) {
     const { messaging } = useMessaging();
+    const detailsId = useId();
     const [isDemo, setIsDemo] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [expiry, setExpiry] = useState(/** @type {{ expiresAt: number } | null} */ (null));
     const [autoWiped, setAutoWiped] = useState(false);
+    const [expanded, setExpanded] = useState(viewportStartsExpanded);
+
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'function') return undefined;
+        const query = window.matchMedia(NARROW_VIEWPORT);
+        const syncToViewport = (event) => setExpanded(!event.matches);
+        syncToViewport(query);
+        query.addEventListener('change', syncToViewport);
+        return () => query.removeEventListener('change', syncToViewport);
+    }, []);
 
     useEffect(() => {
         setIsDemo(flowsLib.isDemoWallet(activeWalletId));
@@ -70,6 +85,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 walletId: activeWalletId,
             });
             if (reloaded) return;
+            setConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setError(err?.message || 'Could not exit demo mode.');
@@ -105,34 +121,58 @@ export function DemoBanner({ activeWalletId, onExited }) {
     return (
         <div className={styles.banner} role="status" aria-label="Demo wallet">
             <div className={styles.body}>
-                <strong className={styles.headline}>Demo wallet: read-only</strong>
-                <span className={styles.copy}>
-                    The balances, prices and history on this screen are sample
-                    data, not real coins. That is why Send and the other action
-                    forms read 0 available: this demo holds nothing to spend, so
-                    it cannot move funds.
-                    {expiryHint ? ` ${expiryHint}` : ''}
-                </span>
-                <span className={styles.copy}>
-                    Exit to wipe the demo and set up a real wallet.
-                </span>
+                <div className={styles.summary}>
+                    <strong className={styles.headline}>Demo wallet: read-only</strong>
+                    <button
+                        type="button"
+                        className={styles.detailsToggle}
+                        aria-expanded={expanded}
+                        aria-controls={detailsId}
+                        onClick={() => setExpanded((value) => !value)}
+                    >
+                        Details
+                    </button>
+                </div>
+                <div id={detailsId} className={styles.disclosure} hidden={!expanded}>
+                    <span className={styles.copy}>
+                        The balances, prices and history on this screen are sample
+                        data, not real coins. That is why Send and the other action
+                        forms read 0 available: this demo holds nothing to spend, so
+                        it cannot move funds.
+                        {expiryHint ? ` ${expiryHint}` : ''}
+                    </span>
+                    <span className={styles.copy}>
+                        Exit to wipe the demo and set up a real wallet.
+                    </span>
+                </div>
             </div>
-            <div className={styles.actions}>
+            <div className={styles.actions} hidden={!expanded}>
                 <Button
                     size="sm"
-                    variant="secondary"
-                    onClick={handleExit}
-                    loading={busy}
-                    disabled={busy}
+                    variant="danger"
+                    onClick={() => { setError(null); setConfirmOpen(true); }}
                 >
                     Exit demo &amp; wipe
                 </Button>
             </div>
-            {error ? (
+            {error && !confirmOpen ? (
                 <p role="alert" className={styles.error}>{error}</p>
+            ) : null}
+            {confirmOpen ? (
+                <DemoExitConfirm
+                    busy={busy}
+                    error={error}
+                    onConfirm={handleExit}
+                    onCancel={() => { setConfirmOpen(false); setError(null); }}
+                />
             ) : null}
         </div>
     );
+}
+
+function viewportStartsExpanded() {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return !window.matchMedia(NARROW_VIEWPORT).matches;
 }
 
 function formatExpiryHint(expiry) {

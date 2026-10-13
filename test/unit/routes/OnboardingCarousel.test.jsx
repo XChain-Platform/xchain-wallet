@@ -19,7 +19,7 @@
 // seen-flag is set.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { OnboardingCarousel } from '../../../packages/core/src/shared/routes/OnboardingCarousel.jsx';
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
@@ -66,9 +66,9 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         const onDone = vi.fn();
         render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
 
-        // First frame only.
-        expect(screen.getByText('Frame A title')).toBeInTheDocument();
-        expect(screen.queryByText('Frame B title')).not.toBeInTheDocument();
+        // Only the first frame is exposed; inactive tab panels stay hidden.
+        expect(screen.getByText('Frame A title')).toBeVisible();
+        expect(screen.getByText('Frame B title')).not.toBeVisible();
 
         // Back is disabled on the first frame.
         expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
@@ -105,6 +105,32 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         expect(screen.getByText('Frame C title')).toBeInTheDocument();
         // The third dot reflects selection.
         expect(screen.getAllByRole('tab')[2]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('implements keyboard tab navigation and connects each tab to its panel', () => {
+        stubMatchMedia(false);
+        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone: vi.fn() }));
+
+        const first = screen.getAllByRole('tab')[0];
+        const firstPanel = screen.getByRole('tabpanel');
+        expect(first).toHaveAttribute('tabindex', '0');
+        expect(first).toHaveAttribute('aria-controls', firstPanel.id);
+        expect(firstPanel).toHaveAttribute('aria-labelledby', first.id);
+
+        first.focus();
+        fireEvent.keyDown(first, { key: 'ArrowRight' });
+        const second = screen.getAllByRole('tab')[1];
+        expect(second).toHaveFocus();
+        expect(second).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame B title');
+
+        fireEvent.keyDown(second, { key: 'End' });
+        expect(screen.getAllByRole('tab')[2]).toHaveFocus();
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame C title');
+
+        fireEvent.keyDown(screen.getAllByRole('tab')[2], { key: 'ArrowRight' });
+        expect(screen.getAllByRole('tab')[0]).toHaveFocus();
+        expect(screen.getByRole('tabpanel')).toHaveTextContent('Frame A title');
     });
 
     it('Skip dismisses early with completed = false', () => {
@@ -216,5 +242,147 @@ describe('Onboarding: explainer gating', () => {
         mountOnboarding();
         expect(screen.queryByTestId('onboarding-carousel')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
+    });
+
+    it('supports returning from create and then entering import', () => {
+        stubMatchMedia(false);
+        acceptLicense();
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+
+        function FlowHarness() {
+            const [step, setStep] = React.useState('welcome');
+            if (step === 'create') {
+                return <button type="button" onClick={() => setStep('welcome')}>Back from create</button>;
+            }
+            if (step === 'import') {
+                return <button type="button" onClick={() => setStep('welcome')}>Back from import</button>;
+            }
+            return (
+                <MessagingProvider shell="web" messaging={{}}>
+                    <Onboarding
+                        onCreate={() => setStep('create')}
+                        onImport={() => setStep('import')}
+                    />
+                </MessagingProvider>
+            );
+        }
+
+        render(<FlowHarness />);
+        fireEvent.click(screen.getByRole('button', { name: 'Create new wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back from create' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back from import' }));
+
+        expect(screen.getByRole('button', { name: 'Create new wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Import wallet' })).toBeInTheDocument();
+    });
+});
+
+describe('Onboarding: license gate', () => {
+    function mountLicenseGate() {
+        return render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <Onboarding onCreate={() => {}} onImport={() => {}} />
+            </MessagingProvider>,
+        );
+    }
+
+    async function withElementDimensions({ scrollHeight, clientHeight }, run) {
+        const scrollDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        const clientDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get: () => typeof scrollHeight === 'function' ? scrollHeight() : scrollHeight,
+        });
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+            configurable: true,
+            get: () => typeof clientHeight === 'function' ? clientHeight() : clientHeight,
+        });
+        try {
+            return await run();
+        } finally {
+            if (scrollDescriptor) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollDescriptor);
+            else delete HTMLElement.prototype.scrollHeight;
+            if (clientDescriptor) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientDescriptor);
+            else delete HTMLElement.prototype.clientHeight;
+        }
+    }
+
+    it('enables acknowledgement when all terms fit without scrolling', async () => {
+        await withElementDimensions({ scrollHeight: 180, clientHeight: 240 }, async () => {
+            mountLicenseGate();
+            await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled());
+            fireEvent.click(screen.getByRole('checkbox'));
+            expect(screen.getByRole('button', { name: 'Accept and continue' })).toBeEnabled();
+        });
+    });
+
+    it('rechecks when a layout resize makes all terms visible', async () => {
+        const OriginalResizeObserver = globalThis.ResizeObserver;
+        let notifyResize;
+        let contentHeight = 600;
+        globalThis.ResizeObserver = class {
+            constructor(callback) { notifyResize = callback; }
+            observe() {}
+            disconnect() {}
+        };
+        try {
+            await withElementDimensions({ scrollHeight: () => contentHeight, clientHeight: 240 }, async () => {
+                mountLicenseGate();
+                expect(screen.getByRole('checkbox')).toBeDisabled();
+
+                contentHeight = 180;
+                act(() => notifyResize());
+                expect(screen.getByRole('checkbox')).toBeEnabled();
+            });
+        } finally {
+            globalThis.ResizeObserver = OriginalResizeObserver;
+        }
+    });
+
+    it('keeps acknowledgement disabled until overflowing terms reach the end', async () => {
+        await withElementDimensions({ scrollHeight: 600, clientHeight: 200 }, async () => {
+            mountLicenseGate();
+            const checkbox = screen.getByRole('checkbox');
+            expect(checkbox).toBeDisabled();
+
+            const terms = screen.getByLabelText('License terms');
+            terms.scrollTop = 400;
+            fireEvent.scroll(terms);
+            expect(checkbox).toBeEnabled();
+        });
+    });
+});
+
+describe('Onboarding: demo entry', () => {
+    it('creates and marks a demo wallet before entering it', async () => {
+        stubMatchMedia(false);
+        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        const importMnemonic = vi.fn(async () => ({ wallet: { id: 'demo-wallet' } }));
+        const onDemoEntered = vi.fn();
+
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic }}>
+                <Onboarding
+                    onCreate={() => {}}
+                    onImport={() => {}}
+                    onDemoEntered={onDemoEntered}
+                />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+        await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
+
+        expect(importMnemonic).toHaveBeenCalledTimes(1);
+        expect(importMnemonic.mock.calls[0][0]).toMatchObject({
+            name: 'Demo Wallet',
+            activeNetwork: 'regtest',
+        });
+        expect(importMnemonic.mock.calls[0][0].password).toMatch(/^[0-9a-f]{64}$/);
+        expect(globalThis.localStorage.getItem('xc:demoWalletId')).toBe('demo-wallet');
+        expect(globalThis.localStorage.getItem('xc:demoWalletPassword')).toBe(importMnemonic.mock.calls[0][0].password);
     });
 });

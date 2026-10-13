@@ -57,7 +57,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
             createWallet: scripted('createWallet'),
             importMnemonic: scripted('importMnemonic'),
             importBackupFile: scripted('importBackupFile'),
-            restoreLabelSyncAfterImport: undefined,
+            restoreLabelSyncAfterImport: scripted('restoreLabelSyncAfterImport'),
         },
         notifications: {
             ...actual.notifications,
@@ -122,6 +122,7 @@ beforeEach(async () => {
     populate.mockReset();
     populate.mockResolvedValue({});
     for (const lane of LANES) flowBehaviour[lane.flow] = lane.ok;
+    flowBehaviour.restoreLabelSyncAfterImport = async () => null;
 });
 
 describe('web onboarding closes its Vault when the session never starts', () => {
@@ -156,4 +157,41 @@ describe('web onboarding closes its Vault when the session never starts', () => 
             expect(built[0].closes).toBe(1);
         });
     }
+});
+
+describe('web mnemonic import restores labels after returning', () => {
+    it('resolves the import before restore finishes and exposes the applied result', async () => {
+        let finishRestore;
+        flowBehaviour.restoreLabelSyncAfterImport = vi.fn(() => new Promise((resolve) => {
+            finishRestore = resolve;
+        }));
+
+        const imported = await importMnemonicLocal({ password: 'pw', mnemonic: PHRASE });
+        expect(imported.labelSyncToken).toEqual(expect.any(String));
+
+        let resultSettled = false;
+        const resultPromise = sendMessage('wallet.labelSyncRestoreResult', {
+            token: imported.labelSyncToken,
+        }).then((value) => {
+            resultSettled = true;
+            return value;
+        });
+        await Promise.resolve();
+        expect(resultSettled).toBe(false);
+
+        const applied = { restored: true, contactsAdded: 1, addressesUpdated: 2 };
+        finishRestore(applied);
+        await expect(resultPromise).resolves.toEqual(applied);
+    });
+
+    it('keeps a restore failure separate from the successful import', async () => {
+        flowBehaviour.restoreLabelSyncAfterImport = async () => {
+            throw new Error('explorer unavailable');
+        };
+
+        const imported = await importMnemonicLocal({ password: 'pw', mnemonic: PHRASE });
+        await expect(sendMessage('wallet.labelSyncRestoreResult', {
+            token: imported.labelSyncToken,
+        })).resolves.toBeNull();
+    });
 });

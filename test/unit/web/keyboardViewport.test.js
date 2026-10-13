@@ -10,8 +10,8 @@
 
 // The iOS keyboard overlays the page. While it is up, the shell fits the
 // visible height, the page pan is undone and the tab bar steps aside; when it
-// goes, every override comes off. Android resizes the WebView itself, so a
-// viewport that already agrees with the layout viewport changes nothing.
+// goes, every override comes off. Android resizes the WebView itself, so its
+// shell height follows innerHeight instead of old WebView 100vh geometry.
 
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -22,7 +22,7 @@ import {
 } from '../../../packages/web/src/platform/keyboardViewport.js';
 
 /** A window stand-in with a controllable visual viewport. */
-function fakeWindow({ layoutH = 874, vvH = 874, scale = 1 } = {}) {
+function fakeWindow({ layoutH = 874, vvH = 874, scale = 1, platform = 'web' } = {}) {
     const listeners = {};
     const winListeners = {};
     const docListeners = {};
@@ -45,6 +45,7 @@ function fakeWindow({ layoutH = 874, vvH = 874, scale = 1 } = {}) {
         removeAttribute: (k) => attrs.delete(k),
     };
     const win = {
+        Capacitor: { getPlatform: () => platform },
         innerHeight: layoutH,
         innerWidth: 402,
         scrollY: 0,
@@ -72,26 +73,27 @@ const textInput = () => ({ tagName: 'INPUT', getAttribute: () => 'text', isConte
 
 describe('Android: the WebView resizes for the keyboard', () => {
     it('hides the tab bar while a field has focus and the window has shrunk', () => {
-        const { win, vv, attrs, fire, style } = fakeWindow({ layoutH: 760, vvH: 760 });
+        const { win, vv, attrs, fire, style } = fakeWindow({ layoutH: 760, vvH: 760, platform: 'android' });
         const stop = installKeyboardViewport(win);
+        expect(style.get('--xc-viewport-h')).toBe('calc(760px - env(safe-area-inset-top, 0px))');
         win.document.activeElement = textInput();
         win.innerHeight = 420;
         vv.height = 420;
         win.document.documentElement.clientHeight = 420;
         fire('resize');
         expect(attrs.get('data-xc-keyboard')).toBe('open');
-        // The WebView already fitted the shell; the height override stays off.
-        expect(style.has('--xc-viewport-h')).toBe(false);
+        expect(style.get('--xc-viewport-h')).toBe('calc(420px - env(safe-area-inset-top, 0px))');
         win.innerHeight = 760;
         vv.height = 760;
         win.document.documentElement.clientHeight = 760;
         fire('resize');
         expect(attrs.has('data-xc-keyboard')).toBe(false);
         stop();
+        expect(style.has('--xc-viewport-h')).toBe(false);
     });
 
     it('shows the tab bar again when focus leaves the field with the window still short', () => {
-        const { win, vv, attrs, fire, fireDoc } = fakeWindow({ layoutH: 760, vvH: 760 });
+        const { win, vv, attrs, fire, fireDoc } = fakeWindow({ layoutH: 760, vvH: 760, platform: 'android' });
         installKeyboardViewport(win);
         win.document.activeElement = textInput();
         win.innerHeight = 420;
@@ -104,7 +106,7 @@ describe('Android: the WebView resizes for the keyboard', () => {
     });
 
     it('reads a rotation as a new full height, not a keyboard', () => {
-        const { win, vv, attrs, fire } = fakeWindow({ layoutH: 760, vvH: 760 });
+        const { win, vv, attrs, fire } = fakeWindow({ layoutH: 760, vvH: 760, platform: 'android' });
         installKeyboardViewport(win);
         win.document.activeElement = textInput();
         win.innerWidth = 760;
@@ -151,8 +153,15 @@ describe('keyboardHeight', () => {
 });
 
 describe('installKeyboardViewport', () => {
+    it('leaves the normal iOS shell height under CSS safe-area control', () => {
+        const f = fakeWindow({ platform: 'ios' });
+        installKeyboardViewport(f.win);
+        f.fire('resize');
+        expect(f.style.has('--xc-viewport-h')).toBe(false);
+    });
+
     it('fits the shell to the visible height, undoes the pan and marks the keyboard open', () => {
-        const f = fakeWindow();
+        const f = fakeWindow({ platform: 'ios' });
         installKeyboardViewport(f.win);
         f.vv.height = 471;
         f.win.scrollY = 108;
@@ -173,7 +182,7 @@ describe('installKeyboardViewport', () => {
         expect(f.attrs.has('data-xc-keyboard')).toBe(false);
     });
 
-    it('changes nothing where the WebView resizes for the keyboard (Android)', () => {
+    it('changes nothing in an ordinary web viewport', () => {
         const f = fakeWindow({ layoutH: 500, vvH: 500 });
         installKeyboardViewport(f.win);
         f.fire('resize');

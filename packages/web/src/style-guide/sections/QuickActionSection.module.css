@@ -42,7 +42,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;

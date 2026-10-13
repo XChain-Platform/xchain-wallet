@@ -11,9 +11,10 @@
 // Balance rows speak the user's currency. Set to euros, a phone showed
 // "€0.00 EUR" on the balance card and "$0.00" on every coin row under it.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BalanceList, formatFiat } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
 
 afterEach(() => cleanup());
 
@@ -44,5 +45,42 @@ describe('BalanceList rows', () => {
         render(<BalanceList rows={rows} fiatCurrency="EUR" />);
         expect(screen.getByText('€40,000.00')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
+    });
+});
+
+describe('empty list views', () => {
+    it('renders the shared empty state and runs the balance action', () => {
+        const onAction = vi.fn();
+        render(
+            <BalanceList
+                rows={[]}
+                emptyTitle="No matching balances"
+                emptyBody="Clear the filter to see every balance."
+                emptyActionLabel="Clear filter"
+                onEmptyAction={onAction}
+            />,
+        );
+
+        expect(screen.getByRole('heading', { name: 'No matching balances' })).toBeTruthy();
+        expect(screen.getByText('Clear the filter to see every balance.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+        expect(onAction).toHaveBeenCalledOnce();
+    });
+
+    it('renders the shared empty state and runs the collectibles action', () => {
+        const onReceive = vi.fn();
+        render(
+            <CollectiblesView
+                rows={[]}
+                emptyTitle="No collectibles"
+                emptyBody="Receive one to see it here."
+                onReceive={onReceive}
+            />,
+        );
+
+        expect(screen.getByRole('heading', { name: 'No collectibles' })).toBeTruthy();
+        expect(screen.getByText('Receive one to see it here.')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
+        expect(onReceive).toHaveBeenCalledOnce();
     });
 });
