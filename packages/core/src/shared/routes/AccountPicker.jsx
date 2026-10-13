@@ -16,6 +16,11 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
+function runRouteAction(action, ...args) {
+    const result = action?.(...args);
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+}
+
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
  * wallet, with thumb-reachable add and current-account management
@@ -61,17 +66,17 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    const header = <PageHeader onBack={onBack} title={t('accountPicker.title')} />;
+    const header = <PageHeader onBack={() => runRouteAction(onBack)} title={t('accountPicker.title')} />;
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
-            <Button variant="primary" onClick={onAddAccount} icon={<Icon.PlusIcon />}>
+            <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
                 {t('accountPicker.add')}
             </Button>
             {onRenameAccount && activeAccount ? (
                 <Button
                     variant="ghost"
-                    onClick={() => onRenameAccount(activeAccount)}
+                    onClick={() => runRouteAction(onRenameAccount, activeAccount)}
                     icon={<Icon.PencilIcon />}
                 >
                     {t('accountPicker.manage')}
@@ -120,8 +125,8 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => {
-                                    if (!active) onSwitch(a.id);
-                                    onBack();
+                                    if (!active) runRouteAction(onSwitch, a.id);
+                                    runRouteAction(onBack);
                                 }}
                                 aria-current={active ? 'true' : undefined}
                             >
@@ -147,7 +152,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     title={t('accountPicker.renameTitle')}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRenameAccount(a);
+                                        runRouteAction(onRenameAccount, a);
                                     }}
                                 >
                                     <Icon.PencilIcon />

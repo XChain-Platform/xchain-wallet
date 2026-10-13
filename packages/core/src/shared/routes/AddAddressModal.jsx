@@ -30,7 +30,7 @@
 // session signer (no password); for hardware wallets each derivation is a
 // device round-trip.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button, ChainPicker, EmptyState, FormPage, Icon, PageHeader, Screen, StatusMessage,
 } from '@xchain-wallet/core/ui';
@@ -140,6 +140,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(0);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const generateLockRef = useRef(false);
 
     // Changing the coin resets the type to that chain's default, since
     // each chain supports a different address-type set.
@@ -152,13 +153,14 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
 
     async function handleGenerate(event) {
         event.preventDefault();
-        if (busy) return;
+        if (generateLockRef.current) return;
         const n = Number(count);
         if (!effectiveChainId) { setError('Pick a coin.'); return; }
         if (!Number.isInteger(n) || n < 1 || n > MAX_ADDRESSES) {
             setError(`Enter a number between 1 and ${MAX_ADDRESSES}.`);
             return;
         }
+        generateLockRef.current = true;
         setBusy(true);
         setError(null);
         setDone(0);
@@ -188,6 +190,8 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                 err?.message
                 || 'Could not generate addresses. Make sure the wallet is unlocked (or your hardware device is connected).',
             );
+        } finally {
+            generateLockRef.current = false;
             setBusy(false);
         }
     }
