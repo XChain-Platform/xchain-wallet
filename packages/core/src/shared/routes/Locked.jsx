@@ -33,6 +33,8 @@ import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './Locked.module.css';
 
 /**
@@ -97,6 +99,8 @@ export function Locked({ onUnlocked }) {
     const [wipeBusy, setWipeBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const forgotTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const forgotDialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
 
     // Demo wallets use a randomly-generated 64-char hex password held in
@@ -152,6 +156,12 @@ export function Locked({ onUnlocked }) {
         setWipeConfirmText('');
         setWipeError(null);
     }
+
+    useFocusTrap(forgotDialogRef, {
+        active: forgotOpen,
+        restoreFocusRef: forgotTriggerRef,
+    });
+    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -505,18 +515,20 @@ export function Locked({ onUnlocked }) {
                 </div>
             ) : (
                 <div className={styles.forgotBlock}>
-                    {!forgotOpen ? (
-                        <button
-                            type="button"
-                            className={styles.forgotLink}
-                            onClick={() => setForgotOpen(true)}
-                            aria-expanded="false"
-                            aria-controls="locked-forgot-password-panel"
-                        >
-                            Forgot password?
-                        </button>
-                    ) : (
+                    <button
+                        ref={forgotTriggerRef}
+                        type="button"
+                        className={styles.forgotLink}
+                        onClick={() => setForgotOpen(true)}
+                        aria-expanded={forgotOpen}
+                        aria-controls="locked-forgot-password-panel"
+                        hidden={forgotOpen}
+                    >
+                        Forgot password?
+                    </button>
+                    {forgotOpen ? (
                         <div
+                            ref={forgotDialogRef}
                             id="locked-forgot-password-panel"
                             className={styles.wipeConfirm}
                             role="dialog"
@@ -558,7 +570,7 @@ export function Locked({ onUnlocked }) {
                                 <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
                             ) : null}
                         </div>
-                    )}
+                    ) : null}
                 </div>
             )}
         </FormPage>

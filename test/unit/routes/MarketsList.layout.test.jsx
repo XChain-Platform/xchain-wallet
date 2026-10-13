@@ -9,10 +9,72 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 afterEach(() => cleanup());
 
 describe('MarketsList narrow layout', () => {
+    it('reaches and activates market actions in their visual order', async () => {
+        const user = userEvent.setup();
+        const onBack = vi.fn();
+        const onChangeAsset = vi.fn();
+        const onOpenMarket = vi.fn();
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue([
+                { tick1: 'BTC', tick2: 'PEPE', tick2_name: 'Pepe', depth: 9 },
+            ]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            saveWatchlistEntry: vi.fn().mockResolvedValue({}),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onBack={onBack}
+                    onChangeAsset={onChangeAsset}
+                    onOpenMarket={onOpenMarket}
+                />
+            </MessagingProvider>,
+        );
+
+        await screen.findByRole('button', { name: 'Open Pepe market' });
+        const back = screen.getByRole('button', { name: 'Back to previous screen' });
+        back.focus();
+        await user.keyboard('{Enter}');
+        expect(onBack).toHaveBeenCalledOnce();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: /Change asset/ })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onChangeAsset).toHaveBeenCalledOnce();
+
+        await user.tab();
+        const search = screen.getByRole('searchbox', { name: 'Search markets' });
+        expect(search).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 'BTC', 'PEPE');
+
+        for (const name of ['All', 'Popular', 'Watchlist']) {
+            await user.tab();
+            expect(screen.getByRole('tab', { name })).toHaveFocus();
+        }
+
+        await user.tab();
+        const star = screen.getByRole('button', { name: 'Add to watchlist' });
+        expect(star).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(messaging.saveWatchlistEntry).toHaveBeenCalledWith({
+            walletId: 'w', chainId: 'bitcoin-mainnet', tick1: 'BTC', tick2: 'PEPE',
+        }));
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Open Pepe market' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        expect(onOpenMarket).toHaveBeenCalledTimes(2);
+    });
+
     it('matches market-row height and marks the results region busy on first load', () => {
         const messaging = {
             getMarkets: vi.fn(() => new Promise(() => {})),
