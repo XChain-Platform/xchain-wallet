@@ -88,8 +88,9 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     // Real balance reads carry no price, so native rows get the coin's live
     // §45 rate here; without it the hero and the chart count every coin as
     // unpriced. A demo wallet asks for nothing (its fixtures price
-    // themselves), and nothing is fetched until settings resolve, so an
-    // opted-out user never reaches the CoinGecko fallback in the meantime.
+    // themselves), and nothing is fetched until the settings read finishes,
+    // so an opted-out user does not reach the CoinGecko fallback before
+    // their choice is known.
     const { settings, loading: settingsLoading } = useSettings();
     const nativeCoins = useMemo(() => {
         if (settingsLoading || isDemoWallet(walletId)) return [];
