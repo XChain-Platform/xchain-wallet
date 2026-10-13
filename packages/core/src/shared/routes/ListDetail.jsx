@@ -26,9 +26,11 @@ import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import { uniqueRows } from '../utils/pagedRows.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MEMBERS_PAGE_SIZE = 25;
 
 /**
  * PC-10 "My Lists" detail page: membership + lineage + a best-effort
@@ -103,7 +105,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
     const isFork = data ? (data.list_action_index != null && data.list_action_index !== '') : false;
-    const items = useMemo(() => (Array.isArray(data?.list) ? data.list : []), [data]);
+    const items = useMemo(
+        () => uniqueRows(Array.isArray(data?.list) ? data.list : [], memberIdentity),
+        [data],
+    );
     const edits = useMemo(() => (Array.isArray(data?.edits) ? data.edits : []), [data]);
     // Items the network recorded invalid and left out (an unknown TICK, a
     // malformed or wrong-network ADDRESS); the LIST itself stays valid.
@@ -113,7 +118,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const resolution = state && typeof state.edit_resolution_active === 'boolean'
         ? state.edit_resolution_active : null;
     const currentItems = useMemo(
-        () => (resolution === true && Array.isArray(state?.current_list) ? state.current_list : null),
+        () => (resolution === true && Array.isArray(state?.current_list)
+            ? uniqueRows(state.current_list, memberIdentity)
+            : null),
         [resolution, state],
     );
     const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
@@ -190,19 +197,37 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
                     />
-                    <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`current:${actionIndex}:${membershipIndex || ''}`}
+                        items={currentItems}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                     <SectionHeader
                         title={`As created (${items.length})`}
                         description="The members this action was published with."
                     />
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`created:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             ) : (
                 <>
                     <SectionHeader
                         title={resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
                     />
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`published:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             )}
 
@@ -286,18 +311,37 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
  * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
 function MemberList({ items, isTick, messaging, chainId }) {
+    const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
         return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
     }
+    const visibleItems = items.slice(0, visibleLimit);
     return (
-        <ul className={styles.detailsList} style={{ display: 'block' }}>
-            {items.map((item, i) => (
-                <li key={i} style={{ padding: '2px 0' }}>
-                    {isTick
-                        ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
-                        : <AddressText address={item} truncate={false} />}
-                </li>
-            ))}
-        </ul>
+        <>
+            <ul className={styles.detailsList} style={{ display: 'block' }}>
+                {visibleItems.map((item) => (
+                    <li key={String(item)} style={{ padding: '2px 0' }}>
+                        {isTick
+                            ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
+                            : <AddressText address={item} truncate={false} />}
+                    </li>
+                ))}
+            </ul>
+            {visibleItems.length < items.length ? (
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
+                    >
+                        Load more members
+                    </Button>
+                </div>
+            ) : null}
+        </>
     );
+}
+
+function memberIdentity(item) {
+    return item == null ? null : String(item);
 }
