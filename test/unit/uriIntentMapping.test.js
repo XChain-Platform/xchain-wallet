@@ -95,6 +95,8 @@ describe('shared URI to view mapping', () => {
             'litecoin:Labc?amount=not-a-number',
             'dogecoin:Dabc?req-unknown=1',
             'xchain:',
+            'xchain:BTC/send?to=bc1qrecipient&amount=not-a-number',
+            'xchain:BTC/send?to=bc1qrecipient&amount=0.000000001',
             'web+xchain:',
         ]) {
             expect(deepLinkRoute(raw, registry), raw).toEqual({
@@ -108,6 +110,7 @@ describe('shared URI to view mapping', () => {
         const bridge = {
             takePending: vi.fn(async () => ({ raw: 'dogecoin:DRecipient?amount=3' })),
             onUri: vi.fn(() => vi.fn()),
+            sendMessage: vi.fn(),
         };
         const apply = vi.fn();
         const { rerender } = renderHook(
@@ -131,5 +134,16 @@ describe('shared URI to view mapping', () => {
             sendPrefill: expect.objectContaining({ tick: 'DOGE', amount: '3' }),
         })));
         expect(apply).toHaveBeenCalledOnce();
+        expect(apply.mock.calls[0][0]).toEqual({
+            view: 'send',
+            sendPrefill: {
+                address: 'DRecipient',
+                amount: '3',
+                tick: 'DOGE',
+                chainId: 'dogecoin-mainnet',
+                memo: undefined,
+            },
+        });
+        expect(bridge.sendMessage).not.toHaveBeenCalled();
     });
 });

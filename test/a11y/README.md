@@ -28,9 +28,10 @@ render registry as either axe-rendered or explicitly missing. This makes a new
 route fail the accessibility suite until its coverage status is recorded.
 
 The runtime route suite renders Send, Receive, History's ActionDetail,
-TokenDetail, Settings and its drilldown sections, and Onboarding's license,
-explainer, and welcome steps. `coverage.a11y.test.js` contains the complete,
-machine-checked list of route modules that remain unrendered by axe.
+TokenDetail, Settings and its drilldown sections, the token issue, dispenser,
+order, bet, and poll voting forms, and Onboarding's license, explainer, and
+welcome steps. `coverage.a11y.test.js` contains the complete, machine-checked
+list of route modules that remain unrendered by axe.
 
 ## Run
 

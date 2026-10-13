@@ -39,8 +39,8 @@
 // defects are about what reaches the screen: a handler test would have passed
 // against the broken build in each case.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
@@ -136,15 +136,28 @@ function mountAirdrop(holders) {
     return getHoldersForToken;
 }
 
+async function flushTimers() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(2000);
+        });
+    }
+}
+
 /** Puts the form in 'Token holders' mode with one tick listed. */
 async function listOneTick() {
-    const mode = await screen.findByDisplayValue('Paste addresses');
+    await flushTimers();
+    const mode = screen.getByDisplayValue('Paste addresses');
     fireEvent.change(mode, { target: { value: 'holders' } });
-    const ticks = await screen.findByLabelText('Tokens (one per line)');
+    const ticks = screen.getByLabelText('Tokens (one per line)');
     fireEvent.change(ticks, { target: { value: LISTED } });
 }
 
 const preview = () => screen.queryByText(/1 token ·/);
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
 
 afterEach(() => {
     cleanup();
@@ -165,10 +178,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         });
 
         await listOneTick();
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/~2 holders right now/);
-        }, { timeout: 8000 });
+        expect(preview()?.textContent).toMatch(/~2 holders right now/);
         expect(holders.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
@@ -182,10 +194,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         });
 
         await listOneTick();
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
-        }, { timeout: 8000 });
+        expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
         expect(screen.getByText('Holder count details (1)')).toBeTruthy();
         expect(screen.getByText(/HTTP 429 rate limited/)).toBeTruthy();
         expect(holders.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -200,16 +211,15 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         });
 
         await listOneTick();
-        const retry = await screen.findByRole(
+        await flushTimers();
+        const retry = screen.getByRole(
             'button',
             { name: 'Retry holder counts' },
-            { timeout: 8000 },
         );
         fireEvent.click(retry);
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/~3 holders right now/);
-        }, { timeout: 4000 });
+        expect(preview()?.textContent).toMatch(/~3 holders right now/);
         expect(holders).toHaveBeenCalledTimes(3);
     });
 
@@ -221,27 +231,26 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         }));
 
         await listOneTick();
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/~9,007,199,254,740,993 holders right now/);
-        }, { timeout: 3000 });
+        expect(preview()?.textContent).toMatch(/~9,007,199,254,740,993 holders right now/);
     });
 
     it('reports an empty holder set as zero rather than unknown', async () => {
         mountAirdrop(async () => ({ tick: LISTED, total: 0, data: [] }));
 
         await listOneTick();
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/~0 holders right now/);
-        }, { timeout: 3000 });
+        expect(preview()?.textContent).toMatch(/~0 holders right now/);
         expect(screen.queryByText(/holder counts unavailable/i)).toBeNull();
 
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), {
             target: { value: '1' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review recipients' }));
-        await screen.findByRole('form', { name: 'Review recipient list' });
+        await flushTimers();
+        expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
         expect(document.body.textContent).toMatch(/~0 HDR550816/);
     });
 
@@ -251,15 +260,15 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
             return { tick, total: 2, data: [{ address: 'a' }, { address: 'b' }] };
         });
 
-        const mode = await screen.findByDisplayValue('Paste addresses');
+        await flushTimers();
+        const mode = screen.getByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
-        fireEvent.change(await screen.findByLabelText('Tokens (one per line)'), {
+        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
             target: { value: `${LISTED}\n${OTHER}` },
         });
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(screen.getByText('Holder count details (1)')).toBeTruthy();
-        }, { timeout: 8000 });
+        expect(screen.getByText('Holder count details (1)')).toBeTruthy();
         expect(screen.getByText(OTHER)).toBeTruthy();
         expect(screen.getByText(/Explorer has no route for this token/)).toBeTruthy();
         expect(holders.mock.calls.filter(([arg]) => arg.tick === OTHER)).toHaveLength(2);
@@ -276,10 +285,9 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         ));
 
         await listOneTick();
+        await flushTimers();
 
-        await waitFor(() => {
-            expect(preview()?.textContent).toMatch(/~2 holders right now/);
-        }, { timeout: 8000 });
+        expect(preview()?.textContent).toMatch(/~2 holders right now/);
         expect(holders).toHaveBeenCalledTimes(1);
     });
 
@@ -287,15 +295,17 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         const holders = mountAirdrop(async ({ tick }) => (
             { tick, total: 1, data: [{ address: 'a' }] }
         ));
-        const mode = await screen.findByDisplayValue('Paste addresses');
+        await flushTimers();
+        const mode = screen.getByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
-        const ticks = await screen.findByLabelText('Tokens (one per line)');
+        const ticks = screen.getByLabelText('Tokens (one per line)');
         fireEvent.change(ticks, { target: { value: `${SYMBOL_TICK}\nmixed!\nA..B` } });
+        await flushTimers();
 
-        await waitFor(() => expect(holders).toHaveBeenCalledWith({
+        expect(holders).toHaveBeenCalledWith({
             chainId: CHAIN,
             tick: SYMBOL_TICK,
-        }), { timeout: 3000 });
+        });
         expect(holders.mock.calls.some(([arg]) => arg.tick === 'A..B')).toBe(false);
         expect(screen.getByText(/These don't look like token names: A\.\.B/)).toBeTruthy();
         expect(ticks).toHaveAttribute('autocapitalize', 'off');
@@ -303,11 +313,13 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
 
     it('keeps a symbol ticker spelling selected for the holder list', async () => {
         mountAirdrop(async ({ tick }) => ({ tick, total: 1, data: [{ address: 'a' }] }));
-        const mode = await screen.findByDisplayValue('Paste addresses');
+        await flushTimers();
+        const mode = screen.getByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
+        fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
+        await flushTimers();
+        fireEvent.click(screen.getByLabelText(/^Select MiXeD!(?:\s|$)/));
 
-        expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
+        expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });
 });

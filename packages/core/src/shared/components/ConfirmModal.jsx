@@ -13,6 +13,7 @@ import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -45,6 +46,25 @@ export function ConfirmModal({
     onCancel,
 }) {
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
+    const confirmingRef = useRef(false);
+    const confirm = useCallback((event) => {
+        event?.preventDefault();
+        // Hold the first activation while the parent closes the dialog or exposes its busy state.
+        if (busy || confirmingRef.current) return;
+        confirmingRef.current = true;
+        const release = () => { confirmingRef.current = false; };
+        try {
+            const result = onConfirm();
+            if (result && typeof result.then === 'function') {
+                Promise.resolve(result).then(release, release);
+            } else {
+                setTimeout(release, 0);
+            }
+        } catch (error) {
+            release();
+            throw error;
+        }
+    }, [busy, onConfirm]);
     const rootRef = useRef(null);
     const panelRef = useRef(null);
     const titleId = useId();
@@ -74,7 +94,11 @@ export function ConfirmModal({
             <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <p id={titleId} className={styles.title}>{title}</p>
                 {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                {error ? <p role="alert" className={styles.error}>{error}</p> : null}
+                {error ? (
+                    <p role="alert" className={styles.error}>
+                        {userFacingMessage(error, 'Could not complete this request. Try again.')}
+                    </p>
+                ) : null}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>
                         {cancelLabel}
@@ -82,7 +106,7 @@ export function ConfirmModal({
                     <Button
                         variant={danger ? 'danger' : 'primary'}
                         block
-                        onClick={onConfirm}
+                        onClick={confirm}
                         loading={busy}
                         disabled={busy}
                     >

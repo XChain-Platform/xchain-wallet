@@ -15,6 +15,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => ({
+    ...await importOriginal(),
+    useTickFiatRate: () => ({ rate: 2, fiatCurrency: 'USD', source: 'oracle' }),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
 
@@ -67,6 +73,18 @@ describe('StakingActionForm partial COLLECT', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({ VERSION: '0' });
+    });
+
+    it('sets the fiat input to the converted maximum', async () => {
+        mountForm();
+        await screen.findByText('15 XCHAIN available');
+        fireEvent.change(screen.getByLabelText('Amount (XCHAIN)'), { target: { value: '4' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch input to USD' }));
+        expect(screen.getByLabelText('Amount (USD)')).toHaveValue('8.00');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Use max available amount' }));
+
+        expect(screen.getByLabelText('Amount (USD)')).toHaveValue('30.00');
     });
 });
 
