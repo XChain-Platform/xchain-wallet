@@ -383,6 +383,23 @@ body {
     box-sizing: border-box;
 }
 
+/* Controls and decorative glyphs behave as one touch target instead of
+ * contributing label or icon fragments to a long-press selection. Wallet
+ * data nested in a clickable row opts back into text selection in the
+ * component that renders it. */
+:where(button, [role='button'], [role='tab']),
+:where(svg, [aria-hidden='true']) {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Machine-readable values remain directly selectable wherever they appear,
+ * including inside a control that opens a transaction detail view. */
+:where(code, samp, output, address) {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
  * to shrink below its widest child. One long <option> then pushes the whole
  * group, and the form around it, past the screen edge: Create multisig's
