@@ -69,6 +69,7 @@ async function rowButtons(view) {
 
 beforeEach(() => {
     resetBackStackForTests();
+    globalThis.localStorage?.removeItem('xc:chainFilter:history:keyboard-wallet');
     globalThis.localStorage?.removeItem('xc:historyGroupingMode:keyboard-wallet');
 });
 

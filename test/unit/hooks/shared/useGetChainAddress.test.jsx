@@ -15,9 +15,11 @@ import { useGetChainAddress } from '../../../../packages/core/src/shared/hooks/u
 
 vi.mock('react', { spy: true });
 
-afterEach(() => {
+afterEach(async () => {
     cleanup();
     vi.restoreAllMocks();
+    const { useState } = await vi.importActual('react');
+    vi.mocked(React.useState).mockImplementation(useState);
 });
 
 function mount(messaging, getChainId, walletId = 'w1') {
