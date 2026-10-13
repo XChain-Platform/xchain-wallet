@@ -497,6 +497,22 @@ function AppInner() {
     useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => {
+        const bridge = globalThis.xchainWalletWindow;
+        if (!bridge || typeof bridge.onStateChange !== 'function') return undefined;
+        return bridge.onStateChange((change) => {
+            if (change?.kind === 'session') {
+                refresh();
+                return;
+            }
+            if (change?.kind !== 'active-wallet' || status.state !== 'unlocked') return;
+            const walletId = change.walletId;
+            if (typeof walletId !== 'string' || !walletList.some((wallet) => wallet.id === walletId)) return;
+            setActiveWalletId(walletId);
+            writeActiveWallet(walletId);
+        });
+    }, [refresh, status.state, walletList]);
+
+    useEffect(() => {
         if (status.state !== 'unlocked') {
             setActiveWalletId(null);
             setActiveAccountId(null);
@@ -600,8 +616,10 @@ function AppInner() {
     // to it instead of snapping back to the first wallet. Twin of the account
     // handler above, one level up.
     const handleSwitchWallet = (id) => {
+        const changed = typeof id === 'string' && id.length > 0 && id !== activeWalletId;
         setActiveWalletId(id);
         if (id) writeActiveWallet(id);
+        if (changed) messaging.setActiveWallet(id).catch(() => { /* best-effort sibling-window notice */ });
     };
 
     // Two gates, because the lanes stopped agreeing. Staking,
