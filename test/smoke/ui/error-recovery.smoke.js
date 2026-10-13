@@ -44,10 +44,11 @@ assert.ok(/Promise\.resolve\(recovery\.onAction\(\)\)\.catch/.test(statusSrc),
 //    errors AND on insufficient-funds submit errors.
 assert.ok(/StatusMessage/.test(sendSrc),
     'Send.jsx imports StatusMessage');
-assert.ok(/label: 'Use max'/.test(sendSrc),
+assert.ok(/label: t\('send\.useMax'\)/.test(sendSrc),
     'Send.jsx wires "Use max" recovery');
-// The structured cause returned by humanizeError makes the Use max recovery
-// key off the classification instead of re-parsing display copy.
+// migrated this from a regex over the displayed message to the
+// structured cause returned by humanizeError, so the Use-Max recovery keys
+// off the classified cause instead of re-parsing display copy.
 assert.ok(/submitErrorCause\s*===\s*'insufficient_funds'/.test(sendSrc),
     'Send.jsx detects insufficient-funds submit errors (via humanizeError cause) for the Use-Max recovery');
 

@@ -21,6 +21,7 @@ const electron = vi.hoisted(() => {
             isPackaged: true,
             on: vi.fn((name, listener) => { appListeners.set(name, listener); }),
             quit: vi.fn(),
+            showAboutPanel: vi.fn(),
             whenReady: vi.fn(() => new Promise(() => {})),
         },
         BrowserWindow: class BrowserWindow {},
@@ -114,6 +115,7 @@ const appIndex = pathToFileURL(join(
 
 beforeEach(() => {
     electron.appListeners.clear();
+    electron.app.isPackaged = true;
     vi.clearAllMocks();
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
     vi.resetModules();
@@ -197,5 +199,70 @@ describe('desktop main entry point', () => {
         expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
         expect(electron.session.fromPartition).toHaveBeenCalledExactlyOnceWith('trezor-connect-isolated');
         expect(permissions.attachHidDenial).toHaveBeenCalledExactlyOnceWith(electron.isolatedSession);
+    });
+});
+
+function submenu(template, label) {
+    return template.find((item) => item.label === label)?.submenu ?? [];
+}
+
+function actionableLeaves(template) {
+    return template.flatMap((item) => item.submenu ?? [])
+        .filter((item) => item.type !== 'separator');
+}
+
+describe('desktop application menu', () => {
+    it.each([
+        ['darwin', '&File', 'close'],
+        ['win32', '&File', 'quit'],
+        ['linux', '&File', 'quit'],
+    ])('uses native %s lifecycle roles', async (platform, fileLabel, finalRole) => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+        electron.app.isPackaged = true;
+        installApplicationMenu({ isMac: platform === 'darwin' });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const file = submenu(template, fileLabel);
+
+        expect(file.at(-1)).toEqual({ role: finalRole });
+        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toContain('reload');
+        expect(actionableLeaves(template).every((item) => item.role || item.click)).toBe(true);
+    });
+
+    it('places About in the native macOS app menu and invokes it from Help elsewhere', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        electron.app.isPackaged = true;
+        installApplicationMenu({ isMac: true });
+        let template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(template[0].submenu[0]).toEqual({ role: 'about' });
+        expect(template.some((item) => item.label === '&Help')).toBe(false);
+
+        installApplicationMenu({ isMac: false });
+        template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const about = submenu(template, '&Help').find((item) => item.label?.startsWith('About '));
+        about.click();
+        expect(electron.app.showAboutPanel).toHaveBeenCalledOnce();
+    });
+
+    it('keeps developer tools out of packaged menus and gives custom commands unique accelerators', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        electron.app.isPackaged = true;
+        installApplicationMenu({ isMac: false });
+        let template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(actionableLeaves(template).some((item) => item.role === 'toggleDevTools')).toBe(false);
+
+        electron.app.isPackaged = false;
+        installApplicationMenu({ isMac: false });
+        template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(actionableLeaves(template).some((item) => item.role === 'toggleDevTools')).toBe(true);
+        const roles = actionableLeaves(template).map((item) => item.role).filter(Boolean);
+        expect(new Set(roles).size).toBe(roles.length);
+        const accelerators = actionableLeaves(template)
+            .map((item) => item.accelerator)
+            .filter(Boolean)
+            .map((accelerator) => accelerator.toLowerCase());
+        expect(new Set(accelerators).size).toBe(accelerators.length);
+        expect(accelerators).toEqual(['cmdorctrl+n']);
     });
 });

@@ -17,8 +17,8 @@
 //
 // A binding string is either:
 //   'mod+k'   a modifier combo: `mod` = Cmd on macOS / Ctrl elsewhere, then a
-//             single key. Combos fire regardless of focus (they're
-//             unambiguous), except the browser-owned ones we deliberately skip.
+//             single key. Global combos stay inactive while the user types in
+//             an editable field.
 //   '?'       a single key: only fires when no editable element has focus.
 //   'g h'     a leader sequence: press `g`, then the next key. Editable-gated
 //             like single keys.
@@ -132,8 +132,8 @@ export function findBindingConflict(id, binding, overrides) {
 }
 
 /**
- * True when the element should swallow single-key / leader shortcuts (the user
- * is typing). Modifier combos are allowed to fire even here.
+ * True when the element should swallow global shortcuts because the user is
+ * typing. Every binding family stays inactive here.
  *
  * @param {EventTarget | null} el
  * @returns {boolean}

@@ -47,6 +47,7 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -301,6 +302,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: items,
     }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
+    const actionSize = useMemo(
+        () => listActionSize(wireParams, descriptor, isWatcherMode ? null : fromAddress),
+        [wireParams, descriptor, isWatcherMode, fromAddress],
+    );
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -398,6 +403,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         if (memoTooLong) { setFormError(memoTooLong); return false; }
         if (nameError || descriptionError) { setFormError('Fix the list name and description first.'); return false; }
         if (listType === '2') {
+            if (recipients.invalid.length > 0) {
+                setFormError(`Remove ${recipients.invalid.length} invalid address${recipients.invalid.length === 1 ? '' : 'es'} before reviewing.`);
+                return false;
+            }
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {
             // Verify every token name is well formed before counting them
@@ -407,6 +416,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             }
             if (memberTicks.length === 0) { setFormError('Add at least one token.'); return false; }
         }
+        const sizeError = listActionSizeError(actionSize);
+        if (sizeError) { setFormError(sizeError); return false; }
         return true;
     }
 
@@ -585,6 +596,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     <dd className={styles.detailsValue}>{listType === '2' ? 'Address list' : 'Token list'}</dd>
                     <dt className={styles.detailsLabel}>Items</dt>
                     <dd className={styles.detailsValue}>{items.length}</dd>
+                    <dt className={styles.detailsLabel}>Action size</dt>
+                    <dd className={styles.detailsValue}>
+                        {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes
+                    </dd>
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -596,6 +611,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     </dd>
                 </dl>
+                <details>
+                    <summary>Review {items.length} item{items.length === 1 ? '' : 's'}</summary>
+                    <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
+                </details>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
@@ -885,6 +904,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             <p className={styles.hint}>
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
+                {' '}Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
             </p>
 
         </FormPage>,

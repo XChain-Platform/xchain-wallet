@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import styles from './CopyButton.module.css';
 import { CopyIcon, CheckIcon } from './icons/index.jsx';
 import { useHapticFeedback } from '../shared/hooks/useHaptic.js';
+import { useToast } from '../shared/components/ToastHost.jsx';
 // SSC-4: every copy in the wallet goes through one path, so a
 // sensitive one can be marked sensitive, kept off a cross-device clipboard
 // sync and given a real expiry on the shells that have those mechanisms.
@@ -37,7 +38,9 @@ import { copyText, CopyFailure } from '../shared/clipboard.js';
 export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs = 1500, sensitive = false, onCopied }) {
     const [state, setState] = useState(/** @type {'idle'|'copied'|'failed'} */ ('idle'));
     const [failureText, setFailureText] = useState('');
+    const buttonRef = useRef(null);
     const haptic = useHapticFeedback();
+    const { announce } = useToast();
 
     async function handleCopy() {
         // A sensitive copy can come back false on a native shell whose
@@ -57,6 +60,15 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
                 : 'Copy failed: the clipboard is unavailable.');
             haptic.error();
         }
+        const resultText = ok
+            ? 'Copied'
+            : reason === CopyFailure.NO_NATIVE_CLIPBOARD
+                ? 'Copy blocked: this app has no secure clipboard.'
+                : 'Copy failed: the clipboard is unavailable.';
+        const localRegion = buttonRef.current?.parentElement?.closest(
+            '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"]',
+        );
+        if (!localRegion) announce(resultText);
         setTimeout(() => setState('idle'), feedbackMs);
     }
 
@@ -64,11 +76,11 @@ export function CopyButton({ value, label = 'Copy value', ariaLabel, feedbackMs 
     const icon = state === 'copied' ? <CheckIcon /> : <CopyIcon />;
     return (
         <button
+            ref={buttonRef}
             type="button"
             onClick={handleCopy}
             className={styles.btn}
             aria-label={ariaLabel || label}
-            aria-live="polite"
             data-state={state}
         >
             <span className={styles.icon} aria-hidden="true">{icon}</span>

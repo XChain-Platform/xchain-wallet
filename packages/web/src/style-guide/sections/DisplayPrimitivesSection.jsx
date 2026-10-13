@@ -47,6 +47,11 @@ export function ChainBadgeSection() {
                 <div style={rowStyle}>
                     <ChainBadge descriptor={bitcoin} size="sm" />
                     <ChainBadge descriptor={bitcoinTestnet} size="md" />
+                    <ChainBadge
+                        descriptor={bitcoinTestnet}
+                        showName={false}
+                        showNetworkKind={false}
+                    />
                 </div>
             </LiveExample>
         </Section>
@@ -124,7 +129,7 @@ export function MultisigBadgeSection() {
             </Markup>
             <LiveExample label="Scheme families use distinct tones while keeping the threshold first.">
                 <div style={rowStyle}>
-                    <MultisigBadge threshold={2} cosignerCount={3} scheme="p2sh-multisig" />
+                    <MultisigBadge threshold={2} cosignerCount={3} scheme="p2sh-multisig" size="sm" />
                     <MultisigBadge threshold={2} cosignerCount={3} scheme="p2wsh-multisig" />
                     <MultisigBadge threshold={3} cosignerCount={5} scheme="taproot-musig2" />
                 </div>
@@ -155,7 +160,7 @@ export function VerifiedBadgeSection() {
                     <VerifiedBadge status="verified" />
                     <VerifiedBadge status="failed" reason="CHECKPOINT_QUORUM_FAILED" />
                     <VerifiedBadge status="unavailable" reason="NOT_YET_CHECKPOINTED" />
-                    <VerifiedBadge status="pending" />
+                    <VerifiedBadge status="pending" size="md" />
                 </div>
             </LiveExample>
         </Section>
@@ -183,10 +188,20 @@ export function InfoTipSection() {
 </span>`}
             </Markup>
             <LiveExample label="Hover, focus, or press the help trigger.">
-                <p style={{ margin: 0 }}>
-                    Replace-by-fee
-                    <InfoTip label="Lets you raise the fee while a payment is pending." />
-                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <p style={{ margin: 0 }}>
+                        Replace-by-fee
+                        <InfoTip label="Lets you raise the fee while a payment is pending." />
+                    </p>
+                    <p style={{ margin: 0 }}>
+                        Derivation path
+                        <InfoTip
+                            placement="bottom"
+                            aria="About derivation paths"
+                            label="Identifies where this account sits in the wallet key tree."
+                        />
+                    </p>
+                </div>
             </LiveExample>
         </Section>
     );

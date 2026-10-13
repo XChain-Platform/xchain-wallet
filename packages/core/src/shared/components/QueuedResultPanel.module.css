@@ -7,10 +7,23 @@
     flex-direction: column;
     gap: var(--xc-space-3);
     align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     padding: var(--xc-space-4);
     border: 1px solid var(--xc-warning, #b8860b);
     border-radius: var(--xc-radius-md);
     background: var(--xc-surface-raised);
+}
+
+.queuedStage {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+    text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .queuedIcon {
@@ -24,6 +37,8 @@
     margin: 0;
     text-align: center;
     color: var(--xc-warning, #b8860b);
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .queuedHint {
@@ -31,6 +46,8 @@
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     text-align: center;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .unsavedWarning {
@@ -39,11 +56,30 @@
     font-size: var(--xc-text-sm);
     font-weight: 700;
     text-align: center;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     justify-content: flex-end;
+    min-width: 0;
+    max-width: 100%;
     margin-top: var(--xc-space-4);
+}
+
+@media (max-width: 360px) {
+    .queuedCard {
+        padding: var(--xc-space-3);
+    }
+
+    .actions {
+        width: 100%;
+    }
+
+    .actions > * {
+        flex: 1 1 100%;
+    }
 }

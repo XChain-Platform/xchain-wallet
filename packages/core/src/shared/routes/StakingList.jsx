@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -513,6 +513,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
 
 function StakeRow({ row, cooldown, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const descriptor = chainRegistry.get(row.chainId);
     return (
         <button
             type="button"
@@ -541,6 +542,9 @@ function StakeRow({ row, cooldown, onSelect }) {
             </div>
             <div className={local.body}>
                 <div className={local.name}>{row.name}</div>
+                <div className={local.subtitle}>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
+                </div>
                 <div className={local.subtitle}>{row.subtitle}</div>
                 {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
                 {cooldown ? <div className={local.subtitle}>{cooldown}</div> : null}

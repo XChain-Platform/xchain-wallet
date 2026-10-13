@@ -97,6 +97,7 @@ export function MenuRoute({
         <Screen variant={variant} header={header}>
             <div className={menuStyles.scroll}>
                 {primary.length > 0 || typeof onSettings === 'function' ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={menuStyles.list} role="list">
                         {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
                             <li key={id}>
