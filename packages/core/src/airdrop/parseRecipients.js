@@ -40,6 +40,7 @@
 // still has to render something. Every real call site passes a chain.
 
 import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
@@ -74,17 +75,15 @@ export function parsePaste(text) {
  */
 export function parseCsv(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    const lines = text.split(/\r?\n/);
+    const rows = parseCsvRecords(text);
     const out = [];
-    let skipHeader = false;
-    if (lines.length > 0) {
-        const firstCol = stripWrappingQuotes(firstCell(lines[0]).trim()).toLowerCase();
-        if (firstCol === 'address') skipHeader = true;
-    }
-    for (let i = skipHeader ? 1 : 0; i < lines.length; i += 1) {
-        const line = lines[i];
-        if (line === undefined) continue;
-        const first = stripWrappingQuotes(firstCell(line).trim());
+    // Find the header after any BOM and leading blank lines exported by spreadsheets.
+    const firstContent = rows.findIndex(({ cells }) => cells.some((cell) => cell.trim().length > 0));
+    if (firstContent === -1) return [];
+    const firstCol = rows[firstContent].cells[0].trim().replace(/^\uFEFF/, '').toLowerCase();
+    const start = firstContent + (firstCol === 'address' ? 1 : 0);
+    for (let i = start; i < rows.length; i += 1) {
+        const first = rows[i].cells[0].trim().replace(/^\uFEFF/, '');
         if (first.length > 0) out.push(first);
     }
     return out;
@@ -174,20 +173,26 @@ export function classifyRecipients(candidates, chain) {
     const seen = new Set();
     let duplicates = 0;
     for (const raw of candidates) {
-        if (seen.has(raw)) {
+        const candidate = String(raw ?? '').trim();
+        if (!candidate) continue;
+        // Bech32 is case-insensitive when the whole address uses one case.
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(candidate)
+            && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
+        const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
+        if (seen.has(duplicateKey)) {
             duplicates += 1;
             continue;
         }
-        seen.add(raw);
-        if (isRecipientForChain(raw, chain)) {
-            valid.push(raw);
+        seen.add(duplicateKey);
+        if (isRecipientForChain(candidate, chain)) {
+            valid.push(candidate);
             continue;
         }
-        invalid.push(raw);
+        invalid.push(candidate);
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isPlausibleAddress(raw)) wrongNetwork.push(raw);
+        if (params && isPlausibleAddress(candidate)) wrongNetwork.push(candidate);
     }
     return { valid, invalid, duplicates, wrongNetwork };
 }
@@ -243,19 +248,4 @@ function stripWrappingQuotes(s) {
         return s.slice(1, -1).trim();
     }
     return s;
-}
-
-function firstCell(line) {
-    // Minimal CSV cell extractor: takes everything before the first
-    // unquoted comma. Enough for addresses in the first column;
-    // doesn't try to parse every RFC 4180 edge case.
-    if (line.length === 0) return '';
-    if (line[0] === '"') {
-        const end = line.indexOf('"', 1);
-        if (end === -1) return line;
-        return line.slice(0, end + 1);
-    }
-    const comma = line.indexOf(',');
-    if (comma === -1) return line;
-    return line.slice(0, comma);
 }

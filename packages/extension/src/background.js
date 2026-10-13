@@ -74,6 +74,7 @@ import {
 } from './background/layoutMode.js';
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
+import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
@@ -84,6 +85,8 @@ import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js
     await applyLayoutMode(mode);
 })();
 attachLayoutModeListener();
+
+const surfaceStateEvents = createSurfaceStateBroadcaster();
 
 // --- Lazy wiring --------------------------------------------------------
 // The service worker starts with no master key; it's in ChromeSessionBackend
@@ -338,6 +341,7 @@ async function buildHost() {
         signerPool,
         broadcastQueueStore,
         approvals: approvalBroker,
+        surfaceStateEvents,
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
@@ -611,13 +615,23 @@ function renewBroadcastQueueStore() {
 // keepalive alarm checks + locks.
 
 let lastActivityStampAt = 0;
+let activeUiRequests = 0;
 function noteAutoLockActivity() {
+    activeUiRequests += 1;
+    let finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        activeUiRequests = Math.max(0, activeUiRequests - 1);
+    };
     const now = Date.now();
     // Throttle persisted writes to at most once per 10s; a message burst from
     // the open popup only needs to keep the idle clock roughly fresh.
-    if (now - lastActivityStampAt < 10_000) return;
-    lastActivityStampAt = now;
-    stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    if (now - lastActivityStampAt >= 10_000) {
+        lastActivityStampAt = now;
+        stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    }
+    return finish;
 }
 
 // Lock sequencing (retry record kept across a lock that left a secret behind)
@@ -629,8 +643,12 @@ const lockBackstop = createLockBackstop({
         sessionBackend: new ChromeSessionBackend(),
         signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
     }),
-    tearDownHost: () => tearDownHost(),
+    tearDownHost: () => {
+        tearDownHost();
+        void surfaceStateEvents.publish('session', { state: 'locked' });
+    },
     isUnlocked: () => Boolean(host && vault),
+    isRequestActive: () => activeUiRequests > 0,
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,
@@ -663,9 +681,11 @@ attachSessionMetaListener({
         clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        return ensureHost().catch((err) => {
-            console.error('[xchain] ensureHost after unlock failed:', err);
-        });
+        return ensureHost()
+            .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
+            .catch((err) => {
+                console.error('[xchain] ensureHost after unlock failed:', err);
+            });
     },
     startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
         walletId: opts.walletId,
@@ -694,6 +714,7 @@ attachWipeStorageListener({
     onWiped: () => {
         tearDownHost();
         renewBroadcastQueueStore();
+        void surfaceStateEvents.publish('session', { state: 'no-wallet' });
     },
 });
 

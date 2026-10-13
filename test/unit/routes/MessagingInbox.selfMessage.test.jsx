@@ -82,9 +82,9 @@ describe('MessagingInbox self-addressed messages', () => {
         fireEvent.click(await screen.findByText('note to self'));
 
         // The thread filter keys on the same value, so an unfixed
-        // counterpartyOf renders "No messages in this conversation."
+        // counterpartyOf renders the "No messages yet" empty state.
         expect(await screen.findByText('note to self')).toBeInTheDocument();
-        expect(screen.queryByText('No messages in this conversation.')).not.toBeInTheDocument();
+        expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
     });
 
     it('still keys an ordinary conversation on the other party, not on us', async () => {

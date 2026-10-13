@@ -151,7 +151,7 @@
     margin: var(--xc-space-3) 0 var(--xc-space-2);
     font-size: var(--xc-text-xs);
     font-weight: 700;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     scroll-margin-top: 56px;
 }
 

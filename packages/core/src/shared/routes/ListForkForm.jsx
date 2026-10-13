@@ -985,7 +985,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 onChange={(e) => setAddText(e.target.value)}
                 rows={6}
                 spellCheck={false}
-                autoCapitalize={isTick ? 'characters' : 'none'}
+                autoCapitalize={isTick ? 'characters' : 'off'}
                 autoCorrect="off"
             />
             <p className={styles.hint}>

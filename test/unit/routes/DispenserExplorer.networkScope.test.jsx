@@ -156,7 +156,7 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        await waitFor(() => expect(screen.getByText(/No open dispensers matched/i)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/No matching dispensers/i)).toBeTruthy());
         expect(screen.queryByRole('alert'),
             'the raw explorer error is still on screen for what is an ordinary empty result')
             .toBeNull();
@@ -180,7 +180,7 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
         // report, which is what tells the user WHICH explorer is down.
         const alerts = await waitFor(() => screen.getAllByRole('alert'));
         expect(alerts.every((el) => /HTTP 503/.test(el.textContent))).toBe(true);
-        expect(screen.queryByText(/No open dispensers matched/i),
+        expect(screen.queryByText(/No matching dispensers/i),
             'every chain failed and the screen still called it an empty result')
             .toBeNull();
     });

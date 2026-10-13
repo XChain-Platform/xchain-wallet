@@ -338,6 +338,27 @@ describe('(c) MyBets names each row\'s outcome', () => {
         expect(calls.filter((c) => c.method === 'betFeed').length).toBe(1);
     });
 
+    it('separates pending bets from plain win and loss history', async () => {
+        const rows = [
+            BET_ROW,
+            { ...BET_ROW, action_index: '5002', bet_status: 'won', settled_block: 7001 },
+            { ...BET_ROW, action_index: '5003', bet_status: 'lost', settled_block: 7002 },
+            { ...BET_ROW, action_index: '5004', bet_status: 'refunded', settled_block: 7003 },
+        ];
+        const { messaging } = harness({ bets: () => Promise.resolve({ data: rows }) });
+        const utils = await openMyBets(messaging);
+        const text = utils.container.textContent;
+
+        expect(text).toContain('Pending resolution');
+        expect(text).toContain('Past bets');
+        expect(text).toContain('Won');
+        expect(text).toContain('Lost');
+        expect(text).toContain('Refunded');
+        expect(text).toContain('Settled in block 7001');
+        expect(text).toContain('There is no claim transaction');
+        expect(text).toContain('credits winnings or refunds automatically');
+    });
+
     it('stops reading markets at the ceiling instead of re-batching forever', async () => {
         // The label read re-runs on its own result, so a per-pass cap would
         // just fetch the next batch each time. 40 distinct markets, ceiling 25.

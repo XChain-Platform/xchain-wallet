@@ -23,7 +23,7 @@
 // and "expired" from the order's own EXPIRATION vs wall clock. Neither
 // feed carries fills, so every order those two leave open is read once
 // through orders.detail, whose `state` block nets settled matches out of
-// give_remaining and reports `complete` once the order is fully filled.
+// give_remaining and reports `complete` or `filled` once the order is fully filled.
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -44,6 +44,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -76,14 +77,16 @@ const FILL_READ_CONCURRENCY = 6;
 
 const CLOSED_LABELS = Object.freeze({
     filled: 'Filled',
+    cancelling: 'Cancelling',
     cancelled: 'Cancelled',
+    expiring: 'Expiring',
     expired: 'Expired',
     invalid: 'Invalid',
 });
 
 // The lifecycle half of an order detail. `state.status` is the indexer's
 // latest order status (open / cancelling / cancelled / expiring / expired /
-// complete) and `state.give_remaining` is the give amount net of settled
+// complete / filled) and `state.give_remaining` is the give amount net of settled
 // matches, zeroed once the order is terminal. Null when the detail lacks
 // the block, so the caller falls back to the feeds alone.
 export function fillStateOf(detail) {
@@ -101,8 +104,10 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
     const fill = item.fill;
     if (fill) {
-        if (fill.status === 'complete') return 'filled';
+        if (fill.status === 'complete' || fill.status === 'filled') return 'filled';
+        if (fill.status === 'cancelling') return 'cancelling';
         if (fill.status === 'cancelled') return 'cancelled';
+        if (fill.status === 'expiring') return 'expiring';
         if (fill.status === 'expired') return 'expired';
         const remaining = compareDecimalStrings(fill.giveRemaining, '0');
         if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
@@ -144,8 +149,10 @@ async function readFillStates(messaging, candidates) {
 
 function fmtDate(unixSec) {
     const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -196,14 +203,25 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [autopayByKey, setAutopayByKey] = useState(/** @type {Map<string, any>} */ (new Map()));
     const [activeAction, setActiveAction] = useState(/** @type {{ type: 'cancel' | 'edit', item: any } | null} */ (null));
+    const [cancellingKeys, setCancellingKeys] = useState(/** @type {Set<string>} */ (new Set()));
     // PC-21: which order's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveExpiration = () => (items || []).some((item) => {
+            const expiration = Number(item.fill?.expiration ?? item.row?.expiration);
+            return Number.isFinite(expiration) && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveExpiration()) return undefined;
+        const t = setInterval(() => {
+            setNowSec(Math.floor(Date.now() / 1000));
+            if (!hasLiveExpiration()) clearInterval(t);
+        }, 30000);
         return () => clearInterval(t);
-    }, []);
+    }, [items]);
 
     const load = useCallback(async () => {
         if (typeof messaging?.getAddressesByChain !== 'function'
@@ -218,9 +236,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getOrderCancelsForAddress === 'function'
-                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([o, c]) => ({ p, orders: extractRows(o), cancels: extractRows(c) }))));
 
@@ -310,6 +328,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 walletId={walletId}
                 messaging={messaging}
                 onDone={() => { setActiveAction(null); load(); loadAutopay(); }}
+                onCancelBroadcast={() => setCancellingKeys((current) => {
+                    const next = new Set(current);
+                    next.add(activeAction.item.key);
+                    return next;
+                })}
                 onBack={() => setActiveAction(null)}
             />
         );
@@ -328,11 +351,15 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         );
     }
 
-    const openItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) === 'open');
-    const closedItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) !== 'open');
+    const statusOf = (it) => {
+        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
+    };
+    const openItems = items.filter((it) => statusOf(it) === 'open');
+    const closedItems = items.filter((it) => statusOf(it) !== 'open');
 
     const renderRow = (it) => {
-        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        const status = statusOf(it);
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
@@ -403,7 +430,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             <SectionHeader title="Open" />
             {openItems.length > 0 ? (
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <EmptyState title="No open orders." titleAs="p" />}
+            ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
                     <SectionHeader title="Closed" />
@@ -420,7 +447,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
  * confirm page with its network pre-flight, or, in watcher mode, the form
  * builds an unsigned transaction.
  */
-function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
+function OrderActionPanel({
+    type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
+}) {
     const { chainId, owner, row } = item;
     const descriptor = chainRegistry.get(chainId);
     const isCancel = type === 'cancel';
@@ -488,6 +517,8 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: isCancel ? { orderActionIndex } : { orderActionIndex, params: editParams },
             });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (isCancel && txid && typeof onCancelBroadcast === 'function') onCancelBroadcast();
             setResult(res || {});
         } catch (err) {
             if (!isUserRejection(err)) {

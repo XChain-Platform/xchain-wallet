@@ -29,6 +29,7 @@ import {
     classifyRecipients,
     isRecipientForChain,
     isPlausibleAddress,
+    parseCsv,
     reconcileStoredList,
 } from '../../../packages/core/src/airdrop/parseRecipients.js';
 
@@ -42,6 +43,20 @@ const GARBAGE = 'notanaddress';
 
 const BTC_REGTEST = { coin: 'bitcoin', network: 'regtest' };
 const BTC_MAINNET = { coin: 'bitcoin', network: 'mainnet' };
+
+describe('parseCsv recipient imports', () => {
+    it('recognizes a spreadsheet header after a BOM and blank lines', () => {
+        expect(parseCsv(`\uFEFF\n\naddress,label\n${MAINNET_BECH32},primary\n`))
+            .toEqual([MAINNET_BECH32]);
+    });
+
+    it('does not turn a quoted multiline label into another address', () => {
+        expect(parseCsv(
+            `"address","label"\r\n${MAINNET_BECH32},"primary\nwallet"\r\n${MAINNET_LEGACY},second\r\n`,
+        )).toEqual([MAINNET_BECH32, MAINNET_LEGACY]);
+    });
+
+});
 
 describe('classifyRecipients - network-aware validation', () => {
     it('does not count a mainnet address as valid on a regtest wallet', () => {
@@ -116,6 +131,15 @@ describe('classifyRecipients - network-aware validation', () => {
         expect(isRecipientForChain(MAINNET_BECH32, BTC_REGTEST)).toBe(false);
         expect(isRecipientForChain(`  ${REGTEST_BECH32}  `, BTC_REGTEST)).toBe(true);
         expect(isRecipientForChain(null, BTC_REGTEST)).toBe(false);
+    });
+
+    it('trims candidates and counts case variants of bech32 as duplicates', () => {
+        const out = classifyRecipients([
+            `  ${MAINNET_BECH32}  `,
+            MAINNET_BECH32.toUpperCase(),
+        ], BTC_MAINNET);
+        expect(out.valid).toEqual([MAINNET_BECH32]);
+        expect(out.duplicates).toBe(1);
     });
 });
 

@@ -118,7 +118,7 @@
 }
 
 .networkOptionActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-weight: 600;
 }
 

@@ -21,7 +21,10 @@ import { AppHeader } from '../../../packages/core/src/shared/components/AppHeade
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const chainRegistry = registryLib.defaultRegistry();
 const COIN_FAMILIES = ['bitcoin', 'litecoin', 'dogecoin'];
@@ -41,6 +44,12 @@ describe('AppHeader settings gear', () => {
     it('renders the gear when only the wallet picker is wired', () => {
         render(<AppHeader onOpenWalletPicker={() => {}} />);
         expect(gear()).not.toBeNull();
+    });
+
+    it('keeps the watch-only badge in the persistent header', () => {
+        render(<AppHeader isWatcherMode />);
+        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
+        expect(screen.getByText('Watch-only')).toBeTruthy();
     });
 
     it('renders the gear when only the network filter is wired', () => {
@@ -128,7 +137,7 @@ describe('AppHeader action row', () => {
 
     it('gives every icon action a label and tooltip in a sensible focus order', () => {
         render(<AppHeader {...allActions} />);
-        const header = screen.getByRole('banner');
+        const header = screen.getByRole('region', { name: 'App header' });
         const buttons = within(header).getAllByRole('button');
 
         expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
@@ -195,7 +204,7 @@ describe('HeaderSettingsButton section gating', () => {
             />,
         );
         fireEvent.click(gear());
-        expect(screen.getByText('Network')).toBeTruthy();
+        expect(screen.getByText('Chain filter')).toBeTruthy();
         const networkTrigger = screen.getByRole('button', { expanded: false, name: /All networks/ });
         expect(networkTrigger).toHaveAttribute('title', 'All networks');
         fireEvent.click(networkTrigger);
@@ -203,6 +212,57 @@ describe('HeaderSettingsButton section gating', () => {
         expect(litecoin).toHaveAttribute('title', 'Litecoin');
         fireEvent.click(litecoin);
         expect(onNetworkFilterChange).toHaveBeenCalledWith('litecoin');
+    });
+
+    it('shows the active network badge and confirms a header switch', async () => {
+        const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(
+            <HeaderSettingsButton
+                activeNetwork="testnet"
+                developerMode
+                onActiveNetworkChange={onActiveNetworkChange}
+            />,
+        );
+
+        expect(screen.getByLabelText('Active network: Testnet').textContent).toBe('Testnet');
+        fireEvent.click(gear());
+        fireEvent.change(screen.getByLabelText('Active network in header'), {
+            target: { value: 'regtest' },
+        });
+
+        expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/refresh balances and history for Regtest/));
+        expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest');
+    });
+
+    it('does not guess a network badge before settings load', () => {
+        render(
+            <HeaderSettingsButton
+                activeNetwork={undefined}
+                onActiveNetworkChange={() => Promise.resolve()}
+            />,
+        );
+
+        expect(screen.queryByLabelText(/Active network:/)).toBeNull();
+    });
+
+    it('keeps the current network when the header confirmation is cancelled', () => {
+        const onActiveNetworkChange = vi.fn();
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(
+            <HeaderSettingsButton
+                activeNetwork="mainnet"
+                onActiveNetworkChange={onActiveNetworkChange}
+            />,
+        );
+
+        fireEvent.click(gear());
+        const select = screen.getByLabelText('Active network in header');
+        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
+        fireEvent.change(select, { target: { value: 'testnet' } });
+
+        expect(onActiveNetworkChange).not.toHaveBeenCalled();
+        expect(select.value).toBe('mainnet');
     });
 
     it('marks the trigger active when a non-default wallet or account is selected', () => {

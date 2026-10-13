@@ -41,6 +41,10 @@
     line-height: 1.5;
 }
 
+.error {
+    color: var(--xc-danger-fg);
+}
+
 .nextStep {
     font-weight: 600;
 }

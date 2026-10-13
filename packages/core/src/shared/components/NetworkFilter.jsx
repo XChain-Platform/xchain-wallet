@@ -120,7 +120,11 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                         <div className={styles.searchWrap}>
                             <Icon.SearchIcon />
                             <input
-                                type="text"
+                                type="search"
+                                enterKeyHint="search"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 className={styles.search}
                                 placeholder="Search networks…"
                                 value={query}

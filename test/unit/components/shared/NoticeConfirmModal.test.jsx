@@ -9,8 +9,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 vi.mock('@xchain-wallet/core/ui', async () => {
     const React = await import('react');
     return {
-        Button: ({ variant, onClick, children }) =>
-            React.createElement('button', { 'data-variant': variant, onClick }, children),
+        Button: ({ variant, onClick, children, disabled, loading }) =>
+            React.createElement('button', {
+                'data-variant': variant,
+                'aria-busy': loading ? 'true' : 'false',
+                disabled: disabled || loading,
+                onClick,
+            }, children),
     };
 });
 
@@ -32,8 +37,16 @@ describe('NoticeModal', () => {
     it('exposes a modal dialog labelled by the title', () => {
         setup();
         const dialog = screen.getByRole('dialog');
+        const title = screen.getByText('Sent');
         expect(dialog.getAttribute('aria-modal')).toBe('true');
-        expect(dialog.getAttribute('aria-label')).toBe('Sent');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+        expect(dialog.getAttribute('aria-describedby')).toBeNull();
+    });
+
+    it('ties the optional detail to the dialog description', () => {
+        setup({ message: 'Message went out' });
+        expect(screen.getByRole('dialog').getAttribute('aria-describedby'))
+            .toBe(screen.getByText('Message went out').id);
     });
 
     it('renders the message paragraph only when given', () => {
@@ -75,6 +88,18 @@ describe('NoticeModal', () => {
         unmount();
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps background content inert while mounted', () => {
+        const onClose = vi.fn();
+        const view = render(
+            <>
+                <button type="button">Outside</button>
+                <NoticeModal title="Sent" onClose={onClose} />
+            </>,
+        );
+        expect(screen.getByText('Outside').hasAttribute('inert')).toBe(true);
+        view.unmount();
     });
 });
 
@@ -128,6 +153,24 @@ describe('ConfirmModal', () => {
         expect(onConfirm).not.toHaveBeenCalled();
     });
 
+    it('cycles keyboard focus between its two actions', () => {
+        setup();
+        const cancel = screen.getByText('Cancel');
+        const confirm = screen.getByText('Confirm');
+        confirm.focus();
+        fireEvent.keyDown(confirm, { key: 'Tab' });
+        expect(document.activeElement).toBe(cancel);
+        fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(confirm);
+    });
+
+    it('uses visible content for its accessible name and description', () => {
+        setup({ message: 'This cannot be undone.' });
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(screen.getByText('Delete?').id);
+        expect(dialog.getAttribute('aria-describedby')).toBe(screen.getByText('This cannot be undone.').id);
+    });
+
     it('styles cancel secondary and confirm primary', () => {
         setup();
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
@@ -138,5 +181,15 @@ describe('ConfirmModal', () => {
         setup({ danger: true });
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
         expect(screen.getByText('Confirm').dataset.variant).toBe('danger');
+    });
+
+    it('shows an error and keeps both exits disabled while confirmation is busy', () => {
+        const { onCancel } = setup({ busy: true, error: 'Wipe failed' });
+        expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('Wipe failed');
+        expect(screen.getByText('Cancel')).toBeDisabled();
+        expect(screen.getByText('Confirm')).toBeDisabled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onCancel).not.toHaveBeenCalled();
     });
 });

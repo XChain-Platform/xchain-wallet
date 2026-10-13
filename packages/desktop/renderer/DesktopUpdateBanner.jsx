@@ -33,7 +33,7 @@
 // persisted dismissal has to remember WHICH version was dismissed, and
 // getting that wrong silences the next one too.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -66,10 +66,11 @@ function updaterBridge() {
 }
 
 export function DesktopUpdateBanner() {
-    // 'idle' | 'available' | 'installing' | 'refused'
+    // 'idle' | 'checking' | 'current' | 'check-failed' | 'available' | 'installing' | 'refused'
     const [state, setState] = useState('idle');
     const [version, setVersion] = useState(/** @type {string | null} */ (null));
     const [dismissed, setDismissed] = useState(false);
+    const installInProgress = useRef(false);
 
     useEffect(() => {
         const bridge = updaterBridge();
@@ -78,22 +79,10 @@ export function DesktopUpdateBanner() {
         // to and nothing to show.
         if (!bridge) return undefined;
 
-        // ASK FIRST, THEN LISTEN (row 148).
-        //
-        // Subscribing was never enough. Main checks the feed at launch and
-        // this component only exists in the unlocked branch of the app, so
-        // on any install with a vault the `available` broadcast happens
-        // while the user is still at the Locked screen and no listener is
-        // alive to hear it. Measured on a packaged 0.338.1 build against a
-        // staging feed serving 0.339.0: main logged `Found version 0.339.0`
-        // and the banner, mounted afterwards, showed nothing.
-        //
-        // Only `available` is hydrated. The retained state can also be an
-        // `error` from a check that failed at launch, and opening a wallet
-        // to be told an update "could not be verified" - about a download
-        // that was never offered, let alone attempted - would be alarming
-        // and wrong. A failure is worth showing when the user asked for
-        // something; a stale one is not.
+        // Ask before listening because main starts the launch check before
+        // creating a renderer. Only an available offer is hydrated. A quiet
+        // launch-check error does not describe a download or verification
+        // attempt and gives the user nothing actionable.
         let cancelled = false;
         if (typeof bridge.getState === 'function') {
             Promise.resolve(bridge.getState()).then((event) => {
@@ -106,6 +95,18 @@ export function DesktopUpdateBanner() {
 
         const unsubscribe = bridge.onEvent((event) => {
             const type = event?.type;
+            if (type === 'checking') {
+                if (!event?.userInitiated) return;
+                installInProgress.current = false;
+                setState('checking');
+                setDismissed(false);
+                return;
+            }
+            if (type === 'not-available') {
+                if (!event?.userInitiated) return;
+                setState('current');
+                return;
+            }
             if (type === 'available') {
                 const next = String(event?.info?.version ?? '');
                 setVersion(SEMVER.test(next) ? next : null);
@@ -116,8 +117,17 @@ export function DesktopUpdateBanner() {
             // `verifying` is the S5 gate reading the signed manifest. It is
             // shown rather than hidden because it is the one step that can
             // take a visible moment after the download finishes.
-            if (type === 'verifying') setState('installing');
-            if (type === 'rejected' || type === 'error') setState('refused');
+            if (type === 'progress' || type === 'downloaded' || type === 'verifying') {
+                setState('installing');
+            }
+            if (type === 'rejected') {
+                installInProgress.current = false;
+                setState('refused');
+            }
+            if (type === 'error') {
+                if (installInProgress.current) setState('refused');
+                else if (event?.userInitiated) setState('check-failed');
+            }
         });
 
         return () => {
@@ -129,12 +139,21 @@ export function DesktopUpdateBanner() {
     const install = useCallback(() => {
         const bridge = updaterBridge();
         if (!bridge) return;
+        installInProgress.current = true;
         setState('installing');
         // A successful install quits and relaunches the app, so the only
         // resolutions observed here are refusals.
         bridge.install()
-            .then((result) => { if (!result?.ok) setState('refused'); })
-            .catch(() => setState('refused'));
+            .then((result) => {
+                if (!result?.ok) {
+                    installInProgress.current = false;
+                    setState('refused');
+                }
+            })
+            .catch(() => {
+                installInProgress.current = false;
+                setState('refused');
+            });
     }, []);
 
     if (dismissed || state === 'idle') return null;
@@ -143,14 +162,19 @@ export function DesktopUpdateBanner() {
         <div role="status" aria-live="polite" style={WRAP}>
             <span aria-hidden="true">⬆</span>
             <div style={{ flex: 1 }}>
+                {state === 'checking' ? 'Checking for updates...' : null}
+                {state === 'current' ? 'XChain Wallet is up to date.' : null}
+                {state === 'check-failed' ? (
+                    'Could not check for updates. Check your connection and try again.'
+                ) : null}
                 {state === 'available' ? (
                     version
                         ? `Version ${version} is available.`
                         : 'A newer version is available.'
                 ) : null}
-                {state === 'installing' ? 'Downloading and checking the signature...' : null}
+                {state === 'installing' ? 'Downloading and verifying the update...' : null}
                 {state === 'refused' ? (
-                    'This update could not be verified, so it was not installed. '
+                    'This update could not be downloaded or verified, so it was not installed. '
                     + 'Your wallet is untouched. Check docs.xchain.io for how to verify a release by hand.'
                 ) : null}
             </div>

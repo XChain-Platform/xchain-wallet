@@ -280,6 +280,11 @@ function resolveFormatLocale(code) {
     return resolved;
 }
 
+/** Return the Intl-safe locale for the active language or an explicit code. */
+export function getFormatLocale(locale = currentLocale) {
+    return resolveFormatLocale(locale);
+}
+
 // Compiled IntlMessageFormat instances are immutable and reusable, so
 // memoise per (locale, template). Bounded to keep long-running shells
 // from growing the cache without limit.

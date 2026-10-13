@@ -542,9 +542,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 label="Review swap"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -734,17 +732,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         <FormPage
             label="Swap tokens"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
                     {validationError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
+                        <StatusMessage variant="error" className={styles.error}>
                             {validationError}
-                        </p>
+                        </StatusMessage>
                     ) : null}
                     {formError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
+                        <StatusMessage variant="error" className={styles.error}>
                             {formError}
-                        </p>
+                        </StatusMessage>
                     ) : null}
                 </>
             ) : null}
@@ -880,7 +879,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-primary)', cursor: 'pointer', font: 'inherit' }}
+                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-text)', cursor: 'pointer', font: 'inherit' }}
             >
                 {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
             </button>

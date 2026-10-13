@@ -13,6 +13,8 @@ import {
     buildCommands,
     contactsToCommands,
     parseFreeformCommands,
+    settingsSectionsToCommands,
+    helpToCommands,
     COMMAND_CATEGORIES,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
@@ -47,6 +49,32 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('settings');
         findById(commands, 'create-token').run();
         expect(navigate).toHaveBeenCalledWith('wizard');
+    });
+
+    it('routes Marketplace when the DEX surface is available', () => {
+        const navigate = vi.fn();
+        const commands = buildCommands({ navigate, hasDexSurface: true });
+        findById(commands, 'nav-marketplace').run();
+        expect(navigate).toHaveBeenCalledWith('market-activity');
+
+        expect(findById(buildCommands({ navigate, hasDexSurface: false }), 'nav-marketplace'))
+            .toBeUndefined();
+    });
+
+    it('ranks the direct destination first for common palette searches', () => {
+        const commands = [
+            ...buildCommands({ navigate() {} }),
+            ...settingsSectionsToCommands({ openSettings() {} }),
+            ...helpToCommands({ openSettings() {} }),
+        ];
+        for (const [query, expectedId] of [
+            ['send', 'nav-send'],
+            ['receive', 'nav-receive'],
+            ['settings', 'nav-settings'],
+            ['backup', 'settings-backup'],
+        ]) {
+            expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
+        }
     });
 
     it('gates BTC-only and governance surfaces behind the context flags', () => {

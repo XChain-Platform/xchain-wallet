@@ -83,18 +83,30 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     // Faster poll than the app-level badge: this screen is the user
     // actively watching deadlines.
-    const { obligations, scanning, refresh } = useCoinpayObligations(
+    const { obligations, scanning, error: scanError, refresh } = useCoinpayObligations(
         walletId,
         activeAccountId,
         { pollMs: 30_000 },
     );
 
-    // 1s tick drives the countdowns. One interval for the whole list.
+    // One interval drives every live countdown and clears at the final deadline.
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveDeadline = () => obligations.some((o) => {
+            const expiration = Number(o.expiration);
+            return Number.isFinite(expiration) && expiration > 0
+                && expiration <= 1e13 && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveDeadline()) return undefined;
+        const t = setInterval(() => setNowSec(() => {
+            const next = Math.floor(Date.now() / 1000);
+            if (!hasLiveDeadline()) clearInterval(t);
+            return next;
+        }), 1000);
         return () => clearInterval(t);
-    }, []);
+    }, [obligations]);
 
     const classified = obligations.map((o) => ({
         ...o,
@@ -143,7 +155,11 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!scanning && classified.length === 0 ? (
+                {scanError ? (
+                    <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
+                ) : null}
+
+                {!scanning && !scanError && classified.length === 0 ? (
                     <EmptyState
                         icon={<Icon.ClockIcon />}
                         title="No payments due"

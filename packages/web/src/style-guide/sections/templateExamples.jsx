@@ -42,6 +42,7 @@ export function ExampleFormScreen({ withError = false }) {
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     placeholder="The address that produced the signature"
+                    autoComplete="off"
                 />
                 <Textarea label="Message" rows={3} placeholder="The exact text that was signed" />
                 <Textarea label="Signature" rows={2} placeholder="Base64 signature blob" />

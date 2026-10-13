@@ -27,11 +27,12 @@ import { Icon } from '../../ui/index.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
-// free-form parsed intents (§33.3) and is only ever produced by
-// parseFreeformCommands, never by buildCommands, so an empty query never shows
-// it; when present it is prepended ahead of everything else.
+// free-form parsed intents (§33.3), while CommandPalette creates 'Recent' from
+// commands selected since the app opened. Neither category is emitted by
+// buildCommands.
 export const COMMAND_CATEGORIES = /** @type {const} */ ([
     'Suggested',
+    'Recent',
     'Navigate',
     'Tokens',
     'Create',
@@ -165,6 +166,7 @@ export function buildCommands(ctx) {
         // other build has stays exactly as it was.
         ...(hasDex ? [
             { id: 'nav-markets', category: 'Navigate', title: 'Open DEX', subtitle: 'Markets and orders', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'], Icon: Icon.MarketIcon, run: go('markets') },
+            { id: 'nav-marketplace', category: 'Navigate', title: 'Marketplace', subtitle: 'Dispensers and exchange activity', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'], Icon: Icon.DollarIcon, run: go('market-activity') },
             { id: 'nav-my-orders', category: 'Navigate', title: 'My orders', subtitle: 'Your open DEX orders', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'], Icon: Icon.MarketIcon, run: go('my-orders') },
             { id: 'nav-my-swaps', category: 'Navigate', title: 'My swaps', subtitle: 'Your open swaps', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'], Icon: Icon.SwapIcon, run: go('my-swaps') },
         ] : []),
