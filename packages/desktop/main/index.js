@@ -227,6 +227,7 @@ function hardenWebContents(contents) {
                         contextIsolation: true,
                         nodeIntegration: false,
                         sandbox: true,
+                        webSecurity: true,
                         devTools: !app.isPackaged,
                         // No `preload` key. The default window.open child
                         // would otherwise inherit this app's preload (and
@@ -465,7 +466,7 @@ function buildRuntime() {
  *
  * @param {{ initialView?: string, initialContext?: any }} [opts]
  */
-function createWindow(opts = {}) {
+export function createWindow(opts = {}) {
     // A live window hands idle tracking back to its renderer's timer.
     stopWindowlessIdleLock();
     const displays = screen.getAllDisplays();
@@ -484,6 +485,7 @@ function createWindow(opts = {}) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            webSecurity: true,
             // A console in the shipped wallet invites "paste this to fix
             // your wallet" scams against a page that holds unlocked keys;
             // the mobile shells ship with WebView debugging off for the

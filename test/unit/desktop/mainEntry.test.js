@@ -22,17 +22,22 @@ const electron = vi.hoisted(() => {
         workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     };
     class BrowserWindow {
+        static instances = [];
+
         constructor(options) {
             browserWindowOptions.push(options);
+            this.options = options;
             this.webContents = { send: vi.fn() };
             this.loadFile = vi.fn();
             this.once = vi.fn();
             this.on = vi.fn();
+            this.isDestroyed = vi.fn(() => false);
+            BrowserWindow.instances.push(this);
         }
 
-        isDestroyed() { return false; }
-
-        static getAllWindows() { return []; }
+        static getAllWindows() {
+            return BrowserWindow.instances;
+        }
 
         static getFocusedWindow() { return null; }
     }
@@ -160,6 +165,7 @@ beforeEach(() => {
     electron.browserWindowOptions.length = 0;
     electron.state.userDataDir = '/tmp/xchain-main-entry-test';
     electron.state.workArea = { x: 0, y: 0, width: 1920, height: 1080 };
+    electron.BrowserWindow.instances.length = 0;
     electron.app.isPackaged = true;
     vi.clearAllMocks();
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
@@ -296,6 +302,19 @@ describe('desktop main entry point', () => {
         expect(webview.preventDefault).toHaveBeenCalledOnce();
     });
 
+    it('creates the main BrowserWindow with every renderer security control enabled', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+
+        expect(win.options.webPreferences).toMatchObject({
+            contextIsolation: true,
+            sandbox: true,
+            nodeIntegration: false,
+            webSecurity: true,
+        });
+    });
+
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;
@@ -318,6 +337,7 @@ describe('desktop main entry point', () => {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            webSecurity: true,
             devTools: false,
         });
         expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
