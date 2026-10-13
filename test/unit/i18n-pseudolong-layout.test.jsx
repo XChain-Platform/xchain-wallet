@@ -3,16 +3,15 @@
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../packages/core/src/shared/routes/Home.jsx';
 import { Send } from '../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../packages/core/src/shared/routes/Receive.jsx';
-import { History } from '../../packages/core/src/shared/routes/History.jsx';
 import { Settings } from '../../packages/core/src/shared/routes/Settings.jsx';
-import { Onboarding } from '../../packages/core/src/shared/routes/Onboarding.jsx';
+import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
 import {
     getLocale,
     registerLocale,
@@ -33,9 +32,8 @@ const pageHeaderCss = readCss('packages/core/src/ui/PageHeader.module.css');
 const homeCss = readCss('packages/core/src/shared/routes/Home.module.css');
 const sendCss = readCss('packages/core/src/shared/routes/Send.module.css');
 const receiveCss = readCss('packages/core/src/shared/routes/Receive.module.css');
-const historyCss = readCss('packages/core/src/shared/routes/History.module.css');
 const settingsCss = readCss('packages/core/src/shared/routes/Settings.module.css');
-const onboardingCss = readCss('packages/core/src/shared/routes/Onboarding.module.css');
+const VIEWPORT_WIDTH = 320;
 
 const FIXED_INLINE_SIZE = /(?:^|;)\s*(?:width|min-width)\s*:\s*[0-9.]+(?:px|r?em)(?:\s*!important)?\s*(?:;|$)/i;
 const CLIPPED_BUTTON_TEXT = /(?:^|;)\s*(?:white-space\s*:\s*nowrap|overflow\s*:\s*hidden|text-overflow\s*:\s*ellipsis)(?:\s*!important)?\s*(?:;|$)/i;
@@ -78,25 +76,9 @@ const SCREEN_TEXT_RULES = {
         [receiveCss, '.assetSub'],
         [receiveCss, '.hint'],
     ],
-    History: [
-        [historyCss, '.filterDisclosure'],
-        [historyCss, '.segBtn'],
-        [historyCss, '.chip'],
-        [historyCss, '.detailAction'],
-        [historyCss, '.moreMenuItem'],
-        [historyCss, '.detailTab'],
-    ],
     Settings: [
         [settingsCss, '.page'],
         [settingsCss, '.sectionHeader'],
-    ],
-    Onboarding: [
-        [onboardingCss, '.namePopup'],
-        [onboardingCss, '.nameFull'],
-        [onboardingCss, '.taglinePopup'],
-        [onboardingCss, '.taglineFull'],
-        [onboardingCss, '.demoGraduateNotice'],
-        [onboardingCss, '.licenseAck'],
     ],
 };
 
@@ -106,12 +88,6 @@ const BUTTON_TEXT_RULES = [
     [homeCss, '.quickAction'],
     [homeCss, '.quickActionMoreItem'],
     [sendCss, '.detailsToggle'],
-    [historyCss, '.filterDisclosure'],
-    [historyCss, '.segBtn'],
-    [historyCss, '.chip'],
-    [historyCss, '.detailAction'],
-    [historyCss, '.moreMenuItem'],
-    [historyCss, '.detailTab'],
 ];
 
 function auditClassRules(screenName) {
@@ -128,41 +104,151 @@ function auditClassRules(screenName) {
     }
 }
 
+function expectNoFixedWidthTextClipping(container, screenName) {
+    const offenders = [];
+    const hasFixedSize = (value) => /^\d+(?:\.\d+)?(?:px|r?em)$/.test(value || '');
+    const candidates = new Set(Array.from(container.querySelectorAll('[style]')).filter(
+        (element) => hasFixedSize(element.style.width) || hasFixedSize(element.style.minWidth),
+    ));
+    const collectFixedRules = (rules) => {
+        for (const cssRule of rules || []) {
+            if (cssRule.cssRules) collectFixedRules(cssRule.cssRules);
+            if (!cssRule.selectorText || !cssRule.style) continue;
+            if (!hasFixedSize(cssRule.style.width) && !hasFixedSize(cssRule.style.minWidth)) continue;
+            try {
+                for (const element of container.querySelectorAll(cssRule.selectorText)) {
+                    candidates.add(element);
+                }
+            } catch {
+                // Unsupported selectors cannot match in this jsdom version.
+            }
+        }
+    };
+    for (const stylesheet of document.styleSheets) collectFixedRules(stylesheet.cssRules);
+
+    for (const element of candidates) {
+        if (!element.textContent.trim()) continue;
+        const style = getComputedStyle(element);
+        const fixed = hasFixedSize(style.width) || hasFixedSize(style.minWidth);
+        const clips = style.textOverflow === 'ellipsis'
+            || style.whiteSpace === 'nowrap'
+            || style.overflowX === 'hidden'
+            || style.overflow === 'hidden';
+        if (fixed && clips) {
+            offenders.push(`${element.tagName.toLowerCase()}.${element.className || '(no class)'}`);
+        }
+    }
+    expect(offenders, `${screenName} has fixed-width text clipping`).toEqual([]);
+}
+
 const pending = new Promise(() => {});
-const pendingMessaging = new Proxy({}, {
-    get(_target, property) {
+const ADDRESS = {
+    id: 'address-1',
+    address: 'bc1qsendersendersendersendersendersendersa',
+    addressType: 'p2wpkh',
+    derivationPath: "m/84'/0'/0'/0/0",
+    source: 'hd',
+};
+const BALANCES = {
+    'bitcoin-mainnet': [{
+        address: ADDRESS.address,
+        balances: {
+            native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+            tokens: [],
+        },
+    }],
+};
+const defaultSettings = createDefaultSettings();
+
+const messaging = new Proxy({
+    getSettings: vi.fn().mockResolvedValue({
+        ...defaultSettings,
+        activeNetwork: 'mainnet',
+        language: PSEUDO_LONG_LOCALE,
+        walletMode: 'full',
+        fees: { 'bitcoin-mainnet': { strategy: 'normal' } },
+        privacy: { ...defaultSettings.privacy, formDraftTtlMs: 0 },
+    }),
+    listWallets: vi.fn().mockResolvedValue([{ id: 'wallet', name: 'Primary wallet' }]),
+    listAccounts: vi.fn().mockResolvedValue([{
+        id: 'account',
+        walletId: 'wallet',
+        name: 'Everyday spending',
+        index: 0,
+    }]),
+    getWalletBalances: vi.fn().mockResolvedValue(BALANCES),
+    getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [ADDRESS] }),
+    getActiveAddresses: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': ADDRESS }),
+    getNewestAddress: vi.fn().mockResolvedValue(ADDRESS),
+    getAddressBalances: vi.fn().mockResolvedValue({
+        native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+        tokens: [],
+    }),
+    getAddressHistory: vi.fn().mockResolvedValue([]),
+    listContacts: vi.fn().mockResolvedValue([]),
+    listMultisigReceiveAddresses: vi.fn().mockResolvedValue([]),
+}, {
+    get(target, property) {
+        if (property in target) return target[property];
         return typeof property === 'string' ? vi.fn(() => pending) : undefined;
     },
 });
 
 function withProviders(node) {
     return (
-        <MessagingProvider shell="popup" messaging={pendingMessaging}>
+        <MessagingProvider shell="popup" messaging={messaging}>
             <ToastHost>{node}</ToastHost>
         </MessagingProvider>
     );
 }
 
 const SCREENS = [
-    ['Home', () => <Home activeWalletId="wallet" activeAccountId="account" />],
-    ['Send', () => <Send walletId="wallet" accountId="account" onBack={() => {}} />],
-    ['Receive', () => <Receive walletId="wallet" accountId="account" onBack={() => {}} />],
-    ['History', () => <History walletId="wallet" accountId="account" onBack={() => {}} />],
-    ['Settings', () => <Settings onBack={() => {}} />],
-    ['Onboarding', () => <Onboarding onCreate={() => {}} onImport={() => {}} />],
+    ['Home', () => (
+        <Home
+            activeWalletId="wallet"
+            activeAccountId="account"
+            onSend={() => {}}
+            onReceive={() => {}}
+            onExchange={() => {}}
+            onActions={() => {}}
+        />
+    ), 4],
+    ['Send', () => <Send walletId="wallet" accountId="account" onBack={() => {}} />, 4],
+    ['Receive', () => <Receive walletId="wallet" accountId="account" onBack={() => {}} />, 4],
+    ['Settings', () => (
+        <Settings
+            onBack={() => {}}
+            activeWallet={{ id: 'wallet', name: 'Primary wallet' }}
+            activeAccount={{ id: 'account', name: 'Everyday spending', index: 0 }}
+            onOpenWalletPicker={() => {}}
+            onOpenAccountPicker={() => {}}
+        />
+    ), 5],
 ];
+
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+const originalClientWidth = Object.getOwnPropertyDescriptor(document.documentElement, 'clientWidth');
 
 beforeAll(async () => {
     registerLocale(PSEUDO_LONG_LOCALE, pseudoLongDictionary);
     await setLocale(PSEUDO_LONG_LOCALE);
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
-    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 360 });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT_WIDTH });
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: VIEWPORT_WIDTH });
     window.dispatchEvent(new Event('resize'));
 });
 
 afterAll(async () => {
     await setLocale('en');
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+    else delete window.innerWidth;
+    if (originalClientWidth) {
+        Object.defineProperty(document.documentElement, 'clientWidth', originalClientWidth);
+    } else {
+        delete document.documentElement.clientWidth;
+    }
 });
+
+afterEach(() => cleanup());
 
 describe('pseudo-long narrow layouts', () => {
     it('lengthens every English dictionary entry by about forty percent', () => {
@@ -174,11 +260,28 @@ describe('pseudo-long narrow layouts', () => {
         expect(t('send.title')).toBe(pseudoLongDictionary['send.title']);
     });
 
-    it.each(SCREENS)('renders %s at 360px without text clipping rules', (name, screenFactory) => {
+    it('rejects a fixed-width control that clips its label', () => {
+        const { container } = render(
+            <button
+                type="button"
+                style={{ width: '80px', overflow: 'hidden', whiteSpace: 'nowrap' }}
+            >
+                A deliberately clipped pseudo-long action
+            </button>,
+        );
+
+        expect(() => expectNoFixedWidthTextClipping(container, 'Falsification control'))
+            .toThrow(/fixed-width text clipping/);
+    });
+
+    it.each(SCREENS)('renders %s at 320px without fixed-width text clipping', async (name, screenFactory, minimumButtons = 1) => {
         expect(getLocale()).toBe(PSEUDO_LONG_LOCALE);
-        expect(window.innerWidth).toBe(360);
+        expect(window.innerWidth).toBe(VIEWPORT_WIDTH);
         const { container } = render(withProviders(screenFactory()));
         expect(container.firstElementChild).not.toBeNull();
+        await waitFor(() => {
+            expect(container.querySelectorAll('button').length).toBeGreaterThanOrEqual(minimumButtons);
+        });
         pseudoLongRenderedEnglish(container);
         const englishText = Array.from(container.querySelectorAll('*'))
             .flatMap((element) => Array.from(element.childNodes))
@@ -186,6 +289,7 @@ describe('pseudo-long narrow layouts', () => {
             .map((node) => node.textContent.trim());
         expect(englishText.length).toBeGreaterThan(0);
         expect(englishText.every((text) => text.startsWith(PSEUDO_LONG_MARKER))).toBe(true);
+        expectNoFixedWidthTextClipping(container, name);
         auditClassRules(name);
     });
 });
