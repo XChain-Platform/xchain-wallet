@@ -35,6 +35,7 @@ import styles from './FormPage.module.css';
  * @param {boolean} [props.sectioned]                   children are FormSections (card per section when wide)
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
+ * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
@@ -47,6 +48,7 @@ export const FormPage = forwardRef(function FormPage(
         sectioned = false,
         label,
         noValidate = true,
+        as: Root = 'form',
         className,
         children,
         ...rest
@@ -58,19 +60,20 @@ export const FormPage = forwardRef(function FormPage(
         sectioned ? styles.sectioned : null,
         className,
     ].filter(Boolean).join(' ');
+    const semanticProps = Root === 'form'
+        ? { onSubmit, noValidate, 'aria-label': label }
+        : { role: 'group', 'aria-label': label };
     return (
-        <form
+        <Root
             ref={ref}
             className={classNames}
-            onSubmit={onSubmit}
-            noValidate={noValidate}
-            aria-label={label}
+            {...semanticProps}
             {...rest}
         >
             {intro ? <p className={styles.intro}>{intro}</p> : null}
             <div className={styles.body}>{children}</div>
             {status ? <div className={styles.status}>{status}</div> : null}
             {actions ? <div className={styles.actions}>{actions}</div> : null}
-        </form>
+        </Root>
     );
 });

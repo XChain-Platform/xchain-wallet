@@ -89,7 +89,7 @@
         box-shadow: var(--xc-shadow-md);
     }
 
-    .sectioned .section {
+    .sectioned > .body > .section {
         padding: var(--xc-space-6);
         background: var(--xc-surface-raised);
         border: 1px solid var(--xc-border);
@@ -97,8 +97,23 @@
         box-shadow: var(--xc-shadow-md);
     }
 
-    .sectioned .section + .section {
+    .sectioned > .body > .section + .section {
         padding-top: var(--xc-space-6);
         border-top: 1px solid var(--xc-border);
+    }
+
+    /* A reusable form fragment shares the parent form's card instead of
+       drawing a second card or narrowing the content again. */
+    form .form {
+        max-width: none;
+        margin: 0;
+    }
+
+    form .form.sectioned > .body > .section {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
     }
 }

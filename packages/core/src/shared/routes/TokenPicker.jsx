@@ -90,6 +90,7 @@ function hasSpendableBalance(row) {
  * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
  * @param {() => void} [props.onBack]
+ * @param {import('react').ElementType} [props.listPageComponent]
  * @param {(sel: { chainId: string, tick: string, kind?: string, displayName?: string, imageUrl?: string | null }) => void} props.onSelect
  */
 export function TokenPicker({
@@ -107,6 +108,7 @@ export function TokenPicker({
     titleIcon,
     backLabel,
     onBack,
+    listPageComponent: ListPageComponent = ListPage,
     onSelect,
 }) {
     const { messaging, shell } = useMessaging();
@@ -591,7 +593,7 @@ export function TokenPicker({
     );
 
     const body = (
-        <ListPage toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
+        <ListPageComponent toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
             {loadError ? (
                 <StatusMessage
                     variant="error"
@@ -676,7 +678,7 @@ export function TokenPicker({
                     ) : null}
                 </div>
             ) : null}
-        </ListPage>
+        </ListPageComponent>
     );
 
     return (

@@ -35,6 +35,7 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
+import { FormPage, FormSection } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -123,8 +124,10 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     ];
 
     return (
-        <fieldset style={FIELDSET_STYLE} aria-label={t('signerSelect.choose')}>
-            <legend style={LEGEND_STYLE}>{t('signerSelect.title')}</legend>
+        <FormPage as="div" sectioned label={t('signerSelect.choose')}>
+            <FormSection title={t('signerSelect.choose')}>
+                <fieldset style={FIELDSET_STYLE} aria-label={t('signerSelect.choose')}>
+                    <legend style={LEGEND_STYLE}>{t('signerSelect.title')}</legend>
             <p style={INTRO_STYLE}>
                 {t('signerSelect.intro')}
             </p>
@@ -163,7 +166,9 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
                     );
                 })}
             </ul>
-        </fieldset>
+                </fieldset>
+            </FormSection>
+        </FormPage>
     );
 }
 

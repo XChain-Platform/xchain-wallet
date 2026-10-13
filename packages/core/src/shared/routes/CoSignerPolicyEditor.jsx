@@ -19,7 +19,7 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Input, Button, Select } from '@xchain-wallet/core/ui';
+import { Button, FormPage, FormSection, Input, Select } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -343,7 +343,8 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     };
 
     return (
-        <div>
+        <FormPage as="div" sectioned label="Agent spending policy">
+            <FormSection title="Policy rules">
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
@@ -590,6 +591,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     + Add output
                 </Button>
             </fieldset>
-        </div>
+            </FormSection>
+        </FormPage>
     );
 }
