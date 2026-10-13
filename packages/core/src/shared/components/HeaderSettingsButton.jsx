@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
-import { useViewportClamp } from '../hooks/useViewportClamp.js';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import {
     activeNetworkLabel,
     activeNetworkOptions,
@@ -83,9 +83,9 @@ export function HeaderSettingsButton({
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
     useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
-    // The gear sits wherever the header puts it; at phone width that is
-    // near the left edge, and a panel aligned to it would hang off-screen.
-    const clamp = useViewportClamp(open);
+    // Flex wrapping can move the gear independently of the header slot, so
+    // the open panel derives its viewport coordinates from the gear itself.
+    const popoverPlacement = useAnchoredPopover(open, triggerRef);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -175,8 +175,8 @@ export function HeaderSettingsButton({
             </button>
             {open ? (
                 <div
-                    ref={clamp.ref}
-                    style={clamp.style}
+                    ref={popoverPlacement.ref}
+                    style={popoverPlacement.style}
                     className={styles.popover}
                     role="dialog"
                     aria-modal="false"

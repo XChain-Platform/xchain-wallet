@@ -34,6 +34,86 @@ export function clampShift(left, width, viewportWidth, margin = VIEWPORT_CLAMP_M
     return 0;
 }
 
+/** Gap between a trigger and the popover below it, in CSS px. */
+export const ANCHORED_POPOVER_GAP = 6;
+
+/**
+ * Places a popover below with its right edge aligned to its trigger.
+ *
+ * The horizontal clamp keeps the panel reachable when the trigger sits too
+ * close to either viewport edge. The panel CSS limits its width to the space
+ * between those margins.
+ *
+ * @param {{ right: number, bottom: number }} triggerRect
+ * @param {number} popoverWidth
+ * @param {number} viewportWidth
+ * @param {number} [margin]
+ * @param {number} [gap]
+ * @returns {{ left: number, top: number }} viewport-relative CSS px
+ */
+export function anchoredPopoverPlacement(
+    triggerRect,
+    popoverWidth,
+    viewportWidth,
+    margin = VIEWPORT_CLAMP_MARGIN,
+    gap = ANCHORED_POPOVER_GAP,
+) {
+    const naturalLeft = triggerRect.right - popoverWidth;
+    const maxLeft = Math.max(margin, viewportWidth - margin - popoverWidth);
+    return {
+        left: Math.round(Math.min(Math.max(naturalLeft, margin), maxLeft)),
+        top: Math.round(triggerRect.bottom + gap),
+    };
+}
+
+/**
+ * Computes fixed popover coordinates from an anchor element.
+ *
+ * Fixed coordinates make the trigger the source of truth even when flex
+ * wrapping changes the header's containing block on a narrow screen.
+ *
+ * @param {boolean} open
+ * @param {import('react').RefObject<HTMLElement>} anchorRef
+ * @returns {{ ref: import('react').RefObject<HTMLElement>, style: import('react').CSSProperties | undefined }}
+ */
+export function useAnchoredPopover(open, anchorRef) {
+    const ref = useRef(/** @type {HTMLElement | null} */ (null));
+    const [placement, setPlacement] = useState(null);
+
+    useLayoutEffect(() => {
+        if (!open) {
+            setPlacement(null);
+            return undefined;
+        }
+        const place = () => {
+            const anchor = anchorRef.current;
+            const popover = ref.current;
+            if (!anchor || !popover) return;
+            const next = anchoredPopoverPlacement(
+                anchor.getBoundingClientRect(),
+                popover.getBoundingClientRect().width,
+                document.documentElement.clientWidth,
+            );
+            setPlacement((current) => (
+                current?.left === next.left && current?.top === next.top ? current : next
+            ));
+        };
+        place();
+        window.addEventListener('resize', place);
+        return () => window.removeEventListener('resize', place);
+    }, [anchorRef, open]);
+
+    return {
+        ref,
+        style: placement ? {
+            position: 'fixed',
+            insetInlineEnd: 'auto',
+            left: placement.left,
+            top: placement.top,
+        } : undefined,
+    };
+}
+
 /**
  * Keeps an anchored popover on screen.
  *

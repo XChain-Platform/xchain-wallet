@@ -8,15 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The header gear's popover is 320px wide and aligned to the gear's trailing
-// edge. On a 411px-wide phone the gear sits about 170px from the left, so the
-// panel's natural position starts roughly 150px OFF the left of the screen:
-// half of it could be neither read nor tapped (found on an LG K51,
-// 2026-10-12). These guards pin the clamp that slides it back inside.
+// The header gear's popover is 320px wide and follows the gear's right
+// edge. These guards cover direct trigger placement and the shared fallback
+// clamp used by the scan menu.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { clampShift, VIEWPORT_CLAMP_MARGIN } from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
+import {
+    anchoredPopoverPlacement,
+    clampShift,
+    VIEWPORT_CLAMP_MARGIN,
+} from '../../../packages/core/src/shared/hooks/useViewportClamp.js';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 
 afterEach(() => {
@@ -61,17 +63,27 @@ describe('clampShift', () => {
     );
 });
 
-describe('HeaderSettingsButton popover stays on screen', () => {
-    function mockLayout({ viewport, left, width }) {
+describe('HeaderSettingsButton popover follows its trigger', () => {
+    function mockLayout({ viewport, trigger, width }) {
         Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: viewport });
         vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
+            if (this.getAttribute('aria-label') === 'Settings') {
+                return {
+                    left: trigger.right - 38,
+                    top: trigger.bottom - 38,
+                    right: trigger.right,
+                    bottom: trigger.bottom,
+                    width: 38,
+                    height: 38,
+                    x: trigger.right - 38,
+                    y: trigger.bottom - 38,
+                    toJSON() {},
+                };
+            }
             if (this.getAttribute('role') !== 'dialog') {
                 return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} };
             }
-            // Report the natural position plus whatever transform is applied,
-            // as a real layout engine would.
-            const m = /translateX\((-?\d+)px\)/.exec(this.style.transform || '');
-            const x = left + (m ? Number(m[1]) : 0);
+            const x = Number.parseFloat(this.style.left) || 0;
             return { left: x, top: 60, right: x + width, bottom: 300, width, height: 240, x, y: 60, toJSON() {} };
         });
     }
@@ -82,26 +94,41 @@ describe('HeaderSettingsButton popover stays on screen', () => {
         return screen.getByRole('dialog', { name: 'Wallet settings' });
     };
 
-    it('slides the panel inside a phone-width viewport', () => {
-        mockLayout({ viewport: 411, left: -149, width: 320 });
+    it('right-aligns the panel under the gear in a K51-sized viewport', () => {
+        mockLayout({ viewport: 411, trigger: { right: 399, bottom: 52 }, width: 320 });
         const panel = open();
-        expect(panel.style.transform).toBe(`translateX(${149 + VIEWPORT_CLAMP_MARGIN}px)`);
+        expect(panel.style.position).toBe('fixed');
+        expect(panel.style.left).toBe('79px');
+        expect(panel.style.top).toBe('58px');
         const rect = panel.getBoundingClientRect();
-        expect(rect.left).toBeGreaterThanOrEqual(VIEWPORT_CLAMP_MARGIN);
-        expect(rect.right).toBeLessThanOrEqual(411 - VIEWPORT_CLAMP_MARGIN);
+        expect(rect.right).toBe(399);
     });
 
-    it('applies no transform when the panel already fits', () => {
-        mockLayout({ viewport: 1280, left: 900, width: 320 });
+    it('clamps the panel when right alignment would cross the viewport', () => {
+        mockLayout({ viewport: 411, trigger: { right: 170, bottom: 52 }, width: 320 });
         const panel = open();
-        expect(panel.style.transform).toBe('');
+        expect(panel.style.left).toBe(`${VIEWPORT_CLAMP_MARGIN}px`);
+        expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(411 - VIEWPORT_CLAMP_MARGIN);
     });
 
-    it('re-measures on resize without compounding the shift', () => {
-        mockLayout({ viewport: 411, left: -149, width: 320 });
+    it('recomputes its anchored coordinates on resize', () => {
+        mockLayout({ viewport: 411, trigger: { right: 399, bottom: 52 }, width: 320 });
         const panel = open();
         fireEvent(window, new Event('resize'));
         fireEvent(window, new Event('resize'));
-        expect(panel.style.transform).toBe(`translateX(${149 + VIEWPORT_CLAMP_MARGIN}px)`);
+        expect(panel.style.left).toBe('79px');
+    });
+});
+
+describe('anchoredPopoverPlacement', () => {
+    it('computes right alignment and viewport clamping', () => {
+        expect(anchoredPopoverPlacement({ right: 399, bottom: 52 }, 320, 411)).toEqual({
+            left: 79,
+            top: 58,
+        });
+        expect(anchoredPopoverPlacement({ right: 170, bottom: 52 }, 320, 411)).toEqual({
+            left: VIEWPORT_CLAMP_MARGIN,
+            top: 58,
+        });
     });
 });
