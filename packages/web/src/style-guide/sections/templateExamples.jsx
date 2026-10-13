@@ -21,6 +21,7 @@ import styles from './templateExamples.module.css';
 const noop = () => {};
 
 const GUTTER_GUIDE_STYLE = {
+    /* safe-area-backdrop: a content-free overlay that only draws the gutter lines. */
     position: 'fixed',
     insetBlock: 0,
     insetInline: 'var(--xc-page-gutter)',
