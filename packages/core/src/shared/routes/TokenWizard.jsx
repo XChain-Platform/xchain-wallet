@@ -177,6 +177,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitPendingRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -484,6 +485,8 @@ export function TokenWizard({ walletId, onBack }) {
     // Compose, tamper-check, and pre-flight run host-side after review.
     // Approve signs the byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
     async function openConfirmScreen() {
+        if (submitPendingRef.current) return;
+        submitPendingRef.current = true;
         const from = fromAddress ? {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -492,7 +495,11 @@ export function TokenWizard({ walletId, onBack }) {
             source: fromAddress.source,
             signerId: fromAddress.signerId,
         } : null;
-        if (!from) { setFormError('No source address available.'); return; }
+        if (!from) {
+            setFormError('No source address available.');
+            submitPendingRef.current = false;
+            return;
+        }
         setFormError(null);
         try {
             if (isWatcherMode) {
@@ -536,15 +543,17 @@ export function TokenWizard({ walletId, onBack }) {
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Issue failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
     const stageBack = stage === 'chain'
-        ? () => setStage('template')
+        ? () => { setFormError(null); setStage('template'); }
         : stage === 'details'
-            ? () => setStage('chain')
+            ? () => { setFormError(null); setStage('chain'); }
             : stage === 'preview'
-                ? () => setStage('details')
+                ? () => { setFormError(null); setStage('details'); }
                 : onBack;
     const header = (
         <PageHeader

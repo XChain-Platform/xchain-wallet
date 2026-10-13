@@ -24,16 +24,21 @@ const ADDRESSES = {
     }],
 };
 
-function mountWizard({ composeForConfirm = vi.fn().mockResolvedValue({
-    psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
-}) } = {}) {
+function mountWizard({
+    composeForConfirm = vi.fn().mockResolvedValue({
+        psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
+    }),
+    walletMode = 'full',
+    messagingOverrides = {},
+} = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         issueToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+        ...messagingOverrides,
     };
     render(
         React.createElement(
@@ -173,15 +178,48 @@ describe('TokenWizard guided flow', () => {
         fireEvent.change(screen.getByLabelText('Transfer ownership to (optional)'), {
             target: { value: 'not-an-address' },
         });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Transfer ownership address is not valid',
+        );
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        expect(screen.queryByRole('alert')).toBeNull();
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
 
         expect(await screen.findByText('Step 4 of 4: Review')).toBeTruthy();
         expect(screen.queryByText(/Transfer ownership address is not valid/i)).toBeNull();
+    });
+
+    it('starts only one watcher build when review is submitted twice', async () => {
+        let resolveBuild;
+        const buildActionPsbtRequest = vi.fn(() => new Promise((resolve) => {
+            resolveBuild = resolve;
+        }));
+        mountWizard({
+            walletMode: 'watcher',
+            messagingOverrides: { buildActionPsbtRequest },
+        });
+
+        fireEvent.click(await screen.findByText('Meme token'));
+        await screen.findByLabelText('Fee paid by');
+        fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'ONCE' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1' } });
+        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        const review = screen.getByRole('form', { name: 'Review token issuance' });
+
+        fireEvent.submit(review);
+        fireEvent.submit(review);
+
+        expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+        resolveBuild({ psbtHex: '70736274ff00', chainId: 'bitcoin-mainnet' });
+        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
     });
 });
