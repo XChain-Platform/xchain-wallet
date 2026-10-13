@@ -168,7 +168,8 @@ export function ConnectedSitesSection() {
         <div style={STACK}>
             {(!sites || sites.length === 0) ? (
                 <EmptyState
-                    title="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here."
+                    title="No connected sites"
+                    body="Websites appear here after you approve their connection requests."
                     titleAs="p"
                 />
             ) : (
@@ -292,7 +293,11 @@ function BlocklistAuditPanel() {
                 an unexpected change to the blocklist before it costs you.
             </span>
             {entries.length === 0 ? (
-                <EmptyState title="No mutations yet." titleAs="p" />
+                <EmptyState
+                    title="No blocklist changes"
+                    body="Recent changes to blocked origins appear here."
+                    titleAs="p"
+                />
             ) : (
                 <ul
                     style={{
@@ -505,7 +510,11 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     too if you want to cover it).
                 </span>
                 {blocked.length === 0 ? (
-                    <EmptyState title="No origins blocked." titleAs="p" />
+                    <EmptyState
+                        title="No blocked origins"
+                        body="Origins added to the blocklist appear here."
+                        titleAs="p"
+                    />
                 ) : (
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (

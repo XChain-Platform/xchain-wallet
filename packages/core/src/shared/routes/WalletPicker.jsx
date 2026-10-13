@@ -80,7 +80,7 @@ export function WalletPicker({
                 ) : wallets === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : wallets.length === 0 ? (
-                    <EmptyState title="No wallets yet." />
+                    <EmptyState title="No wallets yet" body="Wallets available to this app appear here." />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
                     return (

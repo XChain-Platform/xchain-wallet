@@ -55,13 +55,13 @@ describe('OperatorDashboard demo wallet staking', () => {
     it('shows the synthesized stake without querying the indexer', async () => {
         const { methods } = mount(DEMO_ID);
         await waitFor(() => expect(screen.getByText(/^Amount:/)).toBeTruthy());
-        expect(screen.queryByText(/No active stake on this address/)).toBeNull();
+        expect(screen.queryByText(/No active stake/)).toBeNull();
         expect(methods.getStakesForAddress).not.toHaveBeenCalled();
     });
 
     it('keeps the empty-state copy for a non-demo wallet with no stakes', async () => {
         const { methods } = mount('wallet-1');
-        await waitFor(() => expect(screen.getByText(/No active stake on this address/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/No active stake/)).toBeTruthy());
         expect(methods.getStakesForAddress).toHaveBeenCalled();
     });
 });

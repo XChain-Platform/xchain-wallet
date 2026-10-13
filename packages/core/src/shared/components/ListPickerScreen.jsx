@@ -161,8 +161,11 @@ export function ListPickerScreen({
                 <ListPage>
                     <EmptyState
                         title={filterType === '2'
-                            ? 'No address lists published from this chain’s addresses yet. Create one in My Lists first.'
-                            : 'No lists published from this chain’s addresses yet.'}
+                            ? 'No address lists yet'
+                            : 'No published lists yet'}
+                        body={filterType === '2'
+                            ? 'Address lists published from this chain appear here.'
+                            : 'Lists published from this chain appear here.'}
                         titleAs="p"
                         role={null}
                     />

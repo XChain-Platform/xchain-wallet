@@ -360,7 +360,8 @@ export function UnionListForm({ walletId, chainId: initialChainId, activeAccount
             <fieldset aria-label="Member lists" disabled={sdkSupported !== true}>
                 {candidates.length === 0 ? (
                     <EmptyState
-                        title="No local or shared lists can be used on this chain."
+                        title="No usable lists"
+                        body="Local and shared lists available on this chain appear here."
                         titleAs="p"
                     />
                 ) : null}

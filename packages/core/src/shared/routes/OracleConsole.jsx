@@ -270,7 +270,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             <ListPage>
                 <EmptyState
                     title="No markets yet"
-                    body="You have not created any betting markets."
+                    body="Betting markets created by this wallet appear here."
                 />
             </ListPage>,
         );

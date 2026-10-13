@@ -493,7 +493,7 @@ export function StakeDetail({
 
             {activeTab === 'rewards' ? (
                 rewards.length === 0 ? (
-                    <EmptyState title="No reward events yet." />
+                    <EmptyState title="No reward events yet" body="Reward events for this stake appear here." />
                 ) : (
                     <ul className={local.eventList}>
                         {rewards.slice(0, 25).map((r, i) => (
@@ -515,7 +515,7 @@ export function StakeDetail({
 
             {activeTab === 'delegation' ? (
                 delegations.length === 0 ? (
-                    <EmptyState title="No signing key delegated." body="Use Delegate to add one." />
+                    <EmptyState title="No delegated signing key" body="Signing-key delegations for this stake appear here." />
                 ) : (
                     <ul className={local.eventList}>
                         {delegations.slice(0, 25).map((d, i) => (
@@ -537,7 +537,7 @@ export function StakeDetail({
 
             {activeTab === 'positions' ? (
                 activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
-                    <EmptyState title="No positions found for this contract." />
+                    <EmptyState title="No contract positions" body="Staking positions for this contract appear here." />
                 ) : (
                     <ul className={local.eventList}>
                             {activeContractStakes.map((s, i) => (
@@ -568,7 +568,7 @@ export function StakeDetail({
 
             {activeTab === 'slashes' ? (
                 slashEvents.length === 0 ? (
-                    <EmptyState title="No slash events against this position." />
+                    <EmptyState title="No slash events" body="Slash events against this position appear here." />
                 ) : (
                     <ul className={local.eventList}>
                         {slashEvents.slice(0, 25).map((ev, i) => (

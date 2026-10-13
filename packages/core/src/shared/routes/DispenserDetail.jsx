@@ -2021,7 +2021,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {tab === 'lifecycle' ? (
                 <ul className={local.dispenseList}>
                     {lifecycleTimeline.length === 0 ? (
-                        <li><EmptyState title="No lifecycle events yet." titleAs="p" /></li>
+                        <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
                     ) : lifecycleTimeline.slice(0, 40).map((e) => {
                         const refused = e.kind === 'dispense' && !e.row.valid;
                         return (
@@ -2047,7 +2047,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             ) : (
             <ul className={local.dispenseList}>
                 {matchingDispenses.length === 0 ? (
-                    <li><EmptyState title="No dispenses yet." titleAs="p" /></li>
+                    <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
                 ) : matchingDispenses.slice(0, 25).map((d) => {
                     const paidAmount = d.get_amount ?? getAmount;
                     const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';

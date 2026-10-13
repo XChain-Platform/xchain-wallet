@@ -609,7 +609,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {noAddresses ? (
                 <EmptyState
-                    title="No addresses yet on any chain. Generate one to start receiving."
+                    title="No addresses yet"
+                    body="Generate an address to start receiving."
                     actionLabel="Generate an address"
                     onAction={() => setAddAddressOpen(true)}
                     actionIcon={<Icon.PlusIcon />}

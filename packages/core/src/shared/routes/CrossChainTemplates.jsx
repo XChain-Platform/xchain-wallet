@@ -127,8 +127,8 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         if (chainsWithAddresses.length === 0 && loadError.startsWith('No addresses yet.')) {
             return wrap(
                 <EmptyState
-                    title="No addresses yet."
-                    body="Use Receive to generate addresses on at least two chains before launching a cross-chain template."
+                    title="Not enough addresses"
+                    body="Cross-chain templates require addresses on at least two chains."
                 />,
             );
         }

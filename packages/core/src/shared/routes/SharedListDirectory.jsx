@@ -135,9 +135,10 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
 
             {visibleLists.length === 0 ? (
                 <EmptyState
-                    title={mode === 'pick'
-                        ? `No shared ${listType(filterType) || ''} lists are available on this chain.`
-                        : 'No shared lists are available.'}
+                    title={mode === 'pick' ? 'No matching shared lists' : 'No shared lists yet'}
+                    body={mode === 'pick'
+                        ? `Shared ${listType(filterType) || ''} lists available on this chain appear here.`
+                        : 'Published shared lists appear here.'}
                 />
             ) : (
                 <div role="list" aria-label="Shared lists">

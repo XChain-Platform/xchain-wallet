@@ -702,7 +702,8 @@ export function ManageToken({
                         </>
                     ) : (
                         <EmptyState
-                            title={isDemo ? 'No market data yet for this token.' : 'No price history yet'}
+                            title={isDemo ? 'No market data yet' : 'No price history yet'}
+                            body="Indexed market activity builds this token's price history."
                             titleAs="p"
                         />
                     )}
@@ -863,7 +864,7 @@ export function ManageToken({
                                 ) : null}
                             </dl>
                         ) : (
-                            <EmptyState title={`No genesis row indexed for ${tick} yet.`} titleAs="p" />
+                            <EmptyState title="No genesis record yet" body={`The indexed genesis record for ${tick} appears here.`} titleAs="p" />
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
@@ -900,7 +901,8 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     if (listings.length === 0) {
         return (
             <EmptyState
-                title={`No open dispensers selling ${tick}.`}
+                title="No open dispensers"
+                body={`Open dispensers selling ${tick} appear here.`}
                 titleAs="p"
                 actionLabel={typeof onCreateDispenser === 'function' ? 'Create one' : undefined}
                 onAction={onCreateDispenser}
@@ -951,7 +953,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
             <Skeleton height={72} />
         </div>
     );
-    if (orders.length === 0) return <EmptyState title={`No open orders involving ${tick}.`} titleAs="p" />;
+    if (orders.length === 0) return <EmptyState title="No open orders" body={`Open orders involving ${tick} appear here.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {orders.slice(0, 50).map((o, i) => {
@@ -988,7 +990,7 @@ function SwapsPanel({ swaps, error, tick }) {
             <Skeleton height={72} />
         </div>
     );
-    if (swaps.length === 0) return <EmptyState title={`No recent swaps involving ${tick}.`} titleAs="p" />;
+    if (swaps.length === 0) return <EmptyState title="No recent swaps" body={`Recent swaps involving ${tick} appear here.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {swaps.slice(0, 50).map((s, i) => {
@@ -1030,7 +1032,7 @@ function HoldersPanel({ holders, error, onViewAll }) {
         </div>
     );
     if (holders.length === 0) return (
-        <EmptyState title="No holders yet. Mint or distribute supply to start populating this list." titleAs="p" />
+        <EmptyState title="No holders yet" body="Holders appear here after supply is minted or distributed." titleAs="p" />
     );
     return (
         <>
@@ -1067,7 +1069,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <EmptyState title={`No activity yet for ${tick}.`} titleAs="p" />
+        <EmptyState title="No activity yet" body={`Indexed activity for ${tick} appears here.`} titleAs="p" />
     );
     return (
         <>

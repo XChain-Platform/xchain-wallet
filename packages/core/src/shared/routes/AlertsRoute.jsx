@@ -33,7 +33,7 @@ export function AlertsRoute({ onBack, alerts = [] }) {
         <Screen variant={variant} header={header}>
             <ListPage>
                 {alerts.length === 0 ? (
-                    <EmptyState title="No alerts. You&apos;re all caught up." />
+                    <EmptyState title="No alerts" body="You&apos;re all caught up." />
                 ) : (
                     <ul className={styles.list} role="list">
                         {alerts.map((a) => (

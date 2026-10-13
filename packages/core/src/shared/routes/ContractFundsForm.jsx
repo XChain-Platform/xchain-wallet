@@ -565,7 +565,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             <ListPage>
                 <SectionHeader title="Tokens held by the contract" />
                 {rows.length === 0 ? (
-                    <EmptyState title="This contract holds no tokens right now." titleAs="h3" />
+                    <EmptyState title="No contract tokens" body="Tokens held by this contract appear here." titleAs="h3" />
                 ) : (
                     <ul className={styles.detailsList}>
                         {rows.map((row) => (

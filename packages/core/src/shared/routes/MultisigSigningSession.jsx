@@ -437,8 +437,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
         if (sessions.length === 0) {
             return wrap(
                 <EmptyState
-                    title="No multisig signing sessions for this wallet."
-                    body="A session starts when you compose a multisig spend, and signers add their contributions by scanning the transaction QR code."
+                    title="No signing sessions"
+                    body="Multisig spending sessions for this wallet appear here."
                 />,
             );
         }

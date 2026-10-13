@@ -148,7 +148,8 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             <SectionHeader title="Fees earned" />
             {fees.length === 0 ? (
                 <EmptyState
-                    title="This address has never been paid a fee for settling a market."
+                    title="No settlement fees yet"
+                    body="Fees paid to this address for settling markets appear here."
                     titleAs="p"
                 />
             ) : (
@@ -181,7 +182,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             <SectionHeader title="Their markets" />
             {!markets ? <p className={styles.hint}>Loading markets…</p> : null}
             {markets && markets.length === 0 ? (
-                <EmptyState title="No markets from this address on this chain." titleAs="p" />
+                <EmptyState title="No markets yet" body="Markets created by this address on this chain appear here." titleAs="p" />
             ) : null}
             {markets && markets.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>

@@ -78,7 +78,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                 ) : accounts === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : accounts.length === 0 ? (
-                    <EmptyState title="No accounts yet." titleAs="p" />
+                    <EmptyState title="No accounts yet" body="Accounts added to this wallet appear here." titleAs="p" />
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
                     const defaultName = `Account ${a.index + 1}`;

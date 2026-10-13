@@ -305,7 +305,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     }
     if (vmChainsWithAddresses.length === 0) {
         return wrap(
-            <EmptyState title="To use contracts, you need an address on a chain that supports them. Use Receive to generate one first." />,
+            <EmptyState
+                title="No supported address"
+                body="Contracts require an address on a chain that supports them."
+            />,
         );
     }
 
@@ -342,6 +345,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
+                                    emptyTitle="No published contracts"
                                     emptyText="No contracts published from this chain's addresses yet."
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
@@ -355,6 +359,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
+                                    emptyTitle="No contract interactions"
                                     emptyText={`No ${actionDisplayLabel('DEPOSIT').toLowerCase()} or ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions recorded against this chain's addresses yet.`}
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <InteractionRow row={row} chainId={cid} />} />
@@ -376,7 +381,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     const rows = applySearch(state.rows, searchQuery);
                     return (
                         <ChainGroup key={cid} descriptor={d} chainId={cid} state={{ ...state, rows }}
-                                    emptyText="No contracts indexed on this chain yet."
+                                    emptyTitle="No indexed contracts"
+                                    emptyText="Contracts indexed on this chain appear here."
                                     onOpenContract={onOpenContract}
                                     renderRow={(row) => <ContractRow row={row} chainId={cid} />} />
                     );
@@ -430,7 +436,7 @@ function ChainFilterBar({ chains, value, onChange }) {
     );
 }
 
-function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, renderRow }) {
+function ChainGroup({ descriptor, chainId, state, emptyTitle, emptyText, onOpenContract, renderRow }) {
     return (
         <section>
             <SectionHeader
@@ -446,7 +452,7 @@ function ChainGroup({ descriptor, chainId, state, emptyText, onOpenContract, ren
                     Couldn't load contracts: {state.error}
                 </StatusMessage>
             ) : state.rows.length === 0 ? (
-                <EmptyState title={emptyText} titleAs="p" />
+                <EmptyState title={emptyTitle} body={emptyText} titleAs="p" />
             ) : (
                 state.rows.map((row, i) => (
                     <button

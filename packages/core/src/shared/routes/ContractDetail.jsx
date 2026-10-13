@@ -299,7 +299,8 @@ export function ContractDetail({
                         </StatusMessage>
                     ) : executions.length === 0 ? (
                         <EmptyState
-                            title="No contract calls recorded against this contract yet."
+                            title="No contract calls yet"
+                            body="Calls recorded against this contract appear here."
                             titleAs="p"
                         />
                     ) : (
@@ -390,7 +391,7 @@ function Section({ title, rightSlot, children }) {
 function StateTable({ state }) {
     const entries = toKeyValueEntries(state);
     if (entries.length === 0) {
-        return <EmptyState title="No state keys set yet." titleAs="p" />;
+        return <EmptyState title="No state keys yet" body="Published contract state appears here." titleAs="p" />;
     }
     return (
         <table style={{ width: '100%', fontSize: '0.85rem' }}>
@@ -412,7 +413,7 @@ function StateTable({ state }) {
 function BalancesTable({ balances }) {
     const rows = contractBalanceRows(balances);
     if (rows.length === 0) {
-        return <EmptyState title="Contract holds no tokens." titleAs="p" />;
+        return <EmptyState title="No contract tokens" body="Tokens held by this contract appear here." titleAs="p" />;
     }
     return (
         <table style={{ width: '100%', fontSize: '0.85rem' }}>

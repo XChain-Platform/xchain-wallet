@@ -384,7 +384,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     if (chainsWithAddresses.length === 0) {
         return wrap(
             <EmptyState
-                title="No addresses yet on a chain that supports staking. Use Receive to generate one first. Staking into a contract works on Bitcoin, Litecoin and Dogecoin; validator staking is Bitcoin-only."
+                title="No staking address"
+                body="Contract staking supports Bitcoin, Litecoin, and Dogecoin; validator staking supports Bitcoin."
                 titleAs="p"
             />,
         );
@@ -437,8 +438,13 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             ) : visibleRows.length === 0 ? (
                 <EmptyState
                     title={allRows.length === 0
-                        ? 'Nothing staked yet. Use the + button to create your first stake.'
-                        : 'No staking positions match the current filter.'}
+                        ? 'Nothing staked yet'
+                        : 'No matching stakes'}
+                    body={allRows.length === 0
+                        ? 'Staking positions created by this wallet appear here.'
+                        : 'Try a different search or network filter.'}
+                    actionLabel={allRows.length === 0 && onNewStake ? 'New stake' : undefined}
+                    onAction={allRows.length === 0 ? onNewStake : undefined}
                     titleAs="p"
                 />
             ) : (

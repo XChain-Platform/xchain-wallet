@@ -319,8 +319,8 @@ export function MarketsList({
 
                 {!selectedAsset ? (
                     <EmptyState
-                        title="Pick a coin or token"
-                        body="Choose what you want to look at markets for."
+                        title="No asset selected"
+                        body="Choose a coin or token to view its markets."
                     />
                 ) : loading ? (
                     <p className={styles.hint}>Loading markets…</p>
@@ -329,12 +329,12 @@ export function MarketsList({
                         title={search.trim()
                             ? 'No matches'
                             : tab === 'watchlist'
-                                ? 'Watchlist is empty'
+                                ? 'Empty watchlist'
                                 : `No markets for ${selectedAsset.tick}`}
                         body={search.trim()
-                            ? `Nothing matches "${search.trim()}". Clear the search to see everything.`
+                            ? `No markets match "${search.trim()}".`
                             : tab === 'watchlist'
-                                ? `Tap ☆ on any market to add it to your watchlist for ${selectedAsset.tick}.`
+                                ? `Starred markets for ${selectedAsset.tick} appear here.`
                                 : 'No pairs found involving this asset on its chain.'}
                     />
                 ) : (

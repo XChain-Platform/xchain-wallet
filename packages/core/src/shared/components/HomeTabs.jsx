@@ -226,7 +226,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
                         emptyBody={networkFilter === 'all'
                             ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
-                            : undefined}
+                            : 'Coins on this network appear here after this wallet receives them.'}
                         onReceive={networkFilter === 'all' ? onReceive : undefined}
                         onSelectToken={onSelectToken}
                         pinnedKeys={pinnedKeys}
@@ -246,11 +246,10 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             ? 'No matching tokens'
                             : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
                         emptyBody={tokenQueryTrim
-                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see all tokens.`
+                            ? `No held tokens match "${tokenQuery.trim()}".`
                             : (networkFilter === 'all'
                                 ? 'Browse markets or accept a token transfer to populate this view.'
-                                : undefined)}
-                        onReceive={!tokenQueryTrim && networkFilter === 'all' ? onReceive : undefined}
+                                : 'Tokens on this network appear here after this wallet receives them.')}
                         emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
                         onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         onSelectToken={onSelectToken}
@@ -297,7 +296,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
                             emptyBody={networkFilter === 'all'
                                 ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
-                                : undefined}
+                                : 'Collectibles on this network appear here after this wallet receives them.'}
                             onReceive={networkFilter === 'all' ? onReceive : undefined}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}

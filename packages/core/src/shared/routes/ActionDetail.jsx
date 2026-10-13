@@ -148,7 +148,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 <PageHeader onBack={onBack} backLabel="Back to history" title="Action" />
             )}>
                 <ListPage>
-                    <EmptyState title="No action selected." titleAs="p" />
+                    <EmptyState title="No action selected" body="Action details appear here after one is selected." titleAs="p" />
                 </ListPage>
             </Screen>
         );

@@ -355,22 +355,21 @@ export function TokenPicker({
     }, [balances]);
 
     const emptyTitle = partialRead
-        ? 'Balances could not be fully loaded'
+        ? 'Incomplete balance data'
         : tokenQueryTrim
             ? 'No matching balances'
             : (networkFilter === 'all'
                 ? (isReceive ? 'No balances to receive against yet' : 'Nothing to send yet')
                 : 'No balances on this network');
     const emptyBody = partialRead
-        ? 'Some of this wallet\'s token balances could not be read just now, so this list may be '
-            + 'incomplete. It is not a statement that you hold nothing. Try again in a moment.'
+        ? 'Some token balances could not be read, so this list may be incomplete.'
         : tokenQueryTrim
-        ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see everything.`
+        ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Pick a chain to display a fresh receive address. Tokens you have not held before can be received on whichever chain they belong to.'
-                : 'Receive coins or tokens first, then come back to send them.')
-            : undefined);
+                ? 'Choose a chain to display a fresh receive address for it.'
+                : 'Sendable coin and token balances appear here after funds are received.')
+            : 'Balances on this network appear here after this wallet receives funds.');
 
     const KIND_OPTIONS = [
         { id: 'all',    label: 'All' },

@@ -190,7 +190,8 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
     if (rows.length === 0) {
         return wrap(
             <EmptyState
-                title="You have not placed any bets yet."
+                title="No bets yet"
+                body="Bets placed from this wallet appear here."
             />,
         );
     }

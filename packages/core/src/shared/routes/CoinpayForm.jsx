@@ -490,7 +490,7 @@ export function CoinpayForm({
             ) : null}
             {!scanning && obligations.length === 0 ? (
                 <EmptyState
-                    title="No payments due right now."
+                    title="No payments due"
                     body="When one of your orders matches, the coin payment for it appears here."
                 />
             ) : null}

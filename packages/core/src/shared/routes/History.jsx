@@ -1429,11 +1429,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? 'No cross-chain actions yet'
                             : 'No activity yet'}
                         body={crossChainOnly
-                            ? 'Make a cross-chain transfer or receive one to see entries here.'
+                            ? 'Cross-chain transfers sent or received by this wallet appear here.'
                             : 'Once you send or receive on the selected chains, the activity feed populates.'}
-                        actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
-                        onAction={!crossChainOnly ? onReceive : undefined}
-                        icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
@@ -2772,7 +2769,10 @@ function RecipientsBlock({ entry }) {
                 </div>
             ) : (
                 <EmptyState
-                    title={<>No {isDividend ? 'holders' : 'recipients'} found.</>}
+                    title={<>No {isDividend ? 'holders' : 'recipients'} found</>}
+                    body={isDividend
+                        ? 'Token holders appear here after balances are indexed.'
+                        : 'Matching recipients appear here after history is indexed.'}
                     titleAs="p"
                 />
             )}

@@ -1384,7 +1384,7 @@ export function AddressList({
                 </ul>
             ) : null}
             {rows.length === 0 ? (
-                <EmptyState title="No addresses match the current filter." />
+                <EmptyState title="No matching addresses" body="Try a different search or network filter." />
             ) : (
             <ul className={local.addrList} aria-label="Wallet addresses">
                 {rows.map((row) => {
