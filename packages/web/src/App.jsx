@@ -65,6 +65,7 @@ import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/Update
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
@@ -2905,6 +2906,7 @@ function AppInner() {
                                     // not pass this, so they render no switcher.
                                     platformCurrent="wallet"
                                 />
+                                <NetworkBanner activeNetwork={activeNetwork} />
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
                                     unlocked view via the shared layout header slot, not
                                     just Home. */}
