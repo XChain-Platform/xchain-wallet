@@ -290,40 +290,6 @@
     position: relative;
 }
 
-.amountMaxInline {
-    position: absolute;
-    inset-inline-end: var(--xc-space-2);
-    /* Stretch between the bottom of the label area and the bottom of
-       the input (Input.field has gap space-1 below the label and
-       margin-bottom space-3 below the input). The bigField label is
-       text-md / weight 600; 1rem x 1.5 line-height matches. */
-    top: calc(1rem * 1.5 + var(--xc-space-2));
-    bottom: var(--xc-space-3);
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-3);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.amountMaxInline:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
-    border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
-}
-
-.amountMaxInline:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .rbfRow {
     display: flex;
     align-items: flex-start;
