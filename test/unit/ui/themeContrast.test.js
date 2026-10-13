@@ -107,6 +107,13 @@ const uiColors = [
     '--xc-warning',
     '--xc-success',
 ];
+const controlBorders = [
+    '--xc-control-border',
+    '--xc-control-border-hover',
+    '--xc-control-selected',
+    '--xc-control-focus-ring',
+    '--xc-control-disabled-border',
+];
 
 function expectPair(tokens, foreground, background, minimum) {
     const ratio = contrast(resolveToken(tokens, foreground), resolveToken(tokens, background));
@@ -134,6 +141,18 @@ describe('theme token contrast', () => {
         }
     });
 
+    it.each(Object.entries(themes))('%s theme keeps shared control states at 3:1', (_, tokens) => {
+        for (const backgroundName of backgrounds) {
+            for (const borderName of controlBorders) {
+                expectPair(tokens, borderName, backgroundName, largeTextAndUiMinimum);
+            }
+        }
+
+        expectPair(tokens, '--xc-control-disabled-border', '--xc-control-disabled-bg', largeTextAndUiMinimum);
+        expectPair(tokens, '--xc-control-disabled-text', '--xc-control-disabled-bg', normalTextMinimum);
+        expectPair(tokens, '--xc-control-selected-text', '--xc-control-selected', normalTextMinimum);
+    });
+
     it.each(Object.entries(themes))('%s theme keeps text on solid fills at 4.5:1', (_, tokens) => {
         for (const [foreground, background] of filledTextPairs) {
             expectPair(tokens, foreground, background, normalTextMinimum);
@@ -157,8 +176,7 @@ describe('theme token contrast', () => {
 
     it.each(Object.entries(themes))('%s theme visibly distinguishes disabled controls with shared tokens', (_, tokens) => {
         const opacity = Number(resolveToken(tokens, '--xc-disabled-opacity'));
-        expect(opacity).toBeGreaterThan(0);
-        expect(opacity).toBeLessThan(1);
+        expect(opacity).toBe(1);
         const saturation = Number(resolveToken(tokens, '--xc-disabled-saturation'));
         expect(saturation).toBeGreaterThanOrEqual(0);
         expect(saturation).toBeLessThan(1);
@@ -174,9 +192,9 @@ describe('theme token contrast', () => {
                 .toBeGreaterThanOrEqual(normalTextMinimum);
         }
 
-        const disabledBorder = saturate(resolveToken(tokens, '--xc-border-strong'), saturation);
-        const disabledSurface = saturate(resolveToken(tokens, '--xc-surface'), saturation);
-        expect(contrast(disabledBorder, disabledSurface), '--xc-border-strong on --xc-surface')
+        const disabledBorder = saturate(resolveToken(tokens, '--xc-control-disabled-border'), saturation);
+        const disabledSurface = saturate(resolveToken(tokens, '--xc-control-disabled-bg'), saturation);
+        expect(contrast(disabledBorder, disabledSurface), '--xc-control-disabled-border on --xc-control-disabled-bg')
             .toBeGreaterThanOrEqual(largeTextAndUiMinimum);
     });
 
@@ -184,6 +202,7 @@ describe('theme token contrast', () => {
         expect(css).toMatch(/:where\(input, select, textarea, button\):disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)\s*!important/s);
         expect(css).toMatch(/filter:\s*saturate\(var\(--xc-disabled-saturation\)\)/);
         expect(buttonCss).toMatch(/\.btn:disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)/s);
+        expect(resolveToken(light, '--xc-disabled-opacity')).toBe('1');
         expect(buttonCss).toMatch(/\.success\s*\{[^}]*color:\s*var\(--xc-on-success\)/s);
     });
 

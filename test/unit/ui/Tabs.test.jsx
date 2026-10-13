@@ -25,6 +25,7 @@ function ControlledTabs() {
             onChange={setValue}
             panelId="wallet-panel"
             aria-label="Wallet view"
+            data-testid="wallet-tabs"
         />
     );
 }
@@ -35,6 +36,7 @@ describe('<Tabs>', () => {
         const [coins, tokens, activity] = screen.getAllByRole('tab');
 
         expect(screen.getByRole('tablist', { name: 'Wallet view' })).toHaveAttribute('id', 'wallet-tabs');
+        expect(screen.getByTestId('wallet-tabs')).toHaveAccessibleName('Wallet view');
         expect(coins).toHaveAttribute('id', 'wallet-tabs-tab-coins');
         expect(coins).toHaveAttribute('aria-selected', 'true');
         expect(coins).toHaveAttribute('aria-controls', 'wallet-panel');
@@ -70,7 +72,11 @@ describe('<Tabs>', () => {
         const css = readFileSync('packages/core/src/ui/Tabs.module.css', 'utf8');
 
         expect(css).toMatch(/\.tabs\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
+        expect(css).toMatch(/\.tab\s*\{[^}]*min-height:\s*var\(--xc-tap-min\)/s);
+        expect(css).toMatch(/\.tabs\s*\{[^}]*border-bottom:\s*1px solid var\(--xc-control-border\)/s);
         expect(css).toMatch(/\.tabs\s*\{[^}]*overflow-x:\s*auto/s);
         expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
+        expect(css).toMatch(/\.tab:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
+        expect(css).toMatch(/\.tab\[aria-selected='true'\]\s*\{[^}]*var\(--xc-control-selected\)/s);
     });
 });
