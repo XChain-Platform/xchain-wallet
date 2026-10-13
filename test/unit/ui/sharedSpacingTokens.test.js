@@ -59,6 +59,14 @@ const controlDimensionModules = [
     'HwSignBlock.module.css',
     'LayoutModeToggle.module.css',
 ];
+const statusModalModules = [
+    'NetworkStatusIndicator.module.css',
+    'NoticeModal.module.css',
+    'OriginIdentity.module.css',
+    'OwnerWithdrawWarning.module.css',
+    'PlatformSwitcher.module.css',
+    'PortfolioChart.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -125,6 +133,29 @@ function declarationsWithPixels(css) {
     return [...withoutComments(css).matchAll(
         /(?:^|[;{])\s*([\w-]+)\s*:\s*([^;}]*?(?:-?\d+(?:\.\d+)?px)[^;}]*)/gm,
     )].map(([, property, value]) => `${property}: ${value.trim()}`);
+}
+
+function undocumentedPixelGeometry(file, css) {
+    const lines = css.split('\n');
+    const violations = [];
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const declaration = /^\s*([\w-]+)\s*:\s*.*?-?\d+(?:\.\d+)?px/.exec(lines[index]);
+        if (!declaration) continue;
+
+        const property = declaration[1];
+        const hairline = /^(?:border(?:-(?:block|inline)(?:-(?:start|end))?)?|outline)$/.test(property)
+            && [...lines[index].matchAll(/(-?\d+(?:\.\d+)?)px/g)]
+                .every((match) => Math.abs(Number(match[1])) <= 2);
+        if (hairline) continue;
+
+        const previousLine = lines[index - 1] || '';
+        if (!/^\s*\/\* .* has no .*token equivalent\. \*\/\s*$/.test(previousLine)) {
+            violations.push(`${file}:${index + 1}: ${lines[index].trim()}`);
+        }
+    }
+
+    return violations;
 }
 
 it('detects token-sized spacing literals only in margin and padding declarations', () => {
@@ -347,4 +378,42 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
     expect(collectibles).toMatch(/\.chainOverlay\s*\{[^}]*width: var\(--xc-icon-lg\);[^}]*height: var\(--xc-icon-lg\)/s);
     expect(collectibles).toMatch(/\.pinBtn,[\s\S]*?\.hideBtn\s*\{[^}]*width: var\(--xc-control-h-sm\);[^}]*height: var\(--xc-control-h-sm\)/);
     expect(collectibles).toContain('font-size: var(--xc-text-lg);');
+});
+
+it('keeps the audited component geometry on shared design tokens', () => {
+    const cssByFile = Object.fromEntries(statusModalModules.map((file) => [
+        file,
+        readFileSync(join(componentsRoot, file), 'utf8'),
+    ]));
+
+    expect(cssByFile['NetworkStatusIndicator.module.css']).toMatch(
+        /\.trigger\s*\{[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
+    );
+    expect(cssByFile['NetworkStatusIndicator.module.css']).toMatch(
+        /\.dot\s*\{[^}]*width:\s*var\(--xc-icon-xs\);[^}]*height:\s*var\(--xc-icon-xs\)/s,
+    );
+    expect(cssByFile['NetworkStatusIndicator.module.css']).toContain(
+        'calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter))',
+    );
+    expect(cssByFile['NoticeModal.module.css']).toContain(
+        'calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0))',
+    );
+    expect(cssByFile['NoticeModal.module.css']).toContain('padding: var(--xc-card-pad);');
+    expect(cssByFile['OwnerWithdrawWarning.module.css']).toContain('padding: var(--xc-card-pad);');
+    expect(cssByFile['PlatformSwitcher.module.css']).toMatch(
+        /\.trigger\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\);[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
+    );
+    expect(cssByFile['PlatformSwitcher.module.css']).not.toMatch(/padding:\s*var\(--xc-space-2\) 10px/);
+    expect(cssByFile['PlatformSwitcher.module.css']).toContain(
+        'calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter))',
+    );
+    expect(cssByFile['PortfolioChart.module.css']).toContain(
+        'padding: var(--xc-space-1) var(--xc-control-pad-x);',
+    );
+    expect(cssByFile['PortfolioChart.module.css']).toContain(
+        'border-radius: var(--xc-radius-pill);',
+    );
+    expect(statusModalModules.flatMap((file) => (
+        undocumentedPixelGeometry(file, cssByFile[file])
+    ))).toEqual([]);
 });

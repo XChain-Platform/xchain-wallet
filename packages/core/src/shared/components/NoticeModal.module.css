@@ -7,18 +7,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: calc(var(--xc-page-top) + env(safe-area-inset-top, 0px))
-        calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0px))
-        calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0px))
-        calc(var(--xc-page-gutter) + env(safe-area-inset-left, 0px));
+    padding: calc(var(--xc-page-top) + env(safe-area-inset-top, 0))
+        calc(var(--xc-page-gutter) + env(safe-area-inset-right, 0))
+        calc(var(--xc-page-top) + env(safe-area-inset-bottom, 0))
+        calc(var(--xc-page-gutter) + env(safe-area-inset-left, 0));
 }
 
 .panel {
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
+    /* The compact-dialog width has no layout-token equivalent. */
     max-width: 320px;
-    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-page-top) - var(--xc-page-top));
     min-height: 0;
     overflow: hidden;
     display: flex;
@@ -28,7 +29,7 @@
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-modal);
-    padding: var(--xc-space-4);
+    padding: var(--xc-card-pad);
     text-align: center;
     animation: pop 140ms ease-out;
 }
