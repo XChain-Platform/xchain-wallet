@@ -16,6 +16,13 @@ const VALUE_FEATURES = [
     { name: 'light-dark()', value: /light-dark\s*\(/i, supports: /light-dark\s*\(/i },
 ];
 
+export const SAFARI_16_UNSUPPORTED_CSS_FEATURES = Object.freeze([
+    'color-mix()',
+    'text-wrap: balance',
+    'native CSS nesting',
+    'scrollbar-gutter',
+]);
+
 function ancestors(node) {
     const out = [];
     for (let current = node.parent; current; current = current.parent) out.push(current);
@@ -115,4 +122,25 @@ export function findChrome102CssIssues(root) {
     });
 
     return issues;
+}
+
+/**
+ * Find CSS features that need a fallback or a matching `@supports` guard for
+ * the Safari 16 floor used by the iOS shell.
+ *
+ * @param {import('postcss').Root} root
+ * @returns {{ feature: string, line: number }[]}
+ */
+export function findSafari16CssIssues(root) {
+    const safariFeatures = new Set(SAFARI_16_UNSUPPORTED_CSS_FEATURES);
+    const issues = findChrome102CssIssues(root)
+        .filter(({ feature }) => safariFeatures.has(feature));
+
+    root.walkDecls(/^scrollbar-gutter$/i, (decl) => {
+        if (!hasSupportsGuard(decl, /scrollbar-gutter\s*:/i)) {
+            addIssue(issues, decl, 'scrollbar-gutter');
+        }
+    });
+
+    return issues.sort((a, b) => a.line - b.line);
 }
