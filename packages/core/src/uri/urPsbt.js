@@ -202,9 +202,12 @@ function cborRead(bytes, offset) {
  * @returns {Uint8Array}
  */
 export function cborUnwrapBytes(message) {
-    const { value } = cborRead(message, 0);
+    const { value, next } = cborRead(message, 0);
     if (!(value instanceof Uint8Array)) {
         throw new UrError('cbor: expected a byte string');
+    }
+    if (next !== message.length) {
+        throw new UrError('cbor: trailing data after byte string');
     }
     return value;
 }
@@ -623,20 +626,24 @@ export class UrPsbtDecoder {
     receive(frame) {
         if (this.complete) return false;
         const parsed = parseUrFrame(frame);
-        if (this._type === null) this._type = parsed.type;
-        if (parsed.type !== this._type) return false;
         if (this.expectType && parsed.type !== this.expectType) {
             throw new UrError(`expected UR type "${this.expectType}", got "${parsed.type}"`);
         }
+        if (this._type === null) this._type = parsed.type;
+        if (parsed.type !== this._type) return false;
 
         if (parsed.isSinglePart) {
+            cborUnwrapBytes(parsed.cbor);
             this._message = parsed.cbor;
             return true;
         }
         if (!this._assembler) this._assembler = new FountainAssembler();
         const part = decodePartCbor(parsed.cbor);
         const accepted = this._assembler.receive(part);
-        if (this._assembler.complete) this._message = this._assembler.result;
+        if (this._assembler.complete) {
+            cborUnwrapBytes(this._assembler.result);
+            this._message = this._assembler.result;
+        }
         return accepted;
     }
 
