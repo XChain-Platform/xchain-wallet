@@ -51,12 +51,15 @@ afterEach(() => __setLinksPluginForTests(undefined));
 const CLAIMED_LINK = `https://xchain.io/wallet/link/?uri=${encodeURIComponent('xchain:TBTC/receive')}`;
 
 describe('isAcceptableDeepLink', () => {
-    it('accepts the two shapes the manifest claims', () => {
+    it('accepts the web link and payment schemes the manifest claims', () => {
         expect(isAcceptableDeepLink(CLAIMED_LINK)).toBe(true);
         // The claim is a wildcard, so deeper paths under it travel too.
         expect(isAcceptableDeepLink('https://xchain.io/wallet/link/v1/invoice/9')).toBe(true);
         expect(isAcceptableDeepLink('xchain:BTC/send?address=abc')).toBe(true);
         expect(isAcceptableDeepLink('XCHAIN:BTC/send')).toBe(true);
+        expect(isAcceptableDeepLink('bitcoin:bc1qrecipient?amount=1')).toBe(true);
+        expect(isAcceptableDeepLink('litecoin:ltc1qrecipient?amount=2')).toBe(true);
+        expect(isAcceptableDeepLink('dogecoin:DRecipient?amount=3')).toBe(true);
     });
 
     it('rejects the lookalikes a prefix check would accept', () => {
@@ -77,7 +80,7 @@ describe('isAcceptableDeepLink', () => {
             'javascript:alert(1)',
             'file:///etc/passwd',
             'data:text/html,<script>',
-            'bitcoin:bc1qexample',
+            'monero:4example',
         ]) {
             expect(isAcceptableDeepLink(url), url).toBe(false);
         }

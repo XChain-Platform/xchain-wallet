@@ -68,8 +68,9 @@
 .bubble {
     position: absolute;
     z-index: 50;
-    min-width: 180px;
-    max-width: 260px;
+    box-sizing: border-box;
+    min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));
+    max-width: min(260px, calc(100vw - 2 * var(--xc-space-2)));
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-text);
     color: var(--xc-bg);
@@ -78,6 +79,9 @@
     font-weight: 400;
     line-height: 1.35;
     text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
     pointer-events: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }

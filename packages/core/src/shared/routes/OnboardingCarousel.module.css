@@ -68,6 +68,12 @@
     animation: frameEnter 360ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
+/* Author display rules outrank the browser's hidden-state rule. Preserve the
+   inactive panels' hidden state so only the selected slide takes space. */
+.frame[hidden] {
+    display: none;
+}
+
 @keyframes frameEnter {
     from {
         opacity: 0;
@@ -88,7 +94,7 @@
     margin-bottom: var(--xc-space-4);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-bg-muted);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .frameTitle {

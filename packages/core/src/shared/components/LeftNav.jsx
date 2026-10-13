@@ -39,7 +39,7 @@ import styles from './LeftNav.module.css';
 
 export const LEFT_NAV_VIEW_GROUPS = {
     home: [
-        'home', 'menu', 'alerts', 'actions', 'action-detail',
+        'home', 'menu', 'alerts', 'actions', 'resume-confirm',
         'token-detail', 'my-tokens', 'manage-token', 'wizard', 'issue',
         'mint', 'destroy', 'sweep', 'lock', 'mint-settings',
         'callback-settings', 'bridge-settings', 'description', 'transfer',
@@ -56,7 +56,7 @@ export const LEFT_NAV_VIEW_GROUPS = {
         'wallet-details', 'wallet-rename', 'account-rename', 'add-account',
         'add-wallet', 'migrate-bip39',
     ],
-    history: ['history'],
+    history: ['history', 'action-detail'],
     send: ['send', 'send-picker'],
     receive: ['receive', 'receive-picker'],
     scan: ['scan', 'sign-psbt'],
@@ -79,6 +79,11 @@ export const LEFT_NAV_VIEW_GROUPS = {
 export function activeLeftNavItem(currentView) {
     return Object.entries(LEFT_NAV_VIEW_GROUPS)
         .find(([, views]) => views.includes(currentView))?.[0] || 'home';
+}
+
+// Shared with BottomTabBar so both navs highlight the same destination.
+export function isNavItemActive(itemId, currentView) {
+    return itemId === activeLeftNavItem(currentView);
 }
 
 // Compact nav badge label: a count capped at "99+" so a large unread total
@@ -294,6 +299,16 @@ export function LeftNav({
     );
 }
 
+// Moves focus to the page's main region (Screen renders it as #xc-main). A
+// plain href="#xc-main" would also work, but the app can run under a hash
+// router where an in-page anchor navigates, so focus is moved by hand.
+function skipToMain(e) {
+    const main = typeof document !== 'undefined' ? document.getElementById('xc-main') : null;
+    if (!main) return;
+    e.preventDefault();
+    main.focus();
+}
+
 /**
  * Wraps the unlocked-route render tree in a flex layout that places
  * `<LeftNav>` alongside the active route.
@@ -337,6 +352,9 @@ export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
             data-xc-tier={tier}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
+            {sidebar ? (
+                <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
+            ) : null}
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}

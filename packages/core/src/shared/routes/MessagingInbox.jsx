@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -19,7 +19,13 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
+import {
+    readMsgRead,
+    readMsgRequestDeclined,
+    writeMsgRead,
+    writeMsgRequestDeclined,
+    writeMsgUnread,
+} from '../utils/msgReadMemory.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -65,6 +71,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -82,6 +89,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // the seen-set at the moment a thread is opened, so the thread can still show
     // where the unread run began even after we mark its messages seen.
     const [readMap, setReadMap] = useState(/** @type {Record<string, string[]>} */ ({}));
+    const [declinedRequestIds, setDeclinedRequestIds] = useState(/** @type {string[]} */ ([]));
     const [unreadFrom, setUnreadFrom] = useState(/** @type {Set<string> | null} */ (null));
     const firstUnreadRef = useRef(/** @type {HTMLLIElement | null} */ (null));
     // In-page conversation filters: free-text search (address or contact name)
@@ -103,19 +111,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
-                if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate one before reading messages.');
-                }
+                setAddressesByChain(byChain || {});
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (stage === 'password') {
@@ -126,6 +132,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // Load this account's read marks once the wallet/account scope is known.
     useEffect(() => {
         setReadMap(readMsgRead(walletId, activeAccountId));
+        setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
     }, [walletId, activeAccountId]);
 
     useEffect(() => {
@@ -271,16 +278,30 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // (format-1, sharing our key back) originates from that same address.
     const handshakeRequesters = useMemo(() => {
         const seen = new Set();
+        const declined = new Set(declinedRequestIds);
+        const accepted = new Set(messages
+            .filter((m) => m.format === 1 && ownerSet.has(m.from) && m.to && !ownerSet.has(m.to))
+            .map((m) => m.to));
         const out = [];
         for (const m of messages) {
             if (m.format !== 0 || !ownerSet.has(m.to)) continue;
             const who = m.from;
-            if (!who || ownerSet.has(who) || seen.has(who)) continue;
+            if (!who || ownerSet.has(who) || seen.has(who) || accepted.has(who)) continue;
+            const id = requestId(m);
+            if (declined.has(id)) continue;
             seen.add(who);
-            out.push({ from: who, ownerAddress: m.to });
+            out.push({ id, from: who, ownerAddress: m.to });
         }
         return out;
-    }, [messages, ownerSet]);
+    }, [messages, ownerSet, declinedRequestIds]);
+
+    function handleRequestDeclined(id) {
+        setDeclinedRequestIds((prev) => {
+            const next = (prev.includes(id) ? prev : [...prev, id]).slice(-500);
+            writeMsgRequestDeclined(walletId, activeAccountId, next);
+            return next;
+        });
+    }
     const conversations = useMemo(
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
@@ -437,19 +458,38 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
     if (sweepAddrs.length === 0) {
         return wrap(
             <ListPage>
-                <EmptyState title="This account has no addresses that can receive messages yet. Use Receive to generate one first." />
+                <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
             </ListPage>,
         );
     }
@@ -458,10 +498,26 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // effect above advances it to the inbox (or the password prompt) the
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(<ListPage><p className={styles.hint}>Opening inbox…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
-    if (stage === 'password' || stage === 'submitting') {
+    if (stage === 'submitting') {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
+    }
+
+    if (stage === 'password') {
         return wrap(
             <FormPage
                 label="Unlock messaging inbox"
@@ -509,7 +565,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
-                <EmptyState title="No messages in this conversation." />
+                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
             ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {threadItems.map((item) => {
@@ -615,6 +671,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={local.search}
                         placeholder="Search"
                         value={query}
@@ -649,6 +707,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     walletId={walletId}
                                     variant={variant}
                                     contactName={contactsByAddress[r.from]}
+                                    onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
                                         fromAddressId: record.id,
@@ -669,7 +728,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     onAction={onCompose ? () => onCompose() : undefined}
                 />
             ) : visibleConversations.length === 0 ? (
-                <EmptyState title="No conversations match the current filter." />
+                <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
                 <div className={local.convCard}>
                     <ul className={local.convList} aria-label="Conversations">
@@ -750,6 +809,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
         <form className={local.composer} onSubmit={handleSubmit}>
             <input
                 type="text"
+                enterKeyHint="go"
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}
@@ -776,16 +836,27 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * session signer isn't already unlocked.
  *
  * @param {object} props
- * @param {{ from: string, ownerAddress: string }} props.request
+ * @param {{ id: string, from: string, ownerAddress: string }} props.request
  * @param {any} props.record                 owner address record (incl. chainId)
  * @param {boolean} props.signerReady
  * @param {any} props.messaging
  * @param {string} props.walletId
  * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
+ * @param {() => void} props.onDecline
  * @param {(() => void) | null} [props.onMessage]
  */
-function SessionRequestRow({ request, record, signerReady, messaging, walletId, variant, contactName, onMessage }) {
+function SessionRequestRow({
+    request,
+    record,
+    signerReady,
+    messaging,
+    walletId,
+    variant,
+    contactName,
+    onDecline,
+    onMessage,
+}) {
     const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
@@ -879,8 +950,13 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                     <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
                         Share my key
                     </Button>
+                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                        Decline
+                    </Button>
                     {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage}>Message</Button>
+                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                            Message
+                        </Button>
                     ) : null}
                 </div>
             )}
@@ -889,6 +965,11 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
             ) : null}
         </li>
     );
+}
+
+function requestId(message) {
+    if (typeof message?.txid === 'string' && message.txid) return message.txid;
+    return [message?.chainId || message?.chain || '', message?.from || '', message?.to || '', message?.timestamp || ''].join(':');
 }
 
 // The conversation key for a message: whichever endpoint is not ours.

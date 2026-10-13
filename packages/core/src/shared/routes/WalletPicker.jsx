@@ -18,14 +18,14 @@ import pickerStyles from './WalletPicker.module.css';
  * WalletPicker: full-screen list of all wallets in the vault, with
  * an "Add Wallet" affordance in the header. Reached from the gear
  * popover's Wallet summary row. Picking a wallet calls `onSwitch`
- * and returns to home.
+ * and returns to the screen that opened the picker.
  *
  * Each row carries an info (ⓘ) button on the right; clicking it
  * navigates to WalletDetails (where the Rename affordance also lives).
  *
  * @param {object} props
  * @param {string | null} props.activeWalletId
- * @param {(walletId: string) => void} props.onSwitch
+ * @param {(walletId: string) => void | Promise<void>} props.onSwitch
  * @param {() => void} props.onAddWallet
  * @param {(walletId: string) => void} [props.onShowDetails]
  * @param {() => void} props.onBack
@@ -42,6 +42,8 @@ export function WalletPicker({
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [switchingWalletId, setSwitchingWalletId] = useState(/** @type {string | null} */ (null));
+    const [switchError, setSwitchError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -55,9 +57,30 @@ export function WalletPicker({
         return () => { cancelled = true; };
     }, [messaging]);
 
+    async function handleSelect(walletId, active) {
+        if (switchingWalletId) return;
+        if (active) {
+            onBack();
+            return;
+        }
+        setSwitchingWalletId(walletId);
+        setSwitchError(null);
+        try {
+            await onSwitch(walletId);
+            onBack();
+        } catch (err) {
+            setSwitchError(err?.message || 'Failed to switch wallets.');
+        } finally {
+            setSwitchingWalletId(null);
+        }
+    }
+
+    const switching = switchingWalletId !== null;
+
     const header = (
         <PageHeader
             onBack={onBack}
+            backDisabled={switching}
             title="Wallets"
             trailing={(
                 <button
@@ -65,6 +88,7 @@ export function WalletPicker({
                     onClick={onAddWallet}
                     aria-label="Add Wallet"
                     title="Add Wallet"
+                    disabled={switching}
                 >
                     <Icon.PlusIcon />
                 </button>
@@ -75,12 +99,15 @@ export function WalletPicker({
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
+                {switchError ? (
+                    <StatusMessage variant="error" className={styles.entryDescription}>{switchError}</StatusMessage>
+                ) : null}
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : wallets === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : wallets.length === 0 ? (
-                    <EmptyState title="No wallets yet." />
+                    <EmptyState title="No wallets yet" body="Wallets available to this app appear here." />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
                     return (
@@ -89,10 +116,9 @@ export function WalletPicker({
                                 type="button"
                                 className={styles.entry}
                                 style={{ width: '100%', paddingRight: '56px' }}
-                                onClick={() => {
-                                    if (!active) onSwitch(w.id);
-                                    onBack();
-                                }}
+                                onClick={() => handleSelect(w.id, active)}
+                                disabled={switching}
+                                aria-busy={switchingWalletId === w.id ? 'true' : undefined}
                             >
                                 <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
                                     <span className={styles.entryLabel}>
@@ -116,6 +142,7 @@ export function WalletPicker({
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={`Wallet details for ${w.name || 'wallet'}`}
                                     title="Wallet details"
+                                    disabled={switching}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onShowDetails(w.id);

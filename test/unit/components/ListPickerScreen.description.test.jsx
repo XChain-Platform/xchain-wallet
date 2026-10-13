@@ -41,13 +41,22 @@ describe('ListPickerScreen description detail', () => {
     it('renders an empty result through the shared list page and empty state', async () => {
         renderPicker([]);
 
-        const title = await screen.findByText(
-            'No address lists published from this chain’s addresses yet. Create one in My Lists first.',
-        );
+        const title = await screen.findByText('No address lists yet');
+        expect(screen.getByText('Address lists published from this chain appear here.')).toBeTruthy();
         expect(title.tagName).toBe('P');
         expect(title.parentElement.className).toMatch(/wrap/);
         expect(title.parentElement.parentElement.className).toMatch(/page/);
         expect(title.parentElement).not.toHaveAttribute('role');
+    });
+
+    it('omits rejected lists from access-filter choices', async () => {
+        renderPicker([
+            { action_index: '10', type: '2', status: 'valid' },
+            { action_index: '11', type: '2', status: 'invalid: TYPE' },
+        ]);
+
+        expect(await screen.findByText(/list #10/)).toBeTruthy();
+        expect(screen.queryByText(/list #11/)).toBeNull();
     });
 
     it('shows a described row description after the member count', async () => {

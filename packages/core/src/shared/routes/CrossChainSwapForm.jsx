@@ -848,6 +848,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             setGetAddressTouched(true);
                         }}
                         placeholder="auto-filled from your get-chain wallet"
+                        autoComplete="off"
                     />
                     <TokenField
                         label="Get token"

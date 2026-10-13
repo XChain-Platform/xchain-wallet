@@ -113,6 +113,27 @@ describe('settings -> root attributes', () => {
         expect(Object.keys(readCachedDisplayPrefs()).sort())
             .toEqual(['learnMode', 'reducedMotion', 'theme']);
     });
+
+    it('keeps native and browser chrome in contrast with live theme changes', () => {
+        const themeColor = document.createElement('meta');
+        themeColor.setAttribute('name', 'theme-color');
+        document.head.append(themeColor);
+        const setStyle = vi.fn(() => Promise.resolve());
+        globalThis.Capacitor = { Plugins: { SystemBars: { setStyle } } };
+
+        try {
+            applySettingsRootAttributes({ theme: 'dark' });
+            expect(themeColor.getAttribute('content')).toBe('#0B0F17');
+            expect(setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+
+            applySettingsRootAttributes({ theme: 'light' });
+            expect(themeColor.getAttribute('content')).toBe('#FFFFFF');
+            expect(setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+        } finally {
+            themeColor.remove();
+            delete globalThis.Capacitor;
+        }
+    });
 });
 
 describe('reduced motion resolution', () => {
@@ -252,6 +273,13 @@ describe('hide small balances', () => {
         expect(isSmallBalanceRow(tokenRow('10000'))).toBe(false);
     });
 
+    it('applies the selected whole-unit threshold exactly across divisibilities', () => {
+        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '999999'), '0.01')).toBe(true);
+        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '1000000'), '0.01')).toBe(false);
+        expect(isSmallBalanceRow(tokenRow('9', 3), '0.01')).toBe(true);
+        expect(isSmallBalanceRow(tokenRow('10', 3), '0.01')).toBe(false);
+    });
+
     const listRows = [
         { chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native', displayName: 'Bitcoin', quantity: '250000', divisibility: 8, fiatRate: null },
         { chainId: 'litecoin-mainnet', tick: 'LTC', kind: 'native', displayName: 'Litecoin', quantity: '0', divisibility: 8, fiatRate: null },
@@ -286,6 +314,23 @@ describe('hide small balances', () => {
             />,
         );
         expect(screen.getByText('Litecoin')).toBeTruthy();
+        expect(screen.getByTestId('small-balances-toggle').textContent).toBe('Show 1 small balance');
+    });
+
+    it('applies the selected threshold and amount format to rendered rows', () => {
+        render(
+            <BalanceList
+                rows={[
+                    { chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native', displayName: 'Bitcoin', quantity: '123450000000', divisibility: 8, fiatRate: null },
+                    { chainId: 'litecoin-mainnet', tick: 'LTC', kind: 'native', displayName: 'Litecoin', quantity: '999999', divisibility: 8, fiatRate: null },
+                ]}
+                hideSmallBalances
+                smallBalanceThreshold="0.01"
+                numberFormat="trim"
+            />,
+        );
+        expect(screen.getByText('1,234.5')).toBeTruthy();
+        expect(screen.queryByText('Litecoin')).toBeNull();
         expect(screen.getByTestId('small-balances-toggle').textContent).toBe('Show 1 small balance');
     });
 });

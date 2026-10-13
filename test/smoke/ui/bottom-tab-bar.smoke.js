@@ -24,10 +24,9 @@
 //      row is not BTC-exclusive).
 //   4. CSS module declares a 56px absolutely positioned bar that respects
 //      the iOS safe-area inset.
-//   5. FullLayoutWithNav grew a `bottomBar` slot; web + desktop
+//   5. FullLayoutWithNav grew a `bottomBar` slot; web, desktop and extension
 //      App.jsx pass a `<BottomTabBar>` to that slot. The main pane
-//      reserves bottom-padding below 600px so the bar doesn't cover
-//      content. Extension popup is intentionally untouched.
+//      reserves bottom-padding below 600px so the bar doesn't cover content.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -148,7 +147,7 @@ const popupApp = readFileSync(
     'utf8',
 );
 
-for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
+for (const [label, src] of [['web', webApp], ['desktop', desktopApp], ['extension', popupApp]]) {
     assert.ok(
         /import\s*\{\s*BottomTabBar\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/BottomTabBar\.jsx'/.test(src),
         `${label} App imports BottomTabBar`,
@@ -159,9 +158,6 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App passes <BottomTabBar> into FullLayoutWithNav.bottomBar`);
 }
 
-assert.ok(!/BottomTabBar/.test(popupApp),
-    'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
-
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
 );

@@ -12,6 +12,7 @@
 .text {
     flex: 1;
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .details {
@@ -74,7 +75,7 @@
 }
 
 .row.success {
-    background: var(--xc-success-bg, var(--xc-bg-muted));
+    background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
     color: var(--xc-text);
     border: 1px solid var(--xc-success, var(--xc-border));
 }

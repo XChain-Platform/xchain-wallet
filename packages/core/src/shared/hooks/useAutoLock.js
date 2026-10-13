@@ -9,6 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef } from 'react';
+import {
+    AUTO_LOCK_GUARD_CHANGED_EVENT,
+    isAutoLockHeld,
+} from './autoLockGuard.js';
 
 /**
  * Foreground auto-lock timer (§26).
@@ -46,29 +50,54 @@ import { useEffect, useRef } from 'react';
  * @param {number} [opts.idleMs]   default 5 minutes
  * @param {number} [opts.tickMs]   default 30 seconds
  * @param {boolean} [opts.enabled] default true
+ * @param {() => void} [opts.onDeferred] called when an elapsed deadline waits for a guarded operation
  */
 export function useAutoLock(
     onLock,
-    { idleMs = 5 * 60 * 1000, tickMs = 30 * 1000, enabled = true } = {},
+    {
+        idleMs = 5 * 60 * 1000,
+        tickMs = 30 * 1000,
+        enabled = true,
+        onDeferred,
+    } = {},
 ) {
     const lastActivity = useRef(Date.now());
     const onLockRef = useRef(onLock);
+    const onDeferredRef = useRef(onDeferred);
     onLockRef.current = onLock;
+    onDeferredRef.current = onDeferred;
+
+    useEffect(() => {
+        if (enabled) lastActivity.current = Date.now();
+    }, [enabled]);
 
     useEffect(() => {
         if (!enabled) return undefined;
-        // Start every arm with a full idle window: while disabled the listeners
-        // are detached, so the clock still holds the moment of the last lock.
-        lastActivity.current = Date.now();
-        const bump = () => { lastActivity.current = Date.now(); };
+        let deferred = false;
+        const bump = () => {
+            lastActivity.current = Date.now();
+            deferred = false;
+        };
         const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
         for (const ev of events) {
             window.addEventListener(ev, bump, { passive: true });
         }
         let cancelled = false;
-        const tick = () => {
+        let handle;
+        function schedule() {
+            const elapsed = Date.now() - lastActivity.current;
+            const remaining = Math.max(0, idleMs - elapsed);
+            handle = window.setTimeout(tick, Math.min(tickMs, remaining));
+        }
+        function tick() {
             if (cancelled) return;
             if (Date.now() - lastActivity.current >= idleMs) {
+                if (isAutoLockHeld()) {
+                    if (!deferred) onDeferredRef.current?.();
+                    deferred = true;
+                    schedule();
+                    return;
+                }
                 try { onLockRef.current?.(); } catch (_err) { /* ignore */ }
                 // Re-arm instead of stopping. `onLock` is async and can
                 // fail (a messaging round-trip), and bailing here left the
@@ -76,13 +105,28 @@ export function useAutoLock(
                 // The successful case tears the hook down anyway: the shell
                 // flips to `locked` and passes `enabled: false`.
                 lastActivity.current = Date.now();
+                deferred = false;
             }
-            window.setTimeout(tick, tickMs);
+            schedule();
+        }
+        const checkNow = () => {
+            clearTimeout(handle);
+            tick();
         };
-        const handle = window.setTimeout(tick, tickMs);
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') checkNow();
+        };
+        const onGuardChange = () => {
+            if (!isAutoLockHeld()) checkNow();
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener(AUTO_LOCK_GUARD_CHANGED_EVENT, onGuardChange);
+        schedule();
         return () => {
             cancelled = true;
             clearTimeout(handle);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener(AUTO_LOCK_GUARD_CHANGED_EVENT, onGuardChange);
             for (const ev of events) window.removeEventListener(ev, bump);
         };
     }, [enabled, idleMs, tickMs]);
