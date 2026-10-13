@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
     Button,
@@ -82,7 +82,13 @@ function metaFieldError(field, value) {
     return code ? META_ERROR_TEXT[code] : null;
 }
 
-export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
+export function ListRenameForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListRenameFormScreen key={formKey} {...props} />;
+}
+
+function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
     const { messaging, shell } = useMessaging();
@@ -109,6 +115,7 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
     const [memo, setMemo] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -231,7 +238,9 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
 
     async function handleReview(event) {
         event.preventDefault();
+        if (submitInFlightRef.current) return;
         if (!validate()) return;
+        submitInFlightRef.current = true;
         setFormError(null);
         const params = {
             VERSION: '5',
@@ -255,6 +264,8 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'List rename failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

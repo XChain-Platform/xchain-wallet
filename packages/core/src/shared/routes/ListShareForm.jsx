@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
     Button,
@@ -79,7 +79,13 @@ function shortAddress(value) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onDone]
  */
-export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
+export function ListShareForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListShareFormScreen key={formKey} {...props} />;
+}
+
+function ListShareFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
     const { messaging, shell } = useMessaging();
@@ -105,6 +111,7 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
     const [typedConfirm, setTypedConfirm] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -220,7 +227,9 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
 
     async function handleReview(event) {
         event.preventDefault();
+        if (submitInFlightRef.current) return;
         if (!validate()) return;
+        submitInFlightRef.current = true;
         setFormError(null);
         const params = {
             VERSION: '2',
@@ -242,6 +251,8 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'List share failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

@@ -136,6 +136,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -350,9 +351,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }, [stage, actionConfirm.open, wireParams, chainId]);
 
     async function openConfirmScreen() {
-        const from = sourceDescriptor();
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setSubmitError(null);
         try {
+            const from = sourceDescriptor();
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -380,6 +383,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -431,9 +436,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -473,6 +479,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             }));
             setStage('review');
             if (!isWatcherMode && !hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
