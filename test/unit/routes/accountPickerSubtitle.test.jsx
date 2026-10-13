@@ -134,7 +134,7 @@ describe('AccountPicker row subtitle', () => {
         });
 
         fireEvent.click(rowFor(container, account.name));
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onSwitch).not.toHaveBeenCalled();
         expect(onBack).toHaveBeenCalledTimes(2);

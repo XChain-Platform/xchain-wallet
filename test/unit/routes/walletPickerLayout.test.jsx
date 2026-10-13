@@ -18,6 +18,7 @@ describe('WalletPicker row layout', () => {
         const wallet = {
             id: 'wallet-1',
             name: 'A wallet name long enough to wrap on a narrow screen',
+            origin: 'demo',
             format: 'bip39',
         };
         let view;
@@ -43,7 +44,7 @@ describe('WalletPicker row layout', () => {
         expect(row).toBeTruthy();
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
-        expect(row.firstElementChild.textContent).toContain('BIP39');
+        expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
         expect(screen.getByTitle(wallet.name)).toHaveTextContent(wallet.name);
 
         const css = readFileSync(
@@ -86,6 +87,30 @@ describe('WalletPicker row layout', () => {
         fireEvent.click(manage);
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
     });
+
+    it('labels imported-key wallets accurately', async () => {
+        const wallet = {
+            id: 'wallet-1',
+            name: 'Imported wallet',
+            origin: 'imported-wif',
+            format: 'wif-only',
+        };
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+            >
+                <WalletPicker
+                    activeWalletId={null}
+                    onSwitch={() => {}}
+                    onAddWallet={() => {}}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Imported key')).toBeTruthy();
+    });
 });
 
 describe('WalletPicker switching', () => {
@@ -123,7 +148,7 @@ describe('WalletPicker switching', () => {
 
         expect(onSwitch).toHaveBeenCalledWith('wallet-2');
         expect(onBack).not.toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Add Wallet' }).disabled).toBe(true);
         expect(savings.disabled).toBe(true);
         expect(savings.getAttribute('aria-busy')).toBe('true');
@@ -142,7 +167,7 @@ describe('WalletPicker switching', () => {
         expect(await screen.findByText('Switch refused')).toBeTruthy();
         expect(onBack).not.toHaveBeenCalled();
         await waitFor(() => expect(savings.disabled).toBe(false));
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(false);
     });
 
     it('closes from both the current selection and the Back control', async () => {
@@ -151,7 +176,7 @@ describe('WalletPicker switching', () => {
         const primary = await screen.findByRole('button', { name: /Primary/ });
 
         fireEvent.click(primary);
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(onSwitch).not.toHaveBeenCalled();
         expect(onBack).toHaveBeenCalledTimes(2);
