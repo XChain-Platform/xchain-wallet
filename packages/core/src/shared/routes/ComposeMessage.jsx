@@ -36,6 +36,7 @@ import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailu
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MAX_MESSAGE_LENGTH = 1_048_576;
 
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
@@ -255,14 +256,14 @@ export function ComposeMessage({
     }, [toAddress, chainId]);
 
     useEffect(() => {
-        if (!destChainId || !toAddress.trim()) {
+        const addr = toAddress.trim();
+        if (!destChainId || !addr || !isValidAddressAnyNetwork(addr)) {
             setPubkeyState('idle');
             if (!fixedEncryption) setSendUnencrypted(false);
             return undefined;
         }
         let cancelled = false;
         setPubkeyState('checking');
-        const addr = toAddress.trim();
         const handle = setTimeout(() => {
             messaging.getRecipientPubkey({ chainId: destChainId, address: addr })
                 .then((pubkey) => {
@@ -392,6 +393,10 @@ export function ComposeMessage({
         [toAddress],
     );
     const addressError = addressInvalid ? 'Enter a valid address' : undefined;
+    const messageLength = message.length;
+    const messageLengthError = messageLength > MAX_MESSAGE_LENGTH
+        ? `Message is ${messageLength.toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`
+        : undefined;
 
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
@@ -520,6 +525,7 @@ export function ComposeMessage({
             setSubmitError('Write a message to send.');
             return;
         }
+        if (messageLengthError) return;
         if (addressInvalid) return;
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
@@ -538,6 +544,7 @@ export function ComposeMessage({
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        if (messageLengthError) return;
         if (addressInvalid) return;
         if (!sendUnencrypted && pubkeyState === 'missing') return;
         if (!hw && !signerReady && password.length === 0) return;
@@ -884,7 +891,7 @@ export function ComposeMessage({
                     variant="primary"
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || Boolean(messageLengthError)}
                 >
                     {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
@@ -897,6 +904,8 @@ export function ComposeMessage({
                 value={toAddress}
                 onChange={(e) => {
                     setToAddress(e.target.value);
+                    setHandshakeSent(false);
+                    setHandshakeError(null);
                     if (submitError) setSubmitError(null);
                 }}
                 onIconClick={() => setContactsPickerOpen(true)}
@@ -914,6 +923,10 @@ export function ComposeMessage({
                 }}
                 rows={4}
                 placeholder="Write your message…"
+                hint={messageLengthError
+                    ? undefined
+                    : `${messageLength.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`}
+                error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />
 

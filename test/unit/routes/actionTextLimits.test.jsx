@@ -15,10 +15,12 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
+import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const MAX_TEXT_LENGTH = 250;
+const MAX_MESSAGE_LENGTH = 1_048_576;
 const AT_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH);
 const OVER_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH + 1);
 const BTC = 'bitcoin-mainnet';
@@ -48,6 +50,7 @@ function messagingFor() {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        getRecipientPubkey: vi.fn().mockResolvedValue('02' + 'ab'.repeat(32)),
         getTokenInfo: vi.fn().mockResolvedValue({
             tick: 'CALLABLE',
             creator: SOURCE.address,
@@ -100,6 +103,41 @@ describe('BroadcastForm text limits', () => {
         expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH}.`)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('ComposeMessage text limit', () => {
+    it('shows a live counter and blocks review past the protocol limit', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, {
+            chainId: BTC,
+            fixedEncryption: 'plaintext',
+            toAddress: recipient,
+        });
+        const message = await screen.findByLabelText('Message');
+        const submit = screen.getByRole('button', { name: 'Send message' });
+
+        fireEvent.change(message, { target: { value: 'hello' } });
+        expect(screen.getByText('5 / 1,048,576 characters.')).toBeTruthy();
+        expect(submit.disabled).toBe(false);
+
+        fireEvent.change(message, { target: { value: 'm'.repeat(MAX_MESSAGE_LENGTH + 1) } });
+        expect(screen.getByText(
+            'Message is 1,048,577 characters; the network accepts at most 1,048,576.',
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(true);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('does not look up a key or offer a session request for an invalid recipient', async () => {
+        const messaging = mount(ComposeMessage, { chainId: BTC });
+        const address = await screen.findByLabelText('Address');
+
+        fireEvent.change(address, { target: { value: 'not an address' } });
+
+        expect(await screen.findByText('Enter a valid address')).toBeTruthy();
+        expect(messaging.getRecipientPubkey).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
     });
 });
 
