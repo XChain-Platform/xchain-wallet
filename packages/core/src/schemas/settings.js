@@ -241,6 +241,7 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {{ enabled: boolean }} panicMode                                                                v2: duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2: backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
+ * @property {string[]} [watchedTokens]                                                                      v2-tolerant: list of `chainId:tick` keys the user added to the balance list even when the wallet holds none
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant: when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings > Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant: when true, balance rows render a per-row hide affordance. Default false; the Settings > Display unhide list still works regardless.
@@ -359,6 +360,7 @@ export function createDefaultSettings() {
         },
         backupReminders: 'off',
         pinnedTokens: [],
+        watchedTokens: [],
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
@@ -548,6 +550,14 @@ export function validateSettings(record) {
             errors,
             'pinnedTokens',
             Array.isArray(r.pinnedTokens) && r.pinnedTokens.every(isString),
+            'must be an array of strings (chainId:tick keys)',
+        );
+    }
+    if (r.watchedTokens !== undefined) {
+        check(
+            errors,
+            'watchedTokens',
+            Array.isArray(r.watchedTokens) && r.watchedTokens.every(isString),
             'must be an array of strings (chainId:tick keys)',
         );
     }

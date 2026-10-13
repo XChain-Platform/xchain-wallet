@@ -15,10 +15,11 @@ import { DisplaySection } from '../../../packages/core/src/shared/components/set
 
 afterEach(() => cleanup());
 
-function setup(overrides = {}) {
+function setup(overrides = {}, messagingOverrides = {}) {
     let settings = {
         privacy: { hideSmallBalances: false },
         pinnedTokens: [],
+        watchedTokens: [],
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
@@ -36,6 +37,8 @@ function setup(overrides = {}) {
             };
             return Promise.resolve(settings);
         }),
+        getTokenInfo: vi.fn().mockResolvedValue({ canonicalTick: null }),
+        ...messagingOverrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -76,6 +79,7 @@ describe('DisplaySection', () => {
 
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             pinnedTokens: [],
+            watchedTokens: [],
             hiddenTokens: [],
             showPinAffordance: false,
             showHideAffordance: false,
@@ -84,5 +88,42 @@ describe('DisplaySection', () => {
             privacy: { hideSmallBalances: false },
         }));
         expect(await screen.findByText('Display settings reset to defaults.')).toBeTruthy();
+    });
+
+    it('looks up a watched ticker on its selected chain, refuses missing and duplicate tokens, and removes it', async () => {
+        const getTokenInfo = vi.fn(({ tick }) => Promise.resolve({
+            canonicalTick: tick === 'WOW' ? 'WOW' : null,
+        }));
+        const messaging = setup({}, { getTokenInfo });
+        await screen.findByRole('heading', { name: 'Watched tokens (0)' });
+
+        fireEvent.change(screen.getByLabelText('Token chain'), { target: { value: 'dogecoin-testnet' } });
+        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'MISSING' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+
+        expect(await screen.findByText('Token "MISSING" was not found on Dogecoin (testnet).')).toBeTruthy();
+        expect(getTokenInfo).toHaveBeenLastCalledWith({
+            chainId: 'dogecoin-testnet',
+            tick: 'MISSING',
+            demo: false,
+        });
+
+        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'WOW' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
+            watchedTokens: ['dogecoin-testnet:WOW'],
+            hiddenTokens: [],
+        }));
+        expect(await screen.findByText('dogecoin-testnet:WOW')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Token ticker'), { target: { value: 'WOW' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        expect(await screen.findByText('WOW is already watched on Dogecoin (testnet).')).toBeTruthy();
+        expect(getTokenInfo).toHaveBeenCalledTimes(2);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove watched token dogecoin-testnet:WOW' }));
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenLastCalledWith({ watchedTokens: [] }));
+        expect(screen.queryByText('dogecoin-testnet:WOW')).toBeNull();
     });
 });
