@@ -486,11 +486,13 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
         expect(screen.getByText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
-        const announcement = screen.getByRole('status');
+        // The ToastHost notifications viewport is its own status region, so the
+        // success screen's announcement is looked up inside the screen's main.
+        const announcement = within(screen.getByRole('main')).getByRole('status');
         expect(announcement).toHaveAttribute('aria-live', 'polite');
         expect(announcement).toHaveAttribute('aria-atomic', 'true');
         expect(announcement).toHaveTextContent(/network accepted your transaction/i);
-        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(within(screen.getByRole('main')).getAllByRole('status')).toHaveLength(1);
         expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /View in block explorer/i })).toHaveAttribute(
             'href',
@@ -533,8 +535,8 @@ describe('Send flow with mocked messaging', () => {
 
         expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' }))
             .toBeInTheDocument();
-        expect(screen.getByRole('status')).toHaveTextContent(/queued-transactions banner/i);
-        expect(screen.getByRole('status')).toHaveTextContent(/don't send this payment again/i);
+        expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/queued-transactions banner/i);
+        expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/don't send this payment again/i);
         expect(screen.queryByText(TXID)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Send another' })).not.toBeInTheDocument();
     });
@@ -569,8 +571,8 @@ describe('Send flow with mocked messaging', () => {
 
         expect(await screen.findByRole('heading', { name: 'Signed. Not broadcast yet.' }))
             .toBeInTheDocument();
-        expect(screen.getByRole('status')).toHaveTextContent(/waiting in the queued-transactions banner/i);
-        expect(screen.getByRole('status')).not.toHaveTextContent('ETIMEDOUT');
+        expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/waiting in the queued-transactions banner/i);
+        expect(within(screen.getByRole('main')).getByRole('status')).not.toHaveTextContent('ETIMEDOUT');
         expect(sdk.signPsbt).toHaveBeenCalledTimes(1);
         expect(sdk.signPsbt).toHaveBeenCalledWith(expect.objectContaining({ psbtHex: PSBT }));
         expect(sdk.broadcastTx).toHaveBeenCalledTimes(1);
