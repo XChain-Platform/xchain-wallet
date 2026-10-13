@@ -115,7 +115,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 </span>
             </button>
             {open ? (
-                <div ref={popoverRef} className={styles.popover} role="listbox">
+                <div ref={popoverRef} className={styles.popover}>
                     {entries.length > 6 ? (
                         <div className={styles.searchWrap}>
                             <Icon.SearchIcon />
@@ -134,8 +134,8 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                             />
                         </div>
                     ) : null}
-                    <ul className={styles.list}>
-                        <li>
+                    <ul className={styles.list} role="listbox" aria-label="Networks">
+                        <li role="presentation">
                             <button
                                 type="button"
                                 role="option"
@@ -154,7 +154,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                         {filtered.map((e) => {
                             const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
                             return (
-                                <li key={e.coin}>
+                                <li key={e.coin} role="presentation">
                                     <button
                                         type="button"
                                         role="option"
@@ -173,7 +173,13 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                             );
                         })}
                         {filtered.length === 0 ? (
-                            <li className={styles.empty}>No matching networks.</li>
+                            <li
+                                className={styles.empty}
+                                role="option"
+                                aria-disabled="true"
+                            >
+                                No matching networks.
+                            </li>
                         ) : null}
                     </ul>
                 </div>

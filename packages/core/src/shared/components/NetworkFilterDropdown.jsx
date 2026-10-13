@@ -76,9 +76,14 @@ export function NetworkFilterDropdown({ value, onChange }) {
                 <span className={styles.networkCaret} aria-hidden="true">&#9660;</span>
             </button>
             {open ? (
-                <ul ref={popoverRef} className={styles.networkPopover} role="listbox">
+                <ul
+                    ref={popoverRef}
+                    className={styles.networkPopover}
+                    role="listbox"
+                    aria-label="Networks"
+                >
                     {[{ value: 'all', label: 'All networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
-                        <li key={n.value}>
+                        <li key={n.value} role="presentation">
                             <button
                                 type="button"
                                 role="option"
