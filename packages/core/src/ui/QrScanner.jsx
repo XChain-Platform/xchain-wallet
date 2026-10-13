@@ -153,6 +153,16 @@ function isNativeApp() {
     }
 }
 
+/** True when the browser exposes a callable camera API. */
+function hasBrowserCamera() {
+    try {
+        return typeof navigator !== 'undefined'
+            && typeof navigator.mediaDevices?.getUserMedia === 'function';
+    } catch {
+        return false;
+    }
+}
+
 /**
  * The native-scanner surface: a "Scan with camera" button that opens the
  * shell's full-screen camera view, and plain words when it cannot.
@@ -286,8 +296,7 @@ export function QrScanner({
             && typeof window !== 'undefined'
             && typeof window.BarcodeDetector === 'function');
     const hasGetUserMedia = previewState === 'unsupported'
-        || (typeof navigator !== 'undefined'
-            && typeof navigator.mediaDevices?.getUserMedia === 'function');
+        || hasBrowserCamera();
     const isSecureContext = Boolean(previewState) || (typeof window !== 'undefined'
         && (window.isSecureContext === true
             || ['localhost', '127.0.0.1', '[::1]'].includes(window.location?.hostname)));
