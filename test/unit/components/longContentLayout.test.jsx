@@ -10,7 +10,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
-import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
+import { PageHeader, TruncatedText } from '../../../packages/core/src/ui/PageHeader.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { formatAtomicAmount } from '../../../packages/core/src/shared/utils/amountFormat.js';
 
@@ -19,6 +19,14 @@ const historyCss = readFileSync('packages/core/src/shared/routes/History.module.
 const tokenDetailCss = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
 const walletPickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
+const longNameSurfaces = [
+    ['contact picker', 'packages/core/src/shared/components/ContactsPickerScreen.jsx', /<TruncatedText className=\{styles\.abName\}>\{contact\.name\}<\/TruncatedText>/],
+    ['contacts list', 'packages/core/src/shared/routes/ContactsList.jsx', /<TruncatedText className=\{picker\.rowName\}>\{c\.name\}<\/TruncatedText>/],
+    ['list picker', 'packages/core/src/shared/components/ListPickerScreen.jsx', /<TruncatedText className=\{styles\.abName\} title=\{titleLabel\}>/],
+    ['wallet details', 'packages/core/src/shared/routes/WalletDetails.jsx', /value=\{<TruncatedText>\{wallet\.name \|\| 'Unnamed wallet'\}<\/TruncatedText>\}/],
+    ['send contact', 'packages/core/src/shared/routes/Send.jsx', /<TruncatedText className=\{styles\.toContactName\}>\{matchedContact\.contact\.name\}<\/TruncatedText>/],
+    ['messaging contact', 'packages/core/src/shared/routes/MessagingInbox.jsx', /<TruncatedText>\{contactsByAddress\[c\.counterparty\]\}<\/TruncatedText>/],
+];
 
 function rule(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -44,6 +52,25 @@ afterEach(() => {
 });
 
 describe('long content layout', () => {
+    it('ellipsizes an unbroken 60-plus-character name and preserves its tooltip', () => {
+        const name = 'N'.repeat(80);
+        render(<TruncatedText>{name}</TruncatedText>);
+
+        const text = screen.getByTitle(name);
+        expect(text).toHaveTextContent(name);
+        expect(text).toHaveStyle({
+            minWidth: '0',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+        });
+    });
+
+    it.each(longNameSurfaces)('uses the shared long-name contract on the %s', (_label, path, pattern) => {
+        expect(readFileSync(path, 'utf8')).toMatch(pattern);
+    });
+
     it('ellipsizes balance labels while fitting every digit of a huge amount', () => {
         const displayName = 'A token name long enough to occupy every narrow balance-row label lane';
         const quantity = '12345678901234567890123456789012345678901234567890';
@@ -167,8 +194,14 @@ describe('long content layout', () => {
         const title = 'A page heading long enough to cross both fixed action lanes on a narrow viewport';
         render(<PageHeader title={title} onBack={() => {}} trailing={<button type="button">Action</button>} />);
 
-        expect(screen.getByRole('heading', { name: title })).toHaveAttribute('title', title);
-        expect(rule(pageHeaderCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(rule(pageHeaderCss, '.title')).not.toMatch(/text-overflow:\s*ellipsis/);
+        const heading = screen.getByRole('heading', { name: title });
+        const text = screen.getByTitle(title);
+        expect(heading).toContainElement(text);
+        expect(text).toHaveStyle({
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+        });
     });
 });

@@ -10,6 +10,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -775,7 +776,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                             <AddressText address={c.counterparty} />
                                                         </Fragment>
                                                     ) : contactsByAddress[c.counterparty]
-                                                        ? contactsByAddress[c.counterparty]
+                                                        ? <TruncatedText>{contactsByAddress[c.counterparty]}</TruncatedText>
                                                         : <AddressText address={c.counterparty} truncate={false} />}
                                                 </span>
                                             </span>
@@ -992,7 +993,9 @@ function SessionRequestRow({
     return (
         <li className={local.requestRow}>
             <div className={local.requestWho}>
-                {contactName || <AddressText address={request.from} truncate={false} />}
+                {contactName
+                    ? <TruncatedText>{contactName}</TruncatedText>
+                    : <AddressText address={request.from} truncate={false} />}
             </div>
             {stage === 'sent' ? (
                 <p className={local.requestSent} role="status">

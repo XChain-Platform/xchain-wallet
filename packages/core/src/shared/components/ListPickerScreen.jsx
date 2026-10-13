@@ -30,6 +30,7 @@ import { currentListItems, currentListMemberCount } from '../../flows/listMember
 import { listLabel } from '../utils/listLabel.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 
 function firstMemberIndex(detail) {
     const first = (currentListItems(detail) || [])[0];
@@ -270,10 +271,10 @@ export function ListPickerScreen({
                                                 : {}),
                                         })}
                                     >
-                                        <span className={styles.abName}>
+                                        <TruncatedText className={styles.abName} title={titleLabel}>
                                             {titleLabel}
                                             {status && status !== 'valid' ? ` (${status})` : ''}
-                                        </span>
+                                        </TruncatedText>
                                         <span className={styles.abAddr}>
                                             {description && count !== undefined
                                                 ? `${countText} · ${description}`

@@ -26,6 +26,7 @@ import {
     StatusMessage,
     FormErrorSummary,
 } from '@xchain-wallet/core/ui';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -3279,7 +3280,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 id="send-destination"
                 icon="contacts"
                 label={matchedContact
-                    ? <>{t('send.fields.to')} <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
+                    ? <>{t('send.fields.to')} <TruncatedText className={styles.toContactName}>{matchedContact.contact.name}</TruncatedText></>
                     : t('send.fields.to')}
                 value={toAddress}
                 onChange={(e) => {

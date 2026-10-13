@@ -10,6 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { EmptyState, Icon, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
@@ -122,7 +123,7 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                                     className={styles.abRow}
                                     onClick={() => onPick(entry)}
                                 >
-                                    <span className={styles.abName}>{contact.name}</span>
+                                    <TruncatedText className={styles.abName}>{contact.name}</TruncatedText>
                                     <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
                                 </button>
                             </li>
