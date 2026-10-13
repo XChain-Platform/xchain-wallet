@@ -111,7 +111,7 @@ describe('main route heading order', () => {
                 onDone={vi.fn()}
             />,
         );
-        expect(screen.getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Own your keys' })).toBeInTheDocument();
         expectOrderedHeadings(onboarding.container);
     });
 

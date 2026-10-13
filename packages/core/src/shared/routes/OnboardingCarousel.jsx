@@ -119,7 +119,6 @@ export function OnboardingCarousel({
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
             >
-                <h1 className="sr-only">Getting started</h1>
                 <div className={styles.stack}>
                     {frames.map((frame, i) => {
                         const Heading = i === 0 ? 'h1' : 'h2';
@@ -148,7 +147,6 @@ export function OnboardingCarousel({
             data-testid="onboarding-carousel"
             data-reduced-motion="false"
         >
-            <h1 className="sr-only">Getting started</h1>
             <div className={styles.skipRow}>
                 <button type="button" className={styles.skipBtn} onClick={handleSkip}>
                     Skip
