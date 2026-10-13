@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -246,6 +247,10 @@ export function CreateBetFeedForm({
     // broadcast, the miner fee is spent, and the market never exists.
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const nativeFee = useNativeFee(chainId);
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        [chainId],
+    );
 
     const cleanOutcomes = useMemo(
         () => outcomes.map((o) => o.trim()).filter((o) => o.length > 0),
@@ -472,6 +477,9 @@ export function CreateBetFeedForm({
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}

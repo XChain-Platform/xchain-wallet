@@ -98,6 +98,14 @@ function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function reviewDetailLabel(label) {
+    const value = String(label || '');
+    if (value === 'Give') return 'You send';
+    if (value === 'Get') return 'You get';
+    if (/^(?:Destination|Receive address|Dispenser address|Delegate to)$/.test(value)) return 'To';
+    return value.replace(/^Recipient(?=\s|$)/, 'To');
+}
+
 function reviewActionLabel(decoded, fallback, chainLabel) {
     const summary = String(decoded?.summary || '').trim();
     if (!summary) return fallback;
@@ -211,17 +219,17 @@ export function ConfirmActionModal({
         && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
-        label: detail.label === 'Destination'
-            ? 'To'
-            : detail.label.replace(/^Recipient(?=\s|$)/, 'To'),
+        label: reviewDetailLabel(detail.label),
         index,
     })).sort((left, right) => {
         const rank = (label) => {
             if (/^To(?:\s|$)/.test(label)) return 0;
-            if (label === 'Amount' || label === 'Quantity') return 1;
-            if (/fee/i.test(label)) return 2;
-            if (/^total/i.test(label)) return 3;
-            return 1;
+            if (label === 'You send') return 1;
+            if (label === 'You get') return 2;
+            if (label === 'Amount' || label === 'Quantity') return 3;
+            if (/fee/i.test(label)) return 4;
+            if (/^total/i.test(label)) return 5;
+            return 3;
         };
         return rank(left.label) - rank(right.label) || left.index - right.index;
     }).map(({ index, ...detail }) => detail);
@@ -521,7 +529,7 @@ export function ConfirmActionModal({
                 {/* Both exits remain grouped at the end of the review (§5.2.7). */}
                 <footer className={styles.footer}>
                     <Button
-                        variant="danger"
+                        variant="secondary"
                         icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
                         disabled={exitsLocked}
