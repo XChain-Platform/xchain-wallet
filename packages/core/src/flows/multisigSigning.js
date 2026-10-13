@@ -381,40 +381,85 @@ export async function aggregateMultisigSession({ vault, sdkRegistry, sessionId }
     return session;
 }
 
-// ─── Finalize stub ────────────────────────────────────────────────
+// Finalization and broadcast
 
 /**
- * Mark a `'ready-to-finalize'` session as `'finalized'` and stash the
- * caller-supplied transaction hex. Step 20+ supplies the actual tx
- * bytes once PSBT-finalization is wired into QR transport / HW
- * signers; until then this is a thin transition helper that smoke
- * tests + UI can drive by hand.
+ * Finalize the session PSBT through its chain SDK, or broadcast an already
+ * finalized session. Callers may supply finalized bytes when another wallet
+ * performs finalization.
  *
  * @param {object} opts
  * @param {import('../storage/Vault.js').Vault} opts.vault
+ * @param {import('../sdk/SDKRegistry.js').SDKRegistry} [opts.sdkRegistry]
  * @param {string} opts.sessionId
- * @param {string} opts.finalizedTxHex   hex-encoded raw tx (lowercase)
- * @param {string} [opts.txid]           optional; set when broadcast lands
+ * @param {string} [opts.finalizedTxHex] hex-encoded raw tx
+ * @param {string} [opts.txid]
+ * @param {boolean} [opts.broadcast]
  */
 export async function finalizeMultisigSigningSession({
     vault,
+    sdkRegistry,
     sessionId,
     finalizedTxHex,
     txid,
+    broadcast = false,
 }) {
     if (!vault) throw new Error('finalizeMultisigSigningSession: vault is required');
-    if (typeof finalizedTxHex !== 'string' || finalizedTxHex.length === 0
-        || finalizedTxHex.length % 2 !== 0 || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
-        throw new Error('finalizeMultisigSigningSession: finalizedTxHex must be hex');
-    }
     const session = ensureSession(await vault.multisigSigningSessions.get(sessionId), sessionId);
+
+    if (broadcast) {
+        if (session.status === 'broadcast') return session;
+        assertStatus(session, 'finalized');
+        if (!sdkRegistry) throw new Error('finalizeMultisigSigningSession: sdkRegistry is required to broadcast');
+        const sdk = sdkRegistry.get(session.chainId);
+        if (!sdk) {
+            throw new Error(`finalizeMultisigSigningSession: no SDK registered for chainId "${session.chainId}"`);
+        }
+        if (typeof sdk.encoder?.broadcastTx !== 'function') {
+            throw new Error('finalizeMultisigSigningSession: sdk.encoder.broadcastTx is unavailable');
+        }
+        const result = await sdk.encoder.broadcastTx(session.finalizedTxHex);
+        const broadcastTxid = typeof result === 'string' ? result : result?.txid;
+        if (typeof broadcastTxid !== 'string' || broadcastTxid.length === 0) {
+            throw new Error('finalizeMultisigSigningSession: broadcast returned no txid');
+        }
+        return persist(vault, { ...session, txid: broadcastTxid, status: 'broadcast' });
+    }
+
     assertStatus(session, 'ready-to-finalize', 'finalized');
-    const lowerTx = lowerHex(finalizedTxHex);
+    if (finalizedTxHex !== undefined) {
+        if (typeof finalizedTxHex !== 'string' || finalizedTxHex.length === 0
+            || finalizedTxHex.length % 2 !== 0 || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
+            throw new Error('finalizeMultisigSigningSession: finalizedTxHex must be hex');
+        }
+        return persist(vault, {
+            ...session,
+            finalizedTxHex: lowerHex(finalizedTxHex),
+            txid: typeof txid === 'string' && txid.length > 0 ? txid : session.txid,
+            status: session.status === 'ready-to-finalize' ? 'finalized' : session.status,
+        });
+    }
+    if (session.status === 'finalized') return session;
+    if (!sdkRegistry) throw new Error('finalizeMultisigSigningSession: sdkRegistry is required to finalize');
+    const sdk = sdkRegistry.get(session.chainId);
+    if (!sdk) {
+        throw new Error(`finalizeMultisigSigningSession: no SDK registered for chainId "${session.chainId}"`);
+    }
+    if (typeof sdk.wallet?.finalizeMultisigPsbt !== 'function') {
+        throw new Error('finalizeMultisigSigningSession: sdk.wallet.finalizeMultisigPsbt is unavailable');
+    }
+    const finalized = await sdk.wallet.finalizeMultisigPsbt(session.psbtHex);
+    if (typeof finalized?.txHex !== 'string' || finalized.txHex.length === 0
+        || finalized.txHex.length % 2 !== 0 || !HEX_RE.test(finalized.txHex.toLowerCase())) {
+        throw new Error('finalizeMultisigSigningSession: SDK returned invalid transaction hex');
+    }
     return persist(vault, {
         ...session,
-        finalizedTxHex: lowerTx,
-        txid: typeof txid === 'string' && txid.length > 0 ? txid : session.txid,
-        status: session.status === 'ready-to-finalize' ? 'finalized' : session.status,
+        finalizedTxHex: lowerHex(finalized.txHex),
+        txid: typeof finalized.txid === 'string' && finalized.txid.length > 0
+            ? finalized.txid
+            : session.txid,
+        status: 'finalized',
     });
 }
 
