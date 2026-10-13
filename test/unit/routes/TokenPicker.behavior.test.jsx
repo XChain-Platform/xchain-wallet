@@ -78,6 +78,24 @@ afterEach(() => {
 });
 
 describe('TokenPicker asset visibility and filtering', () => {
+    it('keeps exactly one asset-kind tab in the keyboard tab order', async () => {
+        mount();
+        await screen.findByText(LONG_NAME);
+        const all = screen.getByRole('tab', { name: 'All' });
+        const tokens = screen.getByRole('tab', { name: 'Tokens' });
+
+        expect(all).toHaveAttribute('aria-selected', 'true');
+        expect(all).toHaveAttribute('tabindex', '0');
+        expect(tokens).toHaveAttribute('aria-selected', 'false');
+        expect(tokens).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.click(tokens);
+        expect(all).toHaveAttribute('aria-selected', 'false');
+        expect(all).toHaveAttribute('tabindex', '-1');
+        expect(tokens).toHaveAttribute('aria-selected', 'true');
+        expect(tokens).toHaveAttribute('tabindex', '0');
+    });
+
     it('shows persisted pins first and exposes an accessible persistent toggle', async () => {
         const messaging = makeMessaging({
             getSettings: vi.fn().mockResolvedValue({
