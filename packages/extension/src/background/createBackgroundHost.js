@@ -3167,6 +3167,18 @@ export function createBackgroundHost(deps) {
             feeRate: req?.feeRate,
             transactionBytes,
         });
+        const coinAmount = (value) => {
+            const amount = BigInt(value);
+            const whole = amount / 100000000n;
+            const fraction = String(amount % 100000000n).padStart(8, '0').replace(/0+$/, '');
+            return fraction ? `${whole}.${fraction}` : String(whole);
+        };
+        const feeQuote = {
+            originalFee: coinAmount(plan.originalFeeSats),
+            replacementFee: coinAmount(plan.replacementFeeSats),
+            feeIncrease: coinAmount(plan.feeIncreaseSats),
+        };
+        if (req?.preview === true) return feeQuote;
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3293,13 +3305,10 @@ export function createBackgroundHost(deps) {
             status: 'rbf-replaced',
             rbfReplacement: replacementTxHash,
         });
-        const feeIncreaseSats = BigInt(plan.feeIncreaseSats);
-        const whole = feeIncreaseSats / 100000000n;
-        const fraction = String(feeIncreaseSats % 100000000n).padStart(8, '0').replace(/0+$/, '');
         return {
             replacementTxHash,
             broadcastedAt,
-            feeIncrease: fraction ? `${whole}.${fraction}` : String(whole),
+            ...feeQuote,
         };
     });
     // The two node answers that mean "these exact bytes are already on the

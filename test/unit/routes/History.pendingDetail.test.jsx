@@ -92,6 +92,7 @@ function staleLocalSend(over = {}) {
         broadcastAt: new Date(Date.now() - 600000).toISOString(),
         mempoolSeenAt: null,
         rbfReplacement: null,
+        rbf: true,
         tick: 'XCHAIN',
         amount: '100',
         ...over,
@@ -266,6 +267,52 @@ describe('History offers replacement only where it can still work', () => {
         fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Speed up')).toBeTruthy();
         expect(within(region).getByText('Cancel transaction')).toBeTruthy();
+    });
+
+    it('retains RBF availability when a local record merges with its mempool row', async () => {
+        const { view } = mountHistory({
+            mempool: [mempoolRow({ tx_hash: LOCAL_HASH, source: OURS })],
+            pendingTxs: [staleLocalSend()],
+            replaceTx: vi.fn(),
+        });
+        const region = await openRow(view, 'seen');
+        fireEvent.click(within(region).getByText('More'));
+        expect(within(region).getByText('Speed up')).toBeTruthy();
+    });
+
+    it.each([false, null])('withholds replacement when the recorded RBF flag is %s', async (rbf) => {
+        const { view } = mountHistory({
+            pendingTxs: [staleLocalSend({ rbf })],
+            replaceTx: vi.fn(),
+        });
+        const region = await openRow(view, 'not-seen');
+        const more = within(region).queryByText('More');
+        if (more) fireEvent.click(more);
+        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Cancel transaction')).toBeNull();
+    });
+
+    it('shows the old fee, new fee, and added cost before broadcasting', async () => {
+        const replaceTx = vi.fn(async (request) => (request.preview ? {
+            originalFee: '0.00001',
+            replacementFee: '0.00002',
+            feeIncrease: '0.00001',
+        } : { replacementTxHash: REPLACEMENT_HASH }));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByText('More'));
+        fireEvent.click(within(region).getByText('Speed up'));
+
+        const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
+        expect(within(dialog).getByText(
+            'Old fee: 0.00001 LTC. New fee: 0.00002 LTC. Additional cost: 0.00001 LTC.',
+        )).toBeTruthy();
+        expect(replaceTx).toHaveBeenCalledTimes(1);
+        expect(replaceTx.mock.calls[0][0]).toMatchObject({ strategy: 'speedup', preview: true });
+
+        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        await waitFor(() => expect(replaceTx).toHaveBeenCalledTimes(2));
+        expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
     });
 
     it('withdraws the offer once the transaction has been replaced', async () => {
