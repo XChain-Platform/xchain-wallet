@@ -42,7 +42,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
-import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
+import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
@@ -235,8 +235,6 @@ function nativeTickerFor(descriptor) {
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
 }
 
-const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
-
 function utxoKey(utxo) {
     return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
 }
@@ -267,28 +265,27 @@ function utxoOutpoint(utxo) {
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
 // for the right coin on the wrong network, or simply mistyped, is unspendable:
-// the tokens are gone. `isValidAddressForChain` decodes the base58check checksum
+// the tokens are gone. `addressValidationError` decodes the base58check checksum
 // (or bech32) against that coin+network's parameters, so it catches all three -
 // unlike a leading-character guess, which passes any typo that preserves the
 // first letter and cannot tell mainnet from testnet on the shared 'm'/'n'/'2'
 // leaders. Returns an error string, or null when the address is good (or when
 // there is not yet a chain to validate against).
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
 function destinationAddressError(address, descriptor) {
     const a = (address || '').trim();
-    if (!a || !descriptor?.coin || !descriptor?.networkKind) return null;
-    if (isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) return null;
-
-    const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    // Name the coin it *does* look like when that's unambiguous: a much more
-    // useful error than "invalid" when someone pastes the wrong address.
-    const detected = detectAddressCoin(a);
-    if (detected && detected !== descriptor.coin) {
-        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+    if (a && descriptor?.coin && descriptor?.networkKind
+        && !isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) {
+        // A different coin gets the plain "looks like" wording; the same coin on
+        // another network, or a checksum typo, takes the network-aware copy.
+        const detected = detectAddressCoin(a);
+        if (detected && detected !== descriptor.coin) {
+            const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+            return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+        }
     }
-    const where = descriptor.networkKind === 'mainnet'
-        ? chainName
-        : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return addressValidationError(address, descriptor);
 }
 
 function normalizePastedRecipient(value) {

@@ -15,14 +15,16 @@
 // the marker is rejected like any other non-address.
 
 import { describe, it, expect } from 'vitest';
-import { base58check } from '@scure/base';
+import { base58check, bech32, bech32m } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
 import {
     isValidAddressForChain,
     isValidAddressAnyNetwork,
     detectAddressCoin,
     detectAddressChain,
+    addressValidationError,
 } from '../../../../packages/core/src/shared/utils/addressValidation.js';
+import { addressTypeHint } from '../../../../packages/core/src/shared/routes/AddAddressModal.jsx';
 import {
     MOCK_ADDRESS_PREFIXES,
     isDevMockAddress,
@@ -137,6 +139,73 @@ const HASH160 = new Uint8Array(20).fill(7);
 function legacy(version) {
     return base58check(sha256).encode(new Uint8Array([version, ...HASH160]));
 }
+
+function segwit(hrp) {
+    return bech32.encode(hrp, [0, ...bech32.toWords(HASH160)]);
+}
+
+function taproot(hrp) {
+    const program = new Uint8Array(32).fill(7);
+    return bech32m.encode(hrp, [1, ...bech32m.toWords(program)]);
+}
+
+const FORMAT_CASES = [
+    ['bitcoin', 'mainnet', 'p2pkh', legacy(0x00), '1...'],
+    ['bitcoin', 'mainnet', 'p2sh-p2wpkh', legacy(0x05), '3...'],
+    ['bitcoin', 'mainnet', 'p2wpkh', segwit('bc'), 'bc1q...'],
+    ['bitcoin', 'mainnet', 'p2tr', taproot('bc'), 'bc1p...'],
+    ['bitcoin', 'testnet', 'p2pkh', legacy(0x6f), 'm.../n...'],
+    ['bitcoin', 'testnet', 'p2sh-p2wpkh', legacy(0xc4), '2...'],
+    ['bitcoin', 'testnet', 'p2wpkh', segwit('tb'), 'tb1q...'],
+    ['bitcoin', 'testnet', 'p2tr', taproot('tb'), 'tb1p...'],
+    ['bitcoin', 'regtest', 'p2pkh', legacy(0x6f), 'm.../n...'],
+    ['bitcoin', 'regtest', 'p2sh-p2wpkh', legacy(0xc4), '2...'],
+    ['bitcoin', 'regtest', 'p2wpkh', segwit('bcrt'), 'bcrt1q...'],
+    ['bitcoin', 'regtest', 'p2tr', taproot('bcrt'), 'bcrt1p...'],
+    ['litecoin', 'mainnet', 'p2pkh', legacy(0x30), 'L...'],
+    ['litecoin', 'mainnet', 'p2sh-p2wpkh', legacy(0x32), 'M...'],
+    ['litecoin', 'mainnet', 'p2wpkh', segwit('ltc'), 'ltc1...'],
+    ['litecoin', 'testnet', 'p2pkh', legacy(0x6f), 'm.../n...'],
+    ['litecoin', 'testnet', 'p2sh-p2wpkh', legacy(0xc4), '2...'],
+    ['litecoin', 'testnet', 'p2wpkh', segwit('tltc'), 'tltc1...'],
+    ['litecoin', 'regtest', 'p2pkh', legacy(0x6f), 'm.../n...'],
+    ['litecoin', 'regtest', 'p2sh-p2wpkh', legacy(0xc4), '2...'],
+    ['litecoin', 'regtest', 'p2wpkh', segwit('rltc'), 'rltc1...'],
+    ['dogecoin', 'mainnet', 'p2pkh', legacy(0x1e), 'D...'],
+    ['dogecoin', 'testnet', 'p2pkh', legacy(0x71), 'n...'],
+    ['dogecoin', 'regtest', 'p2pkh', legacy(0x6f), 'm.../n...'],
+];
+
+describe('address formats', () => {
+    it.each(FORMAT_CASES)('validates and displays %s %s %s', (coin, network, type, address, hint) => {
+        expect(isValidAddressForChain(address, coin, network)).toBe(true);
+        expect(addressTypeHint({ coin, networkKind: network }, type)).toBe(hint);
+        if (type === 'p2wpkh' || type === 'p2tr') expect(address).toBe(address.toLowerCase());
+    });
+});
+
+describe('addressValidationError', () => {
+    const descriptor = (coin, networkKind) => ({ coin, networkKind });
+
+    it.each([
+        ['Bitcoin mainnet on regtest', legacy(0x00), descriptor('bitcoin', 'regtest'), 'This is a Bitcoin mainnet address, not a Bitcoin regtest address.'],
+        ['Bitcoin mainnet bech32 on testnet', segwit('bc'), descriptor('bitcoin', 'testnet'), 'This is a Bitcoin mainnet address, not a Bitcoin testnet address.'],
+        ['Litecoin mainnet on Bitcoin', legacy(0x30), descriptor('bitcoin', 'mainnet'), 'This is a Litecoin mainnet address, not a Bitcoin mainnet address.'],
+        ['Dogecoin testnet on mainnet', legacy(0x71), descriptor('dogecoin', 'mainnet'), 'This is a Dogecoin testnet address, not a Dogecoin mainnet address.'],
+        ['shared legacy test/regtest prefix', legacy(0x6f), descriptor('bitcoin', 'mainnet'), 'This address belongs to testnet or regtest, not Bitcoin mainnet.'],
+    ])('names the source network for %s', (_name, address, target, message) => {
+        expect(addressValidationError(address, target)).toBe(message);
+    });
+
+    it.each([
+        ['base58 checksum', `${legacy(0x00).slice(0, -1)}3`],
+        ['bech32 checksum', `${segwit('bc').slice(0, -1)}p`],
+        ['plain text', 'not an address'],
+    ])('uses plain typo copy for a bad %s', (_name, address) => {
+        expect(addressValidationError(address, descriptor('bitcoin', 'mainnet')))
+            .toBe('This address has a typo. Check it and try again.');
+    });
+});
 
 describe('detectAddressChain', () => {
     it('reads coin and network from a bech32 HRP', () => {
