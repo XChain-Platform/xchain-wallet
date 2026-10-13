@@ -148,6 +148,28 @@ describe('deriveMasterKeyAsync with a native provider', () => {
         expect(provider).toHaveBeenCalledTimes(3);
     });
 
+    it('does not send a password to a provider unregistered during its check', async () => {
+        let finishCheck;
+        const sentinel = bytesToBase64(new Uint8Array(KDF_KEY_LENGTH).fill(0xab));
+        const provider = vi.fn((req) => {
+            if (provider.mock.calls.length === 1) {
+                return new Promise((resolve) => {
+                    finishCheck = () => resolve(referenceAnswer(req));
+                });
+            }
+            return Promise.resolve(sentinel);
+        });
+        setNativeArgon2id(provider);
+
+        const pending = deriveMasterKeyAsync(SMALL.password, toParams(SMALL));
+        expect(provider).toHaveBeenCalledTimes(1);
+        setNativeArgon2id(null);
+        finishCheck();
+
+        expect(hex(await pending)).toBe(SMALL.keyHex);
+        expect(provider).toHaveBeenCalledTimes(1);
+    });
+
     it('re-encodes the salt as canonical base64 before it crosses to native code', async () => {
         const provider = providerWith(async (req) => referenceAnswer(req));
         setNativeArgon2id(provider);
@@ -227,6 +249,15 @@ describe('deriveMasterKeyAsync validates before any provider call', () => {
         const provider = vi.fn();
         setNativeArgon2id(provider);
         await expect(deriveMasterKeyAsync('p', null)).rejects.toBeInstanceOf(KdfParamError);
+        expect(provider).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-string passwords before sync or native derivation', async () => {
+        const provider = vi.fn(async (req) => referenceAnswer(req));
+        setNativeArgon2id(provider);
+
+        expect(() => deriveMasterKey(undefined, base)).toThrow(TypeError);
+        await expect(deriveMasterKeyAsync(null, base)).rejects.toThrow(TypeError);
         expect(provider).not.toHaveBeenCalled();
     });
 });
