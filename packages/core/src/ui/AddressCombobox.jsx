@@ -20,6 +20,20 @@ const ICONS = {
     addresses: { Component: ScanIcon, defaultLabel: 'Choose address' },
 };
 
+function inspectClipboardPaste(value) {
+    const edges = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
+    const hiddenCharacters = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+    const normalized = String(value ?? '').replace(edges, '');
+    const hidden = hiddenCharacters.test(normalized);
+    return hidden
+        ? {
+            ok: false,
+            value: normalized,
+            error: 'Pasted text contains hidden characters. Check it and try again.',
+        }
+        : { ok: true, value: normalized, error: null };
+}
+
 /**
  * AddressCombobox: destination input for Send / authoring forms, with
  * autocomplete from contacts + recent send history. §29.4 + §21.6.
@@ -79,6 +93,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         style,
         onFocus: onInputFocus,
         onKeyDown: onInputKeyDown,
+        error,
         ...rest
     },
     ref,
@@ -86,6 +101,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const listboxId = useId();
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [pasteError, setPasteError] = useState('');
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -170,6 +186,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
                 value={value}
                 onChange={(e) => {
+                    setPasteError('');
                     onChange(e);
                     setOpen(true);
                     setActiveIndex(-1);
@@ -197,6 +214,8 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                     setOpen(true);
                     setActiveIndex(-1);
                 }}
+                pasteGuard
+                error={pasteError || error}
                 {...rest}
             />
             {IconComponent ? (
@@ -220,15 +239,21 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 <ClipboardPasteButton
                     disabled={disabled}
                     onPaste={(text) => {
+                        const inspected = inspectClipboardPaste(text);
+                        if (!inspected.ok) {
+                            setPasteError(inspected.error);
+                            return;
+                        }
+                        setPasteError('');
                         const pasteEvent = {
-                            clipboardData: { getData: () => text },
+                            clipboardData: { getData: () => inspected.value },
                             defaultPrevented: false,
                             currentTarget: inputRef.current,
                             target: inputRef.current,
                             preventDefault() { this.defaultPrevented = true; },
                         };
                         onPaste?.(pasteEvent);
-                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: text } });
+                        if (!pasteEvent.defaultPrevented) onChange({ target: { value: inspected.value } });
                         setOpen(true);
                         setActiveIndex(-1);
                     }}
