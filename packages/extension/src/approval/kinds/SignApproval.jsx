@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -116,6 +117,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    useBackHandler(onReject, busy);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
     const [settings, setSettings] = useState(/** @type {any | null} */ (null));

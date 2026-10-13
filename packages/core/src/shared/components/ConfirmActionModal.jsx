@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -38,6 +38,7 @@ import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -204,6 +205,8 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    const pageRef = useRef(null);
+    useFocusTrap(pageRef, { active: open });
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -232,7 +235,7 @@ export function ConfirmActionModal({
     );
 
     return (
-        <Screen variant={screenVariant} header={header}>
+        <Screen rootRef={pageRef} variant={screenVariant} header={header}>
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
