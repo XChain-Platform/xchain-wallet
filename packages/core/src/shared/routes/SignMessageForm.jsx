@@ -23,7 +23,7 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, FormPage, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, CopyButton, FormPage, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -409,75 +409,31 @@ export function SignMessageForm({ walletId, onBack }) {
                     label="Chain"
                 />
             </div>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="sign-message-address"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Address
-                </label>
-                <select
-                    id="sign-message-address"
-                    value={addressId || ''}
-                    disabled={confirmAction.composing}
-                    onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
-                    aria-label="Address"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}
-                >
-                    <option value="" disabled>Pick an address</option>
-                    {addressOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                            {a.label ? `${a.label}: ` : ''}{a.address}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="sign-message-text"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Message
-                </label>
-                <textarea
-                    id="sign-message-text"
-                    value={message}
-                    disabled={confirmAction.composing}
-                    onChange={(e) => { setMessage(e.target.value); if (error) setError(null); }}
-                    placeholder="Type the message you want to sign…"
-                    rows={5}
-                    aria-label="Message"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontFamily: 'inherit',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
+            <Select
+                id="sign-message-address"
+                label="Address"
+                value={addressId || ''}
+                disabled={confirmAction.composing}
+                onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
+                aria-label="Address"
+            >
+                <option value="" disabled>Pick an address</option>
+                {addressOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                        {a.label ? `${a.label}: ` : ''}{a.address}
+                    </option>
+                ))}
+            </Select>
+            <Textarea
+                id="sign-message-text"
+                label="Message"
+                value={message}
+                disabled={confirmAction.composing}
+                onChange={(e) => { setMessage(e.target.value); if (error) setError(null); }}
+                placeholder="Type the message you want to sign…"
+                rows={5}
+                aria-label="Message"
+            />
             {/* The password lives on the confirm page, so the form does not ask
                 for it twice. Errors still surface here: the page is gone by the
                 time we render them. */}

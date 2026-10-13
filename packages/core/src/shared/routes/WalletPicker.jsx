@@ -126,6 +126,7 @@ export function WalletPicker({
                     const walletName = w.name || 'Unnamed wallet';
                     return (
                         <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
+                            {/* Keep the native button because the complete wallet row is the list selection target. */}
                             <button
                                 type="button"
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
@@ -162,8 +163,9 @@ export function WalletPicker({
                                 </span>
                             </button>
                             {onShowDetails ? (
-                                <button
+                                <Button
                                     type="button"
+                                    icon={null}
                                     className={pickerStyles.rowMenuBtn}
                                     aria-label={t('walletPicker.detailsFor', { wallet: walletName })}
                                     title={t('walletDetails.title')}
@@ -174,7 +176,7 @@ export function WalletPicker({
                                     }}
                                 >
                                     <Icon.InfoIcon />
-                                </button>
+                                </Button>
                             ) : null}
                         </div>
                     );

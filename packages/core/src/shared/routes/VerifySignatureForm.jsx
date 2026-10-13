@@ -26,6 +26,7 @@ import {
     Screen,
     Button,
     Input,
+    Textarea,
     ChainPicker,
     FormPage,
     PageHeader,
@@ -193,70 +194,25 @@ export function VerifySignatureForm({ onBack }) {
                 autoComplete="off"
                 placeholder={t('verifySignature.addressPlaceholder')}
             />
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-message"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    {t('verifySignature.message')}
-                </label>
-                <textarea
-                    id="verify-message"
-                    value={message}
-                    onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
-                    placeholder={t('verifySignature.messagePlaceholder')}
-                    rows={5}
-                    aria-label={t('verifySignature.message')}
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontFamily: 'inherit',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-signature"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    {t('verifySignature.signature')}
-                </label>
-                <textarea
-                    id="verify-signature"
-                    value={signature}
-                    onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
-                    placeholder={t('verifySignature.signaturePlaceholder')}
-                    rows={3}
-                    aria-label={t('verifySignature.signature')}
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
+            <Textarea
+                id="verify-message"
+                label={t('verifySignature.message')}
+                value={message}
+                onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.messagePlaceholder')}
+                rows={5}
+                aria-label={t('verifySignature.message')}
+            />
+            <Textarea
+                id="verify-signature"
+                label={t('verifySignature.signature')}
+                value={signature}
+                onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.signaturePlaceholder')}
+                rows={3}
+                aria-label={t('verifySignature.signature')}
+                style={{ fontFamily: 'var(--xc-font-mono)' }}
+            />
         </>
     );
 

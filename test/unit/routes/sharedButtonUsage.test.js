@@ -65,4 +65,27 @@ describe('shared route button usage', () => {
         expect(inputs).toHaveLength(4);
         expect(rationales).toHaveLength(inputs.length);
     });
+
+    it.each([
+        ['SellOwnershipForm', ['Button', 'Input'], 0],
+        ['Settings', ['Button', 'Input'], 1],
+        ['SignMessageForm', ['Button', 'CopyButton', 'Select', 'Textarea'], 0],
+        ['TokenPicker', ['Button', 'Input'], 0],
+        ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
+        ['WalletPicker', ['Button'], 1],
+    ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const primitive of primitives) {
+            expect(source).toMatch(new RegExp(`<${primitive}\\b`));
+        }
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        expect(source.match(/<button\b/g) || []).toHaveLength(nativeRowCount);
+        if (nativeRowCount > 0) {
+            expect(source).toMatch(/Keep the native button because the complete .+ row is the list .+ target\./);
+        }
+    });
 });

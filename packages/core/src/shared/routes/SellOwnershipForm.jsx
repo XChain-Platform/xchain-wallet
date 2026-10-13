@@ -649,17 +649,19 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     { id: 'order', label: 'Open order' },
                     { id: 'dispenser', label: 'Instant buy' },
                 ].map((opt) => (
-                    <button
+                    <Button
                         key={opt.id}
                         type="button"
+                        icon={null}
                         role="tab"
+                        tabIndex={mechanism === opt.id ? 0 : -1}
                         aria-selected={mechanism === opt.id}
                         className={`${receivePickerStyles.kindSegment} ${mechanism === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
                         style={{ flex: 1 }}
                         onClick={() => setMechanism(/** @type {'order' | 'dispenser'} */ (opt.id))}
                     >
                         {opt.label}
-                    </button>
+                    </Button>
                 ))}
             </div>
             <p className={styles.hint} style={{ marginTop: 0 }}>
@@ -678,17 +680,19 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     { id: 'coin', label: `Native coin (${coinTicker || 'coin'})` },
                     { id: 'token', label: 'Another token' },
                 ].map((opt) => (
-                    <button
+                    <Button
                         key={opt.id}
                         type="button"
+                        icon={null}
                         role="tab"
+                        tabIndex={getMode === opt.id ? 0 : -1}
                         aria-selected={getMode === opt.id}
                         className={`${receivePickerStyles.kindSegment} ${getMode === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
                         style={{ flex: 1 }}
                         onClick={() => setGetMode(/** @type {'coin' | 'token'} */ (opt.id))}
                     >
                         {opt.label}
-                    </button>
+                    </Button>
                 ))}
             </div>
 

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -417,26 +417,19 @@ export function Settings({
                 className={settingsStyles.page}
                 data-settings-layout="responsive"
                 toolbar={(
-                    <input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search settings…"
-                        aria-label="Search settings"
-                        style={{
-                            width: '100%',
-                            padding: 'var(--xc-space-2) var(--xc-space-3)',
-                            background: 'var(--xc-surface-raised)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-md)',
-                            color: 'var(--xc-text)',
-                            fontSize: 'var(--xc-text-md)',
-                        }}
-                    />
+                    <div className={settingsStyles.searchField}>
+                        <Input
+                            type="search"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search settings…"
+                            aria-label="Search settings"
+                        />
+                    </div>
                 )}
             >
                 {filtered.length === 0 ? (
@@ -527,6 +520,7 @@ function normalizeSearchText(value) {
 
 function DrillRow({ title, summary, onClick, buttonRef }) {
     return (
+        // Keep the native button because the complete drill row is the list action target.
         <button
             ref={buttonRef}
             type="button"

@@ -22,9 +22,8 @@ describe('WalletPicker row layout', () => {
             origin: 'demo',
             format: 'bip39',
         };
-        let view;
         await act(async () => {
-            view = render(
+            render(
                 <MessagingProvider
                     shell="popup"
                     messaging={{ listWallets: () => Promise.resolve([wallet]) }}
@@ -40,9 +39,7 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        const row = Array.from(view.container.querySelectorAll('button'))
-            .find((button) => button.textContent.includes(wallet.name));
-        expect(row).toBeTruthy();
+        const row = screen.getByRole('button', { name: new RegExp(`^${wallet.name}`) });
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
         expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
@@ -79,7 +76,7 @@ describe('WalletPicker row layout', () => {
             await Promise.resolve();
         });
 
-        expect(document.querySelector('button[aria-current="true"]')).toHaveTextContent('Primary');
+        expect(screen.getByRole('button', { current: true })).toHaveTextContent('Primary');
         const add = screen.getByRole('button', { name: 'Add wallet' });
         const manage = screen.getByRole('button', { name: 'Manage wallet' });
         expect(add.closest('footer')).toBeTruthy();
