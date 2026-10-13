@@ -13,7 +13,7 @@
 // as-is: wrapping it again doubled the opener on screen.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
@@ -63,17 +63,26 @@ function mountDividend(holders) {
 
 const hint = () => screen.queryByText(/load the holders/);
 
+async function advanceHolderRead() {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+    });
+}
+
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
 });
 
 describe('the Dividend holder-count hint on a failed holder read', () => {
     it('shows one read sentence with no explorer URL for an explorer 502', async () => {
+        vi.useFakeTimers();
         const holders = mountDividend(async () => {
             throw explorerError(`Explorer returned HTTP 502 for /RBTC/api/holders/${TICK}`);
         });
+        await advanceHolderRead();
 
-        await waitFor(() => expect(hint()).toBeTruthy(), { timeout: 4000 });
+        expect(hint()).toBeTruthy();
         const text = hint().textContent;
         expect(text).toMatch(/^Couldn't load the holders\. /);
         expect(text.match(/Couldn't load/g)).toHaveLength(1);
@@ -83,9 +92,11 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
     });
 
     it('keeps a plain person-written reason after a single opener', async () => {
+        vi.useFakeTimers();
         mountDividend(async () => { throw new Error('the token has no holders yet'); });
+        await advanceHolderRead();
 
-        await waitFor(() => expect(hint()).toBeTruthy(), { timeout: 4000 });
+        expect(hint()).toBeTruthy();
         expect(hint().textContent)
             .toMatch(/^Couldn't load the holders\. the token has no holders yet/);
         expect(hint().textContent.match(/Couldn't load/g)).toHaveLength(1);

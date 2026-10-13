@@ -317,7 +317,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
     });
 
     it('says nothing when the venue will not quote a fee, rather than guessing one', async () => {
-        mount({ feeQuote: { supported: false } });
+        const messaging = mount({ feeQuote: { supported: false } });
         await waitFor(
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
@@ -334,8 +334,10 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
+        vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '1' } });
-        expect(await screen.findByText(/protocol fee is 0.05 XCHAIN/i, {}, WAIT))
+        await advanceFeeQuote();
+        expect(screen.getByText(/protocol fee is 0.05 XCHAIN/i))
             .toBeInTheDocument();
         expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
     });

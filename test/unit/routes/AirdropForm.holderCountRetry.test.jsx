@@ -199,7 +199,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         expect(preview()?.textContent).toMatch(/holder counts unavailable for 1 token/i);
         expect(screen.getByText('Holder count details (1)')).toBeTruthy();
         expect(screen.getByText(/HTTP 429 rate limited/)).toBeTruthy();
-        expect(holders.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(holders).toHaveBeenCalledTimes(2);
     });
 
     it('offers a manual retry after both automatic attempts fail', async () => {
