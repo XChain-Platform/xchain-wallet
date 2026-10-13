@@ -330,6 +330,14 @@ export function Settings({
             props: { onNavigateToMint },
             summary: developerSummary(settings),
         },
+        ...(desktopUpdaterBridge() ? [{
+            id: 'updates',
+            title: 'Updates',
+            description: 'Check for a new version of the desktop wallet.',
+            keywords: 'updates update check for updates new version upgrade latest release',
+            kind: 'panel',
+            Component: UpdateCheckPanel,
+        }] : []),
         {
             id: 'about',
             title: 'About',
@@ -558,6 +566,90 @@ function DrillRow({ title, summary, onClick, buttonRef }) {
                 </span>
             </span>
         </button>
+    );
+}
+
+/**
+ * The desktop shell's updater bridge, or null in every other shell.
+ * @returns {{ onEvent: (cb: (e: any) => void) => (() => void), install: (action?: string) => Promise<any> } | null}
+ */
+function desktopUpdaterBridge() {
+    const bridge = typeof window === 'undefined' ? null : window.xchainWalletUpdater;
+    return bridge && typeof bridge.install === 'function' && typeof bridge.onEvent === 'function'
+        ? bridge
+        : null;
+}
+
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Check for updates. Runs the same visible check as the app menu item (main's
+ * 'check' action) and shows its outcome. Every sentence is a constant; the
+ * only feed-derived value shown is a version that parses as plain semver.
+ */
+function UpdateCheckPanel() {
+    // 'idle' | 'checking' | 'current' | 'available' | 'error'
+    const [state, setState] = useState('idle');
+    const [version, setVersion] = useState(/** @type {string | null} */ (null));
+    const pending = useRef(false);
+
+    useEffect(() => {
+        const bridge = desktopUpdaterBridge();
+        if (!bridge) return undefined;
+        const unsubscribe = bridge.onEvent((event) => {
+            if (!pending.current) return;
+            const type = event?.type;
+            if (type === 'not-available' && event?.userInitiated) {
+                pending.current = false;
+                setState('current');
+            } else if (type === 'available') {
+                const next = String(event?.info?.version ?? '');
+                pending.current = false;
+                setVersion(SEMVER.test(next) ? next : null);
+                setState('available');
+            } else if (type === 'error' && event?.userInitiated) {
+                pending.current = false;
+                setState('error');
+            }
+        });
+        return () => { unsubscribe?.(); };
+    }, []);
+
+    const check = useCallback(() => {
+        const bridge = desktopUpdaterBridge();
+        if (!bridge || pending.current) return;
+        pending.current = true;
+        setState('checking');
+        Promise.resolve(bridge.install('check'))
+            .then((result) => {
+                // Events normally settle the state first; a refusal never emits one.
+                if (result && result.ok === false && pending.current) {
+                    pending.current = false;
+                    setState('error');
+                }
+            })
+            .catch(() => {
+                pending.current = false;
+                setState('error');
+            });
+    }, []);
+
+    const message = {
+        checking: 'Checking for updates…',
+        current: 'You are up to date.',
+        available: version ? `Version ${version} is available.` : 'A new version is available.',
+        error: 'Could not check for updates. Try again later.',
+    }[state];
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+            <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
+                Check for updates
+            </Button>
+            <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                {message || ''}
+            </span>
+        </div>
     );
 }
 
