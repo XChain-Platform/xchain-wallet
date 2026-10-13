@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
+import { i18n } from '@xchain-wallet/core';
 import { Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
@@ -16,6 +17,7 @@ import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
 import styles from './approval.module.css';
 
+const { t } = i18n;
 const SIGN_APPROVAL_KINDS = new Set([
     'signMessage',
     'signPsbt',
@@ -81,7 +83,7 @@ function ApprovalRoute() {
     if (!data) {
         return (
             <Screen variant="small">
-                <p aria-live="polite">Loading approval request…</p>
+                <p aria-live="polite">{t('extension.approval.loading')}</p>
             </Screen>
         );
     }
@@ -93,7 +95,7 @@ function ApprovalRoute() {
         return (
             <Screen variant="popup">
                 <div role="alert" className={styles.error}>
-                    Unsupported approval request type.
+                    {t('extension.approval.unsupported')}
                 </div>
             </Screen>
         );

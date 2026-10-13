@@ -19,6 +19,11 @@ const sharedSources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const extensionSources = import.meta.glob(
+    '../../packages/extension/src/**/*.jsx',
+    { query: '?raw', import: 'default', eager: true },
+);
+
 const shellSources = import.meta.glob(
     [
         '../../packages/desktop/renderer/**/*.jsx',
@@ -29,13 +34,22 @@ const shellSources = import.meta.glob(
 );
 
 describe('shipping JSX localization', () => {
-    test('localized shared screens and shell code keep user-facing copy in the locale dictionary', () => {
+    test('localized shared screens, extension screens and shell code keep user-facing copy in the locale dictionary', () => {
+        expect(Object.keys(extensionSources)).toEqual(expect.arrayContaining([
+            '../../packages/extension/src/approval/Router.jsx',
+            '../../packages/extension/src/approval/kinds/ConnectApproval.jsx',
+            '../../packages/extension/src/approval/kinds/SignApproval.jsx',
+            '../../packages/extension/src/popup/App.jsx',
+        ]));
         const violations = [];
         const missingKeys = [];
 
         const localizedSources = {
             ...Object.fromEntries(
                 Object.entries(sharedSources).filter(([, source]) => /\bt\s*\(/.test(source)),
+            ),
+            ...Object.fromEntries(
+                Object.entries(extensionSources).filter(([, source]) => /\bt\s*\(/.test(source)),
             ),
             ...shellSources,
         };

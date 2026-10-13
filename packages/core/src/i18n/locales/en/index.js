@@ -498,6 +498,74 @@ export const en = {
         '{count, plural, one {# block} other {# blocks}}',
     'tokenDetail.fileCount':
         '{count, plural, one {# file} other {# files}}',
+    // --- browser extension ---------------------------------------
+    'extension.approval.loading': 'Loading approval request…',
+    'extension.approval.unsupported': 'Unsupported approval request type.',
+    'extension.approval.reject': 'Reject',
+    'extension.approval.requestingSite': 'Requesting site',
+
+    'extension.connect.title': 'Connect to XChain Wallet?',
+    'extension.connect.approve': 'Connect',
+    'extension.connect.declaredName': 'The site calls itself',
+    'extension.connect.lede': 'This site wants to connect to your wallet.',
+    'extension.connect.permissions': 'Requested permissions',
+    'extension.connect.permission.accounts':
+        'View the accounts you select, including their addresses and balances',
+    'extension.connect.permission.chains': 'Use only the chains you select below',
+    'extension.connect.permission.signing':
+        'Ask separately before signing any message or transaction',
+    'extension.connect.chains': 'Chains',
+    'extension.connect.chains.requestedHint':
+        'Choose from the chains this site requested. You can change this later.',
+    'extension.connect.chains.hint':
+        'Pick which chains this site can see. You can change this later.',
+    'extension.connect.chains.allow': 'Allow {chain} {network}',
+    'extension.connect.accounts': 'Accounts',
+    'extension.connect.accounts.hint': 'Pick which accounts this site can see.',
+    'extension.connect.accounts.share': 'Share {name}',
+    'extension.connect.accounts.primary':
+        'This site can see your primary account.',
+
+    'extension.sign.source': 'Source',
+    'extension.sign.declaredName': 'The site calls itself: {name}',
+    'extension.sign.signInAs': 'Sign in as',
+    'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
+    'extension.sign.checkingWalletMode': 'Checking wallet mode…',
+    'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
+    'extension.sign.alwaysAllow':
+        'Always allow this site. You can revoke this in Connected sites.',
+    'extension.sign.message': 'Message',
+    'extension.sign.warningNoun.message': 'message',
+    'extension.sign.signer': 'Signer',
+    'extension.sign.signingPaths': 'Signing paths',
+    'extension.sign.action': 'Action',
+    'extension.sign.action.reading': 'Reading this action…',
+    'extension.sign.action.unavailable':
+        'This action could not be described. Approve only if you know exactly what it does.',
+    'extension.sign.from': 'From',
+    'extension.sign.details': 'Details ({count})',
+    'extension.sign.signInTo': 'Sign in to',
+    'extension.sign.warningNoun.signIn': 'sign-in',
+    'extension.sign.oneTimeCode': 'One-time code',
+    'extension.sign.controlCharacters':
+        'Control characters are displayed safely. The original {noun} text is what you will sign.',
+    'extension.sign.technicalDetails': 'Technical details',
+    'extension.sign.coSignRequest': 'Co-sign request',
+    'extension.sign.decodingRequest': 'Decoding request…',
+    'extension.sign.trustSource': 'Only approve it if you trust the source.',
+    'extension.sign.agentAccount': 'Agent account',
+    'extension.sign.coSignerAccount': 'Co-signer account',
+    'extension.sign.to': 'To',
+    'extension.sign.policyRefusal': 'The co-signer will refuse it even if you approve.',
+    'extension.sign.confirmThreshold':
+        'Above the policy confirm-threshold: review carefully before approving.',
+
+    'extension.popup.markets.selectAsset': 'Select coin or token',
+    'extension.popup.markets.back': 'Back to markets',
+    'extension.popup.privateKeyQr': 'Private key QR',
+    'extension.popup.messageSent': 'Message sent',
+    'extension.popup.cannotOpenLink': 'Cannot open link',
+    'extension.popup.unknownState': 'unknown state "{state}"',
 
     // --- errors ---------------------------------------------------
 };
