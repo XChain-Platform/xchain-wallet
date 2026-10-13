@@ -33,6 +33,7 @@
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
 import { useState } from 'react';
+import { Input } from '../../../ui/Input.jsx';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
 import { useMessaging } from '../../useMessaging.js';
@@ -46,16 +47,6 @@ import {
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
 import { ROW, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
-
-const TIME_INPUT = {
-    background: 'var(--xc-surface-2, transparent)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontFamily: 'inherit',
-    fontSize: 'var(--xc-text-sm)',
-};
 
 const PERMISSION_BUTTON = {
     background: 'var(--xc-accent, #3a7afe)',
@@ -379,19 +370,17 @@ function QuietHoursRow({ settings, update }) {
             {qh.enabled ? (
                 <div style={MANAGER}>
                     <div style={ALERT_ROW}>
-                        <label htmlFor="quiet-hours-start">From</label>
-                        <input
+                        <Input
                             id="quiet-hours-start"
+                            label="From"
                             type="time"
-                            style={TIME_INPUT}
                             value={qh.start}
                             onChange={(e) => onTimeChange('start', e.target.value)}
                         />
-                        <label htmlFor="quiet-hours-end">To</label>
-                        <input
+                        <Input
                             id="quiet-hours-end"
+                            label="To"
                             type="time"
-                            style={TIME_INPUT}
                             value={qh.end}
                             onChange={(e) => onTimeChange('end', e.target.value)}
                         />

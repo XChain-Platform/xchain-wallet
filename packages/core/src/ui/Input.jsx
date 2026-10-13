@@ -25,7 +25,9 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * Date-time fields (`type="datetime-local"`) always carry a line naming the
  * device time zone the value is read in, plus the entered moment in UTC,
  * because the browser control shows no zone and every expiration and
- * deadline form parses it as local time.
+ * deadline form parses it as local time. Date, date-time, and time fields
+ * retain their native picker and report required, malformed, min, max, and
+ * step validity errors through the same accessible error slot.
  *
  * @typedef {object} InputOwnProps
  * @property {string} [label]
@@ -56,6 +58,7 @@ export const Input = forwardRef(function Input(
         onKeyUp,
         onFocus,
         onBlur,
+        onInvalid,
         'aria-invalid': externalInvalid,
         'aria-describedby': externalDescribedBy,
         ...rest
@@ -65,7 +68,10 @@ export const Input = forwardRef(function Input(
     const autoId = useId();
     const inputId = id || autoId;
     const [dismissedError, setDismissedError] = useState(null);
-    const visibleError = error && error !== dismissedError ? error : null;
+    const isDateOrTime = type === 'date' || type === 'datetime-local' || type === 'time';
+    const [dateError, setDateError] = useState(null);
+    const callerError = error && error !== dismissedError ? error : null;
+    const visibleError = dateError || callerError;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
@@ -127,12 +133,21 @@ export const Input = forwardRef(function Input(
     };
     const handleBlur = (event) => {
         if (isPassword) setFocused(false);
+        if (isDateOrTime) setDateError(dateValidationMessage(event.currentTarget));
         onBlur?.(event);
     };
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
+        if (isDateOrTime) setDateError(null);
         if (error) setDismissedError(error);
         onChange?.(event);
+    };
+    const handleInvalid = (event) => {
+        if (isDateOrTime) {
+            setDateError(dateValidationMessage(event.currentTarget));
+            event.preventDefault();
+        }
+        onInvalid?.(event);
     };
 
     return (
@@ -162,6 +177,7 @@ export const Input = forwardRef(function Input(
                 onKeyUp={handleKeyUp}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                onInvalid={handleInvalid}
                 {...rest}
             />
             {hint && !visibleError ? (
@@ -191,3 +207,24 @@ export const Input = forwardRef(function Input(
         </div>
     );
 });
+
+function dateValidationMessage(input) {
+    const { validity, type } = input;
+    if (!validity || validity.valid) return null;
+
+    const valueName = type === 'time' ? 'time' : type === 'date' ? 'date' : 'date and time';
+    if (validity.valueMissing) return `Choose a ${valueName}.`;
+    if (validity.badInput || validity.typeMismatch) return `Enter a complete, valid ${valueName}.`;
+    if (validity.rangeUnderflow) {
+        return `Choose a ${valueName} on or after ${readableDateConstraint(input.min)}.`;
+    }
+    if (validity.rangeOverflow) {
+        return `Choose a ${valueName} on or before ${readableDateConstraint(input.max)}.`;
+    }
+    if (validity.stepMismatch) return `Choose a ${valueName} that matches the allowed interval.`;
+    return `Enter a valid ${valueName}.`;
+}
+
+function readableDateConstraint(value) {
+    return String(value || '').replace('T', ' at ');
+}

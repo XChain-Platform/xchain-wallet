@@ -14,6 +14,7 @@ import {
     ChainBadge,
     EmptyState,
     Icon,
+    Input,
     ListPage,
     PageHeader,
     Screen,
@@ -1451,22 +1452,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 />
 
                 <div className={styles.dateRow}>
-                    <input
+                    <Input
                         type="date"
                         aria-label={t('history.filters.fromDate')}
                         value={dateFrom}
                         max={dateTo || undefined}
                         onChange={(ev) => updateDateFrom(ev.target.value)}
-                        className={styles.dateInput}
                     />
                     <span className={styles.dateSep}>→</span>
-                    <input
+                    <Input
                         type="date"
                         aria-label={t('history.filters.toDate')}
                         value={dateTo}
                         min={dateFrom || undefined}
                         onChange={(ev) => updateDateTo(ev.target.value)}
-                        className={styles.dateInput}
                     />
                 </div>
 
