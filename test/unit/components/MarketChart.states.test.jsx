@@ -37,6 +37,7 @@ import { MarketChart } from '../../../packages/core/src/shared/components/Market
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     document.documentElement.removeAttribute('data-xc-theme');
     vi.clearAllMocks();
 });
@@ -62,14 +63,14 @@ describe('MarketChart states and timeframes', () => {
         const request = deferred();
         renderChart(vi.fn(() => request.promise));
 
-        expect(screen.getByRole('status')).toHaveTextContent('Loading price chart…');
+        expect(screen.getByRole('status', { name: 'Loading price chart' })).toBeInTheDocument();
         expect(screen.queryByText('No trades yet in this market.')).toBeNull();
         expect(screen.getByRole('img').parentElement).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => request.resolve([]));
 
         expect(await screen.findByText('No trades yet in this market.')).toBeInTheDocument();
-        expect(screen.queryByText('Loading price chart…')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading price chart' })).toBeNull();
     });
 
     it('offers every supported timeframe and rebuckets the loaded history', async () => {
@@ -212,6 +213,23 @@ describe('MarketChart states and timeframes', () => {
 
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the price chart.");
         expect(screen.queryByText('No trades yet in this market.')).toBeNull();
-        expect(screen.queryByText('Loading price chart…')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading price chart' })).toBeNull();
+    });
+
+    it('times out a stalled history request and retries it', async () => {
+        vi.useFakeTimers();
+        const getMarketHistory = vi.fn()
+            .mockImplementationOnce(() => new Promise(() => {}))
+            .mockResolvedValueOnce([]);
+        renderChart(getMarketHistory);
+
+        expect(screen.getByRole('status', { name: 'Loading price chart' })).toBeInTheDocument();
+        await act(async () => vi.advanceTimersByTimeAsync(15_000));
+        expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the price chart.");
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByText('No trades yet in this market.')).toBeInTheDocument();
+        expect(getMarketHistory).toHaveBeenCalledTimes(2);
     });
 });

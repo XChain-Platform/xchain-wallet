@@ -29,12 +29,13 @@
 // blowing up MarketView.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { describeChartSeries } from './Sparkline.jsx';
+import { withRequestTimeout } from '../utils/requestTimeout.js';
 
 /**
  * @param {object} props
@@ -57,6 +58,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chartReady, setChartReady] = useState(false);
     const [chartUnavailable, setChartUnavailable] = useState(false);
+    const [retryKey, setRetryKey] = useState(0);
 
     const period = useMemo(
         () => PERIODS.find((p) => p.id === periodId) ?? PERIODS.find((p) => p.id === DEFAULT_PERIOD_ID),
@@ -183,7 +185,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         setLoading(true);
         setLoadError(null);
         setRawRows([]);
-        messaging.getMarketHistory({ chainId, tick1, tick2 })
+        withRequestTimeout(messaging.getMarketHistory({ chainId, tick1, tick2 }))
             .then((resp) => {
                 if (cancelled) return;
                 const real = extractRows(resp);
@@ -200,7 +202,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, retryKey]);
     // Rebucket + push into the series whenever rows or period change.
 
     useEffect(() => {
@@ -287,10 +289,17 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 aria-label={chartLabel}
             />
             {loading ? (
-                <StatusMessage variant="status">Loading price chart…</StatusMessage>
+                <div role="status" aria-label="Loading price chart">
+                    <Skeleton.List rows={3} avatar={false} rowHeight={28} />
+                </div>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{ label: 'Try again', onAction: () => setRetryKey((value) => value + 1) }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loading && !loadError && points.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
