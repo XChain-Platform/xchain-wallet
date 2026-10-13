@@ -56,7 +56,20 @@ beforeEach(() => {
     exitDemoWallet.mockClear();
     exitDemoWallet.mockResolvedValue({ reloaded: false });
 });
-afterEach(() => { cleanup(); clearDemoWalletId(); });
+afterEach(() => {
+    cleanup();
+    clearDemoWalletId();
+    vi.unstubAllGlobals();
+});
+
+function setNarrowViewport(narrow) {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+        matches: narrow,
+        media: '(max-width: 599px)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+    })));
+}
 
 describe('DemoBanner: the demo disclosure on Home', () => {
     it('renders nothing for a real wallet', () => {
@@ -91,6 +104,31 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         markDemoWallet('demo-1', { now: Date.now() });
         mount({ activeWalletId: 'demo-1' });
         expect(screen.getByRole('status').textContent).toMatch(/Auto-wipes in/);
+    });
+
+    it('starts collapsed on a narrow viewport and expands its details on request', async () => {
+        setNarrowViewport(true);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+
+        const toggle = screen.getByRole('button', { name: 'Details' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('button', { name: /exit demo/i })).toBeNull();
+
+        await act(async () => { toggle.click(); });
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
+    });
+
+    it('starts fully expanded on a wide viewport', () => {
+        setNarrowViewport(false);
+        markDemoWallet('demo-1');
+        mount({ activeWalletId: 'demo-1' });
+
+        expect(screen.getByRole('button', { name: 'Details' }))
+            .toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: /exit demo/i })).toBeVisible();
     });
 
     it('offers the exit affordance, and pressing it runs the shared teardown', async () => {
