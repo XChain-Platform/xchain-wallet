@@ -43,7 +43,7 @@ import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -248,6 +248,10 @@ function destinationAddressError(address, descriptor) {
         ? chainName
         : `${chainName} ${descriptor.networkKind}`;
     return `This is not a valid ${where} address. Check it for typos.`;
+}
+
+function normalizePastedRecipient(value) {
+    return String(value || '').replace(ZERO_WIDTH, '').trim();
 }
 
 /**
@@ -617,14 +621,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     // clipboard rewrote itself between paste and re-read.
     const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
     const [pasteWarning, setPasteWarning] = useState(/** @type {string | null} */ (null));
+    const [pastedRecipient, setPastedRecipient] = useState(/** @type {string | null} */ (null));
     const onAddressPaste = useCallback((e) => {
         const text = e?.clipboardData?.getData?.('text');
         if (typeof text !== 'string' || text.length === 0) return;
-        const trimmed = text.trim();
+        const trimmed = normalizePastedRecipient(text);
         const detected = uriLib.detectQrContent(trimmed, { chainRegistry });
+        const applyRecipient = (value, targetChainId = chainId) => {
+            const recipient = normalizePastedRecipient(value);
+            setToAddress(recipient);
+            setPastedRecipient(recipient || null);
+            const targetDescriptor = targetChainId ? chainRegistry.get(targetChainId) : null;
+            setToError(destinationAddressError(recipient, targetDescriptor));
+        };
         if (detected.type === 'bip21') {
             e.preventDefault();
-            setToAddress(detected.address);
             const parts = detected.parts;
             if (parts.amount) setAmount(parts.amount);
             const tickParam = parts.params?.tick;
@@ -639,6 +650,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (memoParam) setMemo(neutralizeControlText(memoParam));
             const requestChainId = uriLib.safeChainIdParam(parts.params?.chain);
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            applyRecipient(detected.address, requestChainId || chainId);
             if (requestDescriptor?.uriScheme === detected.scheme && requestChainId !== chainId) {
                 setChainId(requestChainId);
             }
@@ -649,7 +661,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             // (xchain:TBTC/send?to=…) yields intent.address rather than the
             // raw "TBTC/send" that the BIP21 fallback would surface.
             const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
-            if (intent.address) setToAddress(intent.address);
+            if (intent.address) applyRecipient(intent.address, intent.chainId || chainId);
             if (intent.tick) setTick(intent.tick.toUpperCase());
             if (intent.amount) setAmount(intent.amount);
             if (intent.memo) setMemo(intent.memo);
@@ -659,11 +671,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setPasteHint('Filled from xchain: URI');
         } else if (detected.type === 'wif') {
             e.preventDefault();
+            setPastedRecipient(null);
             setPasteHint(
                 'That looks like a private key, not an address. Use Settings → Import private key to import it.',
             );
         } else {
-            // raw address / unknown; let the default paste happen.
+            e.preventDefault();
+            applyRecipient(trimmed);
             setPasteHint(null);
         }
         setPasteWarning(null);
@@ -2725,6 +2739,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 value={toAddress}
                 onChange={(e) => {
                     setToAddress(e.target.value);
+                    setPastedRecipient(null);
                     if (toError) setToError(null);
                     if (pasteHint) setPasteHint(null);
                     if (pasteWarning) setPasteWarning(null);
@@ -2736,6 +2751,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />
+            {pastedRecipient ? (
+                <div className={styles.pastedRecipient} aria-live="polite">
+                    <span className={styles.pastedRecipientLabel}>Check pasted recipient</span>
+                    <AddressText address={pastedRecipient} highlight />
+                    <span className={styles.pastedRecipientHint}>Compare the first and last 6 characters.</span>
+                </div>
+            ) : null}
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
