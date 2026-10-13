@@ -74,6 +74,15 @@ export function ActionIntentSummary({ decoded, simulation }) {
                                 </div>
                             );
                         }
+                        // The balance could not be read at all (issue #74).
+                        if (d.beforeUnknown) {
+                            return (
+                                <div key={`${d.tick}-${i}`} className={styles.delta} data-before-unknown="true">
+                                    <span className={styles.deltaTick}>{d.tick}</span>
+                                    <span className={styles.deltaValues}>balance unknown</span>
+                                </div>
+                            );
+                        }
                         if (d.before === '' && d.after === '') {
                             if (!d.isProtocolFee) return null;
                             return (
