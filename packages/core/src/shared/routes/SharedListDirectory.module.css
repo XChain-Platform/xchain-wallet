@@ -1,0 +1,16 @@
+.filterRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.searchControl {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.searchControl > * {
+    margin-bottom: 0;
+}

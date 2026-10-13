@@ -40,10 +40,30 @@
     box-sizing: border-box;
 }
 
-.searchActions {
+.filterRow {
     display: flex;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: flex-end;
     gap: var(--xc-space-2);
+}
+
+.chainControl {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.queryControl {
+    flex: 2 1 18rem;
+    min-width: 0;
+}
+
+.chainControl > *,
+.queryControl > * {
+    margin-bottom: 0;
+}
+
+.searchHint {
+    margin: var(--xc-space-1) 0 0;
 }
 
 .resultGroup {

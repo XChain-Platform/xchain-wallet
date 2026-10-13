@@ -1,3 +1,24 @@
+.toolbarRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.toolbarNetwork {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.toolbarNetwork > * {
+    margin-bottom: 0;
+}
+
+.toolbarActions {
+    align-items: center;
+}
+
 .marketList {
     list-style: none;
     margin: 0;
