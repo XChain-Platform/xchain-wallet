@@ -117,6 +117,8 @@ installProcessErrorHandlers();
 // `win.loadFile(...)` target in createWindow: they are the same directory
 // said twice, and a drift between them locks the app out of its own IPC.
 const APP_ROOT = join(here, '..', 'renderer', 'dist');
+const MIN_VISUAL_ZOOM_LEVEL = 0.5;
+const MAX_VISUAL_ZOOM_LEVEL = 3;
 
 /**
  * Sender-trust gate for the privileged IPC channels, bound to this app's
@@ -525,6 +527,7 @@ export function createWindow(opts = {}) {
             nodeIntegration: false,
             sandbox: true,
             webSecurity: true,
+            zoomFactor: 1,
             // A console in the shipped wallet invites "paste this to fix
             // your wallet" scams against a page that holds unlocked keys;
             // the mobile shells ship with WebView debugging off for the
@@ -533,6 +536,13 @@ export function createWindow(opts = {}) {
         },
         show: false,
     });
+    void runMainTask(
+        () => win.webContents.setVisualZoomLevelLimits(
+            MIN_VISUAL_ZOOM_LEVEL,
+            MAX_VISUAL_ZOOM_LEVEL,
+        ),
+        'window zoom limits',
+    );
 
     // Renderer is built into packages/desktop/renderer/dist by Step 19's
     // packaging pipeline (vite build). In packaged mode that's what
