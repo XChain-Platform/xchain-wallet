@@ -259,6 +259,51 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         }
     });
 
+    it('does not apply an expired demo check to a replacement wallet', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        try {
+            markDemoWallet('demo-1', { ttlMs: 60_000, now: Date.now() });
+            const view = mount({ activeWalletId: 'demo-1' });
+            expect(exitDemoWallet).not.toHaveBeenCalled();
+
+            vi.setSystemTime(new Date('2026-10-13T12:02:00Z'));
+            view.rerender(
+                <MessagingProvider shell="popup" messaging={messaging}>
+                    <DemoBanner activeWalletId="real-wallet-1" />
+                </MessagingProvider>,
+            );
+
+            await act(async () => {});
+            expect(exitDemoWallet).not.toHaveBeenCalled();
+            expect(view.container).toBeEmptyDOMElement();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('ignores an exit completion after the active wallet changes', async () => {
+        markDemoWallet('demo-1');
+        const onExited = vi.fn();
+        let resolveExit;
+        exitDemoWallet.mockReturnValueOnce(new Promise((resolve) => { resolveExit = resolve; }));
+        const view = mount({ activeWalletId: 'demo-1', onExited });
+        fireEvent.click(screen.getByRole('button', { name: /exit demo/i }));
+        fireEvent.click(
+            within(screen.getByRole('dialog')).getByRole('button', { name: /exit demo/i }),
+        );
+
+        view.rerender(
+            <MessagingProvider shell="popup" messaging={messaging}>
+                <DemoBanner activeWalletId="real-wallet-1" onExited={onExited} />
+            </MessagingProvider>,
+        );
+        await act(async () => { resolveExit({ reloaded: false }); });
+
+        expect(onExited).not.toHaveBeenCalled();
+        expect(view.container).toBeEmptyDOMElement();
+    });
+
     it('mounts the extension banner in the layout notices slot, beside the AppHeader header, so it cannot consume route height', () => {
         expect(popupAppSource).toMatch(
             /<FullLayoutWithNav[\s\S]*?header=\{\(\s*<AppHeader[\s\S]*?\/>\s*\)\}\s*notices=\{\(\s*<>[\s\S]*?\{activeWalletId \? <DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/> : null\}\s*<\/>\s*\)\}\s*bottomBar=/,
