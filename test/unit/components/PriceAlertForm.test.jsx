@@ -14,14 +14,13 @@ describe('PriceAlertForm', () => {
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
         const action = screen.getByRole('button', { name: 'Add alert' });
+        const target = screen.getByLabelText('Target price');
 
         expect(action).toBeDisabled();
-        expect(action).toHaveAttribute('aria-describedby', 'price-alert-disabled-reason');
-        expect(screen.getByRole('status')).toHaveTextContent('Enter a target price to continue.');
-        expect(screen.getByLabelText('Target price')).toHaveAttribute(
-            'aria-describedby',
-            'price-alert-disabled-reason',
-        );
+        expect(action.getAttribute('aria-describedby')).toBe(target.getAttribute('aria-describedby'));
+        const reason = document.getElementById(target.getAttribute('aria-describedby'));
+        expect(reason).toBe(screen.getByRole('status'));
+        expect(reason).toHaveTextContent('Enter a target price to continue.');
     });
 
     it('normalizes grouped decimal input and submits the numeric target', async () => {

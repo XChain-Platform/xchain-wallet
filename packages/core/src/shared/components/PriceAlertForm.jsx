@@ -19,7 +19,7 @@
 // already met given `currentPrice` (the alert is still valid, it'll just
 // fire on the next check.
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
@@ -75,6 +75,7 @@ export function PriceAlertForm({
     initialAlert,
     onCancel,
 }) {
+    const disabledReasonId = `${useId()}-disabled-reason`;
     const cur = String(fiatCurrency || 'usd').toLowerCase();
     const editing = Boolean(initialAlert);
     const [chainId, setChainId] = useState(initialAlert?.chainId || lockedChainId || MAINNET_PRICE_CHAINS[0] || '');
@@ -154,7 +155,7 @@ export function PriceAlertForm({
                     placeholder="Price"
                     value={targetStr}
                     aria-invalid={invalidTarget}
-                    aria-describedby={disabledReason ? 'price-alert-disabled-reason' : undefined}
+                    aria-describedby={disabledReason ? disabledReasonId : undefined}
                     onChange={(e) => setTargetStr(normalizeDecimalEntry(e.target.value, targetStr))}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                     style={{ ...FIELD, width: 110 }}
@@ -164,7 +165,7 @@ export function PriceAlertForm({
                     type="button"
                     onClick={submit}
                     disabled={!valid || busy}
-                    aria-describedby={disabledReason ? 'price-alert-disabled-reason' : undefined}
+                    aria-describedby={disabledReason ? disabledReasonId : undefined}
                     style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}
                 >
                     {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
@@ -181,7 +182,7 @@ export function PriceAlertForm({
             </div>
             {disabledReason ? (
                 <span
-                    id="price-alert-disabled-reason"
+                    id={disabledReasonId}
                     role={invalidTarget ? 'alert' : 'status'}
                     style={invalidTarget ? { ...HINT, color: 'var(--xc-danger)' } : HINT}
                 >
