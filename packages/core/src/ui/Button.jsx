@@ -68,7 +68,9 @@ export function Button({
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
             {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
-            <span className={styles.label}>{children}</span>
+            {/* An icon-only button renders no label span: an empty flex item
+                plus the icon gap would pull the icon off centre. */}
+            {iconOnly ? null : <span className={styles.label}>{children}</span>}
         </button>
     );
 }

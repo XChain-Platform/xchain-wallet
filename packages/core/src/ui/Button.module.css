@@ -70,6 +70,8 @@
     width: var(--xc-button-height);
     min-width: var(--xc-button-height);
     padding-inline: 0;
+    gap: 0;
+    justify-content: center;
 }
 
 .block {
