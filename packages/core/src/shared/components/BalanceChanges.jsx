@@ -182,6 +182,26 @@ function DeltaRow({ delta, fiatRate, fiatCurrency, showFiat }) {
             </div>
         );
     }
+    // The balance itself could not be read (issue #74), so there is no
+    // before or after to print. Say that instead of projecting from zero.
+    if (!delta.isFee && delta.beforeUnknown) {
+        return (
+            <div
+                className={styles.row}
+                style={stackedRowStyle}
+                data-coin={delta.isCoin ? 'true' : undefined}
+                data-direction="flat"
+                data-before-unknown="true"
+            >
+                <dt className={styles.tick}>Your {delta.tick}</dt>
+                <dd className={styles.amount} style={amountStyle}>
+                    <span className={styles.feeNote} style={balanceLineStyle}>
+                        <span className={styles.before}>Balance unknown</span>
+                    </span>
+                </dd>
+            </div>
+        );
+    }
     // The paired balance row: `before` is real, `after` is not projectable
     // because the miner fee above is unknown. directionOf would read the empty
     // string as 0 and colour it as a total debit, so this branch comes first.
