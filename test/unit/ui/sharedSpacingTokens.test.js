@@ -27,6 +27,13 @@ const cardModules = [
     'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
+const tokenCleanupModules = [
+    'WalletIdentity.module.css',
+    'WatcherResultPanel.module.css',
+    'settings/BackupSection.module.css',
+    'settings/DeveloperModeSection.module.css',
+    'settings/ThisWalletSection.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -89,6 +96,20 @@ function rawCardPadding(file, css) {
     return violations;
 }
 
+function rawComponentGeometry(file, css) {
+    const geometryProperty = /^(?:flex|gap|row-gap|column-gap|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?|border-radius|font-size|(?:min-|max-)?(?:width|height)|outline-offset)$/;
+    const violations = [];
+
+    for (const declaration of withoutComments(css).matchAll(/(?:^|[;{])\s*([\w-]+)\s*:\s*([^;}]+)/gm)) {
+        const [, property, value] = declaration;
+        if (geometryProperty.test(property) && /\d+(?:\.\d+)?px/.test(value)) {
+            violations.push(`${file}: ${property}: ${value.trim()}`);
+        }
+    }
+
+    return violations;
+}
+
 it('detects token-sized spacing literals only in margin and padding declarations', () => {
     const spacingValues = new Set(['4', '8']);
     const css = `
@@ -139,6 +160,23 @@ it('lists raw pixel paddings on card-like module CSS rules', () => {
     }
 
     expect(violations).toEqual([]);
+});
+
+it('uses tokens for geometry in the requested component modules', () => {
+    const violations = tokenCleanupModules.flatMap((file) => rawComponentGeometry(
+        file,
+        readFileSync(join(componentsRoot, file), 'utf8'),
+    ));
+
+    expect(violations).toEqual([]);
+
+    const identity = readFileSync(join(componentsRoot, 'WalletIdentity.module.css'), 'utf8');
+    expect(identity).toContain('flex: 0 0 var(--xc-icon-xl);');
+    expect(identity).toContain('font-size: var(--xc-text-xs);');
+
+    const watcher = readFileSync(join(componentsRoot, 'WatcherResultPanel.module.css'), 'utf8');
+    const successRow = watcher.slice(watcher.indexOf('.successRow {'), watcher.indexOf('}', watcher.indexOf('.successRow {')));
+    expect(successRow).toContain('gap: var(--xc-space-1);');
 });
 
 it('uses the shared padding and radius for explicit card modules', () => {
