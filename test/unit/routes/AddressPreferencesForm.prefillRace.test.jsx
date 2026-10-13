@@ -25,7 +25,7 @@ const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'bcrt1qprefsprefsprefsprefsprefsprefsprefs00';
 const DEFAULTS = { onChain: false, feePreference: 0, requireMemo: 0, dispenserPreference: 1 };
 
-function mountWithSlowPrefill() {
+function mountWithSlowPrefill(reviewPreferences = DEFAULTS) {
     let resolvePrefill;
     const prefill = new Promise((resolve) => { resolvePrefill = resolve; });
     const target = {
@@ -39,7 +39,7 @@ function mountWithSlowPrefill() {
         // review baseline and answer at once.
         getAddressPreferences: vi.fn()
             .mockImplementationOnce(() => prefill)
-            .mockResolvedValue(DEFAULTS),
+            .mockResolvedValue(reviewPreferences),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -88,5 +88,33 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
         expect(destroy.checked).toBe(true);
         expect(screen.getByRole('checkbox', { name: 'Require a memo on any send to this address' }).checked).toBe(true);
         expect(screen.getByRole('radio', { name: 'Anyone may open a dispenser funded by this address' }).checked).toBe(true);
+    });
+
+    it('refreshes untouched fields at review without replacing a user choice', async () => {
+        const fresh = { onChain: true, feePreference: 2, requireMemo: 1, dispenserPreference: 2 };
+        const { resolvePrefill } = mountWithSlowPrefill(fresh);
+        const destroy = await screen.findByRole('radio', { name: 'Destroy the fee (reduces supply)' });
+
+        await resolvePrefill(DEFAULTS);
+        fireEvent.click(destroy);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        expect(screen.getByText('Memo required on incoming sends (unchanged)')).toBeTruthy();
+        expect(screen.getByText('Anyone may open a dispenser here (unchanged)')).toBeTruthy();
+    });
+
+    it('does not let the initial read replace a newer review-time read', async () => {
+        const fresh = { onChain: true, feePreference: 1, requireMemo: 1, dispenserPreference: 2 };
+        const { resolvePrefill } = mountWithSlowPrefill(fresh);
+        await screen.findByRole('button', { name: 'Review' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        expect(await screen.findByText('Destroy the fee (reduces supply) (unchanged)')).toBeTruthy();
+        await resolvePrefill(DEFAULTS);
+
+        expect(screen.getByText('Destroy the fee (reduces supply) (unchanged)')).toBeTruthy();
+        expect(screen.getByText('Memo required on incoming sends (unchanged)')).toBeTruthy();
+        expect(screen.getByText('Anyone may open a dispenser here (unchanged)')).toBeTruthy();
     });
 });

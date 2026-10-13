@@ -31,11 +31,12 @@
 //     sniffed type, so a saved-then-reopened file never round-trips
 //     through a wallet-origin document either.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 const MAX_TEXT_CHARS = 200_000;
 
@@ -96,6 +97,9 @@ function kindLabel(kind, mime) {
 export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }) {
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(onClose);
+    // Tab stays inside the dialog and focus returns to whatever opened it.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     const bytes = useMemo(() => decodeBase64(plaintextBase64), [plaintextBase64]);
     const sniffed = useMemo(() => sniffContent(bytes), [bytes]);
 
@@ -190,6 +194,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"

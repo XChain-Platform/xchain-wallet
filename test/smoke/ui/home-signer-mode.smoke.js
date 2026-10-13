@@ -100,7 +100,7 @@ assert.match(
 
 assert.match(
     homeSrc,
-    /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature \}\)/,
+    /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature[,}]/,
     'SignerHomeBody defined with the three sign / verify props',
 );
 assert.match(homeSrc, /Sign a transaction/, 'marquee CTA label "Sign a transaction"');

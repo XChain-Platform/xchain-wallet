@@ -317,6 +317,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // so threading it everywhere is correct on a free action and correct when
     // consensus starts pricing one; enumerating would be wrong the day it does.
     const nativeFee = useNativeFee(chainId);
+    const clearOwnerActionErrors = useCallback(() => {
+        setCancelError(null);
+        setRefillError(null);
+        setEditError(null);
+    }, []);
     const feeSelector = feeTiers ? (
         <FeeSelector
             label="Network fee"
@@ -324,7 +329,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             formatFiat={fiatForFee}
             tiers={feeTiers}
             value={feePick}
-            onChange={setFeePick}
+            onChange={(next) => {
+                setFeePick(next);
+                clearOwnerActionErrors();
+            }}
             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
         />
     ) : null;
@@ -1063,6 +1071,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const closeEscrowNote = ownerAddress ? (
         <p className={styles.hint} data-testid="close-escrow-destination">
             Escrow returns to <AddressText address={ownerAddress.address} /> (this wallet).
+            {escrowRemaining != null && giveTick
+                ? ` Remaining escrow: ${formatWithThousands(String(escrowRemaining))} ${giveTick}.`
+                : null}
             {ownsOnlyDispenserAddress && creatorSource && creatorSource !== ownerAddress.address
                 ? ' Another address opened this dispenser; closing it from the dispenser address'
                     + ' returns the remaining escrow to this wallet, not to the creator.'
@@ -1463,7 +1474,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
+                />
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction. Sign it on your
@@ -1597,7 +1615,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
+                />
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction. Sign it on your
@@ -1677,7 +1702,14 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
+                />
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction. Sign it on your

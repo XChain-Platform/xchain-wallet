@@ -70,7 +70,7 @@ assert.ok(/claimedRef\.current/.test(scanRouteSrc),
 assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
     'ScanRoute refuses to auto-route WIF / mnemonic; directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
 assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
-    'ScanRoute punts XCW chunks back to PsbtSignForm (i18n: scan.error.xcwChunk with n/total vars)');
+    'ScanRoute explains XCW multi-frame progress with n/total values');
 
 // --- 1b. ScanRoute uses t() and dictionary covers every key ----------
 
@@ -90,6 +90,9 @@ const SCAN_KEYS = [
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
+    'scan.error.transactionHex',
+    'scan.error.backupPointer',
+    'scan.error.pairingCode',
     'scan.error.unknown',
 ];
 const { en } = await import('../../../packages/core/src/i18n/locales/en/index.js');
@@ -104,10 +107,10 @@ for (const key of SCAN_KEYS) {
         || scanRouteSrc.includes(`t('${key}',`),
         `ScanRoute calls t('${key}')`);
 }
-assert.ok(/\{n\}\/\{total\}/.test(en['scan.error.xcwChunk']),
-    'scan.error.xcwChunk uses {n}/{total} placeholders');
-assert.ok(/\{type\}/.test(en['scan.error.unknown']),
-    'scan.error.unknown uses {type} placeholder');
+assert.ok(/\{n\}/.test(en['scan.error.xcwChunk']) && /\{total\}/.test(en['scan.error.xcwChunk']),
+    'scan.error.xcwChunk uses n and total placeholders');
+assert.ok(!/\{type\}/.test(en['scan.error.unknown']),
+    'scan.error.unknown does not expose an internal classifier type');
 
 // --- 2. BottomTabBar PRIMARY_TABS swap --------------------------------
 

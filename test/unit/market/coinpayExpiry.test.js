@@ -44,6 +44,7 @@ describe('market/coinpayExpiry coinpayExpiryText', () => {
     });
 
     it('rejects an out-of-range value (guards against a ms value or garbage)', () => {
+        expect(coinpayExpiryText(Date.now())).toBeNull();
         expect(coinpayExpiryText(1e14)).toBeNull();
     });
 });

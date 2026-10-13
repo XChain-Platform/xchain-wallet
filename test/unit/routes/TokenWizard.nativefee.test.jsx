@@ -65,7 +65,7 @@ function mountWizard() {
     );
 }
 
-// Drive template -> chain -> details (meme: name + supply) -> confirm.
+// Drive template -> chain -> details (meme: name + supply) -> review -> confirm.
 // `nativeFee` flips the toggle on the details stage when true.
 async function driveToConfirm({ nativeFee }) {
     fireEvent.click(await screen.findByText('Meme token'));
@@ -77,7 +77,8 @@ async function driveToConfirm({ nativeFee }) {
         target: { value: '1000' },
     });
     if (nativeFee) fireEvent.click(screen.getByRole('switch'));
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     // The confirm page opens once compose + pre-flight resolve.
     await screen.findByTestId('confirm-modal');
 }

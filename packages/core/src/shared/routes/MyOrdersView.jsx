@@ -144,7 +144,11 @@ async function readFillStates(messaging, candidates) {
 }
 
 function fmtDate(unixSec) {
-    return formatLocalDateTime(unixSec);
+    const n = Number(unixSec);
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -227,9 +231,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getOrderCancelsForAddress === 'function'
-                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([o, c]) => ({ p, orders: extractRows(o), cancels: extractRows(c) }))));
 

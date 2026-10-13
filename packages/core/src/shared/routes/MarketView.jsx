@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
+import { Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
@@ -32,8 +32,6 @@ import {
 } from '../utils/amountFormat.js';
 import styles from './IssueTokenForm.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
-
-const chainRegistry = registryLib.defaultRegistry();
 
 /**
  * Market view (§41.3). Trading surface for a single market.
@@ -73,24 +71,29 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     // the panels' own empty states, never fabricated prices/trades.
     const demo = flowsLib.isDemoWallet(walletId);
 
-    const [summary, setSummary] = useState(/** @type {any | null} */ (null));
+    const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
 
     useEffect(() => {
         let cancelled = false;
-        setSummary(null);
+        setSummaryLoading(true);
         setSummaryError(null);
         messaging.getMarket({ chainId, tick1, tick2 })
-            .then((resp) => { if (!cancelled) setSummary(resp); })
+            .then(() => { if (!cancelled) setSummaryLoading(false); })
             .catch((err) => {
-                if (!cancelled) setSummaryError(readFailureMessage(err, 'load this market'));
+                if (!cancelled) {
+                    setSummaryLoading(false);
+                    setSummaryError(readFailureMessage(err, 'load this market'));
+                }
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2]);
 
-    const descriptor = chainRegistry.get(chainId);
+    useEffect(() => {
+        setPrefillPrice(null);
+    }, [chainId, tick1, tick2]);
 
     // Header 24h stats (last / change / high / low / volume) derive from
     // the live getMarketHistory feed, the same data the chart + trades
@@ -117,6 +120,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const changeColor = Number.isFinite(changePct)
         ? (changePct > 0 ? 'var(--xc-success)' : changePct < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
         : 'var(--xc-text-muted)';
+    const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (
         <PageHeader
@@ -152,7 +156,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 {typeof onSwap === 'function' ? (
                     <button
                         type="button"
-                        onClick={onSwap}
+                        onClick={() => {
+                            setPrefillPrice(null);
+                            onSwap();
+                        }}
                         aria-label={`Reverse pair to ${tick2}/${tick1}`}
                         title={`Reverse to ${tick2}/${tick1}`}
                         style={{
@@ -203,13 +210,16 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     return wrap(
         <>
+            {summaryLoading ? (
+                <StatusMessage variant="status">Loading market…</StatusMessage>
+            ) : null}
             {summaryError ? (
                 <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
             ) : null}
             {headerCard}
 
             <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                <MarketChart chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
             </div>
 
             <div
@@ -244,6 +254,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
             {tab === 'book' ? (
                 <OrderbookPanel
+                    key={marketKey}
                     chainId={chainId}
                     tick1={tick1}
                     tick2={tick2}
@@ -252,10 +263,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 />
             ) : null}
             {tab === 'trades' ? (
-                <RecentTradesPanel chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
             ) : null}
             {tab === 'place' ? (
                 <PlaceOrderPanel
+                    key={marketKey}
                     walletId={walletId}
                     chainId={chainId}
                     tick1={tick1}
@@ -265,6 +277,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             ) : null}
             {tab === 'orders' ? (
                 <OpenOrdersPanel
+                    key={marketKey}
                     walletId={walletId}
                     chainId={chainId}
                     tick1={tick1}
@@ -273,6 +286,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             ) : null}
             {tab === 'history' ? (
                 <TradeHistoryPanel
+                    key={marketKey}
                     walletId={walletId}
                     chainId={chainId}
                     tick1={tick1}

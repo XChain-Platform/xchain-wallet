@@ -71,6 +71,7 @@
     margin-inline-start: auto;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    font-weight: 700;
 }
 
 .totals {
@@ -83,7 +84,7 @@
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
 }
 
 .totalsLabel {
@@ -94,6 +95,7 @@
     margin: 0;
     text-align: end;
     font-variant-numeric: tabular-nums;
+    font-weight: 700;
 }
 
 /* Loud partial/failed decode. Not a soft hint: an undecodable

@@ -526,7 +526,10 @@ export function createCrawl(page, {
             if (c.disabled) continue;
             if (DESTRUCTIVE.test(c.label)) continue;
             if (c.type === 'submit' && c.inForm) continue; // the form pass submits forms
-            if (c.href && /^https?:/.test(c.href) && !c.href.startsWith(origin)) {
+            // A mail or phone link hands off to another app. Headless Chromium
+            // raises its open-the-app prompt where nobody can see or answer
+            // it, and from then on the tab takes no clicks or keys at all.
+            if (c.href && ((/^https?:/.test(c.href) && !c.href.startsWith(origin)) || /^(mailto|tel|sms):/i.test(c.href))) {
                 covered.push({ screen: label, control: name, result: 'external link, not followed' });
                 continue;
             }
@@ -712,9 +715,15 @@ export function createCrawl(page, {
             return;
         }
         for (const e of since(mark)) finding(screen.label, '(open)', e.kind, { error: e.text });
-        const { controls, pressed } = await pressControls(screen);
-        const forms = screen.chrome ? 0 : await fillForms(screen);
-        covered.push({ screen: screen.label, control: '(screen)', result: `${controls} controls, ${pressed} pressed, ${forms} forms` });
+        // Each pass reopens the screen first; a screen that will not reopen
+        // is a finding for this screen, not the end of the shard.
+        try {
+            const { controls, pressed } = await pressControls(screen);
+            const forms = screen.chrome ? 0 : await fillForms(screen);
+            covered.push({ screen: screen.label, control: '(screen)', result: `${controls} controls, ${pressed} pressed, ${forms} forms` });
+        } catch (err) {
+            finding(screen.label, '(reopen)', 'screen could not be reopened', { error: clickReason(err) });
+        }
     }
 
     function write(shardName) {

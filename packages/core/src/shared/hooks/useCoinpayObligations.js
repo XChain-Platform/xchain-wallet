@@ -70,8 +70,11 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
     }
     const results = await Promise.all(pairs.map((p) =>
         messaging.getCoinpayObligationsForAddress({ chainId: p.chainId, address: p.address })
-            .then((resp) => ({ ...p, rows: extractRows(resp) }))
-            .catch(() => ({ ...p, rows: [] }))));
+            .then((resp) => ({ ...p, rows: extractRows(resp), failed: false }))
+            .catch((error) => ({ ...p, rows: [], failed: true, error }))));
+    if (results.length > 0 && results.every((result) => result.failed)) {
+        throw results[0].error || new Error('Failed to scan for payments due.');
+    }
     const found = [];
     for (const r of results) {
         for (const row of r.rows) {
@@ -94,7 +97,7 @@ export async function scanCoinpayObligations({ messaging, walletId, accountId })
 
 function sortKey(expiration) {
     const n = Number(expiration);
-    return Number.isFinite(n) && n > 0 && n <= 1e13 ? n : Infinity;
+    return Number.isFinite(n) && n > 0 && n < 10_000_000_000 ? n : Infinity;
 }
 
 /**
@@ -109,13 +112,14 @@ function sortKey(expiration) {
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} [accountId]
  * @param {{ pollMs?: number }} [opts]
- * @returns {{ obligations: PendingObligation[], scanning: boolean, refresh: () => void, payableCount: number }}
+ * @returns {{ obligations: PendingObligation[], scanning: boolean, error: string | null, refresh: () => void, payableCount: number }}
  */
 export function useCoinpayObligations(walletId, accountId, opts = {}) {
     const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
     const { messaging } = useMessaging();
     const [obligations, setObligations] = useState(/** @type {PendingObligation[]} */ ([]));
     const [scanning, setScanning] = useState(false);
+    const [error, setError] = useState(/** @type {string | null} */ (null));
     // Bumping forces the effect to re-run for a manual refresh.
     const [scanSeq, setScanSeq] = useState(0);
     const aliveRef = useRef(true);
@@ -151,6 +155,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         if (identityRef.current !== identity) {
             identityRef.current = identity;
             setObligations([]);
+            setError(null);
         }
         // No wallet, or the demo wallet: nothing to owe, and the demo
         // wallet's fabricated addresses must not spam the explorer.
@@ -167,13 +172,19 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
                     messaging, walletId, accountId: accountId || undefined,
                 });
                 throttle.succeed();
-                if (!cancelled && aliveRef.current) setObligations(found);
-            } catch {
+                if (!cancelled && aliveRef.current) {
+                    setObligations(found);
+                    setError(null);
+                }
+            } catch (scanError) {
                 // Keep the previous rows on a failed sweep; a transient
                 // outage should not flicker the badge to zero. Release the
                 // window too, so the next event may try again rather than
                 // wait out an interval on a failure.
                 throttle.fail();
+                if (!cancelled && aliveRef.current) {
+                    setError(scanError?.message || 'Failed to scan for payments due.');
+                }
             } finally {
                 if (!cancelled && aliveRef.current) setScanning(false);
             }
@@ -221,7 +232,7 @@ export function useCoinpayObligations(walletId, accountId, opts = {}) {
         (o) => classifyObligation(o.expiration).state !== 'expired',
     ).length;
 
-    return { obligations, scanning, refresh, payableCount };
+    return { obligations, scanning, error, refresh, payableCount };
 }
 
 // One scan per tree.
