@@ -26,7 +26,23 @@ function pressKey(key, init = {}) {
     const target = document.activeElement || document.body;
     const proceeds = fireEvent.keyDown(target, { key, ...init });
     fireEvent.keyUp(target, { key, ...init });
-    if (!proceeds || key !== 'Enter') return;
+    if (!proceeds) return;
+
+    if (target instanceof HTMLSelectElement && (key === 'ArrowDown' || key === 'ArrowUp')) {
+        const delta = key === 'ArrowDown' ? 1 : -1;
+        const next = Math.max(0, Math.min(target.options.length - 1, target.selectedIndex + delta));
+        if (next !== target.selectedIndex) {
+            fireEvent.change(target, { target: { value: target.options[next].value } });
+        }
+        return;
+    }
+
+    if (key.length === 1 && target instanceof HTMLInputElement) {
+        fireEvent.input(target, { target: { value: `${target.value}${key}` } });
+        return;
+    }
+
+    if (key !== 'Enter') return;
 
     if (target instanceof HTMLButtonElement) {
         target.click();
@@ -51,7 +67,7 @@ function moveFocus(backward = false) {
 }
 
 /**
- * Minimal keyboard driver for tests that need browser-like Enter and Tab defaults.
+ * Minimal keyboard driver for tests that need browser-like focus, key, and form defaults.
  */
 export const userEvent = {
     setup() {
@@ -61,11 +77,20 @@ export const userEvent = {
                     if (token === '{Enter}') pressKey('Enter');
                     else if (token === '{Escape}') pressKey('Escape');
                     else if (token === '{Tab}') moveFocus(false);
+                    else if (token.startsWith('{')) pressKey(token.slice(1, -1));
                     else pressKey(token);
                 }
             },
             async tab({ shift = false } = {}) {
                 moveFocus(shift);
+            },
+            async clear(element) {
+                element.focus();
+                fireEvent.input(element, { target: { value: '' } });
+            },
+            async type(element, text) {
+                element.focus();
+                for (const character of text) pressKey(character);
             },
         };
     },
