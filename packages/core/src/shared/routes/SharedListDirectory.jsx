@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -77,7 +77,6 @@ function valueOrUnknown(value) {
 export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const [directory, setDirectory] = useState(/** @type {{ lists: any[], unavailable: string[] } | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -114,7 +113,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -135,11 +134,11 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             })}
 
             {visibleLists.length === 0 ? (
-                <p className={styles.hint}>
-                    {mode === 'pick'
+                <EmptyState
+                    title={mode === 'pick'
                         ? `No shared ${listType(filterType) || ''} lists are available on this chain.`
                         : 'No shared lists are available.'}
-                </p>
+                />
             ) : (
                 <div role="list" aria-label="Shared lists">
                     {visibleLists.map((entry) => (

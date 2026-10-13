@@ -7,7 +7,6 @@
     gap: var(--xc-space-3);
     width: 100%;
     padding: var(--xc-space-3);
-    margin-bottom: var(--xc-space-4);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -53,7 +53,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { isWatcherMode } = useWalletMode();
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : '';
@@ -341,9 +340,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (loadError) {
@@ -419,7 +416,35 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             ? 'New pack (fresh key)'
             : `Existing pack ${packChoice.slice(0, 12)}…`;
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review gated publish"
+                onSubmit={handleSubmit}
+                noValidate
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button variant="secondary" type="button" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign and publish'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Publish <strong>{fileMeta?.name}</strong> encrypted; only holders
                     of {tick} will be able to read it.
@@ -476,36 +501,23 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button variant="secondary" type="button" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign and publish'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // Form stage.
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Gated content"
+            onSubmit={handleReview}
+            noValidate
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button type="submit" variant="primary">
+                    Review
+                </Button>
+            )}
+        >
             <p className={styles.hint}>
                 Publish a file that only holders of <strong>{tick}</strong> can
                 read. The file is encrypted before it touches the chain; the key
@@ -627,13 +639,6 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 and the gate cannot be removed later.
             </label>
 
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-
-            <div className={styles.actions}>
-                <Button type="submit" variant="primary">
-                    Review
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
