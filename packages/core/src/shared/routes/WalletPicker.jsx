@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { WalletIdentity } from '../components/WalletIdentity.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -120,14 +121,16 @@ export function WalletPicker({
                                 onClick={() => handleSelect(w.id, active)}
                                 disabled={switching}
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
+                                aria-current={active ? 'true' : undefined}
                             >
                                 <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
-                                    <span className={styles.entryLabel} title={walletName}>
-                                        {active ? '● ' : '○ '}{walletName}
+                                    <span className={styles.entryLabel}>
+                                        <WalletIdentity wallet={w} active={active} />
                                     </span>
                                     {w.format ? (
                                         <span className={styles.entryDescription}>
                                             {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
+                                            {active ? ' · Current wallet' : ''}
                                             {/* A stored passphrase (passphraseStored) unlocks on the
                                                 password alone, so it earns no badge here; only a legacy
                                                 record still owed its one-time capture does, and the badge

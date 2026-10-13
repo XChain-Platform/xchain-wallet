@@ -30,6 +30,7 @@ import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
+import { WalletIdentity } from './WalletIdentity.jsx';
 import styles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
@@ -97,13 +98,14 @@ export function AppHeader({
     return (
         // A labelled region, not a second banner: each screen's Screen header already
         // is the page banner, and a document may hold only one.
-        <div className={styles.bar} role="region" aria-label="App header">
+        <div className={styles.bar} style={{ flexWrap: 'wrap' }} role="region" aria-label="App header">
             <div className={styles.left}>
                 <img
                     src={branding.logoUrl()}
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
+                <WalletIdentity wallet={activeWallet} namePrefix="Wallet: " />
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
