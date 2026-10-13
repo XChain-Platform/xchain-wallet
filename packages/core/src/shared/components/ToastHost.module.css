@@ -71,7 +71,10 @@
 
 .toast {
     pointer-events: none;
+    box-sizing: border-box;
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
@@ -127,6 +130,9 @@
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     font-family: inherit;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
@@ -166,4 +172,17 @@
 .dismissBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+    .toast {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .controls {
+        flex: 1 1 100%;
+        min-width: 0;
+        justify-content: flex-end;
+    }
 }

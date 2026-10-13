@@ -192,4 +192,10 @@ describe('ConfirmModal', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onCancel).not.toHaveBeenCalled();
     });
+
+    it('does not render an internal error code', () => {
+        setup({ error: 'ERR_STORAGE_WRITE' });
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not complete this request. Try again.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent('ERR_STORAGE_WRITE');
+    });
 });

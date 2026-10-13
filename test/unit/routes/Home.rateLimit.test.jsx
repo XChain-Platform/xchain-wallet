@@ -40,8 +40,22 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+
+const homeTabsRender = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useNativeFiatRates: (args) => {
+            homeTabsRender();
+            return actual.useNativeFiatRates(args);
+        },
+    };
+});
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const CHAIN = 'litecoin-regtest';
@@ -93,7 +107,11 @@ function mountHome(messaging) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Home, { activeWalletId: WALLET.id }),
+            React.createElement(
+                ToastHost,
+                null,
+                React.createElement(Home, { activeWalletId: WALLET.id }),
+            ),
         ),
     );
 }
@@ -117,6 +135,22 @@ async function advance(ms) {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Home shows a rate limit as a wait, not as a broken screen', () => {
+    it('does not re-render the portfolio while only the countdown changes', async () => {
+        vi.useFakeTimers();
+        homeTabsRender.mockClear();
+        const messaging = baseMessaging();
+        messaging.getWalletBalances.mockResolvedValue(refused(RATE_LIMITED_WITH_SECONDS));
+
+        mountHome(messaging);
+        await settle();
+
+        const rendersAfterLoad = homeTabsRender.mock.calls.length;
+        expect(rendersAfterLoad).toBeGreaterThan(0);
+        await advance(1_000);
+        expect(onScreen()).toContain('slow down for 2 seconds; retrying.');
+        expect(homeTabsRender).toHaveBeenCalledTimes(rendersAfterLoad);
+    });
+
     it('counts the named seconds down and re-loads by itself at zero', async () => {
         vi.useFakeTimers();
         const messaging = baseMessaging();

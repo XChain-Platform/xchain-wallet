@@ -43,7 +43,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -735,7 +735,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
             <Input
                 label="Memo (optional)"
-                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                hint={`${utf8ByteLength(trimmedMemo)} / ${MAX_MEMO_LENGTH} bytes.`}
                 error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); setFormError(null); }}

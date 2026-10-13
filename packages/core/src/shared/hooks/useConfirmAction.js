@@ -453,12 +453,19 @@ export function useConfirmAction() {
         }
 
         try {
-            setError(null);   // clear a previous attempt's credential error
+            setError(null);   // clear a previous attempt's retryable signing error
             const value = await args.onApprove(credentials, built);
             setPhase('done');
             settleResolve(value);
             return value;
         } catch (err) {
+            const hardwareRetryError = retryableHardwareSigningError(err);
+            if (hardwareRetryError) {
+                setError(hardwareRetryError);
+                setPhase('ready');
+                return { interrupted: true, reason: 'hardware-retry' };
+            }
+
             // §5.3.4 signing-phase credential failure: re-prompt on the SAME
             // PSBT instead of tearing the modal down. The confirm() promise
             // stays PENDING so the caller's flow is uninterrupted and the user
@@ -622,8 +629,8 @@ function persistSession(args, id, built, report) {
 }
 
 /**
- * A signing-phase CREDENTIAL failure (§5.3.4) - bad password / declined HW -
- * as opposed to a compose, pre-flight, or broadcast failure. These re-prompt
+ * A signing-phase software credential failure (§5.3.4), as opposed to a
+ * compose, pre-flight, or broadcast failure. These re-prompt
  * on the same PSBT; everything else is terminal.
  *
  * The error crosses the messaging boundary as a plain object, so match on the
@@ -636,6 +643,37 @@ function isCredentialFailure(err) {
     const code = err.code || err.reason;
     if (code === 'INVALID_PASSWORD' || code === 'BAD_CREDENTIALS') return true;
     return /incorrect password|invalid password|bad password/i.test(String(err.message || ''));
+}
+
+function retryableHardwareSigningError(err) {
+    if (!err) return null;
+    const fingerprint = [
+        err.name,
+        err.status,
+        err.code,
+        err.reason,
+        err.statusCode,
+        err.message,
+    ].filter((value) => value !== undefined && value !== null).join(' ');
+
+    let message = null;
+    if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware/i.test(fingerprint)) {
+        message = 'Your hardware wallet firmware is too old. Update it with the vendor app, reconnect and unlock the device, then select Approve again.';
+    } else if (/wrong[- ]app|status ["']wrong-app["']|0x6a82|0x6e00|cla_not_supported/i.test(fingerprint)) {
+        message = 'The wrong app is open on your hardware wallet. Open the app for this network, then select Approve again.';
+    } else if (/UserRejectedError|user[- ]rejected|Failure_ActionCancelled|action cancelled|denied by user|device declined|0x6985/i.test(fingerprint)) {
+        message = 'Signing was rejected on your hardware wallet. Review the details, then select Approve again when you are ready.';
+    } else if (/SignerLockedError|status ["']locked["']|device (?:is )?locked|pin locked/i.test(fingerprint)) {
+        message = 'Your hardware wallet is locked. Unlock it, then select Approve again.';
+    } else if (/status ["']disconnected["']|signer bridge disconnected|device disconnected|disconnected.*(?:device|sign)|transport.*(?:disconnected|unavailable|missing)|no (?:compatible )?device/i.test(fingerprint)) {
+        message = 'Your hardware wallet disconnected before signing finished. Reconnect and unlock it, then select Approve again.';
+    }
+    if (!message) return null;
+
+    const recovery = new Error(message);
+    recovery.name = 'HardwareSigningRetryError';
+    recovery.cause = err;
+    return recovery;
 }
 
 /**
