@@ -32,6 +32,7 @@ import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
@@ -563,18 +564,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         }
 
         try {
-            let b;
             // Cluster J FOLLOWUP 1: synthesize fabricated balances
             // for the demo wallet so Home / Send / Receive feel
             // populated. Uses the wallet's real address records so
             // the rest of the app sees the same address-rooted
             // shape it would for a funded wallet.
-            if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                b = flowsLib.synthesizeDemoBalances(byChain);
-            } else {
-                b = await messaging.getWalletBalances(walletId, accountId);
-            }
+            // loadDisplayBalances holds that branch so the palette shows the same.
+            const b = await loadDisplayBalances(messaging, walletId, accountId);
             if (!isCancelled()) {
                 // Fresh balances: this is what restarts the re-poll window,
                 // whichever path asked for them.
