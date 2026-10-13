@@ -192,6 +192,10 @@
 .licenseScroll {
     flex: 1 1 auto;
     min-height: 160px;
+    /* Inside FormPage the gate no longer has a fixed height to fill, so the
+       terms panel caps itself and keeps its own scroll: reaching its end is
+       what unlocks the acknowledgement. */
+    max-height: max(160px, 50vh);
     overflow-y: auto;
     padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-bg-muted);
@@ -271,6 +275,7 @@
 
     .licenseScroll {
         min-height: 96px;
+        max-height: max(96px, 40vh);
         padding: var(--xc-space-2) var(--xc-space-3);
     }
 }
