@@ -1,8 +1,8 @@
 .headerIcon {
     display: block;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    border-radius: 50%;
     object-fit: contain;
     flex: 0 0 auto;
 }
@@ -20,11 +20,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 6px;
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     flex: 0 0 auto;

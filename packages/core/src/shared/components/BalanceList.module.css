@@ -43,7 +43,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--xc-bg-muted);
+    background: transparent;
 }
 
 .iconImg {
@@ -51,6 +51,7 @@
     height: 40px;
     display: block;
     border-radius: 50%;
+    object-fit: contain;
 }
 
 .iconLetter {
@@ -59,16 +60,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
 }
 
-/* The fill is a per-ticker colour set inline; the letter colour lives here so
-   forced-colors mode can re-pair it. --xc-on-accent maps to Canvas there,
-   which only suits an accent fill, and the mode repaints this fill to Canvas
-   as well, so the letter would vanish into it. */
+/* Forced-colors mode pairs the neutral monogram with the platform canvas. */
 @media (forced-colors: active) {
     .iconLetter {
         color: CanvasText;

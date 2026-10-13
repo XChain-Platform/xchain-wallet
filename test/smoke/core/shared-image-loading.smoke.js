@@ -12,7 +12,7 @@ import { parse } from '@babel/parser';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const fullyDeferred = new Map([
-    ['packages/core/src/shared/components/BalanceList.jsx', 3],
+    ['packages/core/src/shared/components/BalanceList.jsx', 2],
     ['packages/core/src/shared/components/CollectiblesView.jsx', 2],
     ['packages/core/src/shared/components/GatedFileViewer.jsx', 1],
     ['packages/core/src/shared/components/HomeTabs.jsx', 7],
