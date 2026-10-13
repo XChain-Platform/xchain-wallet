@@ -468,9 +468,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 onSubmit={handleUnlock}
                 intro="Enter your wallet password to decrypt this account's messages."
                 status={unlockError ? (
-                    <p role="alert" className={styles.error}>
-                        {unlockError}
-                    </p>
+                    <StatusMessage variant="error" className={styles.error}>{unlockError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button

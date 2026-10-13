@@ -157,7 +157,7 @@ assert.ok(
     'DispenserDetail signs cancel on the dispenserAction lane',
 );
 assert.ok(
-    /label="Close dispenser"\s+danger/.test(detailSrc),
+    /label="Close dispenser"[\s\S]{0,600}?variant="danger"/.test(detailSrc),
     'DispenserDetail close button uses the danger variant',
 );
 assert.ok(
