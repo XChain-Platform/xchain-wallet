@@ -423,6 +423,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [addressesReload, setAddressesReload] = useState(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
@@ -484,6 +486,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
+        setAddressesByChain(null);
+        setHistoryLoaded(false);
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -518,7 +523,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, initialChainCoin]);
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -625,6 +630,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             .map(([cid]) => cid);
         if (chainsToLoad.length === 0) {
             setEntries([]);
+            setHistoryLoaded(true);
             setHistoryFetchedAt(null);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
@@ -669,8 +675,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 tasks.push(
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                            .then((r) => extractRows(r)),
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
@@ -821,6 +826,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
+            setHistoryLoaded(true);
+        }).catch(() => {
+            if (cancelled) return;
+            throttle.fail();
+            setLoadingChains(new Set());
+            setHistoryLoaded(true);
+            setLoadError('Could not load history. Try again.');
         });
 
         return () => { cancelled = true; };
@@ -1295,7 +1307,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setHistoryLoaded(false);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
@@ -1484,13 +1510,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 />
             ) : null}
 
-            {loadingChains.size > 0 ? (
+            {!historyLoaded || loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
                 </div>
             ) : null}
 
-            {visibleEntries.length === 0 && loadingChains.size === 0 ? (
+            {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
                         title="No matches for the current filters"

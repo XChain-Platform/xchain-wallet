@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -58,11 +58,14 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     const [listsByChain, setListsByChain] = useState(
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [listsReload, setListsReload] = useState(0);
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -72,7 +75,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                 if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (!addressesByChain) return;
@@ -126,7 +129,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, listsReload]);
 
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -212,10 +215,29 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     );
 
     if (addressesError) {
-        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setAddressesError(null);
+                        setAddressesByChain(null);
+                        setAddressesReload((value) => value + 1);
+                    },
+                }}
+            >
+                {addressesError}
+            </StatusMessage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading lists">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
@@ -247,14 +269,28 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     return wrap(
         <>
             {loadErrors.length > 0 ? (
-                <StatusMessage variant="error" className={styles.entryDescription}>
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setListsByChain({});
+                            setListsReload((value) => value + 1);
+                        },
+                    }}
+                >
                     {/* Names the chains only: the raw fetch error carries API paths and
                         HTTP codes that mean nothing to the user. */}
                     Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>Loading…</p>
+                <div role="status" aria-label="Loading lists">
+                    <Skeleton.List rows={5} />
+                </div>
+            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+                null
             ) : visibleRows.length === 0 ? (
                 allRows.length === 0 ? (
                     <EmptyState
