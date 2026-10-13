@@ -77,6 +77,7 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
+            grepInvert: /@lg-k51/,
             use: { ...devices['Desktop Chrome'] },
         },
         {
