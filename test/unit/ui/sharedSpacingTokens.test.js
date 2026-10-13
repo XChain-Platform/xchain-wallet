@@ -67,6 +67,14 @@ const statusModalModules = [
     'PlatformSwitcher.module.css',
     'PortfolioChart.module.css',
 ];
+const pixelTokenModules = [
+    'PreflightPanel.module.css',
+    'PsbtIntentPanel.module.css',
+    'QueuedBroadcastBanner.module.css',
+    'QueuedResultPanel.module.css',
+    'RawPsbtViewer.module.css',
+    'ReachabilityBanner.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -152,6 +160,28 @@ function undocumentedPixelGeometry(file, css) {
         const previousLine = lines[index - 1] || '';
         if (!/^\s*\/\* .* has no .*token equivalent\. \*\/\s*$/.test(previousLine)) {
             violations.push(`${file}:${index + 1}: ${lines[index].trim()}`);
+        }
+    }
+
+    return violations;
+}
+
+function undocumentedPixelDimensions(file, css) {
+    const violations = [];
+
+    for (const match of css.matchAll(/(^|\n)([^\n{}]+:\s*[^;{}]*\d+(?:\.\d+)?px[^;{}]*;)/g)) {
+        const declaration = match[2].trim();
+        const property = declaration.slice(0, declaration.indexOf(':')).trim();
+        const values = [...declaration.matchAll(/(\d+(?:\.\d+)?)px/g)]
+            .map((value) => Number(value[1]));
+        const isHairline = /^(?:border(?:-[\w-]+)?|outline)$/.test(property)
+            && values.every((value) => value <= 2);
+        const isBreakpoint = property === 'max-width' || property === 'min-width';
+        const previousLine = css.slice(0, match.index).trimEnd().split('\n').at(-1).trim();
+        const hasExceptionComment = /^\/\*.*(?:no (?:border-width )?token|spacing scale).*\*\/$/.test(previousLine);
+
+        if (!isHairline && !isBreakpoint && !hasExceptionComment) {
+            violations.push(`${file}: ${declaration}`);
         }
     }
 
@@ -416,4 +446,18 @@ it('keeps the audited component geometry on shared design tokens', () => {
     expect(statusModalModules.flatMap((file) => (
         undocumentedPixelGeometry(file, cssByFile[file])
     ))).toEqual([]);
+});
+
+it('uses dimension tokens or documents unmatched pixel values in cleanup modules', () => {
+    const violations = pixelTokenModules.flatMap((file) => undocumentedPixelDimensions(
+        file,
+        readFileSync(join(componentsRoot, file), 'utf8'),
+    ));
+
+    expect(violations).toEqual([]);
+
+    const queuedResult = readFileSync(join(componentsRoot, 'QueuedResultPanel.module.css'), 'utf8');
+    const reachability = readFileSync(join(componentsRoot, 'ReachabilityBanner.module.css'), 'utf8');
+    expect(queuedResult).toContain('font-size: var(--xc-icon-xl);');
+    expect(reachability).toContain('font-size: var(--xc-icon-sm);');
 });

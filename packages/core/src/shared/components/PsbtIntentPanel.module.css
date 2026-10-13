@@ -78,6 +78,7 @@
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: var(--xc-space-3);
+    /* Two pixels keeps paired totals grouped; the spacing scale starts at four. */
     row-gap: 2px;
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
