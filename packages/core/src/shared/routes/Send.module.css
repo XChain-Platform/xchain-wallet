@@ -695,3 +695,28 @@
     font-weight: 600;
     color: var(--xc-text-muted);
 }
+
+/* Native font scaling enlarges labels without changing the CSS viewport.
+   Phone-width review grids and action rows reflow before their text competes
+   for the same line. */
+@media not all and (min-width: 480px) {
+    .detailsList,
+    .advancedReviewList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        align-self: start;
+    }
+
+    .successTxidRow,
+    .saveRecipientActions,
+    .recipientRowHead {
+        flex-wrap: wrap;
+    }
+
+    .successTxidRow > .txid {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+}
