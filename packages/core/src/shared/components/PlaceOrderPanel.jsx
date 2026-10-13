@@ -26,7 +26,15 @@
 // behind the same form surface (Phase 2 HW Sign pattern).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Input, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    FormPage,
+    Input,
+    SegmentedControl,
+    Select,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -755,52 +763,16 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
-            <div className={styles.sideToggle} role="group" aria-label="Order side">
-                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
-                <button
-                    type="button"
-                    onClick={() => setSide('buy')}
-                    aria-pressed={side === 'buy'}
-                    style={{
-                        flex: 1,
-                        minWidth: '8rem',
-                        appearance: 'none',
-                        font: 'inherit',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid var(--xc-success)',
-                        background: 'var(--xc-success)',
-                        color: 'var(--xc-on-accent)',
-                        opacity: side === 'buy' ? 1 : 0.45,
-                    }}
-                >
-                    Buy {tick1}
-                </button>
-                {/* Native buttons retain segmented-toggle pressed behavior because the kit has no segmented control. */}
-                <button
-                    type="button"
-                    onClick={() => setSide('sell')}
-                    aria-pressed={side === 'sell'}
-                    style={{
-                        flex: 1,
-                        minWidth: '8rem',
-                        appearance: 'none',
-                        font: 'inherit',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        border: '1px solid var(--xc-danger)',
-                        background: 'var(--xc-danger)',
-                        color: 'var(--xc-on-accent)',
-                        opacity: side === 'sell' ? 1 : 0.45,
-                    }}
-                >
-                    Sell {tick1}
-                </button>
-            </div>
+            <SegmentedControl
+                className={styles.sideToggle}
+                aria-label="Order side"
+                value={side}
+                onChange={setSide}
+                items={[
+                    { id: 'buy', label: <>Buy {tick1}</>, tone: 'success' },
+                    { id: 'sell', label: <>Sell {tick1}</>, tone: 'danger' },
+                ]}
+            />
             <div className={styles.priceAmountFields} role="group" aria-label="Price and amount">
                 <Input
                     label={`Price (${tick2})`}

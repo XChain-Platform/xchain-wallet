@@ -12,6 +12,8 @@
 // wallet's reusable component vocabulary. Add a new <Section> for each
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
+import { useState } from 'react';
+import { SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import {
     DesignTokensSection,
@@ -105,6 +107,7 @@ export const SECTIONS = [
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection },
     { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
+    { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
     { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection, primitives: ['Input', 'Select', 'Textarea'] },
@@ -284,6 +287,66 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
             {label ? <p className="sg-example-label">{label}</p> : null}
             <ViewFrame title={label} minHeight={minHeight} padded={padded}>{children}</ViewFrame>
         </div>
+    );
+}
+
+export function SegmentedControlSection() {
+    const [grouping, setGrouping] = useState('grouped');
+    const [side, setSide] = useState('buy');
+
+    return (
+        <Section
+            id="segmented-control"
+            title="Segmented control"
+            tag="CANONICAL compact exclusive choice"
+            kicker="A two- or three-way choice with one selected value, a shared control height, and radio keyboard behavior."
+        >
+            <Guidance
+                what={<>A <code>radiogroup</code> containing equal-width radio buttons. One segment is selected and reachable in the tab order; arrow keys, Home, and End both move focus and select a value.</>}
+                when={<>Use for two or three short, mutually exclusive choices such as Grouped / Flat history or Buy / Sell order side.</>}
+                whenNot={<>Use <a href="#tabs">Tabs</a> when the choice changes a page panel, checkboxes for multiple values, or a switch for an independent on/off setting.</>}
+                sizing={<>The control uses <code>--xc-control-h-md</code>, <code>--xc-control-radius</code>, and equal-width segments. Apply a width through <code>className</code> when the control should fill its container.</>}
+                doRule={<>✓ Provide an accessible label · keep labels short · keep exactly one selected value · use semantic success or danger tones only when the choices carry those meanings</>}
+                dontRule={<>✗ Put unrelated actions in one control · wrap segments onto multiple lines · add custom heights or radii · implement route-local arrow-key handling</>}
+                supersedes={<>Route-local native button groups for compact exclusive choices. Use <code>&lt;SegmentedControl&gt;</code> from <code>@xchain-wallet/core/ui</code>.</>}
+            />
+
+            <Markup>
+{`<SegmentedControl
+    aria-label="History grouping"
+    value={grouping}
+    onChange={setGrouping}
+    items={[
+        { id: 'grouped', label: 'Grouped' },
+        { id: 'flat', label: 'Flat' },
+    ]}
+/>`}
+            </Markup>
+
+            <LiveExample label="History grouping">
+                <SegmentedControl
+                    aria-label="History grouping"
+                    value={grouping}
+                    onChange={setGrouping}
+                    items={[
+                        { id: 'grouped', label: 'Grouped' },
+                        { id: 'flat', label: 'Flat' },
+                    ]}
+                />
+            </LiveExample>
+
+            <LiveExample label="Semantic order side">
+                <SegmentedControl
+                    aria-label="Order side"
+                    value={side}
+                    onChange={setSide}
+                    items={[
+                        { id: 'buy', label: 'Buy', tone: 'success' },
+                        { id: 'sell', label: 'Sell', tone: 'danger' },
+                    ]}
+                />
+            </LiveExample>
+        </Section>
     );
 }
 
