@@ -199,8 +199,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallet setup"
+                title="Back to wallet setup"
                 disabled={stage === 'persisting'}
             >
                 <Icon.BackIcon />
