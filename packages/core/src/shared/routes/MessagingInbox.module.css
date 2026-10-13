@@ -192,7 +192,9 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-inline-end: none;
-    border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
+    border-radius: 0;
+    border-start-start-radius: var(--xc-radius-md);
+    border-end-start-radius: var(--xc-radius-md);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -206,7 +208,7 @@
     color: var(--xc-text-muted);
 }
 
-/* Send-confirmation review rows: label on the left, value on the right. */
+/* Send-confirmation review rows keep labels at the start and values at the end. */
 
 .confirmRow {
     display: flex;
@@ -261,7 +263,7 @@
     background: var(--xc-bg-muted);
 }
 
-/* Line 1: name/address (left, ellipsized) + relative timestamp (right). */
+/* Line 1: name/address at the start + relative timestamp at the end. */
 .convTop {
     display: flex;
     align-items: baseline;
@@ -270,7 +272,7 @@
     min-width: 0;
 }
 
-/* Holds the unread dot + name on the left of line 1, taking the row's free
+/* Holds the unread dot + name at the start of line 1, taking the row's free
    width so the name still ellipsizes and the timestamp keeps its place. */
 .convNameWrap {
     display: flex;
@@ -281,7 +283,7 @@
     overflow: hidden;
 }
 
-/* Unread indicator: a small accent dot to the left of a conversation's name,
+/* Unread indicator: a small accent dot before a conversation's name,
    iOS-Messages style. Cleared once the thread is opened. */
 .unreadDot {
     flex: 0 0 auto;

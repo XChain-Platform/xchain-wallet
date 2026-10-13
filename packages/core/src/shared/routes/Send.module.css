@@ -142,6 +142,15 @@
     word-break: break-word;
 }
 
+.detailsValue code,
+.coinControlValue,
+.coinControlSummary dd,
+.txid,
+.successMono {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .warnings {
     border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
     background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);

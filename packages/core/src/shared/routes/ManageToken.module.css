@@ -97,6 +97,8 @@
 .heroOwner {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .heroDescription {
@@ -154,6 +156,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .statSub {
@@ -349,6 +353,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .holderAddress,
@@ -364,6 +370,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .error {
@@ -408,6 +416,8 @@ button.row:hover:not(:disabled) {
 
 .genesisMono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .copyableGenesis {
@@ -564,6 +574,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .histSource {
@@ -571,6 +583,8 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     word-break: break-all;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .histMeta {

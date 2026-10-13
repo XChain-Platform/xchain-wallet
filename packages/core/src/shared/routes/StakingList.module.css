@@ -1,6 +1,6 @@
 /* Staking positions: one flat card list across every network, following the
-   My-dispensers list anatomy (48px icon with the chain badge overlaid in the
-   lower-right corner, name/subtitle body, trailing status chip). */
+   My-dispensers list anatomy (48px icon with the chain badge at the block-end
+   inline-end corner, name/subtitle body, trailing status chip). */
 
 .toolbar {
     display: flex;
@@ -157,7 +157,7 @@
     min-width: 0;
 }
 
-/* Right-hand column of the row: status chip on top, amount beneath it. */
+/* Trailing column of the row: status chip on top, amount beneath it. */
 .trailing {
     flex: 0 0 auto;
     display: flex;
@@ -199,6 +199,8 @@
     text-align: end;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .duration {

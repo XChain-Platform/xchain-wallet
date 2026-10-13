@@ -66,6 +66,8 @@
     padding: 2px var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
     border: 1px solid var(--xc-border);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .revealRow {
@@ -86,6 +88,8 @@
     border-radius: var(--xc-radius-sm);
     word-break: break-all;
     white-space: pre-wrap;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .qrRow {

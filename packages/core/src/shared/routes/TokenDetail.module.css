@@ -178,14 +178,16 @@
     color: var(--xc-on-accent);
     white-space: nowrap;
     overflow: hidden;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* AutoShrinkText scaffolding. The wrap is the measurement container -
    block-level so it inherits the parent's font-size and width. The
    inner span carries the actual text and is `transform: scale(...)`d
-   to fit when overflowing. Origin: left center so shrinking pulls the
-   trailing characters in toward the leading edge rather than collapsing
-   around the middle. */
+   to fit when overflowing. Its LTR number origin stays at the physical
+   left so shrinking pulls trailing characters toward the leading edge
+   rather than collapsing around the middle. */
 .balanceHeroAmountFitWrap {
     display: block;
     overflow: hidden;
@@ -507,6 +509,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .statValuePositive { color: var(--xc-success, #14b86c); }
@@ -886,6 +890,8 @@
 .creatorCell {
     font-family: var(--xc-font-mono, monospace);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .copyableValue,
@@ -924,10 +930,14 @@
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .holdersQty {
     color: var(--xc-text-muted);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .muted {
