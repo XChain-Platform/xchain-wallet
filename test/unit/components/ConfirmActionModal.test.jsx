@@ -6,10 +6,18 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
+import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 
 afterEach(() => cleanup());
 
-const DECODED = { summary: 'Send 5 JDOG to bc1qxyz', details: [{ label: 'Amount', value: '5' }], warnings: [] };
+const DECODED = {
+    summary: 'Send 5 JDOG to bc1qxyz',
+    details: [
+        { label: 'Amount', value: '5' },
+        { label: 'Destination', value: 'bc1qxyz' },
+    ],
+    warnings: [],
+};
 const REPORT_PASS = { verdict: 'pass', restricted: false, findings: [{ code: 'DRYRUN_VALID', severity: 'info', message: 'ok' }], unverified: [], stateHeight: 100 };
 const REPORT_HARD_FAIL = { verdict: 'fail', restricted: false, findings: [{ code: 'DEST_ADDRESS_INVALID', severity: 'error', overridable: false, message: 'bad address' }], unverified: [] };
 const REPORT_OVERRIDABLE = { verdict: 'fail', restricted: false, findings: [{ code: 'DRYRUN_INVALID', severity: 'error', overridable: true, message: 'network says no' }], unverified: [] };
@@ -36,7 +44,89 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('action-intent')).toBeTruthy();
         expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
         expect(screen.getByTestId('preflight-panel')).toBeTruthy();
-        expect(screen.getByTestId('confirm-approve').textContent).toMatch(/Approve/);
+        expect(screen.getByTestId('confirm-approve').textContent)
+            .toBe('Approve Send 5 JDOG to bc1qxyz');
+        expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
+    });
+
+    it('orders and labels the review as recipient, amount, fee, then total', () => {
+        const { container } = render(<ConfirmActionModal {...base({
+            feeText: 'Network fee: 0.1 BTC',
+            totalText: 'Total: 5.1 BTC',
+        })} />);
+        const labels = Array.from(screen.getByTestId('action-intent').querySelectorAll('dt'))
+            .map((node) => node.textContent);
+        expect(labels).toEqual(['To', 'Amount']);
+
+        const intent = screen.getByTestId('action-intent');
+        const fee = screen.getByTestId('confirm-fee');
+        const total = screen.getByTestId('confirm-total');
+        const preflight = screen.getByTestId('preflight-panel');
+        expect(intent.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(fee.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(total.compareDocumentPosition(preflight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(container.textContent).not.toContain('Destination');
+    });
+
+    it('shows an exact total for a native payment without adding unlike units', () => {
+        const confirmAction = {
+            phase: 'ready',
+            composed: {
+                chainId: 'bitcoin-mainnet',
+                bareNativePayment: true,
+                networkFeeSats: 2500,
+                decoded: {
+                    summary: 'Send 1 BTC to bc1qxyz',
+                    details: [
+                        { label: 'Token', value: 'BTC' },
+                        { label: 'Amount', value: '1' },
+                        { label: 'Destination', value: 'bc1qxyz' },
+                    ],
+                    warnings: [],
+                },
+            },
+            report: null,
+            acknowledged: new Set(),
+            acknowledge: vi.fn(),
+            canApprove: true,
+            approve: vi.fn(),
+            reject: vi.fn(),
+            error: null,
+            source: null,
+        };
+        const { rerender } = render(
+            <ActionConfirmScreen
+                confirmAction={confirmAction}
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('confirm-total').textContent).toBe('Total: 1.000025 BTC');
+
+        rerender(
+            <ActionConfirmScreen
+                confirmAction={{
+                    ...confirmAction,
+                    composed: {
+                        ...confirmAction.composed,
+                        decoded: {
+                            ...confirmAction.composed.decoded,
+                            details: [
+                                { label: 'Token', value: 'JDOG' },
+                                { label: 'Amount', value: '1' },
+                            ],
+                        },
+                    },
+                }}
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={vi.fn()}
+            />,
+        );
+        expect(screen.queryByTestId('confirm-total')).toBeNull();
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

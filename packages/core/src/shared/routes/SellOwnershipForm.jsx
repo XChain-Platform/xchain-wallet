@@ -410,7 +410,13 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         ? 'Review sale'
         : `Sell ${tokenUpper} name`;
     const header = (
-        <PageHeader onBack={onBack} title={headerTitle} />
+        <PageHeader
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            title={headerTitle}
+        />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -486,9 +492,9 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Create unsigned transaction: list name for sale'
                             : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}: list name for sale`
                                 : 'List name for sale'}
                     </Button>
                 )}

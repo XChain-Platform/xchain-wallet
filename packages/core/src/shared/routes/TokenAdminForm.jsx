@@ -955,7 +955,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${MODE_LABEL_LOWER[mode]}`
                     : `${MODE_LABEL[mode]}`}
@@ -1032,10 +1035,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
+                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${MODE_LABEL_LOWER[mode]}`}
                     </Button>
                 )}
             >

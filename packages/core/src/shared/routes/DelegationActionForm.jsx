@@ -339,7 +339,10 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
                     : verb}
@@ -415,9 +418,9 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? `Create unsigned transaction: ${verb.toLowerCase()}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}`
                                 : verb}
                     </Button>
                 )}

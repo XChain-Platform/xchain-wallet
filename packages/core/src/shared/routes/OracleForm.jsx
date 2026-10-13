@@ -410,7 +410,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
         />
     );

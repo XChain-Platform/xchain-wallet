@@ -669,7 +669,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dividend'
                     : `Pay dividend`}
@@ -747,10 +750,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Create unsigned transaction: pay dividend'
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: pay dividend`
+                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: pay dividend`}
                     </Button>
                 )}
             >

@@ -431,7 +431,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()} controller`
                     : `${verb} controller`}
@@ -505,10 +508,10 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? `Create unsigned transaction: ${verb.toLowerCase()} controller`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${verb} on ${descriptor.displayName}` : verb)}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()} controller`
+                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${verb.toLowerCase()} controller`}
                     </Button>
                 )}
             >

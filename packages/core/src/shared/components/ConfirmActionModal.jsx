@@ -16,13 +16,13 @@
 // `ConfirmActionModal` so the slice wiring and its tests keep
 // their vocabulary. Built on the single-encode pipeline (the previewed
 // PSBT is the signed PSBT). Anatomy top-to-bottom (§5.2): "Confirm"
-// header, intent, balance deltas, pre-flight panel, fee section,
-// credentials + HW note, Approve/Reject footer.
+// header, intent, balance deltas, fee and total section, pre-flight panel,
+// credentials + HW note, back/reject and approve footer.
 //
-// Interaction contract (§5.1, page form): exactly two exits, Approve or
-// Reject; the header back arrow is Reject. The footer is STICKY so
-// Approve/Reject stay reachable however long the intent is (§5.2.7 - a
-// safety property, not cosmetic). Once a signature exists both exits
+// Interaction contract (§5.1, page form): exactly two exits, approve or
+// back/reject; the header back arrow rejects the request. Both exits stay
+// reachable however long the intent is (§5.2.7 - a safety property, not
+// cosmetic). Once a signature exists both exits
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
@@ -54,9 +54,7 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  * @param {{ summary: string, details: Array<{label: string, value: string}>, warnings: string[] }} props.decoded
  * @param {object|null} [props.simulation]
  * @param {string} props.chainLabel
- * @param {string} [props.approveLabel]   overrides the footer verb. Defaults to a
- *   bare "Approve" on every variant, paired with "Reject": thumbs up, thumbs down,
- *   no chain suffix. The earlier "Approve & Sign on <chain>" form is retired.
+ * @param {string} [props.approveLabel]   overrides the footer action label
  * @param {import('react').ReactNode} props.credentials      the SignCredentials block (host wires it)
  * @param {'action'|'psbt'|'message'} [props.variant]
  * @param {'small'|'full'} [props.screenVariant]             Screen sizing, the caller's shell variant (defaults to 'small')
@@ -85,13 +83,14 @@ const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', '
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
+ * @param {string} [props.totalText]                         total debit when amount and fees share one unit
  */
 export function ConfirmActionModal({
     phase, composed, report, reportLoading, acknowledged, onAcknowledge,
     canApprove, onApprove, onReject, decoded, simulation, chainLabel,
     approveLabel,
     credentials, credentialsReady = false, variant = 'action',
-    screenVariant = 'small', feeText, error = null,
+    screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
     formatNativeFee, formatProtocolFee,
@@ -104,15 +103,27 @@ export function ConfirmActionModal({
     const headlineText = headline !== undefined
         ? headline
         : (decoded?.summary?.split('\n')[0] || fallbackHeadline);
-    // The footer is a plain Approve / Reject pair, thumbs up and thumbs down, on
-    // every variant. This REPLACES the older §21.7 convention where a
-    // balance-committing signature appended the chain ("Approve & Sign on
-    // Litecoin"): operator decision, the verb is the decision the user is making
-    // and the chain belongs in the intent above, not on the button. The chain is
-    // still named on this screen - in the headline, the balance rows and the
-    // network-fee line - so nothing about which network moves the money is lost.
-    // Do not reintroduce the suffix here or in SignApproval.jsx.
     const defaultApproveLabel = 'Approve';
+    const resolvedApproveLabel = approveLabel || (variant === 'action'
+        ? `${defaultApproveLabel} ${headlineText}`
+        : headlineText);
+    const reviewDetails = (decoded?.details || []).map((detail, index) => ({
+        ...detail,
+        label: detail.label === 'Destination'
+            ? 'To'
+            : detail.label.replace(/^Recipient(?=\s|$)/, 'To'),
+        index,
+    })).sort((left, right) => {
+        const rank = (label) => {
+            if (/^To(?:\s|$)/.test(label)) return 0;
+            if (label === 'Amount' || label === 'Quantity') return 1;
+            if (/fee/i.test(label)) return 2;
+            if (/^total/i.test(label)) return 3;
+            return 1;
+        };
+        return rank(left.label) - rank(right.label) || left.index - right.index;
+    }).map(({ index, ...detail }) => detail);
+    const reviewDecoded = decoded ? { ...decoded, details: reviewDetails } : decoded;
     //Read off the composed envelope rather than taken as a prop, for
     // the same reason as the label above: a rule every adapter has to remember
     // is a rule one of them will forget, and the one that forgets shows a
@@ -241,10 +252,13 @@ export function ConfirmActionModal({
                         </section>
                     ) : null}
 
-                    {/* WHO PAYS, above what happens (#40). The wallet can hold
-                        several addresses per chain, so the action row names
-                        the spender alongside the balance debit. Message signing
-                        uses the same row to name the signing address. */}
+                    {variant === 'action' && reviewDecoded ? (
+                        <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
+                    ) : null}
+
+                    {/* The wallet can hold several addresses per chain, so the
+                        action row names the spender alongside the balance debit.
+                        Message signing uses the same row for its signing address. */}
                     {(variant === 'action' || variant === 'message') && sourceAddress ? (
                         <dl className={styles.sourceRow} data-testid="confirm-source">
                             <dt className={styles.sourceLabel}>
@@ -259,10 +273,6 @@ export function ConfirmActionModal({
                         </dl>
                     ) : null}
 
-                    {variant === 'action' && decoded ? (
-                        <ActionIntentSummary decoded={decoded} simulation={simulation} />
-                    ) : null}
-
                     {/* Pre-flight on the PSBT variant is REPORT-ONLY (§5.5): the
                         wallet cannot rebuild a caller's PSBT, so findings inform
                         but never block. The caller controls `canApprove`; this
@@ -273,15 +283,6 @@ export function ConfirmActionModal({
                         unavailable; proceeding is at your discretion" on an
                         ordinary payment - alarming, and false: nothing failed
                         and nothing is missing. Not applicable means not shown. */}
-                    {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
-                        <PreflightPanel
-                            report={report}
-                            loading={reportLoading}
-                            acknowledged={acknowledged}
-                            onAcknowledge={onAcknowledge}
-                        />
-                    ) : null}
-
                     {feeText ? (
                         <div className={styles.fee} data-testid="confirm-fee">{feeText}</div>
                     ) : null}
@@ -320,6 +321,19 @@ export function ConfirmActionModal({
 
                     {oracleFee ? (
                         <div className={styles.fee} data-testid="confirm-oracle-fee">{oracleFee.text}</div>
+                    ) : null}
+
+                    {totalText ? (
+                        <div className={styles.fee} data-testid="confirm-total">{totalText}</div>
+                    ) : null}
+
+                    {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
+                        <PreflightPanel
+                            report={report}
+                            loading={reportLoading}
+                            acknowledged={acknowledged}
+                            onAcknowledge={onAcknowledge}
+                        />
                     ) : null}
 
                     {/* Fail-closed refusal (§5.5): no credentials, no Approve,
@@ -372,7 +386,7 @@ export function ConfirmActionModal({
                     ) : null}
                 </div>
 
-                {/* Sticky footer: Approve/Reject stay reachable (§5.2.7). */}
+                {/* Both exits remain grouped at the end of the review (§5.2.7). */}
                 <footer className={styles.footer}>
                     <Button
                         variant="danger"
@@ -393,9 +407,14 @@ export function ConfirmActionModal({
                         // explicitly: it matches the visible text exactly (the
                         // accessible name must contain it), and a screen-reader
                         // user gets the same "on <chain>" that a sighted one does.
-                        aria-label={approveLabel || defaultApproveLabel}
+                        aria-label={resolvedApproveLabel}
                     >
-                        {approveLabel || defaultApproveLabel}
+                        {variant === 'action' ? (
+                            <>
+                                {approveLabel || defaultApproveLabel}
+                                {approveLabel ? null : ` ${headlineText}`}
+                            </>
+                        ) : (approveLabel || headlineText)}
                     </Button>
                 </footer>
             </div>

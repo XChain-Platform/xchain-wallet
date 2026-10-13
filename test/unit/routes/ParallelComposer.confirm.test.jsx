@@ -78,7 +78,7 @@ describe('ParallelComposer confirmation', () => {
         expect(messaging.advancedAction).not.toHaveBeenCalled();
         expect(screen.getByLabelText(FROM.address)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Approve / }));
 
         await waitFor(() => expect(messaging.advancedAction).toHaveBeenCalledWith(expect.objectContaining({
             walletId: 'wallet-1',

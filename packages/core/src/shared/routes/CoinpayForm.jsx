@@ -343,7 +343,10 @@ export function CoinpayForm({
         : 'Pay for matched order';
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={titleText}
         />
     );
