@@ -711,7 +711,7 @@ export const en = {
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
     'scan.error.paymentRequest':
-        "This payment request doesn't match a supported chain or valid address.",
+        "This payment request doesn't match a supported chain or valid address. Check the request and scan again, or paste the address instead.",
     'scan.error.wif':
         'This is a private key (WIF). In XChain Platform, open Import wallet and choose Import WIF.',
     'scan.error.mnemonic':
@@ -725,7 +725,7 @@ export const en = {
     'scan.error.pairingCode':
         'This is a wallet pairing code. In XChain Platform, open Pair a watcher or signer and scan it there.',
     'scan.error.unknown':
-        "This QR code contains text the wallet doesn't know how to use.",
+        "This QR code contains text the wallet doesn't know how to use. Scan a supported payment or transaction code, or paste it below instead.",
 
     // --- history --------------------------------------------------
     'history.title': 'History',

@@ -110,27 +110,27 @@ const EXPLANATION_CASES = [
     {
         name: 'payment URI whose address belongs to another chain',
         input: `bitcoin:${LTC}?amount=1`,
-        message: /payment request.*supported chain or valid address/i,
+        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'payment URI whose chain parameter contradicts its scheme',
         input: `bitcoin:${BTC}?chain=litecoin-mainnet`,
-        message: /payment request.*supported chain or valid address/i,
+        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'xchain payment whose address contradicts its chain',
         input: `xchain:LTC/send?to=${BTC}&amount=1`,
-        message: /payment request.*supported chain or valid address/i,
+        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'unsupported required BIP21 parameter',
         input: `bitcoin:${BTC}?req-something=1`,
-        message: /payment request.*supported chain or valid address/i,
+        message: /payment request.*supported chain or valid address.*check the request.*paste the address instead/i,
     },
     {
         name: 'address-shaped garbage',
         input: 'thisisnotavalidwalletaddress12345',
-        message: /contains text the wallet doesn't know how to use/i,
+        message: /contains text the wallet doesn't know how to use.*scan a supported.*paste it below instead/i,
     },
     {
         name: 'signed transaction hex',
@@ -165,12 +165,12 @@ const EXPLANATION_CASES = [
     {
         name: 'unknown text',
         input: 'hello from an unrelated QR code',
-        message: /contains text the wallet doesn't know how to use/i,
+        message: /contains text the wallet doesn't know how to use.*scan a supported.*paste it below instead/i,
     },
     {
         name: 'unsupported URI',
         input: 'https://example.com/not-a-payment',
-        message: /contains text the wallet doesn't know how to use/i,
+        message: /contains text the wallet doesn't know how to use.*scan a supported.*paste it below instead/i,
     },
 ];
 
