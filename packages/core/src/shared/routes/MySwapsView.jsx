@@ -34,6 +34,7 @@ import {
     PageHeader,
     Screen,
     SectionHeader,
+    Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -210,6 +211,8 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;
         }
+        setItems(null);
+        setLoadError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
             if (requestId !== loadRequestId.current) return;
@@ -245,9 +248,9 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, live: states.get(it.key) || null })));
             setLoadError(null);
-        } catch (err) {
+        } catch {
             if (requestId !== loadRequestId.current) return;
-            setLoadError(err?.message || 'Failed to load swaps.');
+            setLoadError('Could not load your swaps. Try again.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
@@ -285,8 +288,24 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     }
 
-    if (items === null) return wrap(<p className={L.hint}>Loading your swaps…</p>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
+    if (items === null) {
+        return wrap(
+            <div role="status" aria-label="Loading swaps">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
+    }
+    if (loadError) {
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={L.hint}
+                recovery={{ label: 'Try again', onAction: load }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
+    }
     if (items.length === 0) {
         return wrap(
             <EmptyState

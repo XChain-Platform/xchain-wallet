@@ -27,7 +27,7 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -232,6 +232,8 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             || typeof messaging?.getOrdersForAddress !== 'function') {
             setItems([]); return;
         }
+        setItems(null);
+        setLoadError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
             if (requestId !== loadRequestId.current) return;
@@ -281,9 +283,9 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
-        } catch (err) {
+        } catch {
             if (requestId !== loadRequestId.current) return;
-            setLoadError(err?.message || 'Failed to load orders.');
+            setLoadError('Could not load your orders. Try again.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
@@ -355,8 +357,24 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         );
     }
 
-    if (items === null) return wrap(<p className={L.hint}>Loading your orders…</p>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
+    if (items === null) {
+        return wrap(
+            <div role="status" aria-label="Loading orders">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
+    }
+    if (loadError) {
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={L.hint}
+                recovery={{ label: 'Try again', onAction: load }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
+    }
     if (items.length === 0) {
         return wrap(
             <EmptyState

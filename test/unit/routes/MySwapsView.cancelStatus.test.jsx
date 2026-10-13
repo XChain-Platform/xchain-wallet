@@ -67,7 +67,8 @@ describe('MySwapsView: cancel row status', () => {
     it('shows a load error instead of a false empty state when the swap feed fails', async () => {
         const utils = await open([], [], { swapsError: new Error('Swap explorer unavailable') });
 
-        expect(utils.getByText('Swap explorer unavailable')).toBeTruthy();
+        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Swap explorer unavailable')).toBeNull();
         expect(utils.queryByText('No swaps yet')).toBeNull();
     });
 
@@ -78,7 +79,8 @@ describe('MySwapsView: cancel row status', () => {
             { cancelsError: new Error('Cancel status unavailable') },
         );
 
-        expect(utils.getByText('Cancel status unavailable')).toBeTruthy();
+        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Cancel status unavailable')).toBeNull();
         expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
     });
 
