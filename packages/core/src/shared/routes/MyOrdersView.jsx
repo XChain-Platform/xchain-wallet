@@ -27,7 +27,7 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -190,7 +190,6 @@ function explorerTxUrl(descriptor, txid) {
 export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [items, setItems] = useState(/** @type {any[] | null} */ (null));
     const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
@@ -297,7 +296,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? L.wrapFull : L.wrapPopup}>{children}</div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -320,11 +319,12 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
     if (items.length === 0) {
         return wrap(
-            <div className={L.empty}>
-                <p className={L.emptyTitle}>No orders yet</p>
-                <p className={L.hint}>Orders you place on the DEX show up here across every pair.</p>
-                {onCreateOrder ? <div className={F.actions}><Button variant="primary" onClick={onCreateOrder}>Create an order</Button></div> : null}
-            </div>,
+            <EmptyState
+                title="No orders yet"
+                body="Orders you place on the DEX show up here across every pair."
+                actionLabel={onCreateOrder ? 'Create an order' : undefined}
+                onAction={onCreateOrder}
+            />,
         );
     }
 
@@ -400,12 +400,13 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     return wrap(
         <>
+            <SectionHeader title="Open" />
             {openItems.length > 0 ? (
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <p className={L.hint}>No open orders.</p>}
+            ) : <EmptyState title="No open orders." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
-                    <p className={L.sectionLabel}>Closed</p>
+                    <SectionHeader title="Closed" />
                     <ul className={L.list} role="list" aria-label="Closed orders">{closedItems.map(renderRow)}</ul>
                 </>
             ) : null}
@@ -502,10 +503,9 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     }
 
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
-    const isFull = variant === 'full';
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={F.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -581,7 +581,20 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     }
 
     return wrap(
-        <form onSubmit={submit} noValidate>
+        <FormPage
+            label={isCancel ? 'Cancel order' : 'Edit order'}
+            onSubmit={submit}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={isCancel ? 'danger' : 'primary'}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
+                >
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
+                </Button>
+            )}
+        >
             <p className={F.summary}>
                 Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
@@ -640,16 +653,6 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
             ) : null}
             {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
-            <div className={F.actions}>
-                <Button
-                    type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
-                >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
@@ -68,7 +68,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     // Demo wallets get sample feeds so the trading surface is fully
     // populated without live liquidity. Real wallets show live data and
     // the panels' own empty states, never fabricated prices/trades.
@@ -127,7 +126,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -280,9 +279,6 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                     tick2={tick2}
                 />
             ) : null}
-
-            <div className={styles.actions}>
-            </div>
         </>,
     );
 }

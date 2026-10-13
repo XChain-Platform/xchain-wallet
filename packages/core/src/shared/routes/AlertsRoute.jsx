@@ -15,7 +15,7 @@
 // destination (Decentralized Exchange, Marketplace, ...). Reuses
 // AlertsOverlay.module.css for the alert-row styling.
 
-import { Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from '../components/AlertsOverlay.module.css';
 
@@ -31,9 +31,9 @@ export function AlertsRoute({ onBack, alerts = [] }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
+            <ListPage>
                 {alerts.length === 0 ? (
-                    <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
+                    <EmptyState title="No alerts. You&apos;re all caught up." />
                 ) : (
                     <ul className={styles.list} role="list">
                         {alerts.map((a) => (
@@ -55,7 +55,7 @@ export function AlertsRoute({ onBack, alerts = [] }) {
                         ))}
                     </ul>
                 )}
-            </div>
+            </ListPage>
         </Screen>
     );
 }

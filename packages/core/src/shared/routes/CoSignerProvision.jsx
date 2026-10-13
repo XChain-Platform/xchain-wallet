@@ -34,6 +34,7 @@ import {
     ChainBadge,
     CopyButton,
     AddressText,
+    FormPage,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -62,7 +63,6 @@ const PUBKEY_RE = /^[0-9a-fA-F]{66}$/;
 export function CoSignerProvision({ walletId, onBack, onDone }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -122,7 +122,8 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return null;
     }, [chainId, daemonAddress, agentPubkey, policyDraft]);
 
-    async function handleSubmit() {
+    async function handleSubmit(event) {
+        event?.preventDefault();
         if (composeError || !chainId || !daemonAddress) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setSubmitError(built.error); return; }
@@ -151,7 +152,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const header = <PageHeader onBack={onBack} title="New agent account" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -194,13 +195,34 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
     const descriptor = chainRegistry.get(chainId);
 
     return wrap(
-        <>
-            <p className={styles.hint} style={{ textAlign: 'left' }}>
+        <FormPage
+            label="Create agent account"
+            onSubmit={handleSubmit}
+            intro={(
+                <>
                 An agent account is a 2-of-2 shared address between an automated
                 agent and this wallet. This wallet acts as the policy co-signer:
                 it signs a request automatically when it fits the rules you set
                 below, and refuses anything out of policy. Bitcoin-only at launch.
-            </p>
+                </>
+            )}
+            status={(
+                <>
+                    {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
+                    {composeError ? <p className={styles.hint}>{composeError}</p> : null}
+                </>
+            )}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={Boolean(composeError) || stage === 'submitting'}
+                    loading={stage === 'submitting'}
+                >
+                    Create agent account
+                </Button>
+            )}
+        >
 
             <ChainPicker
                 label="Network"
@@ -247,20 +269,6 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 </dd>
             </dl>
 
-            {submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleSubmit}
-                    disabled={Boolean(composeError) || stage === 'submitting'}
-                    loading={stage === 'submitting'}
-                >
-                    Create agent account
-                </Button>
-                {composeError ? <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>{composeError}</p> : null}
-            </div>
-        </>,
+        </FormPage>,
     );
 }
