@@ -191,7 +191,7 @@
     overflow-wrap: anywhere;
 }
 
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .detailsList {
         grid-template-columns: minmax(0, 1fr);
     }
