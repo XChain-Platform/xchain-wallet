@@ -38,6 +38,18 @@ async function detailText(idx) {
 }
 
 describe('ListPickerScreen description detail', () => {
+    it('renders an empty result through the shared list page and empty state', async () => {
+        renderPicker([]);
+
+        const title = await screen.findByText(
+            'No address lists published from this chain’s addresses yet. Create one in My Lists first.',
+        );
+        expect(title.tagName).toBe('P');
+        expect(title.parentElement.className).toMatch(/wrap/);
+        expect(title.parentElement.parentElement.className).toMatch(/page/);
+        expect(title.parentElement).not.toHaveAttribute('role');
+    });
+
     it('shows a described row description after the member count', async () => {
         const detail = Promise.withResolvers();
         renderPicker(
