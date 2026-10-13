@@ -18,11 +18,9 @@
 // seed onto a fresh device should land on Home rather than inherit
 // the last view from a different device.
 //
-// Resume safety: only views that take no contextual props (token
-// detail's selected token, history's initial query, dispenser detail's
-// actionIndex, etc.) can be resumed without re-priming React state.
-// `RESUMABLE_VIEWS` enumerates the safe set; everything else falls
-// through to Home.
+// Resume safety: context-free views need only their name. The four deep
+// views below also persist a small, validated parameter object so their
+// React state can be primed before the shell renders them.
 
 const NS = 'xc:lastView:';
 
@@ -41,9 +39,61 @@ export const RESUMABLE_VIEWS = Object.freeze([
     'staking-dashboard',
     'contracts-list',
     'cross-chain-templates',
+    'lists',
+    'shared-lists',
+    'dispensers-list',
+    'dispenser-explorer',
+    'token-detail',
+    'list-detail',
+    'dispenser-detail',
+    'market',
 ]);
 
 const RESUMABLE_SET = new Set(RESUMABLE_VIEWS);
+const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
+
+const isText = (value) => typeof value === 'string' && value.length > 0 && value.length <= 512;
+
+function copyOptional(target, source, fields) {
+    for (const field of fields) {
+        const value = source[field];
+        if ((typeof value === 'string' && value.length <= 512)
+            || (typeof value === 'number' && Number.isFinite(value))
+            || typeof value === 'boolean'
+            || value === null) {
+            target[field] = value;
+        }
+    }
+    return target;
+}
+
+/**
+ * Validate and trim the state carried by a contextual route. Unknown fields
+ * never reach storage or session history.
+ *
+ * @param {string} view
+ * @param {unknown} params
+ * @returns {Record<string, any> | null}
+ */
+export function normalizeRouteParams(view, params) {
+    if (!PARAM_VIEWS.has(view)) return null;
+    if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+    if (!isText(params.chainId)) return null;
+    if (view === 'token-detail') {
+        if (!isText(params.tick)) return null;
+        return copyOptional({ chainId: params.chainId, tick: params.tick }, params, [
+            'kind', 'displayName', 'divisibility', 'fiatRate', 'quantity', 'imageUrl', 'issuer',
+        ]);
+    }
+    if (view === 'market') {
+        if (!isText(params.tick1) || !isText(params.tick2)) return null;
+        return { chainId: params.chainId, tick1: params.tick1, tick2: params.tick2 };
+    }
+    if (!isText(params.actionIndex)) return null;
+    return copyOptional({ chainId: params.chainId, actionIndex: params.actionIndex }, params, [
+        'origin', 'directoryChainId',
+    ]);
+}
 
 function safeGet(key) {
     try {
@@ -73,13 +123,27 @@ function safeRemove(key) {
  * last visited that we have since removed should no-op, not crash).
  *
  * @param {string | null | undefined} walletId
- * @returns {string | null}
+ * @returns {{ view: string, params: Record<string, any> | null } | null}
  */
-export function readLastView(walletId) {
+export function readLastViewRoute(walletId) {
     if (typeof walletId !== 'string' || !walletId) return null;
-    const v = safeGet(walletId);
-    if (typeof v !== 'string' || !v) return null;
-    return RESUMABLE_SET.has(v) ? v : null;
+    const raw = safeGet(walletId);
+    if (typeof raw !== 'string' || !raw) return null;
+    if (RESUMABLE_SET.has(raw) && !PARAM_VIEWS.has(raw)) return { view: raw, params: null };
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !RESUMABLE_SET.has(parsed.view)) return null;
+        if (!PARAM_VIEWS.has(parsed.view)) return { view: parsed.view, params: null };
+        const params = normalizeRouteParams(parsed.view, parsed.params);
+        return params ? { view: parsed.view, params } : null;
+    } catch {
+        return null;
+    }
+}
+
+export function readLastView(walletId, includeParams = false) {
+    const route = readLastViewRoute(walletId);
+    return includeParams ? route : (route?.view || null);
 }
 
 /**
@@ -89,8 +153,9 @@ export function readLastView(walletId) {
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} view
+ * @param {unknown} [params]
  */
-export function writeLastView(walletId, view) {
+export function writeLastView(walletId, view, params = null) {
     if (typeof walletId !== 'string' || !walletId) return;
     if (typeof view !== 'string' || !view) return;
     if (!RESUMABLE_SET.has(view)) return;
@@ -98,6 +163,12 @@ export function writeLastView(walletId, view) {
         // Home is the implicit default; storing it just creates noise
         // and a future "go home" navigation reads the same answer.
         safeRemove(walletId);
+        return;
+    }
+    if (PARAM_VIEWS.has(view)) {
+        const normalized = normalizeRouteParams(view, params);
+        if (!normalized) return;
+        safeSet(walletId, JSON.stringify({ view, params: normalized }));
         return;
     }
     safeSet(walletId, view);

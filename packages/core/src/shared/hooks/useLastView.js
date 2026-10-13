@@ -31,21 +31,37 @@
 
 import { useEffect, useRef } from 'react';
 import { readLastView, writeLastView } from '../utils/lastViewMemory.js';
+import { normalizeRouteParams } from '../utils/lastViewMemory.js';
+import { setRouteHistoryManaged } from '../../ui/backStack.js';
+
+const PARAM_VIEWS = new Set(['token-detail', 'list-detail', 'dispenser-detail', 'market']);
 
 /**
  * @param {object} args
  * @param {string | null | undefined} args.walletId   Active wallet id.
  * @param {string} args.currentView                   The shell's current `unlockedView`.
+ * @param {object | null} [args.currentParams]        Validated context for a supported deep view.
  * @param {(view: string) => void} args.onResume      Called once per walletId change with the persisted view (or 'home' on miss).
+ * @param {(view: string, params: object | null) => void} [args.onResumeParams] Primes deep-view state before `onResume` selects it.
  * @param {boolean} [args.skip]   §24.6 / Cluster Y FU 4: when true, the resume effect is
  *                                suppressed; a freshly-detached desktop window opens on its
  *                                pinned target rather than the user's last resumed view.
  *                                The persist effect still runs so navigation inside the
  *                                detached window survives a refresh.
  */
-export function useLastView({ walletId, currentView, onResume, skip = false }) {
+export function useLastView({ walletId, currentView, currentParams = null, onResume, onResumeParams, skip = false }) {
     const lastResumedFor = useRef(/** @type {string | null} */ (null));
     const lastPersistedFor = useRef(/** @type {string | null} */ (null));
+    const onResumeRef = useRef(onResume);
+    const onResumeParamsRef = useRef(onResumeParams);
+    const pendingPopKey = useRef(/** @type {string | null} */ (null));
+    const historyKey = useRef(/** @type {string | null} */ (null));
+    const historyWallet = useRef(/** @type {string | null} */ (null));
+    onResumeRef.current = onResume;
+    onResumeParamsRef.current = onResumeParams;
+    const normalizedParams = normalizeRouteParams(currentView, currentParams);
+    const route = { view: currentView, params: normalizedParams };
+    const routeKey = JSON.stringify(route);
 
     // Persist current view whenever it changes, but only after the
     // resume effect has run for this walletId. Without that gate, a
@@ -69,8 +85,47 @@ export function useLastView({ walletId, currentView, onResume, skip = false }) {
             lastPersistedFor.current = walletId;
             return;
         }
-        writeLastView(walletId, currentView);
-    }, [walletId, currentView]);
+        writeLastView(walletId, currentView, normalizedParams);
+    }, [walletId, currentView, routeKey]);
+
+    // Session history stores the same validated route payload as reload
+    // memory. A pop restores params before selecting the view, so Back and
+    // Forward cannot remount a deep screen with an empty ref.
+    useEffect(() => {
+        if (typeof walletId !== 'string' || !walletId || typeof window === 'undefined') return undefined;
+        setRouteHistoryManaged(true);
+        const onPop = (event) => {
+            const snapshot = event.state?.xcRoute;
+            if (!snapshot || snapshot.walletId !== walletId || typeof snapshot.view !== 'string') return;
+            const params = normalizeRouteParams(snapshot.view, snapshot.params);
+            if (PARAM_VIEWS.has(snapshot.view) && !params) return;
+            const next = { view: snapshot.view, params };
+            pendingPopKey.current = JSON.stringify(next);
+            historyKey.current = pendingPopKey.current;
+            onResumeParamsRef.current?.(next.view, next.params);
+            onResumeRef.current(next.view);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, [walletId]);
+
+    useEffect(() => {
+        if (typeof walletId !== 'string' || !walletId || typeof window === 'undefined') return;
+        if (historyWallet.current !== walletId) {
+            historyWallet.current = walletId;
+            historyKey.current = null;
+            pendingPopKey.current = null;
+        }
+        if (pendingPopKey.current === routeKey) {
+            pendingPopKey.current = null;
+            return;
+        }
+        if (historyKey.current === routeKey) return;
+        const state = { ...(window.history.state || {}), xcRoute: { walletId, ...route } };
+        if (historyKey.current === null) window.history.replaceState(state, '');
+        else window.history.pushState(state, '');
+        historyKey.current = routeKey;
+    }, [walletId, routeKey]);
 
     // Resume on wallet activation / change. Skips re-running for the
     // same walletId so user navigation after the resume is not
@@ -88,9 +143,14 @@ export function useLastView({ walletId, currentView, onResume, skip = false }) {
         lastResumedFor.current = walletId;
         lastPersistedFor.current = null;
         if (skip) return;
-        const persisted = readLastView(walletId);
-        if (persisted && persisted !== currentView) {
-            onResume(persisted);
+        const persisted = readLastView(walletId, true);
+        if (persisted && (persisted.view !== currentView || persisted.params)) {
+            onResumeParamsRef.current?.(persisted.view, persisted.params);
+            onResumeRef.current(persisted.view);
+        } else {
+            // No state update follows a miss, so the next user navigation is
+            // already safe to persist rather than being mistaken for a switch.
+            lastPersistedFor.current = walletId;
         }
     // currentView + skip intentionally omitted. We only resume on
     // walletId change. skip is captured at the moment the resume would

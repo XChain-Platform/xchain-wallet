@@ -71,16 +71,28 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const variant = screenVariantFor(shell);
 
     const [data, setData] = useState(/** @type {any | null} */ (null));
+    const [loaded, setLoaded] = useState(false);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
         setData(null);
+        setLoaded(false);
         setLoadError(null);
         messaging.getListByActionIndex({ chainId, actionIndex })
-            .then((row) => { if (!cancelled) setData(row || null); })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
+            .then((row) => {
+                if (!cancelled) {
+                    setData(row || null);
+                    setLoaded(true);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setLoadError(err?.message || 'Failed to load list.');
+                    setLoaded(true);
+                }
+            });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging]);
 
@@ -132,9 +144,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
-    if (!data) {
+    if (!loaded) {
         return wrap(<p className={styles.hint}>Loading…</p>);
     }
+    if (!data) return wrap(<EmptyState title="List not found" />);
 
     return wrap(
         <>

@@ -37,6 +37,7 @@ let armed = false;
 let ignoreNextPop = false;
 let syncScheduled = false;
 let listening = false;
+let routeHistoryManaged = false;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
 
@@ -44,7 +45,8 @@ const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history
 function sync() {
     syncScheduled = false;
     if (!hasHistory()) return;
-    const want = handlers.length > 0;
+    const want = handlers.some((entry) => entry.kind !== 'route')
+        || (!routeHistoryManaged && handlers.length > 0);
     if (want && !armed) {
         window.history.pushState({ xcBack: true }, '');
         armed = true;
@@ -90,14 +92,15 @@ function onPopState() {
  * is the one a Back press runs.
  *
  * @param {() => void} run
+ * @param {'route' | 'overlay'} [kind]
  * @returns {() => void} unregister
  */
-export function registerBackHandler(run) {
+export function registerBackHandler(run, kind = 'overlay') {
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
         listening = true;
     }
-    const entry = { run };
+    const entry = { run, kind };
     handlers.push(entry);
     scheduleSync();
     return () => {
@@ -119,8 +122,9 @@ export function registerBackHandler(run) {
  *
  * @param {(() => void) | undefined} onBack
  * @param {boolean} [disabled]
+ * @param {'route' | 'overlay'} [kind]
  */
-export function useBackHandler(onBack, disabled = false) {
+export function useBackHandler(onBack, disabled = false, kind = 'overlay') {
     const latest = useRef({ onBack, disabled });
     latest.current = { onBack, disabled };
     const present = typeof onBack === 'function';
@@ -129,8 +133,18 @@ export function useBackHandler(onBack, disabled = false) {
         return registerBackHandler(() => {
             const { onBack: run, disabled: off } = latest.current;
             if (!off && typeof run === 'function') run();
-        });
-    }, [present]);
+        }, kind);
+    }, [present, kind]);
+}
+
+/** Let the shell's route snapshots own browser Back while keeping overlay
+ * handlers on the sentinel stack. */
+export function setRouteHistoryManaged(managed) {
+    routeHistoryManaged = Boolean(managed);
+    if (routeHistoryManaged && armed && !handlers.some((entry) => entry.kind !== 'route')) {
+        armed = false;
+    }
+    scheduleSync();
 }
 
 /** Test seam: forget everything, as a fresh page load would. */
@@ -141,4 +155,5 @@ export function resetBackStackForTests() {
     syncScheduled = false;
     if (listening && typeof window !== 'undefined') window.removeEventListener('popstate', onPopState);
     listening = false;
+    routeHistoryManaged = false;
 }

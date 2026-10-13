@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MarketChart } from '../components/MarketChart.jsx';
@@ -73,6 +73,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
+    const [marketMissing, setMarketMissing] = useState(false);
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
 
@@ -80,8 +81,14 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         let cancelled = false;
         setSummaryLoading(true);
         setSummaryError(null);
+        setMarketMissing(false);
         messaging.getMarket({ chainId, tick1, tick2 })
-            .then(() => { if (!cancelled) setSummaryLoading(false); })
+            .then((summary) => {
+                if (!cancelled) {
+                    setSummaryLoading(false);
+                    setMarketMissing(summary == null);
+                }
+            })
             .catch((err) => {
                 if (!cancelled) {
                     setSummaryLoading(false);
@@ -207,6 +214,8 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             </dl>
         </div>
     );
+
+    if (marketMissing) return wrap(<EmptyState title="Market not found" />);
 
     return wrap(
         <>
