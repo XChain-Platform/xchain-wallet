@@ -46,9 +46,9 @@ assert.match(cmp, /\$\{styles\[size\]/, 'applies the size class to the field wra
 
 // --- CSS: chrome matches Input at both sizes ---------------------------
 
-assert.match(css, /\.control\s*\{[^}]*min-height:\s*36px/s, 'md control is 36px like Input');
+assert.match(css, /\.control\s*\{[^}]*min-height:\s*var\(--xc-control-h-md\)/s, 'md control uses the shared control height');
 assert.match(css, /\.control\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s, 'control borrows Input border chrome');
-assert.match(css, /\.lg \.control\s*\{[^}]*min-height:\s*48px/s, 'lg control is 48px');
+assert.match(css, /\.lg \.control\s*\{[^}]*min-height:\s*var\(--xc-control-h-lg\)/s, 'lg control uses the shared large control height');
 for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeholder', 'caret']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }

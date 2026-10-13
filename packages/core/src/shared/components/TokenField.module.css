@@ -2,8 +2,8 @@
    field chrome (border/background/radius/label) at both sizes, so it sits in
    a form indistinguishable in size from an Input/Select. The control is a
    button (icon + ticker/chain text + caret) rather than an <input>, but the
-   sizing contract mirrors Input.module.css: default (md, 36px) values on
-   .control/.label, `.lg` overrides for the 48px hero size. */
+   sizing contract mirrors Input.module.css: the default control token on
+   .control/.label, with `.lg` overrides for the large hero size. */
 
 .field {
     display: flex;
@@ -26,10 +26,9 @@
     gap: var(--xc-space-3);
     width: 100%;
     min-width: 0;
-    /* space-1 vertical (not Input's space-2): the 20px token icon plus
-       borders must fit inside the same 36px outer height as Input md. */
+    /* Keep the compact vertical inset while the shared token owns the outer height. */
     padding: var(--xc-space-1) var(--xc-space-3);
-    min-height: 36px;
+    min-height: var(--xc-control-h-md);
     font-family: var(--xc-font-sans);
     font-size: var(--xc-text-md);
     color: var(--xc-text);
@@ -67,7 +66,7 @@
 .lg .control {
     font-size: var(--xc-text-lg);
     padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
+    min-height: var(--xc-control-h-lg);
 }
 
 .lg .label {
@@ -75,8 +74,7 @@
     font-weight: 600;
 }
 
-/* md: single line ("TICK on Chain") so the control stays at the Input
-   md height (36px); lg stacks the two lines in the 48px hero field. */
+/* Keep md on one line while lg stacks the two lines inside its taller control. */
 .text {
     display: flex;
     flex-direction: row;
@@ -89,6 +87,7 @@
 .lg .text {
     flex-direction: column;
     align-items: stretch;
+    /* Preserve the untokenized 2px optical separation between stacked labels. */
     gap: 2px;
 }
 
