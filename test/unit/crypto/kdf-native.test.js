@@ -134,6 +134,20 @@ describe('deriveMasterKeyAsync with a native provider', () => {
         expect(provider).toHaveBeenCalledTimes(4);
     });
 
+    it('rechecks the same provider after it is unregistered', async () => {
+        let correct = true;
+        const wrong = bytesToBase64(new Uint8Array(KDF_KEY_LENGTH).fill(7));
+        const provider = vi.fn(async (req) => (correct ? referenceAnswer(req) : wrong));
+        setNativeArgon2id(provider);
+        expect(hex(await deriveMasterKeyAsync(SMALL.password, toParams(SMALL)))).toBe(SMALL.keyHex);
+
+        setNativeArgon2id(null);
+        correct = false;
+        setNativeArgon2id(provider);
+        expect(hex(await deriveMasterKeyAsync(SMALL.password, toParams(SMALL)))).toBe(SMALL.keyHex);
+        expect(provider).toHaveBeenCalledTimes(3);
+    });
+
     it('re-encodes the salt as canonical base64 before it crosses to native code', async () => {
         const provider = providerWith(async (req) => referenceAnswer(req));
         setNativeArgon2id(provider);

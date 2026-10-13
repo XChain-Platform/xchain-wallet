@@ -29,6 +29,7 @@
 //                       whose message a dApp would have to parse.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
 
 const { sendToken } = vi.hoisted(() => ({ sendToken: vi.fn() }));
 
@@ -120,6 +121,14 @@ function reply(id, payload) {
     }));
 }
 
+function replyEvent(event, payload) {
+    window.dispatchEvent(new MessageEvent('message', {
+        data: { source: 'xchain-inject-event', event, payload },
+        origin: window.location.origin,
+        source: window,
+    }));
+}
+
 // The content script, reduced to what it actually does for the page: refuse
 // non-`bridge.*` types, stamp the page origin, hand the request to the
 // background, post the response envelope back.
@@ -129,6 +138,10 @@ function installRelay(getHost) {
         if (!data || typeof data !== 'object') return;
         if (data.source !== 'xchain-inject') return;
         if (typeof data.id !== 'string' || typeof data.type !== 'string') return;
+        if (relayOverride) {
+            relayOverride(data);
+            return;
+        }
         if (!data.type.startsWith('bridge.')) {
             reply(data.id, {
                 ok: false,
@@ -160,6 +173,8 @@ function installRelay(getHost) {
 let provider = null;
 let host = null;
 let uninstallRelay = null;
+let relayOverride = null;
+let addedWindowGlobals = [];
 
 function newHost({ signThrottle } = {}) {
     host = new MessageHost({ vault: makeVault(), chainRegistry, sdkRegistry: {} });
@@ -172,8 +187,11 @@ function newHost({ signThrottle } = {}) {
 
 beforeAll(async () => {
     uninstallRelay = installRelay(() => host);
+    const globalsBefore = new Set(Object.getOwnPropertyNames(window));
     await import('../../../packages/extension/src/inject/xchainProvider.js');
     provider = window.xchain;
+    addedWindowGlobals = Object.getOwnPropertyNames(window)
+        .filter((name) => !globalsBefore.has(name));
 });
 
 afterAll(() => {
@@ -181,11 +199,86 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+    relayOverride = null;
     sendToken.mockReset().mockResolvedValue({ txid: 'tx-page-1' });
     newHost();
 });
 
 describe('what the reference dApp sees through the real provider', () => {
+    it('adds only the documented provider global with the documented surface', () => {
+        expect(addedWindowGlobals).toEqual(['xchain']);
+        expect(Object.keys(provider).sort()).toEqual([
+            'coSign',
+            'connect',
+            'disconnect',
+            'getAccounts',
+            'getActiveChains',
+            'getAddresses',
+            'getBalances',
+            'getSupportedChains',
+            'isXChainWallet',
+            'off',
+            'on',
+            'parallel',
+            'signAction',
+            'signIn',
+            'signMessage',
+            'signPsbt',
+            'version',
+        ].sort());
+    });
+
+    it('rejects malformed response envelopes as an internal bridge failure', async () => {
+        relayOverride = (data) => reply(data.id, { ok: 'yes', result: [] });
+        const result = await provider.connect();
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('INTERNAL_ERROR');
+        expect(result.message).toMatch(/invalid response envelope/);
+    });
+
+    it('accepts responses only from the current window origin', async () => {
+        relayOverride = (data) => {
+            window.dispatchEvent(new MessageEvent('message', {
+                data: { source: 'xchain-inject-response', id: data.id, ok: true, result: ['wrong'] },
+                origin: 'https://attacker.example',
+                source: window,
+            }));
+            reply(data.id, { ok: true, result: ['right'] });
+        };
+        await expect(provider.getAccounts()).resolves.toEqual(['right']);
+    });
+
+    it('dispatches only documented events with valid payloads from this origin', () => {
+        const handler = vi.fn();
+        provider.on('accountsChanged', handler);
+        window.dispatchEvent(new MessageEvent('message', {
+            data: {
+                source: 'xchain-inject-event',
+                event: 'accountsChanged',
+                payload: [{ id: 'account-1', name: 'Primary' }],
+            },
+            origin: 'https://attacker.example',
+            source: window,
+        }));
+        replyEvent('accountsChanged', [{ name: 'missing id' }]);
+        replyEvent('internalState', { unlocked: true });
+        expect(handler).not.toHaveBeenCalled();
+
+        replyEvent('accountsChanged', [{ id: 'account-1', name: 'Primary' }]);
+        expect(handler).toHaveBeenCalledOnce();
+        expect(handler).toHaveBeenCalledWith([{ id: 'account-1', name: 'Primary' }]);
+        provider.off('accountsChanged', handler);
+    });
+
+    it('does not install the provider when evaluated in a subframe', () => {
+        const frameWindow = { top: {}, addEventListener: vi.fn(), dispatchEvent: vi.fn() };
+        const run = new Function('window', providerSource);
+        run(frameWindow);
+        expect(frameWindow.xchain).toBeUndefined();
+        expect(frameWindow.addEventListener).not.toHaveBeenCalled();
+        expect(frameWindow.dispatchEvent).not.toHaveBeenCalled();
+    });
+
     it('connect resolves an ok:true ConnectSuccess the example can branch on', async () => {
         const conn = await provider.connect({ appName: 'Example dApp', requestedChains: [CHAIN] });
 

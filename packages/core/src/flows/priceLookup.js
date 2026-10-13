@@ -80,6 +80,12 @@ const rateCache = new Map();
 /** @type {Map<string, number>} */
 const coinMissAt = new Map();
 
+// A mounted route and the Home summary can ask for the same rate before the
+// first request fills the cache. Each key owns one refresh promise so those
+// consumers share the request instead of racing identical network work.
+/** @type {Map<string, Promise<{ updated: string[] }>>} */
+const coinRefreshes = new Map();
+
 /** @type {Set<() => void>} */
 const listeners = new Set();
 
@@ -289,7 +295,7 @@ export async function refreshFiatRates({
     if (!fetchImpl) return { updated: [] };
     const nowMs = deps.now();
 
-    const wanted = chainCoins.filter((coin) => {
+    const wanted = Array.from(new Set(chainCoins)).filter((coin) => {
         if (typeof coin !== 'string' || coin.length === 0) return false;
         if (force) return true;
         const missAt = coinMissAt.get(cacheKey(coin, fiatCurrency));
@@ -298,6 +304,46 @@ export async function refreshFiatRates({
         return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
     });
     if (wanted.length === 0) return { updated: [] };
+
+    const refreshKey = (coin) => `${cacheKey(coin, fiatCurrency)}|fallback:${allowCoingeckoFallback}`;
+    const owned = [];
+    const pending = new Set();
+    for (const coin of wanted) {
+        const active = coinRefreshes.get(refreshKey(coin));
+        if (active) pending.add(active);
+        else owned.push(coin);
+    }
+
+    if (owned.length > 0) {
+        let refresh;
+        refresh = refreshFiatRateBatch({
+            wanted: owned,
+            fiatCurrency,
+            allowCoingeckoFallback,
+            fetchImpl,
+            nowMs,
+        }).finally(() => {
+            for (const coin of owned) {
+                const key = refreshKey(coin);
+                if (coinRefreshes.get(key) === refresh) coinRefreshes.delete(key);
+            }
+        });
+        for (const coin of owned) coinRefreshes.set(refreshKey(coin), refresh);
+        pending.add(refresh);
+    }
+
+    const results = await Promise.all(pending);
+    const updated = new Set(results.flatMap((result) => result.updated));
+    return { updated: wanted.filter((coin) => updated.has(coin)) };
+}
+
+async function refreshFiatRateBatch({
+    wanted,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+}) {
 
     /** @type {string[]} */
     const updated = [];
@@ -412,6 +458,9 @@ const MISS_TTL_MS = 60 * 1000;
 /** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number }>} */
 const tokenRateCache = new Map();
 
+/** @type {Map<string, Promise<{ updated: boolean }>>} */
+const tokenRefreshes = new Map();
+
 function tokenCacheKey(chainCoin, tick, fiatCurrency) {
     return `${chainCoin}|${tick}|${fiatCurrency}`;
 }
@@ -506,6 +555,39 @@ export async function refreshTokenFiatRate({
         const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
         if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
     }
+    const refreshKey = `${key}|fallback:${allowCoingeckoFallback}`;
+    const active = tokenRefreshes.get(refreshKey);
+    if (active) return active;
+
+    let refresh;
+    refresh = refreshTokenFiatRateUncached({
+        chainCoin,
+        tick: t,
+        nativeTicker: n,
+        fiatCurrency,
+        allowCoingeckoFallback,
+        fetchImpl,
+        nowMs,
+        key,
+        hit,
+    }).finally(() => {
+        if (tokenRefreshes.get(refreshKey) === refresh) tokenRefreshes.delete(refreshKey);
+    });
+    tokenRefreshes.set(refreshKey, refresh);
+    return refresh;
+}
+
+async function refreshTokenFiatRateUncached({
+    chainCoin,
+    tick: t,
+    nativeTicker: n,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+    key,
+    hit,
+}) {
     // A refresh that resolved nothing keeps whatever the cache already
     // holds, exactly as the coin path does: a price from five minutes ago
     // is a better answer mid-session than a field that suddenly goes
@@ -587,7 +669,9 @@ export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {})
 export function _resetPriceLookupForTests() {
     rateCache.clear();
     coinMissAt.clear();
+    coinRefreshes.clear();
     tokenRateCache.clear();
+    tokenRefreshes.clear();
     listeners.clear();
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
 }
