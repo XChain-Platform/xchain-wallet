@@ -267,12 +267,13 @@ describe('MarketView market state', () => {
         await screen.findByRole('button', { name: 'Open AAA market' });
         expect(screen.queryByRole('button', { name: 'Open FFF market' })).toBeNull();
 
-        const popular = screen.getByRole('tab', { name: 'Popular' });
+        // The view filters are toggle chips in a group; each is its own tab stop.
+        const popular = screen.getByRole('button', { name: 'Popular' });
         popular.focus();
-        fireEvent.keyDown(popular, { key: 'ArrowLeft' });
-        const all = screen.getByRole('tab', { name: 'All' });
-        expect(all).toHaveFocus();
-        expect(all).toHaveAttribute('aria-selected', 'true');
+        expect(popular).toHaveFocus();
+        const all = screen.getByRole('button', { name: 'All' });
+        fireEvent.click(all);
+        expect(all).toHaveAttribute('aria-pressed', 'true');
 
         const lastRow = await screen.findByRole('button', { name: 'Open FFF market' });
         lastRow.focus();
