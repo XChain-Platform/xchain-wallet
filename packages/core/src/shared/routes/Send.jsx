@@ -201,6 +201,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
@@ -3062,23 +3063,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
             {t('send.draft.unfinished')}
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label={t('send.draft.discardLabel')}
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
+            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
                 {t('send.draft.discard')}
-            </button>
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
     const hasTokenSelected = !!chainId && !!tick.trim();

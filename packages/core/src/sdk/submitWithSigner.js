@@ -28,6 +28,7 @@
 // or skip the wait and poll separately.
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
+import { assertMainnetActionAllowed } from '../flows/mainnetPrelaunch.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
 import { capRbfToDescriptor } from '../flows/rbfCap.js';
@@ -296,6 +297,8 @@ export async function submitWithSigner({
     // §26.5 / G068: refuse to drive any signer while panic mode is on.
     // Cleared automatically once the timer expires.
     assertSigningAllowed();
+    // XChain actions on *-mainnet are refused before launch; bare native payments pass.
+    assertMainnetActionAllowed({ chainId, actionData, descriptor: chainRegistry?.get(chainId) });
 
     const sdk = sdkRegistry.get(chainId);
     const encoder = sdk.encoder;

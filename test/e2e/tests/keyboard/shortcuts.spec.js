@@ -26,7 +26,7 @@ test.describe('keyboard shortcuts', () => {
         // `?` (Shift+/) opens the shortcut cheatsheet; Escape closes it.
         await page.keyboard.press('Shift+Slash');
         await expect(helpDialog(page)).toBeVisible();
-        await expect(helpDialog(page)).toContainText('Go to History');
+        await expect(helpDialog(page)).toContainText('Go to history');
         await page.keyboard.press('Escape');
         await expect(helpDialog(page)).toBeHidden();
 

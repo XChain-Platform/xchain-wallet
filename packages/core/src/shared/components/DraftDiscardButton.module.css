@@ -1,0 +1,24 @@
+/* A text link in look, a full pointer target in size: the underline stays
+   on the word while the box around it reaches the --xc-tap-min floor. */
+.discard {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    min-height: var(--xc-tap-min);
+    min-width: var(--xc-tap-min);
+    padding: 0 var(--xc-space-1);
+    margin-inline-start: var(--xc-space-2);
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    font-size: var(--xc-text-xs);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.discard:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
