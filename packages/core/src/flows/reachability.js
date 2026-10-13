@@ -30,6 +30,9 @@
 // Timeouts default to 3000 ms per service; callers polling frequently
 // should pick a lower value to keep the aggregate bounded.
 
+import { explorerErrorCode } from '../sdk/explorerErrors.js';
+import { explorerPausedSeconds } from '../sdk/explorerRateLimit.js';
+
 const DEFAULT_TIMEOUT_MS = 3000;
 
 /**
@@ -101,7 +104,7 @@ export async function checkReachability({
     const hubProbe = probes.hub === null ? null : probes.hub ?? defaultHubProbe;
     const explorerProbe = probes.explorer === null
         ? null
-        : probes.explorer ?? defaultExplorerProbe;
+        : probes.explorer ?? sharedPerHost(defaultExplorerProbe);
 
     const perChain = await Promise.all(
         chainIds.map((chainId) =>
@@ -277,6 +280,26 @@ function assertPinged(result) {
     return result;
 }
 
+/**
+ * Run a probe once per explorer host for one reachability check.
+ *
+ * The explorer's /status document covers every coin the host serves (its maps
+ * are keyed by coin), so BTC, LTC and DOGE on one host need one read, not three.
+ *
+ * @param {ServiceProbe} probe
+ * @returns {ServiceProbe}
+ */
+function sharedPerHost(probe) {
+    const byHost = new Map();
+    return (sdk) => {
+        const ex = sdk && sdk.explorer;
+        const host = ex && typeof ex.baseUrl === 'string' ? `${ex.baseUrl}:${ex.port ?? ''}` : null;
+        if (!host) return probe(sdk);
+        if (!byHost.has(host)) byHost.set(host, Promise.resolve().then(() => probe(sdk)));
+        return byHost.get(host);
+    };
+}
+
 /** @type {ServiceProbe} */
 async function defaultExplorerProbe(sdk) {
     // /status is the probe of choice: one request that both answers "is it
@@ -284,12 +307,17 @@ async function defaultExplorerProbe(sdk) {
     // tip_age_seconds, replica_halted) the banner turns into "balances and
     // history are behind, last confirmed block N was X ago". It is also the
     // one route the explorer keeps reachable whatever state a coin is in.
+    // A host paused for a rate limit has answered recently, so it is up; asking
+    // again would only wait in the queue past the probe's timeout.
+    if (explorerPausedSeconds(sdk) > 0) return undefined;
     if (typeof sdk.getStatus === 'function') {
         try {
             return await sdk.getStatus();
         } catch (e) {
             const msg = String(e?.message ?? e);
             if (/\b(4\d\d|5\d\d)\b/.test(msg) || /status/i.test(msg)) return undefined;
+            // A rate limit is the explorer answering, so it is reachable.
+            if (explorerErrorCode(e) === 'RATE_LIMITED') return undefined;
             throw e;
         }
     }
@@ -309,6 +337,7 @@ async function defaultExplorerProbe(sdk) {
         // propagated to mark the service unreachable.
         const msg = String(e?.message ?? e);
         if (/\b(4\d\d|5\d\d)\b/.test(msg) || /status/i.test(msg)) return;
+        if (explorerErrorCode(e) === 'RATE_LIMITED') return;
         throw e;
     }
 }

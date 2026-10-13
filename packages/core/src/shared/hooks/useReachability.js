@@ -265,11 +265,16 @@ export function useReachability(opts = {}) {
             provisionalRef.current = null;
         }
         probe();
+        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
         if (intervalMs > 0) {
-            pollRef.current = setInterval(() => { probe(); }, intervalMs);
+            // A hidden app shows no banner, so the poll skips its beats until it is seen again.
+            pollRef.current = setInterval(() => { if (!hidden()) probe(); }, intervalMs);
         }
+        const onVisible = () => { if (!hidden()) probe(); };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
         return () => {
             mountedRef.current = false;
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
             // Retire this probe generation: a response still in flight is
             // about a chain set we are no longer showing.
             seqRef.current += 1;

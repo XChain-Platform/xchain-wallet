@@ -70,6 +70,8 @@ const MESSAGE_TO_CODE = [
 // message prefix (across the messaging boundary, where the fields are gone)
 // can. Hence both tests below rather than a name check alone.
 const EXPLORER_429_RE = /Explorer returned HTTP 429\b/i;
+// The sentence the shared rate-limit layer puts on a 429 it gave up on.
+const EXPLORER_BUSY_RE = /The XChain explorer is busy\b/;
 const RETRY_AFTER_RE = /;\s*retry after (\d+) seconds?/i;
 
 /**
@@ -90,9 +92,10 @@ export function explorerErrorCode(err) {
     // neither field left is recognised by the "; retry after N seconds" suffix,
     // which only the new class writes.
     if (code === 'RATE_LIMITED' || name === 'SDKRateLimitedError') {
-        if (e.service === 'explorer' || EXPLORER_429_RE.test(message)) return 'RATE_LIMITED';
+        if (e.service === 'explorer' || EXPLORER_429_RE.test(message) || EXPLORER_BUSY_RE.test(message)) return 'RATE_LIMITED';
     }
     if (EXPLORER_429_RE.test(message) && RETRY_AFTER_RE.test(message)) return 'RATE_LIMITED';
+    if (EXPLORER_BUSY_RE.test(message)) return 'RATE_LIMITED';
     // Only codes the SDK actually mints count. A raw axios error also carries a
     // `code` (ECONNABORTED, ENOTFOUND), and the SDK's own WS_* / INVALID_NETWORK
     // codes are deliberately NOT claimed here: they are not a failed read of a
@@ -136,6 +139,8 @@ export function rateLimitRetryAfterSeconds(err) {
     if (!err || typeof err !== 'object') return null;
     const e = /** @type {any} */ (err);
     if (Number.isInteger(e.retryAfterSeconds) && e.retryAfterSeconds >= 0) return e.retryAfterSeconds;
+    // retryAfterMs is the copy the messaging envelope carries across the boundary.
+    if (Number.isFinite(e.retryAfterMs) && e.retryAfterMs >= 0) return Math.ceil(e.retryAfterMs / 1000);
     const m = RETRY_AFTER_RE.exec(String(e.message || ''));
     if (!m) return null;
     const seconds = Number.parseInt(m[1], 10);
