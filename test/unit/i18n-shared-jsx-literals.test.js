@@ -19,13 +19,24 @@ const sources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const requiredLocalizedRoutes = [
+    'RenameAccountForm.jsx',
+    'RenameWalletForm.jsx',
+    'RouteNotFound.jsx',
+    'SignerSelectForm.jsx',
+    'StakeNew.jsx',
+];
+
 describe('shared route localization', () => {
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
+        const localizedRoutes = [];
 
         for (const [file, source] of Object.entries(sources)) {
             if (!/\bt\s*\(/.test(source)) continue;
+            const route = requiredLocalizedRoutes.find((name) => file.endsWith(`/${name}`));
+            if (route) localizedRoutes.push(route);
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
@@ -40,5 +51,6 @@ describe('shared route localization', () => {
 
         expect(violations).toEqual([]);
         expect(missingKeys).toEqual([]);
+        expect(localizedRoutes.sort()).toEqual(requiredLocalizedRoutes);
     });
 });

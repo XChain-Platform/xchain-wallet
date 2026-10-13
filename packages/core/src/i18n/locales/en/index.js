@@ -44,6 +44,40 @@ export const en = {
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
+    'common.save': 'Save',
+
+    // --- route fallback -----------------------------------------
+    'routeNotFound.title': 'Page not found',
+    'routeNotFound.body': 'This page does not exist or is no longer available.',
+    'routeNotFound.backToHome': 'Back to Home',
+
+    // --- signer selection ---------------------------------------
+    'signerSelect.choose': 'Choose signer',
+    'signerSelect.title': 'Signer',
+    'signerSelect.intro':
+        'Choose where this operation derives its keys. This choice does not share recovery words or hardware secrets.',
+    'signerSelect.watcherNote':
+        'Watch-only mode remains active. Selecting a key source here does not enable local transaction signing.',
+
+    // --- rename forms -------------------------------------------
+    'renameAccount.title': 'Rename account',
+    'renameAccount.name': 'Account name',
+    'renameWallet.title': 'Rename wallet',
+    'renameWallet.name': 'Wallet name',
+
+    // --- staking chooser ----------------------------------------
+    'stakeNew.backToStaking': 'Back to staking',
+    'stakeNew.title': 'New stake',
+    'stakeNew.chooseNetwork': 'Choose the network to stake on.',
+    'stakeNew.prompt': 'What would you like to stake?',
+    'stakeNew.bitcoinOnly':
+        'Staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',
+    'stakeNew.validatorTitle': 'Validator staking',
+    'stakeNew.validatorDescription':
+        'Stake XCHAIN to help secure the network and earn rewards.',
+    'stakeNew.contractTitle': 'Contract staking',
+    'stakeNew.contractDescription':
+        "Stake tokens into a contract. You'll pick the contract next.",
 
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',

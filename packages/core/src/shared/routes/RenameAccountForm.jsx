@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 const NAME_MAX_LENGTH = 64;
@@ -97,13 +98,13 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title="Rename account"
+            title={t('renameAccount.title')}
             trailing={(
                 <button
                     type="button"
                     onClick={() => handleSubmit()}
-                    aria-label="Save"
-                    title="Save"
+                    aria-label={t('common.save')}
+                    title={t('common.save')}
                     disabled={saveDisabled}
                 >
                     <Icon.CheckIcon />
@@ -113,10 +114,10 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
     );
 
     const formBody = (
-        <FormPage ref={formRef} label="Rename account" onSubmit={handleSubmit}>
+        <FormPage ref={formRef} label={t('renameAccount.title')} onSubmit={handleSubmit}>
             <Input
                 ref={nameRef}
-                label="Account name"
+                label={t('renameAccount.name')}
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 maxLength={NAME_MAX_LENGTH}
