@@ -33,11 +33,12 @@
 // the lowercase cases fail. Restore `/^[A-Za-z0-9]+$/` and the symbol cases fail.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { tickerGrammarError } from '../../../packages/core/src/shared/utils/tickerGrammar.js';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
@@ -52,8 +53,10 @@ const ADDRESSES = {
 };
 
 let composeForConfirm;
+let getTokenInfo;
 
 function messagingStub() {
+    getTokenInfo = vi.fn().mockResolvedValue({ divisibility: 8 });
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
@@ -63,7 +66,7 @@ function messagingStub() {
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
-        getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8 }),
+        getTokenInfo,
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         issueToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
@@ -106,6 +109,12 @@ async function submitDirect(tick) {
     const field = await screen.findByLabelText('Ticker');
     fireEvent.change(field, { target: { value: tick } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+    // The form holds submit until its availability lookup for a well-formed
+    // ticker settles; a refused ticker never starts one.
+    if (!tickerGrammarError(tick.trim())) {
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick })), { timeout: 3000 });
+        await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
     return field;
 }

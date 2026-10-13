@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
@@ -131,6 +131,9 @@ describe('protocol form review accessibility', () => {
             const mounted = mount(IssueTokenForm, walletMode);
             fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'TOKEN' } });
             fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+            // Submit waits for the ticker availability lookup to settle.
+            await waitFor(() => expect(mounted.messaging.getTokenInfo).toHaveBeenCalled(), { timeout: 3000 });
+            await act(async () => { await mounted.messaging.getTokenInfo.mock.results.at(-1).value; });
             fireEvent.click(screen.getByRole('button', { name: walletMode === 'watcher' ? 'Preview' : 'Issue token' }));
             return { ...mounted, reviewName: 'Review token issue' };
         });
