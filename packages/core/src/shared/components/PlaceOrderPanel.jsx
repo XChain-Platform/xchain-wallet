@@ -336,7 +336,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
-                fallback: err?.message || 'Order placement failed.',
+                fallback: "Couldn't place this order. Something went wrong. Try again.",
+                verb: 'place this order',
             }));
         }
     }
@@ -443,7 +444,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     chainId,
                     coinTicker,
                     mandatory: nativeFeeMandatory,
-                    fallback: err?.message || 'Order placement failed.',
+                    fallback: "Couldn't place this order. Something went wrong. Try again.",
+                    verb: 'place this order',
                 });
             }
             setSubmitError(errorMessage);

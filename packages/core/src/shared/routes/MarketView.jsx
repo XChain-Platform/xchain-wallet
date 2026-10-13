@@ -110,22 +110,30 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     // panel render. Demo wallets fall back to sample matches; real wallets
     // show real stats, or blanks (empty) when the market has no fills yet.
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
+    const [historyError, setHistoryError] = useState(/** @type {string | null} */ (null));
+    const [historyRetryKey, setHistoryRetryKey] = useState(0);
     useEffect(() => {
         let cancelled = false;
         setHistoryRows([]);
+        setHistoryError(null);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
                 if (cancelled) return;
                 const real = extractHistoryRows(resp);
                 setHistoryRows(real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []));
             })
-            .catch(() => {
-                if (!cancelled) setHistoryRows(demo ? sampleMatchesFor(tick1, tick2) : []);
+            .catch((err) => {
+                if (!cancelled) {
+                    setHistoryRows(demo ? sampleMatchesFor(tick1, tick2) : []);
+                    setHistoryError(readFailureMessage(err, 'refresh market prices'));
+                }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, historyRetryKey]);
     const stats = useMemo(() => derive24hStats(historyRows, tick1, tick2), [historyRows, tick1, tick2]);
     const lastPrice = stats.lastPrice;
+    const priceIsStale = stats.lastTimestamp !== null
+        && stats.lastTimestamp < Math.floor(Date.now() / 1000) - 86400;
     const changePct = stats.changePct;
     const changeDisplay = percentChangeDisplay(changePct);
     const changeColor = changeDisplay?.direction === 'positive'
@@ -239,6 +247,27 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
                             {headerCard}
                         </RouteErrorBoundary>
+                        {historyError ? (
+                            <StatusMessage
+                                variant="error"
+                                className={styles.error}
+                                recovery={{
+                                    label: 'Try again',
+                                    onAction: () => setHistoryRetryKey((key) => key + 1),
+                                }}
+                            >
+                                {historyError}
+                            </StatusMessage>
+                        ) : priceIsStale ? (
+                            <StatusMessage
+                                recovery={{
+                                    label: 'Refresh prices',
+                                    onAction: () => setHistoryRetryKey((key) => key + 1),
+                                }}
+                            >
+                                The latest trade is over 24 hours old. Check the price before placing an order.
+                            </StatusMessage>
+                        ) : null}
                     </>
                 )}
             </div>
@@ -382,6 +411,7 @@ function derive24hStats(rows, tick1, tick2) {
         : divideDecimalStrings(multiplyDecimalStrings(change, '100'), firstPriceIn24h, 8);
     return {
         lastPrice,
+        lastTimestamp: Number.isFinite(lastTs) ? lastTs : null,
         changePct: changePctText === null ? NaN : Number(changePctText),
         high,
         low,
