@@ -53,6 +53,25 @@ function submitPhrase(phrase, importMnemonic = vi.fn().mockResolvedValue({})) {
 }
 
 describe('ImportWallet recovery phrase entry', () => {
+    it('names the next missing field beside the disabled import action', () => {
+        renderImport();
+        const action = screen.getByRole('button', { name: 'Import' });
+
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
+
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: BIP39_PHRASE } });
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        expect(screen.getByRole('status')).toHaveTextContent('Confirm your password to continue.');
+
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        expect(action).toBeEnabled();
+        expect(action).not.toHaveAttribute('aria-describedby');
+    });
+
     it('normalizes spaces and newlines when a whole phrase is pasted', async () => {
         const importMnemonic = renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');

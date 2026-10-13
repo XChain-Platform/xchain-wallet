@@ -27,6 +27,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
@@ -69,6 +71,7 @@ const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
 
 export function DisplaySection() {
     const { settings, loading, error, update } = useSettings();
+    const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
@@ -194,7 +197,14 @@ export function DisplaySection() {
             setDisplayMessage('Could not save the display preference. Try again.');
         });
     };
-    const resetDisplay = () => {
+    const resetDisplay = async () => {
+        const confirmed = await confirmDialog.confirm({
+            title: 'Reset display settings?',
+            message: 'This restores all balance display options and clears pinned tokens, hidden tokens, and saved list preferences. This cannot be undone.',
+            confirmLabel: 'Reset settings',
+            danger: true,
+        });
+        if (!confirmed) return;
         setDisplayMessage(null);
         update({
             pinnedTokens: [],
@@ -421,6 +431,13 @@ export function DisplaySection() {
                     Reset to defaults
                 </Button>
             </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }

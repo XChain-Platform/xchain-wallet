@@ -21,6 +21,7 @@ import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MARKETS_PAGE_SIZE = 25;
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const SEARCH_DEBOUNCE_MS = 200;
 function nativeTickerFor(descriptor) {
@@ -71,6 +72,8 @@ export function MarketsList({
         return () => clearTimeout(handle);
     }, [search]);
 
+    const [visibleMarketCount, setVisibleMarketCount] = useState(MARKETS_PAGE_SIZE);
+
     const loadWatchlist = useCallback(async () => {
         try {
             const rows = await messaging.listWatchlistForWallet({ walletId });
@@ -96,6 +99,7 @@ export function MarketsList({
         const assetKey = `${selectedAsset.chainId}:${selectedAsset.tick}`;
         setLoading(true);
         setLoadError(null);
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
         const applyResult = (rows) => {
             if (cancelled) return;
             const tick = selectedAsset.tick.toUpperCase();
@@ -190,7 +194,16 @@ export function MarketsList({
     const clearSearch = () => {
         setSearch('');
         setDebouncedSearch('');
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
         searchRef.current?.focus();
+    };
+
+    const filtersHideResults = Boolean(search.trim())
+        || (tab !== 'all' && markets.length > displayMarkets.length);
+    const resetFilters = () => {
+        setSearch('');
+        setTab('all');
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
     };
 
     const toggleStar = useCallback(async (chainId, tick1, tick2) => {
@@ -308,7 +321,10 @@ export function MarketsList({
                                     autoCorrect="off"
                                     spellCheck={false}
                                     value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearch(e.target.value);
+                                        setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                    }}
                                     onKeyDown={handleSearchKeyDown}
                                     placeholder="Search"
                                     aria-label="Search markets"
@@ -348,7 +364,10 @@ export function MarketsList({
                                                 role="tab"
                                                 aria-selected={active}
                                                 className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                                                onClick={() => setTab(opt.id)}
+                                                onClick={() => {
+                                                    setTab(opt.id);
+                                                    setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                                }}
                                             >
                                                 {opt.label}
                                             </button>
@@ -397,12 +416,13 @@ export function MarketsList({
                             : tab === 'watchlist'
                                 ? `Starred markets for ${selectedAsset.tick} appear here.`
                                 : 'No pairs found involving this asset on its chain.'}
+                        actionLabel={filtersHideResults ? 'Reset filters' : undefined}
+                        onAction={filtersHideResults ? resetFilters : undefined}
                     />
                 ) : (
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
                         <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {displayMarkets.map((m, idx) => (
-                                <MarketRow
+                            {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (                                <MarketRow
                                     key={`${m.tick1}::${m.tick2}`}
                                     chainId={selectedAsset.chainId}
                                     selectedTick={selectedAsset.tick}
@@ -420,6 +440,15 @@ export function MarketsList({
                                 />
                             ))}
                         </ul>
+                        {displayMarkets.length > visibleMarketCount ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
+                            >
+                                Load more markets
+                            </Button>
+                        ) : null}
                     </div>
                 )}
             </ListPage>
