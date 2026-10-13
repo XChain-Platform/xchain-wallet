@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -496,16 +496,13 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         only an individual swap completes together.
                     </p>
                 </div>
-                <label className={`${styles.checkRow} ${parallelStyles.acknowledgement}`}>
-                    {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                    <input
-                        type="checkbox"
-                        checked={acknowledgedNoRollback}
-                        onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
-                        aria-describedby="parallel-no-rollback-warning"
-                    />
-                    <span>I understand successful actions cannot be rolled back if a later action fails.</span>
-                </label>
+                <Checkbox
+                    className={parallelStyles.acknowledgement}
+                    label="I understand successful actions cannot be rolled back if a later action fails."
+                    checked={acknowledgedNoRollback}
+                    onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
+                    aria-describedby="parallel-no-rollback-warning"
+                />
             </FormPage>,
         );
     }
