@@ -122,6 +122,8 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Share QR payment link' }))
+            .toHaveTextContent(/^Share QR$/);
         expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
         expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
         expect(screen.queryByText('0.000015 BTC')).toBeNull();

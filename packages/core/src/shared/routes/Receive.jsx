@@ -930,8 +930,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 onClick={shareQrImage}
                 disabled={!qrDataUrl}
                 icon={<Icon.UploadIcon />}
+                aria-label="Share QR payment link"
             >
-                Share QR payment link
+                Share QR
             </Button>
             {addressExplorerUrl ? (
                 <a
