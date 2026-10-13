@@ -6,11 +6,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
+
+const receiveCss = readFileSync(
+    'packages/core/src/shared/routes/Receive.module.css',
+    'utf8',
+);
 
 afterEach(() => cleanup());
 
 describe('PriceAlertForm', () => {
+    it('centres md actions beside the md target field', () => {
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} onCancel={vi.fn()} />);
+        const targetField = screen.getByRole('textbox', { name: 'Target price' })
+            .parentElement.parentElement;
+        const row = targetField.parentElement;
+
+        expect(targetField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(row.style.alignItems).toBe('center');
+        expect(screen.getByRole('button', { name: 'Add alert' }).className).toMatch(/(?:^|\s)_?md_/);
+        expect(screen.getByRole('button', { name: 'Cancel' }).className).toMatch(/(?:^|\s)_?md_/);
+    });
+
+    it('centres the Receive label action and removes field-wrapper spacing', () => {
+        const labelEditor = receiveCss.match(/\.labelEditor\s*\{([^}]+)\}/)?.[1] || '';
+        const labelEditorChildren = receiveCss.match(/\.labelEditor\s*>\s*\*\s*\{([^}]+)\}/)?.[1] || '';
+
+        expect(labelEditor).toMatch(/align-items:\s*center/);
+        expect(labelEditorChildren).toMatch(/margin-bottom:\s*0/);
+    });
+
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
         const action = screen.getByRole('button', { name: 'Add alert' });

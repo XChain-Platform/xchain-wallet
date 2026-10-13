@@ -163,9 +163,13 @@
 .labelEditor {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
+    align-items: center;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
+}
+
+.labelEditor > * {
+    margin-bottom: 0;
 }
 
 @media (max-width: 420px) {
