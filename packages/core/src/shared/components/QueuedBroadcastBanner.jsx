@@ -57,14 +57,49 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const prevOverallRef = useRef(/** @type {string | null} */ (null));
     const lastPromptedAtRef = useRef(/** @type {number} */ (0));
     const bannerRef = useRef(/** @type {HTMLElement | null} */ (null));
+    const mountedRef = useRef(false);
+    const currentInputRef = useRef({ messaging, walletId });
+    const refreshRequestRef = useRef(0);
+    const actionRef = useRef(/** @type {object | null} */ (null));
+    const queueWalletRef = useRef(walletId);
+    const normalizedQueueRef = useRef({ source: null, shown: /** @type {any[]} */ ([]) });
+    currentInputRef.current = { messaging, walletId };
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            refreshRequestRef.current += 1;
+        };
+    }, []);
 
     // Re-list the queue; resolves the list shown, or null when it could not be read.
     const refresh = useCallback(async () => {
         if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return null;
+        const requestId = ++refreshRequestRef.current;
         try {
             const list = await messaging.listQueuedBroadcasts({ walletId });
-            const shown = Array.isArray(list) ? list : [];
-            setQueue(shown);
+            let shown = normalizedQueueRef.current.shown;
+            if (normalizedQueueRef.current.source !== list) {
+                if (Array.isArray(list)) {
+                    const seenIds = new Set();
+                    shown = list.filter((entry) => {
+                        if (seenIds.has(entry?.id)) return false;
+                        seenIds.add(entry?.id);
+                        return true;
+                    });
+                } else {
+                    shown = [];
+                }
+                normalizedQueueRef.current = { source: list, shown };
+            }
+            const current = currentInputRef.current;
+            if (mountedRef.current
+                && current.messaging === messaging
+                && current.walletId === walletId
+                && refreshRequestRef.current === requestId) {
+                setQueue(shown);
+            }
             return shown;
         } catch (_err) {
             // The list endpoint is read-only; failures here surface
@@ -74,12 +109,21 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     }, [messaging, walletId]);
 
     useEffect(() => {
-        refresh();
-        if (intervalMs > 0) {
-            const id = setInterval(refresh, intervalMs);
-            return () => clearInterval(id);
+        if (queueWalletRef.current !== walletId) {
+            queueWalletRef.current = walletId;
+            normalizedQueueRef.current = { source: null, shown: [] };
+            setQueue([]);
+            setError(null);
         }
-        return undefined;
+        void refresh();
+        if (intervalMs > 0) {
+            const id = setInterval(() => { void refresh(); }, intervalMs);
+            return () => {
+                clearInterval(id);
+                refreshRequestRef.current += 1;
+            };
+        }
+        return () => { refreshRequestRef.current += 1; };
     }, [refresh, intervalMs]);
 
     // Reconnection prompt: fire once per offline|degraded → normal
@@ -117,19 +161,25 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     if (queue.length === 0) return null;
 
     async function broadcast(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
         setBusyKind('send');
         setError(null);
         try {
             await messaging.broadcastQueuedRequest({ walletId, id });
+            if (!isCurrentAction(action)) return;
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
             showToast({ message: 'Transaction sent.', variant: 'success' });
         } catch (err) {
+            if (!isCurrentAction(action)) return;
             // Re-list first: the host removes the entry before it throws on a
             // permanent rejection or a refused claim, so the row may be gone.
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             const outcome = queuedBroadcastFailure(err, list, id);
             if (outcome.removed) {
                 // The row is gone, so tell the user in a toast rather than under a list without it.
@@ -139,23 +189,32 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 setError(outcome.message);
             }
         } finally {
-            setBusyId(null);
-            setBusyKind(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
     }
     async function discard(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
         setBusyKind('remove');
         setError(null);
         try {
             await messaging.discardQueuedRequest({ walletId, id });
+            if (!isCurrentAction(action)) return;
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
             showToast({ message: 'Transaction removed from the queue.' });
         } catch (_err) {
+            if (!isCurrentAction(action)) return;
             // Re-list so a row the host already removed does not linger.
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             const removed = Array.isArray(list) && !list.some((entry) => entry?.id === id);
             if (removed) {
                 showToast({ message: 'Transaction removed from the queue.' });
@@ -165,9 +224,19 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                     : 'Could not confirm whether this transaction was removed. Check the queue again.');
             }
         } finally {
-            setBusyId(null);
-            setBusyKind(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
+    }
+
+    function isCurrentAction(action) {
+        const current = currentInputRef.current;
+        return mountedRef.current
+            && current.messaging === action.messaging
+            && current.walletId === action.walletId;
     }
 
     return (

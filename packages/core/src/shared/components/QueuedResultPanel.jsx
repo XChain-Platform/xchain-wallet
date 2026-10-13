@@ -49,9 +49,8 @@ import styles from './QueuedResultPanel.module.css';
  */
 export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, what, unsaved }) {
     const noun = what ? `Your ${what}` : 'Your transaction';
-    const [showUnsaved] = useState(() => (unsaved === undefined
-        ? readQueuedResultHandoff()?.unsaved === true
-        : unsaved === true));
+    const [handoffUnsaved] = useState(() => readQueuedResultHandoff()?.unsaved === true);
+    const showUnsaved = unsaved === undefined ? handoffUnsaved : unsaved === true;
     const handleDone = () => {
         clearQueuedResultHandoff();
         onDone();
