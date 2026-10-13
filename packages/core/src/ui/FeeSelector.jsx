@@ -117,6 +117,9 @@ export function FeeSelector({
             .map((speed) => ({ speed, estimate: tiers[speed] }))
             .filter((t) => t.estimate);
     }, [tiers]);
+    const usesFallbackRates = tierList.some(
+        ({ estimate }) => estimate?.source === 'static-placeholder',
+    );
 
     if (!tiers || tierList.length === 0) {
         return (
@@ -380,6 +383,11 @@ export function FeeSelector({
                     );
                 })() : null}
             </div>
+            {usesFallbackRates ? (
+                <p className={styles.placeholder} aria-live="polite">
+                    Live fee estimate unavailable. Using safe default rates. Custom fees remain available.
+                </p>
+            ) : null}
         </div>
     );
 }

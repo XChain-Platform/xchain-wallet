@@ -98,6 +98,39 @@ describe('settings diagnostic disclosures', () => {
         expect(screen.getByText(/entries must contain an address/)).toBeTruthy();
     });
 
+    it('imports valid CSV contacts and identifies an invalid physical line', async () => {
+        const saveContact = vi.fn().mockResolvedValue(undefined);
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue(settings),
+            listContacts: vi.fn().mockResolvedValue([]),
+            saveContact,
+        };
+        mount(<ContactsSection />, messaging);
+
+        const file = {
+            name: 'contacts.csv',
+            text: async () => 'name,chain,address,notes\n'
+                + 'Alice,bitcoin,bc1qdevmockabcd,"one\ntwo"\n'
+                + 'Bob,,bc1qdevmockbeef,bad\n',
+        };
+        fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
+            target: { files: [file] },
+        });
+
+        expect(await screen.findByText('Imported 1 contact; 1 skipped.')).toBeTruthy();
+        expect(saveContact).toHaveBeenCalledWith({
+            record: expect.objectContaining({
+                name: 'Alice',
+                notes: 'one\ntwo',
+                entries: [{ chain: 'bitcoin', address: 'bc1qdevmockabcd', label: '' }],
+            }),
+        });
+        fireEvent.click(screen.getByText('Skipped contacts (1)'));
+        expect(screen.getByText((_, element) => (
+            element?.tagName === 'LI' && element.textContent.includes('Line 4: chain is required.')
+        ))).toBeTruthy();
+    });
+
     it('lists each account left unchanged during network activation', async () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue(settings),

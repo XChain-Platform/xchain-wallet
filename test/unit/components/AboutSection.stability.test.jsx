@@ -48,4 +48,17 @@ describe('AboutSection diagnostics', () => {
         expect(license.style.overflow).toBe('');
         expect(license.style.maxHeight).toBe('');
     });
+
+    it('renders license copy as naturally wrapping paragraphs', () => {
+        mount();
+
+        const summary = screen.getByText(/XChain Wallet is free/).parentElement;
+        expect([...summary.querySelectorAll('p')].every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show full text' }));
+        const license = document.getElementById('full-license-text');
+        const paragraphs = [...license.querySelectorAll('p')];
+        expect(paragraphs.length).toBeGreaterThan(1);
+        expect(paragraphs.every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
+    });
 });

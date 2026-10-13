@@ -31,7 +31,7 @@ import {
     trimAmountTail,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
-import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
+import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -88,8 +88,8 @@ export function splitFromBets(rows) {
     }));
 }
 
-// One page of bets is enough to describe every market this campaign has seen,
-// and the screen says so out loud when a market has more.
+// The compatibility reconstruction is bounded, and the screen says so out
+// loud when an empty terminal aggregate requires more rows than this read.
 const SETTLED_BET_LIMIT = 500;
 
 function statusLabel(status) {
@@ -142,19 +142,19 @@ const loadFailed = (err) => humanizeError(err, 'load this market').message;
 /**
  * One betting market: its terms, the current pool split, and its status history.
  *
- * The pool figures come from the explorer's open-bets-only sum, which is the same
- * predicate settlement uses, so the split shown here is the split the payout math
- * will actually work from. It is still NOT a locked-in price: this is a
- * parimutuel market, so every later bet moves everyone's share.
+ * The pool figures come from the explorer's accepted-bet sum. While the market is
+ * open, the split is not a locked-in price: this is a parimutuel market, so every
+ * later bet moves everyone's share.
  *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
  * @param {string | number} props.feedIndex
  * @param {(chainId: string, address: string) => void} [props.onOpenOracle]
+ * @param {() => void} [props.onSettleMarket]
  * @param {() => void} props.onBack
  */
-export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBack }) {
+export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSettleMarket, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
@@ -192,23 +192,20 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
         return () => { cancelled = true; };
     }, [chainId, feedIndex, messaging]);
 
-    // A settled market's split has to be rebuilt from its bets, because the
-    // explorer sums `pools` over OPEN bets only. That predicate is right for
-    // payout math and wrong as a record: the moment a market resolves,
-    // cancels or expires, every bet leaves `open` and the market renders with
-    // an empty pool list - so a market that took real money and paid it out
-    // reported "no bets yet" on the very screen a bettor opens to check what
-    // happened, directly above a history saying it settled.
-    //
-    // Only for terminal markets: while a market is live the explorer's own
-    // aggregate is the authority (it is what settlement will use), and asking
-    // for every bet row on a busy market would be a worse read of the same
-    // number.
+    // Current explorers preserve accepted-bet pools after settlement. An older
+    // or incomplete explorer can return an empty terminal split, so rebuild that
+    // one case from its bet rows. A non-empty aggregate stays authoritative and
+    // avoids replacing a complete total with the bounded compatibility read.
     useEffect(() => {
         let cancelled = false;
         setSettledSplit(null);
         setSettledPartial(false);
         if (!feed || isLiveFeedStatus(feed.feed_status)) return undefined;
+        const explorerPools = Array.isArray(feed.pools) ? feed.pools : [];
+        if (explorerPools.length > 0) {
+            setSettledSplit(explorerPools);
+            return undefined;
+        }
         if (typeof messaging.bets !== 'function') return undefined;
         messaging.bets({ chainId, query: String(feedIndex), type: 'feed', opts: { limit: SETTLED_BET_LIMIT } })
             .then((resp) => {
@@ -220,8 +217,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 setSettledPartial(rows.length >= SETTLED_BET_LIMIT);
                 setSettledSplit(splitFromBets(rows));
             })
-            // Falling back to the live-pool rows keeps the screen readable; it
-            // shows zeros rather than a wrong total.
+            // Falling back to the explorer rows keeps the screen readable; an
+            // empty aggregate shows zeros rather than a guessed total.
             .catch(() => { if (!cancelled) setSettledSplit(null); });
         return () => { cancelled = true; };
     }, [feed, chainId, feedIndex, messaging]);
@@ -443,13 +440,24 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     const outcomes = outcomeLabels;
     const live = isLiveFeedStatus(feed.feed_status);
     const livePools = Array.isArray(feed.pools) ? feed.pools : [];
-    // On a settled market the rebuilt split is the one that describes what
-    // happened; the live rows are empty there by construction.
+    // A terminal market uses the explorer aggregate when present, or the
+    // compatibility reconstruction when the aggregate is empty.
     const pools = live ? livePools : (settledSplit || livePools);
     const byOutcome = {};
     for (const p of pools) byOutcome[Number(p.outcome)] = p;
     const total = sumDecimalStrings(pools.map((pool) => pool.pool || '0'));
     const timeline = Array.isArray(feed.timeline) ? feed.timeline : [];
+    const hasWinningOutcome = feed.winning_outcome !== undefined
+        && feed.winning_outcome !== null
+        && feed.winning_outcome !== '';
+    const winningOutcome = hasWinningOutcome ? Number(feed.winning_outcome) : null;
+    const winningLabel = Number.isInteger(winningOutcome)
+        ? outcomePhrase(outcomes, winningOutcome)
+        : null;
+    const ownsMarket = (addressesByChain?.[chainId] || [])
+        .some((address) => String(address.address) === String(feed.source));
+    const resolveWindowOpen = feed.feed_status === 'closed'
+        && Number(feed.expire_at) > Math.floor(Date.now() / 1000);
 
     return wrap(
         <>
@@ -479,8 +487,51 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                 ) : null}
             </div>
 
+            {feed.feed_status === 'closed' ? (
+                <div className={styles.listCard} data-testid="bet-settlement">
+                    <strong>Pending resolution</strong>
+                    <p className={styles.hint}>
+                        {resolveWindowOpen
+                            ? 'The market oracle must publish the winning outcome before the refund window ends. Payouts settle automatically when the result is recorded; bettors do not submit a claim.'
+                            : 'The resolution window has ended. The protocol refunds every bet automatically when the chain records the expiry; bettors do not submit a claim.'}
+                    </p>
+                    {resolveWindowOpen && ownsMarket && onSettleMarket ? (
+                        <Button variant="primary" onClick={onSettleMarket}>Settle this market</Button>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {feed.feed_status === 'resolved' ? (
+                <div className={styles.listCard} data-testid="bet-settlement">
+                    <strong>Winning outcome: {winningLabel || 'recorded by the oracle'}</strong>
+                    <p className={styles.hint}>
+                        Winning bets settled as won and losing bets lost their stakes. The protocol credited
+                        any payout automatically; bettors have nothing to claim.
+                    </p>
+                </div>
+            ) : null}
+
+            {feed.feed_status === 'resolved_void' ? (
+                <div className={styles.listCard} data-testid="bet-settlement">
+                    <strong>Market voided{winningLabel ? `: ${winningLabel} had no bets` : ''}</strong>
+                    <p className={styles.hint}>
+                        Every bet was refunded automatically because no bet backed the reported winner.
+                        Bettors have nothing to claim.
+                    </p>
+                </div>
+            ) : null}
+
+            {feed.feed_status === 'cancelled' || feed.feed_status === 'expired' ? (
+                <div className={styles.listCard} data-testid="bet-settlement">
+                    <strong>{feed.feed_status === 'cancelled' ? 'All bets refunded' : 'Expired without a result'}</strong>
+                    <p className={styles.hint}>
+                        The protocol refunded every bet automatically. Bettors have nothing to claim.
+                    </p>
+                </div>
+            ) : null}
+
             <SectionHeader as="h3" title={live ? 'Current split' : 'Final split'} />
-            {outcomes.length === 0 ? <EmptyState title="No outcomes recorded." titleAs="p" /> : (
+            {outcomes.length === 0 ? <EmptyState title="No outcomes recorded" body="Settled market outcomes appear here." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                     {outcomes.map((label, i) => {
                         const p = byOutcome[i] || { pool: 0, bet_count: 0 };
@@ -634,6 +685,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                    autoComplete="current-password"
                                 />
                             ) : null}
                             <p className={styles.hint}>
@@ -679,11 +731,12 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
             ) : null}
 
             <SectionHeader as="h3" title="History" />
-            {timeline.length === 0 ? <EmptyState title="No history yet." titleAs="p" /> : (
+            {timeline.length === 0 ? <EmptyState title="No history yet" body="Market updates appear here as they happen." titleAs="p" /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     {timeline.map((t, i) => (
                         <div key={i} className={styles.hint}>
                             {statusLabel(t.status)} · block {String(t.block_index ?? 'n/a')}
+                            {t.status === 'resolved' && winningLabel ? ` · winner ${winningLabel}` : ''}
                             {/* The close is recorded by the chain rather than caused by anyone's
                                 transaction, so it is labelled instead of shown as an action. */}
                             {t.synthetic ? ' (automatic, when the deadline passed)' : ''}

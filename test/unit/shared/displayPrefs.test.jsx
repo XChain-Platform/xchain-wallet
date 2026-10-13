@@ -113,6 +113,27 @@ describe('settings -> root attributes', () => {
         expect(Object.keys(readCachedDisplayPrefs()).sort())
             .toEqual(['learnMode', 'reducedMotion', 'theme']);
     });
+
+    it('keeps native and browser chrome in contrast with live theme changes', () => {
+        const themeColor = document.createElement('meta');
+        themeColor.setAttribute('name', 'theme-color');
+        document.head.append(themeColor);
+        const setStyle = vi.fn(() => Promise.resolve());
+        globalThis.Capacitor = { Plugins: { SystemBars: { setStyle } } };
+
+        try {
+            applySettingsRootAttributes({ theme: 'dark' });
+            expect(themeColor.getAttribute('content')).toBe('#0B0F17');
+            expect(setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+
+            applySettingsRootAttributes({ theme: 'light' });
+            expect(themeColor.getAttribute('content')).toBe('#FFFFFF');
+            expect(setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+        } finally {
+            themeColor.remove();
+            delete globalThis.Capacitor;
+        }
+    });
 });
 
 describe('reduced motion resolution', () => {

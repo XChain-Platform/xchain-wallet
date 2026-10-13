@@ -45,6 +45,7 @@ import { getNativeQrScanner } from './nativeQrScanner.js';
  * @param {boolean} [props.autoStart]    default true
  * @param {number} [props.width]         video display width; default 320
  * @param {string} [props.alt]           aria-label for the scanner surface
+ * @param {'unsupported' | 'denied'} [props.previewState] deterministic non-camera state for documentation and visual tests
  */
 // Android's WebView draws a large grey play button on a <video> with no
 // poster until its first frame, which reads as a broken media player while
@@ -224,21 +225,37 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
     );
 }
 
-export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR scanner' }) {
+export function QrScanner({
+    onFrame,
+    autoStart = true,
+    width = 320,
+    alt = 'QR scanner',
+    previewState,
+}) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const [running, setRunning] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const hasBarcodeDetector = typeof window !== 'undefined'
-        && typeof window.BarcodeDetector === 'function';
-    const hasGetUserMedia = typeof navigator !== 'undefined'
-        && typeof navigator.mediaDevices?.getUserMedia === 'function';
-    const isSecureContext = typeof window !== 'undefined'
+    const hasBarcodeDetector = previewState === 'denied'
+        || (previewState !== 'unsupported'
+            && typeof window !== 'undefined'
+            && typeof window.BarcodeDetector === 'function');
+    const hasGetUserMedia = previewState === 'unsupported'
+        || (typeof navigator !== 'undefined'
+            && typeof navigator.mediaDevices?.getUserMedia === 'function');
+    const isSecureContext = Boolean(previewState) || (typeof window !== 'undefined'
         && (window.isSecureContext === true
-            || ['localhost', '127.0.0.1', '[::1]'].includes(window.location?.hostname));
-    const supported = hasBarcodeDetector && hasGetUserMedia && isSecureContext;
+            || ['localhost', '127.0.0.1', '[::1]'].includes(window.location?.hostname)));
+    const supported = previewState !== 'unsupported'
+        && hasBarcodeDetector
+        && (previewState === 'denied' || hasGetUserMedia)
+        && isSecureContext;
 
     useEffect(() => {
         if (!supported || !autoStart) return undefined;
+        if (previewState === 'denied') {
+            setError(cameraErrorText({ name: 'NotAllowedError' }));
+            return undefined;
+        }
         let cancelled = false;
         /** @type {MediaStream | null} */
         let stream = null;
@@ -313,12 +330,12 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
             if (video) video.srcObject = null;
             setRunning(false);
         };
-    }, [supported, autoStart, onFrame]);
+    }, [supported, autoStart, onFrame, previewState]);
 
     // The iPhone app: no BarcodeDetector in its WebView, but a native
     // scanner registered by the shell. Android's WebView has BarcodeDetector
     // and never reaches this branch.
-    const nativeScanner = hasBarcodeDetector ? null : getNativeQrScanner();
+    const nativeScanner = previewState || hasBarcodeDetector ? null : getNativeQrScanner();
     if (nativeScanner) {
         return <NativeCameraScan scanner={nativeScanner} onFrame={onFrame} alt={alt} />;
     }

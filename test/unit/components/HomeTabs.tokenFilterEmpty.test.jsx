@@ -69,7 +69,7 @@ describe('HomeTabs token filter empty state', () => {
         mount({ tokenQuery: 'LTC', onTokenQueryChange });
 
         expect(screen.getByText('No matching tokens')).toBeInTheDocument();
-        expect(screen.getByText('Nothing matches "LTC". Clear the filter to see all tokens.')).toBeInTheDocument();
+        expect(screen.getByText('No held tokens match "LTC".')).toBeInTheDocument();
         expect(screen.queryByText(/top toolbar/)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
@@ -82,8 +82,9 @@ describe('HomeTabs token filter empty state', () => {
     });
 
     it('keeps the filter row collapsed and shows no Clear action without a query', () => {
-        mount();
+        mount({ onReceive: vi.fn() });
         expect(screen.queryByRole('searchbox', { name: 'Search tokens by name' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 });

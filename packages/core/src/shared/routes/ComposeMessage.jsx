@@ -29,10 +29,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { formatFiat } from '../components/BalanceList.jsx';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -370,7 +370,7 @@ export function ComposeMessage({
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
-    // to the time estimate. Tiny values use the selected currency's sub-cent form.
+    // to the time estimate. Tiny values collapse below the currency's minor unit.
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const { settings } = useSettings();
@@ -381,9 +381,9 @@ export function ComposeMessage({
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
-        const v = coinToFiat(coinAmount, fiatRate);
-        if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return formatFiat(v, fiatRate?.fiatCurrency || fiatCurrency);
+        const value = coinToFiatExact(coinAmount, fiatRate);
+        if (value == null || !(Number(value) > 0)) return null;
+        return formatFiatAmount(value, fiatRate?.fiatCurrency || fiatCurrency);
     }, [fiatRate, fiatCurrency]);
 
     // Catch random text before review. A message can be delivered on any chain
@@ -750,9 +750,7 @@ export function ComposeMessage({
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button

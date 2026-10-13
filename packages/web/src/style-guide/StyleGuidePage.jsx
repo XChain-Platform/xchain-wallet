@@ -49,26 +49,42 @@ import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
+import {
+    AddressComboboxSection,
+    IconSelectSection,
+} from './sections/ChoicePrimitivesSection.jsx';
+import {
+    AddressTextSection,
+    ChainBadgeSection,
+    CopyButtonSection,
+    InfoTipSection,
+    MultisigBadgeSection,
+    VerifiedBadgeSection,
+} from './sections/DisplayPrimitivesSection.jsx';
+import {
+    AnimatedQrFramesSection,
+    QrScannerSection,
+} from './sections/QrPrimitivesSection.jsx';
 // Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
 // canonical going forward.
 
-const SECTIONS = [
+export const SECTIONS = [
     { id: 'color-palette',         label: 'Color palette',          Component: ColorPaletteSection },
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
-    { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection },
-    { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection },
-    { id: 'form-page',             label: 'Form page',              Component: FormPageSection },
-    { id: 'form-section',          label: 'Form section',           Component: FormSectionSection },
-    { id: 'list-page',             label: 'List page',              Component: ListPageSection },
-    { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection },
-    { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection },
-    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection },
+    { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection, primitives: ['Icon'] },
+    { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection, primitives: ['Screen'] },
+    { id: 'form-page',             label: 'Form page',              Component: FormPageSection, primitives: ['FormPage'] },
+    { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
+    { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
+    { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
+    { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
+    { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
-    { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection },
+    { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
     { id: 'tabs',                  label: 'Tabs (page-level)',      Component: TabsSection },
     { id: 'quick-action',          label: 'Quick-action card',      Component: QuickActionSection },
     { id: 'gray-card',             label: 'Gray surface card',      Component: GrayCardSection },
@@ -81,17 +97,31 @@ const SECTIONS = [
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
-    { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection },
+    { id: 'field-sizes',           label: 'Field sizes',            Component: FieldSizesSection, primitives: ['Input', 'Select', 'Textarea'] },
+    { id: 'icon-select',           label: 'Icon select',            Component: IconSelectSection, primitives: ['IconSelect'] },
+    { id: 'address-combobox',      label: 'Address combobox',       Component: AddressComboboxSection, primitives: ['AddressCombobox'] },
     { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection },
-    { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection },
+    { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection, primitives: ['AddressField'] },
     { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection },
-    { id: 'chain-picker',          label: 'Chain picker',           Component: ChainPickerSection },
-    { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection },
-    { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection },
+    { id: 'chain-picker',          label: 'Chain picker',           Component: ChainPickerSection, primitives: ['ChainPicker'] },
+    { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection, primitives: ['NetworkField'] },
+    { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection, primitives: ['FeeSelector'] },
+    { id: 'chain-badge',           label: 'Chain badge',            Component: ChainBadgeSection, primitives: ['ChainBadge'] },
+    { id: 'address-text',          label: 'Address text',           Component: AddressTextSection, primitives: ['AddressText'] },
+    { id: 'copy-button',           label: 'Copy button',            Component: CopyButtonSection, primitives: ['CopyButton'] },
+    { id: 'multisig-badge',        label: 'Multisig badge',         Component: MultisigBadgeSection, primitives: ['MultisigBadge'] },
+    { id: 'verified-badge',        label: 'Verified badge',         Component: VerifiedBadgeSection, primitives: ['VerifiedBadge'] },
+    { id: 'info-tip',              label: 'Info tip',               Component: InfoTipSection, primitives: ['InfoTip'] },
+    { id: 'animated-qr-frames',    label: 'Animated QR frames',     Component: AnimatedQrFramesSection, primitives: ['AnimatedQrFrames'] },
+    { id: 'qr-scanner',            label: 'QR scanner',             Component: QrScannerSection, primitives: ['QrScanner'] },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
-    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection },
+    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'StatusMessage'] },
     { id: 'privacy-mode',          label: 'Privacy mode',           Component: PrivacyModeSection },
 ];
+
+export const DOCUMENTED_PRIMITIVES = Object.freeze(
+    SECTIONS.flatMap(({ primitives = [] }) => primitives),
+);
 
 export function StyleGuidePage() {
     const [view, setView] = useViewState();

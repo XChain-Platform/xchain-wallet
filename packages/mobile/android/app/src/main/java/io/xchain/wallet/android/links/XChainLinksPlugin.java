@@ -22,7 +22,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Delivers App Links and {@code xchain:} links to the SPA (§1, S3).
+ * Delivers App Links, {@code xchain:} links and payment links to the SPA (§1, S3).
  *
  * WHY NOT {@code @capacitor/app}. That plugin would do the delivery, and it
  * would also hand every script in the WebView {@code exitApp()},
@@ -37,8 +37,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * that started the app - so the first link is queued here and the SPA
  * collects it when it is ready. Warm taps arrive through the event.
  *
- * NATIVE VALIDATION IS DEFENCE IN DEPTH, NOT THE GATE. Only the two shapes
- * the app claims in its manifest are forwarded; anything else is dropped
+ * NATIVE VALIDATION IS DEFENCE IN DEPTH, NOT THE GATE. Only link shapes
+ * claimed in the manifest are forwarded; anything else is dropped
  * without reaching JS. The real invariants - never bypass the unlock screen,
  * never auto-advance into a signing or connect flow, re-display every
  * extracted parameter for confirmation - are enforced in the shared UI,
@@ -50,6 +50,9 @@ public class XChainLinksPlugin extends Plugin {
 
     private static final String EVENT = "xchainUrlOpen";
     private static final String SCHEME_APP = "xchain";
+    private static final String SCHEME_BITCOIN = "bitcoin";
+    private static final String SCHEME_LITECOIN = "litecoin";
+    private static final String SCHEME_DOGECOIN = "dogecoin";
     private static final String SCHEME_WEB = "https";
     private static final String HOST_WEB = "xchain.io";
 
@@ -136,7 +139,10 @@ public class XChainLinksPlugin extends Plugin {
         // Intent rather than in a field.
         if (intent.getBooleanExtra(EXTRA_CONSUMED, false)) return null;
 
-        if (SCHEME_APP.equalsIgnoreCase(scheme)) {
+        if (SCHEME_APP.equalsIgnoreCase(scheme)
+                || SCHEME_BITCOIN.equalsIgnoreCase(scheme)
+                || SCHEME_LITECOIN.equalsIgnoreCase(scheme)
+                || SCHEME_DOGECOIN.equalsIgnoreCase(scheme)) {
             intent.putExtra(EXTRA_CONSUMED, true);
             return data.toString();
         }
