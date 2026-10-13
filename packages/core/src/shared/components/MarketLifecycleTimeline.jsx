@@ -67,16 +67,16 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         let cancelled = false;
         const fetchLifecycle = kind === 'order' ? messaging?.getOrderLifecycle : messaging?.getSwapLifecycle;
         if (typeof fetchLifecycle !== 'function') {
-            setState({ loading: false, events: [], error: null });
+            setState({ loading: false, events: [], error: 'Timeline is unavailable.' });
             return undefined;
         }
         const idx = String(actionIndex);
         const parentKey = kind === 'order' ? 'order_action_index' : 'swap_action_index';
         setState({ loading: true, events: null, error: null });
 
-        const lane = (k, req) => fetchLifecycle({ chainId, kind: k, ...req })
-            .then((r) => ({ k, rows: extractRows(r) }))
-            .catch(() => ({ k, rows: [] }));
+        const lane = (k, req) => Promise.resolve()
+            .then(() => fetchLifecycle({ chainId, kind: k, ...req }))
+            .then((r) => ({ k, rows: extractRows(r) }));
 
         Promise.all([
             lane('edits', { query: address, type: 'address' }),
@@ -105,7 +105,7 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         return () => { cancelled = true; };
     }, [messaging, kind, chainId, address, actionIndex, createdBlock]);
 
-    if (state.loading) return <div className={S.status}>Loading timeline…</div>;
+    if (state.loading) return <StatusMessage variant="status" className={S.status}>Loading timeline…</StatusMessage>;
     if (state.error) return <StatusMessage variant="error" className={S.status}>{state.error}</StatusMessage>;
     if (!state.events || state.events.length === 0) return <div className={S.status}>No lifecycle events yet.</div>;
 

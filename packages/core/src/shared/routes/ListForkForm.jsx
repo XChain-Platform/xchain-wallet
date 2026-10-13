@@ -33,6 +33,9 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
+import { listTickCoinSupport } from '../../flows/listTickCoinSupport.js';
+import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -150,6 +153,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // The list's owner: undefined while resolving, null when it cannot be read.
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
     const [listName, setListName] = useState(/** @type {string | null} */ (null));
+    const [tickCoinSupported, setTickCoinSupported] = useState(false);
 
     // Prefer the explorer's current owner, then walk to the root create for
     // older explorers that do not report one.
@@ -233,6 +237,24 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     }, [stage, tx1Txid, chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
+
+    useEffect(() => {
+        let cancelled = false;
+        setTickCoinSupported(false);
+        if (!isTick) return () => { cancelled = true; };
+        const sdkRegistry = {
+            get: () => ({
+                isListTickCoinActive: () => (typeof messaging.isListTickCoinActive === 'function'
+                    ? messaging.isListTickCoinActive({ chainId })
+                    : false),
+            }),
+        };
+        listTickCoinSupport({ sdkRegistry, chainId })
+            .then((supported) => { if (!cancelled) setTickCoinSupported(supported); })
+            .catch(() => { if (!cancelled) setTickCoinSupported(false); });
+        return () => { cancelled = true; };
+    }, [chainId, isTick, messaging]);
+
     const fromAddress = useMemo(() => {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -301,29 +323,39 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // New items to add: same paste parsing as ListCreateForm/AirdropForm
     // for addresses, or the ProjectRosterForm-style tick split for ticks.
     // Anything already on the list is dropped (it's a member either way).
-    const toAdd = useMemo(() => {
-        const currentSet = new Set(currentItems);
+    const additions = useMemo(() => {
         if (isTick) {
-            const seen = new Set();
-            const out = [];
-            for (const raw of addText.split(/[\n,]+/)) {
-                const t = raw.trim().toUpperCase();
-                if (!t || seen.has(t) || currentSet.has(t)) continue;
-                seen.add(t);
-                out.push(t);
-            }
-            return out;
+            const parsed = classifyTickItems(addText, { coinQualified: tickCoinSupported });
+            // Fork edit wire items use uppercase token normalization.
+            return { ...parsed, valid: parsed.valid.map((item) => item.toUpperCase()) };
         }
         // Validate additions against the chain this fork is published
         // to, not just against address shape, so a wrong-network paste cannot
         // ride into the new list and be dropped by the indexer afterwards.
         const parts = airdropLib.parsePaste(addText);
-        const { valid } = airdropLib.classifyRecipients(parts, {
+        return airdropLib.classifyRecipients(parts, {
             coin: descriptor?.coin || null,
             network: descriptor?.networkKind || null,
         });
-        return valid.filter((a) => !currentSet.has(a));
-    }, [addText, currentItems, isTick, descriptor?.coin, descriptor?.networkKind]);
+    }, [addText, isTick, tickCoinSupported, descriptor?.coin, descriptor?.networkKind]);
+
+    const itemIdentity = useCallback((item) => {
+        const value = String(item);
+        if (isTick) return value.toLowerCase();
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(value)
+            && (value === value.toLowerCase() || value === value.toUpperCase());
+        return bech32 ? value.toLowerCase() : value;
+    }, [isTick]);
+
+    const currentItemKeys = useMemo(
+        () => new Set(currentItems.map(itemIdentity)),
+        [currentItems, itemIdentity],
+    );
+    const toAdd = useMemo(
+        () => additions.valid.filter((item) => !currentItemKeys.has(itemIdentity(item))),
+        [additions.valid, currentItemKeys, itemIdentity],
+    );
+    const alreadyPresent = additions.valid.length - toAdd.length;
 
     const toRemove = useMemo(
         () => currentItems.filter((i) => !keep.has(i)),
@@ -365,6 +397,21 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: toRemove,
     }), [intermediateIndex, toRemove, trimmedMemo]);
+    const firstActionSize = useMemo(
+        () => listActionSize(firstParams, descriptor, isWatcherMode ? null : fromAddress),
+        [firstParams, descriptor, isWatcherMode, fromAddress],
+    );
+    const secondActionSize = useMemo(
+        () => listActionSize(secondParams, descriptor, isWatcherMode ? null : fromAddress),
+        [secondParams, descriptor, isWatcherMode, fromAddress],
+    );
+    const secondReviewActionSize = useMemo(() => listActionSize({
+        ...secondParams,
+        // The first leg's index does not exist yet. Reserve a full uint64-width
+        // decimal index so the add leg cannot strand an oversized remove leg.
+        LIST_ACTION_INDEX: '9'.repeat(20),
+    }, descriptor, isWatcherMode ? null : fromAddress), [secondParams, descriptor, isWatcherMode, fromAddress]);
+    const resultingCount = currentItems.length - toRemove.length + toAdd.length;
 
     const firstDecoded = useMemo(() => (
         stage === 'review-1' || stage === 'wait-index'
@@ -480,11 +527,21 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             setFormError('Nothing changed: add or remove an item, or write a memo.');
             return;
         }
+        if (additions.invalid.length > 0) {
+            const noun = isTick
+                ? (additions.invalid.length === 1 ? 'token name' : 'token names')
+                : (additions.invalid.length === 1 ? 'address' : 'addresses');
+            setFormError(`Remove ${additions.invalid.length} invalid ${noun} before reviewing.`);
+            return;
+        }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return; }
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
         const memoTooLong = memoLengthError(trimmedMemo);
         if (memoTooLong) { setFormError(memoTooLong); return; }
+        const sizeError = listActionSizeError(firstActionSize)
+            || (twoPhase ? listActionSizeError(secondReviewActionSize) : null);
+        if (sizeError) { setFormError(sizeError); return; }
         // Verify the list has not changed since this screen loaded it
         const changed = await membershipChangedMessage();
         if (changed) { setFormError(changed); return; }
@@ -569,6 +626,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     async function handleSignSecond(event) {
         event.preventDefault();
         if (submitting || !intermediateIndex) return;
+        const sizeError = listActionSizeError(secondActionSize);
+        if (sizeError) { setSubmitError(sizeError); return; }
         if (!hw && (!signerReady && password.length === 0)) return;
         if (hw && hwStatus !== 'available') return;
         if (singleEncode) {
@@ -767,7 +826,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 label="Review list removal"
                 onSubmit={handleSignSecond}
                 noValidate
-                status={hw && submitError ? (
+                status={submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
@@ -793,6 +852,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     </dd>
                     <dt className={styles.detailsLabel}>Removing</dt>
                     <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
+                    <dt className={styles.detailsLabel}>Members after edit</dt>
+                    <dd className={styles.detailsValue}>{resultingCount}</dd>
+                    <dt className={styles.detailsLabel}>Action size</dt>
+                    <dd className={styles.detailsValue}>
+                        {secondActionSize.compiledBytes.toLocaleString('en-US')} / {secondActionSize.maxBytes.toLocaleString('en-US')} bytes
+                    </dd>
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -800,6 +865,10 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         </>
                     ) : null}
                 </dl>
+                <details>
+                    <summary>Review removed items</summary>
+                    <ul>{toRemove.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
+                </details>
                 {notOwnerNotice}
                 <SignCredentials
                     unlocked={signerReady}
@@ -881,8 +950,14 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         <>
                             <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
                             <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                            <dt className={styles.detailsLabel}>Members after edit</dt>
+                            <dd className={styles.detailsValue}>{resultingCount}</dd>
                         </>
                     )}
+                    <dt className={styles.detailsLabel}>Action size</dt>
+                    <dd className={styles.detailsValue}>
+                        {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes
+                    </dd>
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -894,6 +969,12 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     </dd>
                 </dl>
+                {!memoOnly ? (
+                    <details>
+                        <summary>Review {needsAdd ? 'added' : 'removed'} items</summary>
+                        <ul>{(needsAdd ? toAdd : toRemove).map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
+                    </details>
+                ) : null}
                 {notOwnerNotice}
                 {memoOnly ? (
                     <p className={styles.hint}>
@@ -990,8 +1071,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             />
             <p className={styles.hint}>
                 {toAdd.length} to add · {toRemove.length} to remove
+                {additions.duplicates > 0 ? ` · ${additions.duplicates} duplicate${additions.duplicates === 1 ? '' : 's'} removed` : ''}
+                {alreadyPresent > 0 ? ` · ${alreadyPresent} already on the list` : ''}
+                {additions.invalid.length > 0 ? ` · ${additions.invalid.length} invalid` : ''}
                 {toRemove.length + toAdd.length === 0 ? ' (no changes yet)' : ''}
             </p>
+            {additions.invalid.length > 0 ? (
+                <p role="alert" className={styles.warning}>
+                    Invalid {isTick ? 'token names' : 'addresses'}: {additions.invalid.join(', ')}
+                </p>
+            ) : null}
             {!isTick ? (
                 <p className={styles.hint}>
                     Added addresses become permanent public on-chain data once
@@ -1018,6 +1107,9 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            <p className={styles.hint}>
+                Action size: {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes.
+            </p>
 
         </FormPage>,
     );

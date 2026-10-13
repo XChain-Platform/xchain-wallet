@@ -1,12 +1,3 @@
-.identity {
-    margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
-}
-
-.identityLabel,
 .declaredNameLabel {
     margin: 0;
     color: var(--xc-text-muted);
@@ -14,14 +5,6 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-}
-
-.identityOrigin {
-    margin: var(--xc-space-1) 0 0;
-    color: var(--xc-text);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
 }
 
 .declaredNameLabel {
@@ -39,6 +22,31 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     margin: 0 0 var(--xc-space-3);
+}
+
+.permissions {
+    padding: var(--xc-space-3);
+    margin: 0 0 var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg-muted);
+}
+
+.permissionsTitle {
+    margin: 0 0 var(--xc-space-2);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+.permissionsList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    padding-inline-start: var(--xc-space-4);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
 }
 
 .fieldset {

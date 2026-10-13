@@ -135,6 +135,7 @@ export function ToggleRow({
                 type="checkbox"
                 role="switch"
                 aria-label={accessibleLabel}
+                aria-checked={checked}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}

@@ -14,11 +14,13 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const LTC_TO = 'ltc1qxvenxvenxvenxvenxvenxvenxvenxvenwcpknh';
 const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
@@ -48,7 +50,12 @@ function composedSend() {
     };
 }
 
-function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
+function mount({
+    walletMode = 'full',
+    sendResult = { txid: TXID },
+    contacts = [],
+    history = [],
+} = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{
@@ -75,9 +82,17 @@ function mount({ walletMode = 'full', sendResult = { txid: TXID } } = {}) {
         updateSettings: vi.fn().mockResolvedValue({}),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
-        listContacts: vi.fn().mockResolvedValue([]),
+        listContacts: vi.fn().mockResolvedValue(contacts),
+        saveContact: vi.fn().mockImplementation(async ({ input, record }) => record || {
+            ...input,
+            id: 'saved-contact',
+            schemaVersion: 1,
+            avatarSeed: input.entries[0].address,
+            createdAt: '2026-10-13T00:00:00.000Z',
+            updatedAt: '2026-10-13T00:00:00.000Z',
+        }),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
-        getAddressHistory: vi.fn().mockResolvedValue([]),
+        getAddressHistory: vi.fn().mockResolvedValue(history),
         gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
         composeForConfirm: vi.fn().mockResolvedValue(composedSend()),
         sendToken: vi.fn().mockImplementation(async () => {
@@ -140,6 +155,112 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('tabs through payment fields and reviews only a valid Enter submission', async () => {
+        const user = userEvent.setup();
+        const messaging = mount();
+        await screen.findByLabelText('From');
+        const destination = await screen.findByLabelText(/^To$/);
+        destination.focus();
+
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open address book' }));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
+        await user.keyboard('{Enter}');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Destination address is required.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(destination, { target: { value: TO } });
+        const amount = screen.getByLabelText(/^Amount \(/);
+        fireEvent.change(amount, { target: { value: AMOUNT } });
+        amount.focus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
+    it('cleans a pasted recipient, shows both ends, and signs the full cleaned address', async () => {
+        const messaging = mount();
+        const toField = await screen.findByLabelText(/^To$/);
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => ` \u200B${TO}\uFEFF ` },
+        });
+
+        expect(toField).toHaveValue(TO);
+        expect(screen.getByText('Check pasted recipient')).toBeInTheDocument();
+        expect(screen.getByLabelText(TO)).toHaveTextContent('bc1qw5…v8f3t4');
+
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledWith(
+            expect.objectContaining({ to: TO }),
+        ));
+        await screen.findByTestId('confirm-modal');
+        await approveWithPassword(messaging);
+        expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ to: TO }));
+    });
+
+    it('plainly refuses a pasted address from another chain', async () => {
+        const messaging = mount();
+        const toField = await screen.findByLabelText(/^To$/);
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => LTC_TO },
+        });
+
+        expect(toField).toHaveValue(LTC_TO);
+        expect(await screen.findByText(
+            'This looks like a Litecoin address, not a Bitcoin address.',
+        )).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('searches contacts and immediately explains a wrong-chain pick', async () => {
+        const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
+        const messaging = mount({
+            contacts: [{
+                id: 'shibe',
+                name: 'Shibe',
+                entries: [{ chain: 'dogecoin', address: doge, label: 'Tips' }],
+            }],
+        });
+
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.change(to, { target: { value: 'shi' } });
+        fireEvent.mouseDown(screen.getByRole('option', { name: /Shibe/ }));
+
+        expect(to).toHaveValue(doge);
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'This looks like a Dogecoin address, not a Bitcoin address.',
+        );
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(screen.getByRole('form', { name: 'Send' })).toHaveTextContent(
+            'This looks like a Dogecoin address, not a Bitcoin address.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows recent recipients from a wrapped history response', async () => {
+        const recent = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
+        mount({
+            history: { data: [{ action: 'SEND', destination: recent, timestamp: 123 }] },
+        });
+
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.focus(to);
+        await waitFor(() => expect(screen.getByText('Previously sent')).toBeInTheDocument());
+        fireEvent.change(to, { target: { value: '1BvB' } });
+        fireEvent.mouseDown(screen.getByRole('option', { name: /Recent/ }));
+
+        expect(to).toHaveValue(recent);
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
         const messaging = mount();
         const confirm = await openPasswordConfirm(messaging);
@@ -175,6 +296,27 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
         expect(screen.getByText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
+    });
+
+    it('saves a new recipient as a contact after broadcast', async () => {
+        const messaging = mount();
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+        await screen.findByRole('heading', { name: 'Broadcast pending' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save contact' }));
+
+        await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
+            input: {
+                name: 'Alice',
+                notes: '',
+                entries: [{ chain: 'bitcoin', address: TO, label: '' }],
+            },
+        }));
+        expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
     });
 
     it('ends on the signed-not-broadcast screen when the signed transaction is queued', async () => {
