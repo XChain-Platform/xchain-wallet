@@ -34,6 +34,8 @@
 //   8. When both trees exist, the staged webDir is byte-identical to
 //      packages/web/dist: the mobile shell ships the web shell's bytes or it
 //      is not the same wallet.
+//   9. Native launch screens have light and dark backgrounds, keep their mark
+//      bounded on tablets, and hand off through the platform readiness path.
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
@@ -101,6 +103,72 @@ assert.equal(
     capConfig.plugins?.SystemBars?.style,
     'LIGHT',
     'the native status bar starts with dark content over the white splash',
+);
+
+// --- 2a. Native splash configuration ---------------------------------
+
+// Android's SplashScreen theme owns the handoff to the post-splash theme.
+// Keeping the artwork in the animated-icon slot gives it a bounded box on
+// phones and tablets; a window background bitmap instead scales to the whole
+// viewport. The night override uses the same two page-background tokens as
+// the SPA, so the native and web frames meet without a color flash.
+const lightSplashStyles = readFileSync(
+    join(android, 'app', 'src', 'main', 'res', 'values', 'styles.xml'),
+    'utf8',
+);
+const darkSplashStyles = readFileSync(
+    join(android, 'app', 'src', 'main', 'res', 'values-night', 'styles.xml'),
+    'utf8',
+);
+for (const [mode, styles, background, lightBars] of [
+    ['light', lightSplashStyles, '#FFFFFF', 'true'],
+    ['dark', darkSplashStyles, '#0B0F17', 'false'],
+]) {
+    assert.match(
+        styles,
+        new RegExp(`<item name="windowSplashScreenBackground">${background}</item>`),
+        `${mode} Android splash background matches the SPA theme token`,
+    );
+    assert.match(
+        styles,
+        /<item name="windowSplashScreenAnimatedIcon">@mipmap\/ic_launcher_foreground<\/item>/,
+        `${mode} Android splash keeps its mark in the platform's bounded icon slot`,
+    );
+    assert.match(
+        styles,
+        /<item name="postSplashScreenTheme">@style\/AppTheme\.NoActionBar<\/item>/,
+        `${mode} Android splash hands off when the shell content is ready`,
+    );
+    assert.match(
+        styles,
+        new RegExp(`<item name="android:windowLightStatusBar">${lightBars}</item>`),
+        `${mode} Android splash keeps system-bar content legible`,
+    );
+    assert.doesNotMatch(
+        styles,
+        /<item name="android:background">@drawable\/splash<\/item>/,
+        `${mode} Android splash must not stretch a viewport-sized bitmap`,
+    );
+}
+
+const iosLaunch = readFileSync(
+    join(mobile, 'ios', 'App', 'App', 'Base.lproj', 'LaunchScreen.storyboard'),
+    'utf8',
+);
+assert.match(
+    iosLaunch,
+    /<color key="backgroundColor" systemColor="systemBackgroundColor"\/>/,
+    'iOS launch background follows the active light or dark system appearance',
+);
+assert.match(
+    iosLaunch,
+    /<color key="textColor" systemColor="labelColor"\/>/,
+    'iOS launch mark stays legible in both appearances',
+);
+assert.doesNotMatch(
+    iosLaunch,
+    /image="Splash"|contentMode="scaleAspectFill"/,
+    'iOS launch view must not scale a square bitmap across iPad windows',
 );
 
 // --- 3 + 4. Gradle: SDK floor and tag-derived version -----------------
@@ -1420,7 +1488,8 @@ assert.match(
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
-    + ' built-in SystemBars starts with splash-compatible contrast; minSdkVersion 26 (D2);'
+    + ' built-in SystemBars starts with splash-compatible contrast; native splash uses matching light/dark'
+    + ' backgrounds, bounded artwork and platform-ready handoff; minSdkVersion 26 (D2);'
     + ' versionCode/versionName read from the'
     + ' tag-derived version.properties with no literal fallback and a hard failure when absent;'
     + ' exactly one exported component; no google-services wiring; keystores + generated version'
