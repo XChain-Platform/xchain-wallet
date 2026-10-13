@@ -8,19 +8,105 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A routed screen's title is its top-level heading, so assistive tech can
-// jump to it and announce where the user is.
+// Pin the shared page chrome's semantics and its narrow-screen layout
+// constraints so every route inherits one accessible, single-scroll shell.
 
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
+import { Screen } from '../../../packages/core/src/ui/Screen.jsx';
+
+const pageHeaderCss = readFileSync('packages/core/src/ui/PageHeader.module.css', 'utf8');
+const screenCss = readFileSync('packages/core/src/ui/Screen.module.css', 'utf8');
+const tokensCss = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+
+function rule(css, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
+}
 
 afterEach(() => cleanup());
 
-describe('PageHeader title', () => {
+describe('PageHeader', () => {
     it('renders the title as the level-one heading', () => {
         render(<PageHeader title="Decentralized Exchange" onBack={() => {}} />);
         const heading = screen.getByRole('heading', { level: 1 });
         expect(heading.textContent).toBe('Decentralized Exchange');
+    });
+
+    it('gives the back button a useful default label and runs its action', () => {
+        const onBack = vi.fn();
+        render(<PageHeader title="Wallet details" onBack={onBack} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a route-specific back label and keeps a disabled action inert', () => {
+        const onBack = vi.fn();
+        render(
+            <PageHeader
+                title="Action"
+                onBack={onBack}
+                backLabel="Back to history"
+                backDisabled
+            />,
+        );
+
+        const back = screen.getByRole('button', { name: 'Back to history' });
+        expect(back).toBeDisabled();
+        fireEvent.click(back);
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('keeps a long title in a shrinkable lane between fixed actions at 360px', () => {
+        const header = rule(pageHeaderCss, '.header');
+        const title = rule(pageHeaderCss, '.title');
+        const trailingButton = rule(pageHeaderCss, '.trailing button:not([role="menuitem"])');
+
+        expect(header).toMatch(/--xc-page-header-side:\s*38px/);
+        expect(header).toMatch(
+            /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
+        );
+        expect(title).toMatch(/overflow:\s*hidden/);
+        expect(title).toMatch(/text-overflow:\s*ellipsis/);
+        expect(trailingButton).toMatch(/width:\s*var\(--xc-page-header-side\)/);
+    });
+});
+
+describe('Screen layout', () => {
+    it('uses landmarks around one focusable main scroll container', () => {
+        render(
+            <Screen
+                header={<PageHeader title="Settings" />}
+                footer={<button type="button">Save</button>}
+            >
+                <p>Preferences</p>
+            </Screen>,
+        );
+
+        expect(screen.getByRole('banner')).toBeInTheDocument();
+        expect(screen.getByRole('main')).toHaveAttribute('id', 'xc-main');
+        expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+        expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+    });
+
+    it('keeps the document safe area and gives scrolling to Screen body only', () => {
+        const body = rule(tokensCss, 'body');
+        const viewport = tokensCss.match(/--xc-viewport-h:\s*calc\(100vh[^;]+;/)?.[0] || '';
+        const shell = rule(screenCss, '.screen');
+        const scrollBody = rule(screenCss, '.body');
+
+        expect(body).toMatch(/padding-top:\s*env\(safe-area-inset-top,\s*0\)/);
+        expect(body).toMatch(/padding-left:\s*env\(safe-area-inset-left,\s*0\)/);
+        expect(body).toMatch(/padding-right:\s*env\(safe-area-inset-right,\s*0\)/);
+        expect(viewport).toMatch(/100vh\s*-\s*env\(safe-area-inset-top,\s*0px\)/);
+        expect(shell).toMatch(/overflow:\s*hidden/);
+        expect(scrollBody).toMatch(/min-height:\s*0/);
+        expect(scrollBody).toMatch(/overflow-y:\s*auto/);
+        expect(scrollBody).toMatch(/overflow-x:\s*hidden/);
+        expect(scrollBody).toMatch(/scrollbar-gutter:\s*stable/);
     });
 });

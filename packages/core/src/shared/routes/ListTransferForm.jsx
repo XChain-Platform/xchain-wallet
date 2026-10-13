@@ -22,6 +22,7 @@ import {
 import { airdrop as airdropLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -245,6 +246,15 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
     }
 
     if (result) {
+        if (result.psbtHex && !result.txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onDone}
+                />,
+            );
+        }
         return wrap(
             <>
                 <StatusMessage variant="success">
@@ -276,7 +286,7 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
                     loading={lane.composing}
                     disabled={sdkSupported !== true || !typedConfirmOk || !fromAddress || lane.composing}
                 >
-                    Review
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
                 </Button>
             )}
         >
@@ -308,7 +318,7 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
                 value={destination}
                 onChange={(event) => { setDestination(event.target.value); setFormError(null); }}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
                 disabled={sdkSupported !== true}

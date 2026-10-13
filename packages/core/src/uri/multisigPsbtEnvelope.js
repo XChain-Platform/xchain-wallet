@@ -358,12 +358,16 @@ export function encodeEnvelope(envelope) {
  * @returns {object}
  */
 export function decodeEnvelope(bytes) {
-    if (!(bytes instanceof Uint8Array)) {
+    if (!(bytes instanceof Uint8Array)
+        && !(ArrayBuffer.isView(bytes) && bytes.BYTES_PER_ELEMENT === 1)) {
         throw new MultisigEnvelopeError('decodeEnvelope: input must be Uint8Array');
     }
+    const input = bytes instanceof Uint8Array
+        ? bytes
+        : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let parsed;
     try {
-        parsed = JSON.parse(new TextDecoder().decode(bytes));
+        parsed = JSON.parse(new TextDecoder().decode(input));
     } catch (e) {
         throw new MultisigEnvelopeError(`JSON.parse failed: ${e?.message ?? e}`);
     }

@@ -93,7 +93,7 @@ const routeSrc = readFileSync(
     join(wsRoot, 'packages', 'desktop', 'renderer', 'deepLinkRoute.js'),
     'utf8',
 );
-assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry\s*\}\)/.test(routeSrc),
+assert.ok(/coreUri\.parseXchainUri\(normalized,\s*\{\s*chainRegistry\s*\}\)/.test(routeSrc),
     'deepLinkRoute parses with the chain registry');
 assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(webApp),
     'web App declares an executePrefill state slot');

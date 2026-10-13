@@ -82,6 +82,36 @@ describe('<Input>', () => {
         expect(screen.getByLabelText('Name')).not.toHaveAttribute('aria-invalid');
     });
 
+    it('uses mobile-safe text-entry defaults', () => {
+        render(<Input label="Code" />);
+        const input = screen.getByLabelText('Code');
+        expect(input).toHaveAttribute('type', 'text');
+        expect(input).toHaveAttribute('autocapitalize', 'off');
+        expect(input).toHaveAttribute('autocorrect', 'off');
+        expect(input).toHaveAttribute('spellcheck', 'false');
+        expect(input).toHaveAttribute('enterkeyhint', 'done');
+    });
+
+    it('uses a search return key and honors keyboard-hint overrides', () => {
+        const { rerender } = render(<Input label="Find" type="search" />);
+        expect(screen.getByLabelText('Find')).toHaveAttribute('enterkeyhint', 'search');
+
+        rerender(
+            <Input
+                label="Name"
+                autoCapitalize="words"
+                autoCorrect="on"
+                spellCheck
+                enterKeyHint="go"
+            />,
+        );
+        const input = screen.getByLabelText('Name');
+        expect(input).toHaveAttribute('autocapitalize', 'words');
+        expect(input).toHaveAttribute('autocorrect', 'on');
+        expect(input).toHaveAttribute('spellcheck', 'true');
+        expect(input).toHaveAttribute('enterkeyhint', 'go');
+    });
+
     it('pass-through value + onChange work end-to-end', () => {
         const onChange = vi.fn();
         render(<Input label="Amount" value="1" onChange={onChange} />);

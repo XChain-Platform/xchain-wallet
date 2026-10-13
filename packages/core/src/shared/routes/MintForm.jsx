@@ -46,6 +46,7 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
@@ -82,6 +83,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function MintForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
 
     const lockedToken = !!(initialChainId && initialTick);
@@ -187,6 +189,11 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const [contacts, setContacts] = useState(/** @type {any[]} */ ([]));
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
 
     // PC-51: opt in to pay the XCHAIN protocol fee in the native coin. MINT is
     // a quotable fee-bearing action; the authoritative price/validity check
@@ -213,6 +220,7 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     const feeEstimate = feePick.mode === 'custom'
         ? feeCustomEstimate
         : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
@@ -239,7 +247,6 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     // confirm page (compose + tamper + sdk.preflight all host-side), hardware
     // included. Watcher mode keeps the legacy review stage: it
     // encodes, it never signs.
-    const { settings } = useSettings();
     const confirmAction = useConfirmAction();
     const CONFIRM_MODAL_PHASES = ['preflighting', 'ready', 'signing', 'rechecking'];
     const confirmModalOpen = CONFIRM_MODAL_PHASES.includes(confirmAction.phase);
@@ -567,7 +574,8 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         label="Network fee"
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
                     />
                 </dl>
                 {decoded && decoded.warnings.length > 0 ? (
@@ -616,10 +624,13 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
-                    : undefined}
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -769,16 +780,15 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                 onIconClick={() => setContactsPickerOpen(true)}
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            <FeeSelector
+                label="Network fee"
+                coinTicker={coinTicker}
+                formatFiat={formatNativeFee}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
                 onChange={setPayFeeInNativeCoin}

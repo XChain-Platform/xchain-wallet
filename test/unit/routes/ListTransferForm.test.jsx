@@ -168,6 +168,18 @@ describe('ListTransferForm', () => {
         });
     });
 
+    it('shows the unsigned transaction in watcher mode without asking for a password', async () => {
+        const messaging = mount({ walletMode: 'watcher' });
+        await fillTransfer({ memo: 'handoff' });
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledOnce());
+        expect(await screen.findByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
     it.each([
         ['false', { share: true, transfer: false, union: true }],
         ['absent', { share: true, union: true }],

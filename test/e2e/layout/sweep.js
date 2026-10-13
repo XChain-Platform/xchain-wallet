@@ -313,11 +313,22 @@ export function measureInPage(opts = {}) {
     }
 }
 
+/** Applies a venue's root font size before app code runs on every document. */
+export function installRootFontSize(page, rootFontSize) {
+    if (!rootFontSize) return Promise.resolve();
+    return page.addInitScript((size) => {
+        document.documentElement.style.fontSize = size;
+    }, rootFontSize);
+}
+
 /** A sweep bound to one page, one venue and one output directory. */
-export function createSweep(page, { venue, outDir, restart = () => page.goto('/'), onScreen = null, contrast = false }) {
+export function createSweep(page, {
+    venue, outDir, restart = () => page.goto('/'), onScreen = null, contrast = false, rootFontSize,
+}) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
+    const pageReady = installRootFontSize(page, rootFontSize);
     let n = 0;
 
     async function measure(label) {
@@ -403,6 +414,7 @@ export function createSweep(page, { venue, outDir, restart = () => page.goto('/'
      * would touch the OS keychain (the desktop app).
      */
     async function onboarding({ demo = false } = {}) {
+        await pageReady;
         await restart();
         await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
             .first().waitFor({ state: 'visible', timeout: 60_000 });

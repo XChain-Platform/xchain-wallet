@@ -70,7 +70,7 @@ describe('MessagingInbox audit states', () => {
     it('renders the address empty state when the account has no messageable addresses', async () => {
         mount(messagingFor({ addresses: {} }));
 
-        expect(await screen.findByText(/This account has no addresses/)).toBeTruthy();
+        expect(await screen.findByText(/No messaging addresses/)).toBeTruthy();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 

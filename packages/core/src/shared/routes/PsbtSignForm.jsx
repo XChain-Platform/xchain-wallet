@@ -825,6 +825,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         <PageHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
     );
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign transactions. Move the unsigned
+                        transaction to a Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
@@ -55,8 +55,10 @@ export function MarketsList({
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
     const [watchlist, setWatchlist] = useState(/** @type {any[]} */ ([]));
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(Boolean(selectedAsset));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [settledAssetKey, setSettledAssetKey] = useState(/** @type {string | null} */ (null));
+    const [marketsReload, setMarketsReload] = useState(0);
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
 
@@ -78,9 +80,11 @@ export function MarketsList({
             setMarkets([]);
             setLoadError(null);
             setLoading(false);
+            setSettledAssetKey(null);
             return undefined;
         }
         let cancelled = false;
+        const assetKey = `${selectedAsset.chainId}:${selectedAsset.tick}`;
         setLoading(true);
         setLoadError(null);
         const applyResult = (rows) => {
@@ -102,14 +106,22 @@ export function MarketsList({
         messaging.getMarkets({ chainId: selectedAsset.chainId })
             .then((resp) => applyResult(extractRows(resp)))
             .catch(() => {
-                applyResult([]);
                 if (!cancelled) setLoadError('Could not load markets. Try again.');
             })
             .finally(() => {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setSettledAssetKey(assetKey);
+                    setLoading(false);
+                }
             });
         return () => { cancelled = true; };
-    }, [selectedAsset, messaging, walletId]);
+    }, [selectedAsset, messaging, walletId, marketsReload]);
+
+    const selectedAssetKey = selectedAsset
+        ? `${selectedAsset.chainId}:${selectedAsset.tick}`
+        : null;
+    const marketsLoading = Boolean(selectedAsset)
+        && (loading || settledAssetKey !== selectedAssetKey);
 
     const watchlistKeySet = useMemo(() => {
         const s = new Set();
@@ -264,6 +276,10 @@ export function MarketsList({
                             }}>
                                 <input
                                     type="search"
+                                    enterKeyHint="search"
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Search"
@@ -312,28 +328,41 @@ export function MarketsList({
                 )}
             >
 
-                {loadError ? (
-                    <StatusMessage variant="error" className={styles.hint}>{loadError}</StatusMessage>
-                ) : null}
-
                 {!selectedAsset ? (
                     <EmptyState
-                        title="Pick a coin or token"
-                        body="Choose what you want to look at markets for."
+                        title="No asset selected"
+                        body="Choose a coin or token to view its markets."
                     />
-                ) : loading ? (
-                    <p className={styles.hint}>Loading markets…</p>
+                ) : marketsLoading ? (
+                    <div role="status" aria-label="Loading markets">
+                        <Skeleton.List rows={5} />
+                    </div>
+                ) : loadError ? (
+                    <StatusMessage
+                        variant="error"
+                        className={styles.hint}
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => {
+                                setSettledAssetKey(null);
+                                setLoading(true);
+                                setMarketsReload((value) => value + 1);
+                            },
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
                 ) : displayMarkets.length === 0 ? (
                     <EmptyState
                         title={search.trim()
                             ? 'No matches'
                             : tab === 'watchlist'
-                                ? 'Watchlist is empty'
+                                ? 'Empty watchlist'
                                 : `No markets for ${selectedAsset.tick}`}
                         body={search.trim()
-                            ? `Nothing matches "${search.trim()}". Clear the search to see everything.`
+                            ? `No markets match "${search.trim()}".`
                             : tab === 'watchlist'
-                                ? `Tap ☆ on any market to add it to your watchlist for ${selectedAsset.tick}.`
+                                ? `Starred markets for ${selectedAsset.tick} appear here.`
                                 : 'No pairs found involving this asset on its chain.'}
                     />
                 ) : (

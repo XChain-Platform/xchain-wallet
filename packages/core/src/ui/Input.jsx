@@ -47,6 +47,10 @@ export const Input = forwardRef(function Input(
         maxLength,
         className,
         onChange,
+        autoCapitalize = 'off',
+        autoCorrect = 'off',
+        spellCheck = false,
+        enterKeyHint,
         onKeyDown,
         onKeyUp,
         onFocus,
@@ -70,6 +74,7 @@ export const Input = forwardRef(function Input(
     const initialValue = value ?? defaultValue ?? '';
     const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
     const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
+    const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -133,6 +138,10 @@ export const Input = forwardRef(function Input(
                 ref={ref}
                 id={inputId}
                 type={type}
+                autoCapitalize={autoCapitalize}
+                autoCorrect={autoCorrect}
+                spellCheck={spellCheck}
+                enterKeyHint={resolvedEnterKeyHint}
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
