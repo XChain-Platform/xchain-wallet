@@ -13,6 +13,10 @@ import {
 let messaging;
 let settings;
 let update;
+const biometric = vi.hoisted(() => ({
+    registered: false,
+    describe: vi.fn(),
+}));
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update }),
@@ -23,9 +27,21 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
     useToast: () => ({ showToast: vi.fn() }),
 }));
+vi.mock('../../../packages/core/src/flows/biometricUnlock.js', () => ({
+    describeBiometric: biometric.describe,
+    isBiometricRegistered: () => biometric.registered,
+    registerBiometricCredential: vi.fn(),
+    clearBiometricCredential: vi.fn(),
+}));
 
 const { ConnectedSitesSection } = await import(
     '../../../packages/core/src/shared/components/settings/ConnectedSitesSection.jsx'
+);
+const { ContactsSection } = await import(
+    '../../../packages/core/src/shared/components/settings/ContactsSection.jsx'
+);
+const { BiometricRow } = await import(
+    '../../../packages/core/src/shared/components/settings/BiometricRow.jsx'
 );
 
 beforeEach(() => {
@@ -40,11 +56,80 @@ beforeEach(() => {
         blockOrigin: vi.fn(),
         unblockOrigin: vi.fn(),
     };
+    biometric.registered = false;
+    biometric.describe.mockReset().mockResolvedValue({
+        supported: true,
+        reason: null,
+        mechanism: 'device unlock',
+        wrapNote: 'The password stays protected.',
+    });
 });
 
 afterEach(() => cleanup());
 
 describe('ConnectedSitesSection settings controls', () => {
+    it('ignores a connected-site load from a replaced messaging source', async () => {
+        let resolveOld;
+        const oldMessaging = messaging;
+        oldMessaging.listConnectedSites = vi.fn(() => new Promise((resolve) => { resolveOld = resolve; }));
+        const { rerender } = render(<ConnectedSitesSection />);
+
+        messaging = {
+            ...oldMessaging,
+            listConnectedSites: vi.fn(async () => [{
+                id: 'new-site',
+                origin: 'https://new.example',
+                permissions: {},
+            }]),
+        };
+        rerender(<ConnectedSitesSection />);
+
+        expect(await screen.findAllByText('https://new.example')).toHaveLength(2);
+        resolveOld([{
+            id: 'old-site',
+            origin: 'https://old.example',
+            permissions: {},
+        }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.getAllByText('https://new.example')).toHaveLength(2);
+        expect(screen.queryAllByText('https://old.example')).toHaveLength(0);
+    });
+
+    it('ignores an audit-log load from a replaced messaging source', async () => {
+        let resolveOldAudit;
+        const oldMessaging = {
+            ...messaging,
+            listBlocklistAuditLog: vi.fn(() => new Promise((resolve) => { resolveOldAudit = resolve; })),
+        };
+        messaging = oldMessaging;
+        const { rerender } = render(<ConnectedSitesSection />);
+        await screen.findByText('No sites connected yet');
+
+        messaging = {
+            ...oldMessaging,
+            listBlocklistAuditLog: vi.fn(async () => [{
+                at: Date.now(),
+                action: 'add',
+                entry: 'https://new-block.example',
+            }]),
+        };
+        rerender(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('https://new-block.example')).toBeTruthy();
+        resolveOldAudit([{
+            at: Date.now() - 1,
+            action: 'add',
+            entry: 'https://old-block.example',
+        }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.getByText('https://new-block.example')).toBeTruthy();
+        expect(screen.queryByText('https://old-block.example')).toBeNull();
+    });
+
     it('marks destructive site actions as danger and disables repeat disconnects', async () => {
         let finishDelete;
         messaging.listConnectedSites.mockResolvedValue([{
@@ -243,5 +328,38 @@ describe('ConnectedSitesSection settings controls', () => {
         const list = entry.closest('ul');
         expect(list.style.overflowY).toBe('');
         expect(list.style.maxHeight).toBe('');
+    });
+});
+
+describe('settings async probes', () => {
+    it('ignores a contact count from a replaced messaging source', async () => {
+        let resolveOld;
+        const oldMessaging = {
+            listContacts: vi.fn(() => new Promise((resolve) => { resolveOld = resolve; })),
+        };
+        messaging = oldMessaging;
+        const { rerender } = render(<ContactsSection />);
+
+        messaging = {
+            listContacts: vi.fn(async () => [{ id: 'new-1' }, { id: 'new-2' }]),
+        };
+        rerender(<ContactsSection />);
+
+        expect(await screen.findByText('2 contacts stored')).toBeTruthy();
+        resolveOld([{ id: 'old-1' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.getByText('2 contacts stored')).toBeTruthy();
+        expect(screen.queryByText('1 contact stored')).toBeNull();
+    });
+
+    it('handles a rejected biometric capability probe', async () => {
+        biometric.describe.mockRejectedValueOnce(new Error('provider failed'));
+        render(<BiometricRow />);
+
+        expect(await screen.findByText(
+            'Not available. Could not check biometric unlock on this device.',
+        )).toBeTruthy();
     });
 });

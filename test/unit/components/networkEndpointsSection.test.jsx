@@ -17,6 +17,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 const updateSpy = vi.fn();
 let settingsRecord;
@@ -248,6 +249,62 @@ describe('NetworkEndpointsSection', () => {
 
         expect(await screen.findByText('Refresh complete: 6 networks available from the registry.'))
             .toBeInTheDocument();
+    });
+
+    it('ignores registry status returned by a replaced messaging source', async () => {
+        let resolveOldStatus;
+        messagingRecord = {
+            getChainRegistryStatus: vi.fn(() => new Promise((resolve) => { resolveOldStatus = resolve; })),
+            refreshChainRegistry: vi.fn(),
+        };
+        const { rerender } = render(<NetworkEndpointsSection />);
+
+        messagingRecord = {
+            getChainRegistryStatus: vi.fn(async () => ({
+                ok: true,
+                descriptorCount: 9,
+                lastRefreshedAt: new Date().toISOString(),
+            })),
+            refreshChainRegistry: vi.fn(),
+        };
+        rerender(<NetworkEndpointsSection />);
+
+        expect(await screen.findByText(/9 networks in the registry/)).toBeInTheDocument();
+        resolveOldStatus({
+            ok: true,
+            descriptorCount: 1,
+            lastRefreshedAt: new Date().toISOString(),
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.getByText(/9 networks in the registry/)).toBeInTheDocument();
+        expect(screen.queryByText(/1 network in the registry/)).toBeNull();
+    });
+
+    it('refreshes an endpoint draft when its chain descriptor changes', async () => {
+        const registry = defaultRegistry();
+        const original = { ...registry.get('bitcoin-mainnet') };
+        delete original.isUserAdded;
+        const replacement = {
+            ...original,
+            explorer: {
+                ...original.explorer,
+                defaultUrl: 'https://remote-explorer.example',
+            },
+        };
+        const view = render(<NetworkEndpointsSection />);
+        const explorer = within(bitcoinMainnetBlock()).getByLabelText('Explorer URL');
+        expect(explorer).toHaveValue('https://explorer.xchain.io');
+
+        try {
+            registry.applyRemoteDescriptors([replacement]);
+            view.rerender(<NetworkEndpointsSection />);
+
+            await waitFor(() => expect(explorer).toHaveValue('https://remote-explorer.example'));
+        } finally {
+            registry.applyRemoteDescriptors([original]);
+        }
     });
 
     it('explains an unreachable registry host and preserves the bundled fallback', async () => {

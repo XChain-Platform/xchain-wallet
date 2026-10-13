@@ -122,30 +122,36 @@ function ChainRegistryRefreshRow() {
     const [status, setStatus] = useState(/** @type {any} */ (null));
     const [refreshing, setRefreshing] = useState(false);
     const [manualResult, setManualResult] = useState(false);
-    const manualRefreshRef = useRef(false);
+    const requestRef = useRef(0);
     useEffect(() => {
         if (!wired) return;
+        const request = ++requestRef.current;
+        setRefreshing(false);
+        setManualResult(false);
         messaging.getChainRegistryStatus()
-            .then((s) => { if (!manualRefreshRef.current) setStatus(s); })
-            .catch(() => { if (!manualRefreshRef.current) setStatus(null); });
+            .then((s) => { if (request === requestRef.current) setStatus(s); })
+            .catch(() => { if (request === requestRef.current) setStatus(null); });
+        return () => { requestRef.current += 1; };
     }, [wired, messaging]);
     if (!wired) return null;
 
     const onRefresh = async () => {
-        manualRefreshRef.current = true;
+        const request = ++requestRef.current;
         try {
             setRefreshing(true);
             const next = await messaging.refreshChainRegistry();
+            if (request !== requestRef.current) return;
             setStatus(next);
             setManualResult(true);
         } catch (err) {
+            if (request !== requestRef.current) return;
             setStatus({
                 ok: false,
                 error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
             });
             setManualResult(true);
         } finally {
-            setRefreshing(false);
+            if (request === requestRef.current) setRefreshing(false);
         }
     };
 
@@ -281,7 +287,14 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         setEditing(false);
         setSaveError(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [override?.explorerUrl, override?.encoderUrl, override?.hubUrl]);
+    }, [
+        override?.explorerUrl,
+        override?.encoderUrl,
+        override?.hubUrl,
+        defaults.explorerUrl,
+        defaults.encoderUrl,
+        defaults.hubUrl,
+    ]);
 
     const isCustom = Boolean(override?.custom);
     const networkSuffix = descriptor.networkKind !== 'mainnet'

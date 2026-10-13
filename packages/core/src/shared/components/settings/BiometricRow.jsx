@@ -68,6 +68,15 @@ export function BiometricRow() {
         let cancelled = false;
         describeBiometric().then((described) => {
             if (!cancelled) setDescription(described);
+        }).catch(() => {
+            if (!cancelled) {
+                setDescription({
+                    supported: false,
+                    reason: 'Could not check biometric unlock on this device.',
+                    mechanism: 'device unlock',
+                    wrapNote: '',
+                });
+            }
         });
         return () => { cancelled = true; };
     }, []);

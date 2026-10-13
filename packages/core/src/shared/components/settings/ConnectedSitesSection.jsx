@@ -22,7 +22,7 @@
 // origins with Unblock buttons, plus an inline form to manually
 // block an origin without it being connected first.
 //
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, FormErrorSummary } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -70,12 +70,14 @@ export function ConnectedSitesSection() {
     const [expanded, setExpanded] = useState(/** @type {Set<string>} */ (new Set()));
     const [manualBlock, setManualBlock] = useState('');
     const [pendingAction, setPendingAction] = useState(/** @type {string | null} */ (null));
+    const reloadRequestRef = useRef(0);
 
     const blocklistWired = typeof messaging?.listBlockedOrigins === 'function'
         && typeof messaging?.blockOrigin === 'function'
         && typeof messaging?.unblockOrigin === 'function';
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const request = ++reloadRequestRef.current;
         if (typeof messaging?.listConnectedSites !== 'function') {
             setError('Connected sites are unavailable in this app.');
             setLoading(false);
@@ -87,17 +89,22 @@ export function ConnectedSitesSection() {
                 messaging.listConnectedSites(),
                 blocklistWired ? messaging.listBlockedOrigins() : Promise.resolve([]),
             ]);
+            if (request !== reloadRequestRef.current) return;
             setSites(Array.isArray(siteList) ? siteList : []);
             setBlocked(Array.isArray(blockedList) ? blockedList : []);
             setError(null);
         } catch (err) {
+            if (request !== reloadRequestRef.current) return;
             setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setLoading(false);
+            if (request === reloadRequestRef.current) setLoading(false);
         }
-    };
+    }, [blocklistWired, messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { reloadRequestRef.current += 1; };
+    }, [reload]);
 
     const onDisconnect = async (id) => {
         if (pendingAction) return;
@@ -284,18 +291,25 @@ function BlocklistAuditPanel({ confirm }) {
     const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [clearing, setClearing] = useState(false);
+    const reloadRequestRef = useRef(0);
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const request = ++reloadRequestRef.current;
         try {
             const list = await messaging.listBlocklistAuditLog();
+            if (request !== reloadRequestRef.current) return;
             setEntries(Array.isArray(list) ? list : []);
             setError(null);
         } catch (err) {
+            if (request !== reloadRequestRef.current) return;
             setError(err instanceof Error ? err.message : String(err));
         }
-    };
+    }, [messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { reloadRequestRef.current += 1; };
+    }, [reload]);
 
     const onClear = async () => {
         if (clearing) return;

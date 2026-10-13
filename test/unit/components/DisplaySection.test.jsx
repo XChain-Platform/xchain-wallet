@@ -141,6 +141,26 @@ describe('DisplaySection', () => {
         expect(screen.queryByText('dogecoin-testnet:WOW')).toBeNull();
     });
 
+    it('does not apply a watched-token lookup after its ticker changes', async () => {
+        let resolveLookup;
+        const getTokenInfo = vi.fn(() => new Promise((resolve) => { resolveLookup = resolve; }));
+        const messaging = setup({}, { getTokenInfo });
+        await screen.findByRole('heading', { name: 'Watched tokens (0)' });
+
+        const ticker = screen.getByLabelText('Token ticker');
+        fireEvent.change(ticker, { target: { value: 'OLD' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Watch token' }));
+        fireEvent.change(ticker, { target: { value: 'NEW' } });
+        resolveLookup({ canonicalTick: 'OLD' });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
+        expect(ticker).toHaveValue('NEW');
+        expect(screen.queryByText(/OLD is now shown/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Watch token' })).toBeEnabled();
+    });
+
     it('debounces token-list search across ticker and network name with clear and keyboard controls', async () => {
         setup({
             pinnedTokens: ['bitcoin-mainnet:XCP'],
