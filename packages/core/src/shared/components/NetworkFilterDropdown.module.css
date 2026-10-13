@@ -18,13 +18,13 @@
 }
 
 .sm {
-    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) - var(--xc-space-2));
+    --network-filter-control-height: var(--xc-control-h-sm);
 }
 
 .md {
-    --network-filter-control-height: var(--xc-control-h-md, 36px);
+    --network-filter-control-height: var(--xc-control-h-md);
 }
 
 .lg {
-    --network-filter-control-height: calc(var(--xc-control-h-md, 36px) + var(--xc-space-3));
+    --network-filter-control-height: var(--xc-control-h-lg);
 }
