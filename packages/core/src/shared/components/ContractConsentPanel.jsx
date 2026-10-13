@@ -67,11 +67,11 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     if (status === 'unavailable') {
         return (
             <>
-                <dt className={labelClassName}>What this contract can do</dt>
+                <dt className={labelClassName}>Permission you grant</dt>
                 <dd className={valueClassName}>
-                    The wallet couldn&rsquo;t look up what this contract is
-                    allowed to do. Try again, or continue only if you trust the
-                    author.
+                    The wallet couldn&rsquo;t look up which actions you would grant this
+                    contract permission to take. Try again, or continue only if you
+                    trust the author.
                 </dd>
             </>
         );
@@ -93,11 +93,11 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
     if (status === 'unrestricted') {
         return (
             <>
-                <dt className={labelClassName}>What this contract can do</dt>
+                <dt className={labelClassName}>Permission you grant</dt>
                 <dd className={valueClassName}>
-                    Anything. This contract set no limits on itself, so it can
-                    take any action the protocol allows on your behalf. Continue
-                    only if you trust the author.
+                    Anything. By continuing, you grant this contract permission to
+                    take any action the protocol allows on your behalf. The contract
+                    set no limits on itself, so continue only if you trust the author.
                 </dd>
                 {feeRows}
                 {provenance}
@@ -109,16 +109,21 @@ export function ContractConsentPanel({ manifest, labelClassName, valueClassName 
 
     return (
         <>
-            <dt className={labelClassName}>What this contract can do</dt>
+            <dt className={labelClassName}>Permission you grant</dt>
             <dd className={valueClassName}>
                 {verbs && verbs.length > 0 ? (
-                    <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
-                        {verbs.map((v) => (
-                            <li key={v}>It can {v}.</li>
-                        ))}
-                    </ul>
+                    <>
+                        <p style={{ margin: '0 0 0.25rem' }}>
+                            By continuing, you grant this contract permission to:
+                        </p>
+                        <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+                            {verbs.map((v) => (
+                                <li key={v}>It can {v}.</li>
+                            ))}
+                        </ul>
+                    </>
                 ) : (
-                    'Nothing: this contract declared it can take no actions on your behalf.'
+                    'You grant no action permissions: this contract declared it can take no actions on your behalf.'
                 )}
             </dd>
             {feeRows}

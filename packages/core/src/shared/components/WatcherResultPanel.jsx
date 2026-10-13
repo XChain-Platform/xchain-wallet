@@ -83,8 +83,9 @@ export function WatcherResultPanel({
                 <h2 className={styles.successTitle}>{title}</h2>
                 <p className={styles.successHint}>
                     Take this transaction to your Signer-mode wallet. Paste the hex,
-                    or scan the animated QR. Sign there, then paste the signed
-                    transaction into a Normal-mode wallet to broadcast.
+                    or scan the animated QR. Signing authorizes this transaction
+                    only, so verify its details again on the signer. Then paste the
+                    signed transaction into a Normal-mode wallet to broadcast.
                 </p>
                 {result?.encoding ? (
                     <dl className={styles.successSummary}>
