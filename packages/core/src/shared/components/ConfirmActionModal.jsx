@@ -53,26 +53,29 @@ const chainRegistry = defaultRegistry();
 
 function useSigningWallet(wallet) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const [resolvedWallet, setResolvedWallet] = useState(wallet);
+    const walletId = wallet ? null : readActiveWallet();
+    const [resolution, setResolution] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
-        if (wallet) {
-            setResolvedWallet(wallet);
-            return undefined;
-        }
-        setResolvedWallet(null);
-        const walletId = readActiveWallet();
+        if (wallet) return undefined;
         if (!walletId || typeof messaging?.listWallets !== 'function') return undefined;
         Promise.resolve().then(() => messaging.listWallets()).then((walletsValue) => {
             if (cancelled) return;
             const wallets = Array.isArray(walletsValue) ? walletsValue : [];
-            setResolvedWallet(wallets.find((candidate) => candidate.id === walletId) || null);
+            setResolution({
+                messaging,
+                walletId,
+                wallet: wallets.find((candidate) => candidate.id === walletId) || null,
+            });
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [messaging, wallet]);
+    }, [messaging, wallet, walletId]);
 
-    return resolvedWallet;
+    if (wallet) return wallet;
+    return resolution?.messaging === messaging && resolution?.walletId === walletId
+        ? resolution.wallet
+        : null;
 }
 
 function formatReviewDecoded(decoded) {
@@ -282,13 +285,23 @@ export function ConfirmActionModal({
         ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
     const resolvedSigningWallet = useSigningWallet(signingWallet);
-    const [approveDisabled, setApproveDisabled] = useState(false);
+    const [approvalAttempt, setApprovalAttempt] = useState(null);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
     const pageRef = useRef(null);
     useFocusTrap(pageRef, { active: open });
+    const previewReady = phase === 'ready' && !reportLoading;
+    const approveDisabled = approvalAttempt !== null && approvalAttempt.request === composed;
     const signingTime = useLongOperationStatus(signaturePhase);
+
+    useEffect(() => {
+        if (!open) return;
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.closest('[data-testid="confirm-modal"]')) {
+            active.blur();
+        }
+    }, [composed, open]);
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -310,10 +323,25 @@ export function ConfirmActionModal({
     // await (§5.1). The parent's onApprove runs the async signing.
     const handleApprove = useCallback((e) => {
         if (e) e.preventDefault();
-        if (approveDisabled || !canApprove || !credentialsReady || refusal) return;
-        setApproveDisabled(true);      // sync, this tick
-        Promise.resolve(onApprove({})).catch(() => {}).finally(() => setApproveDisabled(false));
-    }, [approveDisabled, canApprove, credentialsReady, refusal, onApprove]);
+        if (approveDisabled || !previewReady || !canApprove || !credentialsReady || refusal) return;
+        const attempt = { request: composed };
+        const finish = () => {
+            setApprovalAttempt((current) => current === attempt ? null : current);
+        };
+        setApprovalAttempt(attempt);      // sync, this tick
+        try {
+            Promise.resolve(onApprove({})).catch(() => {}).finally(finish);
+        } catch {
+            finish();
+        }
+    }, [approveDisabled, previewReady, canApprove, credentialsReady, refusal, composed, onApprove]);
+
+    const handleReject = useCallback((e) => {
+        if (e) e.preventDefault();
+        try {
+            Promise.resolve(onReject()).catch(() => {});
+        } catch { /* Event callbacks have no rejection consumer. */ }
+    }, [onReject]);
 
     if (!open) return null;
 
@@ -321,7 +349,7 @@ export function ConfirmActionModal({
     // signature is in flight (both exits locked).
     const header = (
         <PageHeader
-            onBack={onReject}
+            onBack={handleReject}
             backDisabled={exitsLocked}
             title="Confirm"
         />
@@ -523,7 +551,7 @@ export function ConfirmActionModal({
                     <Button
                         variant="danger"
                         icon={<Icon.ThumbsDownIcon />}
-                        onClick={onReject}
+                        onClick={handleReject}
                         disabled={exitsLocked}
                         data-testid="confirm-reject"
                     >
@@ -533,7 +561,7 @@ export function ConfirmActionModal({
                         variant="success"
                         icon={<Icon.ThumbsUpIcon />}
                         onClick={handleApprove}
-                        disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
+                        disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                         data-testid="confirm-approve"
                         // The explicit accessible name stays identical to the
                         // visible action and amount.

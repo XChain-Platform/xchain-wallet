@@ -162,6 +162,7 @@ assert.doesNotMatch(modalCss, /\.footer\s*\{[^}]*border-top/s, 'action row has n
 assert.doesNotMatch(modalCss, /\.overlay\b/, 'no overlay backdrop remains');
 assert.match(modalSrc, /<Screen /, 'confirm surface renders as a Screen page');
 assert.match(modalSrc, /title="Confirm"/, 'page header reads Confirm');
-assert.match(modalSrc, /onBack=\{onReject\}/, 'header back arrow is Reject');
+assert.match(modalSrc, /onBack=\{handleReject\}/, 'header back arrow uses the guarded Reject handler');
+assert.match(modalSrc, /Promise\.resolve\(onReject\(\)\)\.catch/, 'Reject promises cannot escape the event handler');
 
 console.log('confirm-modal-send-slice1.smoke.js OK');

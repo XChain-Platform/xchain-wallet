@@ -3,6 +3,7 @@
 //
 // ConfirmActionModal render + interaction contract (§5.1-5.2).
 
+import { Profiler } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -467,6 +468,22 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('ack-DRYRUN_INVALID')).toBeTruthy();
     });
 
+    it('keeps Approve disabled until the preview finishes loading', () => {
+        const onApprove = vi.fn();
+        const props = base({
+            phase: 'preflighting', report: null, reportLoading: true, onApprove,
+        });
+        const { rerender } = render(<ConfirmActionModal {...props} />);
+
+        const button = screen.getByTestId('confirm-approve');
+        expect(button).toBeDisabled();
+        fireEvent.click(button);
+        expect(onApprove).not.toHaveBeenCalled();
+
+        rerender(<ConfirmActionModal {...props} phase="ready" reportLoading={false} />);
+        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+    });
+
     it('Approve disables synchronously on click and calls onApprove once', () => {
         const onApprove = vi.fn(() => new Promise(() => {}));
         render(<ConfirmActionModal {...base({ onApprove })} />);
@@ -475,6 +492,79 @@ describe('ConfirmActionModal', () => {
         expect(btn.disabled).toBe(true);         // sync-disabled this tick
         fireEvent.click(btn);                     // second click ignored
         expect(onApprove).toHaveBeenCalledOnce();
+    });
+
+    it('does not carry busy state or focus into a new request', () => {
+        const firstComposed = { psbt: 'first' };
+        const secondComposed = { psbt: 'second' };
+        const firstApprove = vi.fn(() => new Promise(() => {}));
+        const secondApprove = vi.fn();
+        const { rerender } = render(<ConfirmActionModal {...base({
+            composed: firstComposed,
+            onApprove: firstApprove,
+        })} />);
+        const firstButton = screen.getByTestId('confirm-approve');
+        firstButton.focus();
+        fireEvent.click(firstButton);
+        expect(firstButton).toHaveFocus();
+        expect(firstButton).toBeDisabled();
+
+        rerender(<ConfirmActionModal {...base({
+            composed: secondComposed,
+            decoded: { summary: 'Send 7 JDOG to bc1qnew', details: [], warnings: [] },
+            onApprove: secondApprove,
+        })} />);
+
+        const secondButton = screen.getByTestId('confirm-approve');
+        expect(secondButton).toBeEnabled();
+        expect(secondButton).not.toHaveFocus();
+        fireEvent.click(secondButton);
+        expect(secondApprove).toHaveBeenCalledOnce();
+    });
+
+    it('renders a new request with its own signing wallet on the first commit', () => {
+        const commits = [];
+        const recordCommit = () => {
+            commits.push({
+                request: document.querySelector('[data-testid="confirm-modal"]')?.getAttribute('aria-label'),
+                wallet: document.querySelector('[data-testid="wallet-identity"]')?.textContent,
+            });
+        };
+        const firstWallet = { id: 'first-wallet', name: 'First wallet' };
+        const secondWallet = { id: 'second-wallet', name: 'Second wallet' };
+        const { rerender } = render(
+            <Profiler id="confirm" onRender={recordCommit}>
+                <ConfirmActionModal {...base({ signingWallet: firstWallet })} />
+            </Profiler>,
+        );
+
+        rerender(
+            <Profiler id="confirm" onRender={recordCommit}>
+                <ConfirmActionModal {...base({
+                    composed: { psbt: 'second' },
+                    decoded: { summary: 'Send 7 JDOG', details: [], warnings: [] },
+                    signingWallet: secondWallet,
+                })} />
+            </Profiler>,
+        );
+
+        const secondRequestCommits = commits.filter(({ request }) => request === 'Confirm Send 7 JDOG');
+        expect(secondRequestCommits.length).toBeGreaterThan(0);
+        expect(secondRequestCommits.every(({ wallet }) => wallet?.includes('Second wallet'))).toBe(true);
+    });
+
+    it('contains callback throws and rejected event promises', async () => {
+        const onApprove = vi.fn(() => { throw new Error('signer stopped'); });
+        const onReject = vi.fn(() => Promise.reject(new Error('release stopped')));
+        render(<ConfirmActionModal {...base({ onApprove, onReject })} />);
+
+        expect(() => fireEvent.click(screen.getByTestId('confirm-approve'))).not.toThrow();
+        await act(async () => {});
+        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+
+        fireEvent.click(screen.getByTestId('confirm-reject'));
+        await act(async () => {});
+        expect(onReject).toHaveBeenCalledOnce();
     });
 
     it('shows the queued terminal copy in the signed-not-broadcast phase', () => {
