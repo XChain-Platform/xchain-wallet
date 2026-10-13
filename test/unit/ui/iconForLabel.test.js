@@ -20,7 +20,7 @@ import {
     BackIcon, ForwardIcon, CopyIcon, ScanIcon, SearchIcon, FilterIcon,
     EyeIcon, UploadIcon, DownloadIcon, MigrateIcon, TokenIcon,
     MultisigIcon, AddressIcon, ContractIcon, MarketIcon, MessageIcon,
-    HistoryIcon, HomeIcon, GearIcon, MoreIcon, PrinterIcon, HandshakeIcon,
+    HistoryIcon, HomeIcon, GearIcon, MoreIcon, MintIcon, SweepIcon, HandshakeIcon,
     VerifyIcon, SaveIcon,
 } from '../../../packages/core/src/ui/icons/index.jsx';
 
@@ -42,6 +42,7 @@ describe('ui/icons/iconForLabel', () => {
         ['Reject', XIcon],
         ['Delete', TrashIcon],
         ['Burn', TrashIcon],
+        ['Sweep address', SweepIcon],
         ['Edit', PencilIcon],
         ['Compose', PencilIcon],
         ['Create', PlusIcon],
@@ -68,7 +69,7 @@ describe('ui/icons/iconForLabel', () => {
         ['Migrate to BIP39', MigrateIcon],
         ['Issue token', PlusIcon], // matches "issue" in PlusIcon list
         ['Token', TokenIcon],
-        ['Mint additional supply', PrinterIcon], // "mint" now routes to Printer
+        ['Mint', MintIcon],
         ['Transfer ownership', HandshakeIcon],   // "transfer" → Handshake
         ['Verify signature', VerifyIcon],        // "verify" → shield-check
         ['Multisig signing', MultisigIcon],

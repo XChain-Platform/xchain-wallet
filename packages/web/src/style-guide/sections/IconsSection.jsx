@@ -16,7 +16,7 @@ import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 // a `type` prop and renders a different glyph per file extension, not
 // a stable single icon).
 const ICON_NAMES = [
-    'BackIcon', 'CheckIcon', 'XIcon', 'PlusIcon', 'MenuIcon', 'MoreIcon',
+    'BackIcon', 'CheckIcon', 'XIcon', 'PlusIcon', 'MintIcon', 'SweepIcon', 'MenuIcon', 'MoreIcon',
     'SendIcon', 'ReceiveIcon', 'SwapIcon', 'BroadcastIcon',
     'ScanIcon', 'CameraIcon', 'CopyIcon', 'PasteIcon', 'SearchIcon', 'FilterIcon',
     'BookIcon', 'AddressIcon', 'UsersIcon',
