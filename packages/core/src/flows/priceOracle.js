@@ -84,6 +84,8 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
     }
     /** @type {Map<string, NativePriceEntry>} */
     const cache = new Map();
+    /** @type {Map<string, number>} */
+    const sparklineFetchedAt = new Map();
 
     /**
      * Fetch (or return cached) prices for the supplied chainIds in the
@@ -115,63 +117,64 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
         }
         if (lookups.length === 0) return { prices: out };
 
-        // For each lookup, see if the cache is fresh enough for the
-        // user's request. A request that needs sparkline data may be
-        // satisfied from a spot-only cached entry only partially; in
-        // that case we re-fetch to bring the sparkline in.
+        // Spot and sparkline data use separate freshness windows so a chart
+        // request does not refetch fresh spot data.
         const tNow = now();
         const stale = [];
         for (const lk of lookups) {
             const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
             if (!cached) { stale.push(lk); continue; }
             const ageMs = tNow - cached.fetchedAt;
-            const wantSpark = includeSparkline && cached.sparkline == null;
-            if (wantSpark && ageMs > SPARKLINE_TTL_MS) { stale.push(lk); continue; }
             if (ageMs > SPOT_TTL_MS) { stale.push(lk); continue; }
             out[lk.chainId] = cached;
         }
-        if (stale.length === 0) return { prices: out };
 
         // One batched spot call covers every stale chain. That's the
         // whole privacy mitigation: one request, not N.
         let spotErr = null;
-        try {
-            const idsParam = stale.map((s) => s.coingeckoId).join(',');
-            const url = `${COINGECKO_BASE}/simple/price?ids=${encodeURIComponent(idsParam)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_market_cap=true&include_24hr_change=true`;
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-            for (const lk of stale) {
-                const row = data?.[lk.coingeckoId];
-                /** @type {NativePriceEntry} */
-                const entry = {
-                    priceFiat: numOrNull(row?.[vsCurrency]),
-                    marketCapFiat: numOrNull(row?.[`${vsCurrency}_market_cap`]),
-                    change24hPct: numOrNull(row?.[`${vsCurrency}_24h_change`]),
-                    sparkline: null,
-                    fetchedAt: tNow,
-                };
-                cache.set(cacheKey(lk.chainId, vsCurrency), entry);
-                out[lk.chainId] = entry;
-            }
-        } catch (err) {
-            spotErr = err && err.message ? String(err.message) : String(err);
-            // Surface cached entries even on failure (better than blank
-            // panels). New stale chains stay absent from `out`.
-            for (const lk of stale) {
-                const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
-                if (cached) out[lk.chainId] = cached;
+        if (stale.length > 0) {
+            try {
+                const idsParam = stale.map((s) => s.coingeckoId).join(',');
+                const url = `${COINGECKO_BASE}/simple/price?ids=${encodeURIComponent(idsParam)}&vs_currencies=${encodeURIComponent(vsCurrency)}&include_market_cap=true&include_24hr_change=true`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                for (const lk of stale) {
+                    const key = cacheKey(lk.chainId, vsCurrency);
+                    const row = data?.[lk.coingeckoId];
+                    /** @type {NativePriceEntry} */
+                    const entry = {
+                        priceFiat: numOrNull(row?.[vsCurrency]),
+                        marketCapFiat: numOrNull(row?.[`${vsCurrency}_market_cap`]),
+                        change24hPct: numOrNull(row?.[`${vsCurrency}_24h_change`]),
+                        sparkline: cache.get(key)?.sparkline ?? null,
+                        fetchedAt: tNow,
+                    };
+                    cache.set(key, entry);
+                    out[lk.chainId] = entry;
+                }
+            } catch (err) {
+                spotErr = err && err.message ? String(err.message) : String(err);
+                // Surface cached entries even on failure (better than blank
+                // panels). New stale chains stay absent from `out`.
+                for (const lk of stale) {
+                    const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
+                    if (cached) out[lk.chainId] = cached;
+                }
             }
         }
 
-        // Sparkline pass: only when requested, and only for chains
-        // whose cached entry lacks sparkline data. Each chain costs one
+        // Sparkline pass: only when requested, and only for chains whose
+        // cached chart is missing or stale. Each chain costs one
         // request, so this is the expensive path; the 1-hour TTL means
         // a typical user pays it once per coin per session.
         if (includeSparkline) {
-            await Promise.all(stale.map(async (lk) => {
-                const cached = cache.get(cacheKey(lk.chainId, vsCurrency));
-                if (cached?.sparkline) return;
+            await Promise.all(lookups.map(async (lk) => {
+                const key = cacheKey(lk.chainId, vsCurrency);
+                const cached = cache.get(key);
+                const fetchedAt = sparklineFetchedAt.get(key);
+                if (cached?.sparkline && fetchedAt !== undefined
+                    && tNow - fetchedAt <= SPARKLINE_TTL_MS) return;
                 try {
                     const url = `${COINGECKO_BASE}/coins/${encodeURIComponent(lk.coingeckoId)}/market_chart?vs_currency=${encodeURIComponent(vsCurrency)}&days=7`;
                     const resp = await fetch(url);
@@ -186,12 +189,12 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
                                 priceFiat: null,
                                 marketCapFiat: null,
                                 change24hPct: null,
-                                fetchedAt: tNow,
+                                fetchedAt: tNow - SPOT_TTL_MS - 1,
                             }),
                             sparkline: series,
-                            fetchedAt: tNow,
                         };
-                        cache.set(cacheKey(lk.chainId, vsCurrency), updated);
+                        cache.set(key, updated);
+                        sparklineFetchedAt.set(key, tNow);
                         out[lk.chainId] = updated;
                     }
                 } catch {
@@ -207,6 +210,7 @@ export function createPriceOracle({ fetch, now = () => Date.now() }) {
 
     function clearCache() {
         cache.clear();
+        sparklineFetchedAt.clear();
     }
 
     return { getNativePrices, clearCache };
