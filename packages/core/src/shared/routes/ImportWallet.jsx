@@ -379,7 +379,10 @@ export function ImportWallet({
             // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
             // says which of the three boxes it is talking about.
-            setError(restoreFailureMessage(err, { mode }));
+            setError(userFacingMessage(
+                restoreFailureMessage(err, { mode }),
+                'That backup could not be restored. Check the backup file and try again.',
+            ));
             setBusy(false);
         }
     }

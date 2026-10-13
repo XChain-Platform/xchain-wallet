@@ -19,6 +19,7 @@ import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -202,7 +203,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
             setStage('ads-notice');
         } catch (err) {
-            setPersistError(err?.message || 'Could not create the wallet.');
+            setPersistError(userFacingMessage(err, 'Failed to create wallet. Try again.'));
             setStage('verify');
         }
     }

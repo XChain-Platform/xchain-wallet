@@ -28,8 +28,10 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
+        calibrateKdfParamsAsync: vi.fn(actual.calibrateKdfParamsAsync),
         deriveMasterKey: vi.fn(actual.deriveMasterKey),
         deriveMasterKeyAsync: vi.fn(actual.deriveMasterKeyAsync),
+        makeFreshKdfParams: vi.fn(actual.makeFreshKdfParams),
     };
 });
 
@@ -38,7 +40,12 @@ import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWall
 import { unlockWalletRecord } from '../../../packages/core/src/flows/unlockWallet.js';
 import { decryptWalletPassphrase } from '../../../packages/core/src/crypto/walletBlob.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
-import { deriveMasterKey, deriveMasterKeyAsync } from '../../../packages/core/src/crypto/kdf.js';
+import {
+    calibrateKdfParamsAsync,
+    deriveMasterKey,
+    deriveMasterKeyAsync,
+    makeFreshKdfParams,
+} from '../../../packages/core/src/crypto/kdf.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 
@@ -173,5 +180,16 @@ describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
             expect(putSpy).toHaveBeenCalledTimes(1);
             putSpy.mockRestore();
         }
+    });
+
+    it('uses the existing minimum parameters when device calibration fails', async () => {
+        const vault = await openVault();
+        vi.mocked(calibrateKdfParamsAsync).mockRejectedValueOnce(new Error('calibration failed'));
+        vi.mocked(makeFreshKdfParams).mockReturnValueOnce(LOW_COST_KDF_PARAMS);
+
+        const { wallet } = await persist(vault, { kdfParams: undefined });
+
+        expect(makeFreshKdfParams).toHaveBeenCalledWith();
+        expect(wallet.kdfParams).toEqual(LOW_COST_KDF_PARAMS);
     });
 });
