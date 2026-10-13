@@ -73,6 +73,39 @@ describe('desktop update banner lifecycle', () => {
         expect(screen.getByRole('status').textContent).toContain('wallet is untouched');
     });
 
+    it('names a read-only location when a verified update cannot be installed', async () => {
+        const bridge = installBridge();
+        bridge.install.mockResolvedValue({
+            ok: false, cause: 'read-only', reason: 'remote controlled text', retryable: false,
+        });
+        render(<DesktopUpdateBanner />);
+        bridge.emit({ type: 'ready', info: { version: '1.2.3' } });
+
+        await act(async () => {
+            screen.getByRole('button', { name: /restart to update/i }).click();
+            await Promise.resolve();
+        });
+
+        const text = screen.getByRole('status').textContent;
+        expect(text).toContain('read-only location');
+        expect(text).not.toContain('could not be downloaded or verified');
+        expect(text).not.toContain('remote controlled text');
+    });
+
+    it('keeps the restart-blocked copy for an unclassified retryable failure', async () => {
+        const bridge = installBridge();
+        bridge.install.mockResolvedValue({ ok: false, retryable: true });
+        render(<DesktopUpdateBanner />);
+        bridge.emit({ type: 'ready', info: { version: '1.2.3' } });
+
+        await act(async () => {
+            screen.getByRole('button', { name: /restart to update/i }).click();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('status').textContent).toContain('Finish the current wallet operation');
+    });
+
     it('unsubscribes when the renderer removes the banner', () => {
         const bridge = installBridge();
         const view = render(<DesktopUpdateBanner />);

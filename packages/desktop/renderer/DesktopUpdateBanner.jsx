@@ -66,11 +66,14 @@ function updaterBridge() {
 }
 
 export function DesktopUpdateBanner() {
-    // 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'restart-blocked' | 'error'
+    // 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'restart-blocked' | 'install-failed' | 'error'
     const [state, setState] = useState('idle');
     const [version, setVersion] = useState(/** @type {string | null} */ (null));
     const [progress, setProgress] = useState(/** @type {number | null} */ (null));
     const [dismissed, setDismissed] = useState(false);
+    // Why a verified update failed to install: 'read-only' | 'permission' | null.
+    // Main sends one of a fixed set of words and anything else is ignored.
+    const [installCause, setInstallCause] = useState(/** @type {string | null} */ (null));
     const operationInProgress = useRef(/** @type {null | 'check' | 'download' | 'restart'} */ (null));
     const retryAction = useRef(/** @type {'check' | 'download' | 'restart'} */ ('check'));
 
@@ -170,8 +173,20 @@ export function DesktopUpdateBanner() {
             .then((result) => {
                 operationInProgress.current = null;
                 if (result?.ok) return;
-                if (action === 'restart' && result?.retryable) setState('restart-blocked');
-                else setState('error');
+                if (action === 'restart') {
+                    const cause = result?.cause;
+                    if (cause === 'read-only' || cause === 'permission') {
+                        setInstallCause(cause);
+                        setState('install-failed');
+                        return;
+                    }
+                    setInstallCause(null);
+                    if (result?.retryable) {
+                        setState('restart-blocked');
+                        return;
+                    }
+                }
+                setState('error');
             })
             .catch(() => {
                 operationInProgress.current = null;
@@ -200,6 +215,15 @@ export function DesktopUpdateBanner() {
                 {state === 'restart-blocked' ? (
                     'Finish the current wallet operation before restarting.'
                 ) : null}
+                {state === 'install-failed' ? (
+                    installCause === 'read-only'
+                        ? 'The update was verified but could not be installed because XChain Wallet is '
+                          + 'running from a read-only location. Move the app to your Applications or '
+                          + 'programs folder, open it from there, and try again.'
+                        : 'The update was verified but could not be installed because this account '
+                          + 'does not have permission to replace the app. Run it from a location you '
+                          + 'can write to, or ask an administrator, and try again.'
+                ) : null}
                 {state === 'error' && retryAction.current === 'check' ? (
                     'Could not check for updates. Check your connection and try again.'
                 ) : null}
@@ -216,6 +240,11 @@ export function DesktopUpdateBanner() {
             {state === 'ready' || state === 'restart-blocked' ? (
                 <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
                     Restart to update
+                </button>
+            ) : null}
+            {state === 'install-failed' ? (
+                <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
+                    Retry
                 </button>
             ) : null}
             {state === 'error' ? (

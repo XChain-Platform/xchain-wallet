@@ -641,7 +641,14 @@ export async function attachUpdater({
                 autoUpdater.quitAndInstall();
                 return { ok: true };
             } catch (err) {
-                return { ok: false, reason: String(err?.message || err), retryable: true };
+                const cause = classifyInstallFailure(err);
+                return {
+                    ok: false,
+                    reason: String(err?.message || err),
+                    cause,
+                    // A read-only location does not fix itself on retry.
+                    retryable: cause !== 'read-only',
+                };
             }
         },
     };
@@ -712,6 +719,23 @@ export async function attachUpdater({
             return { ok: false, reason };
         }
     }
+}
+
+/**
+ * Name the cause of an install failure that happened AFTER the signature
+ * check passed. The result is one of a fixed set of constants, never the
+ * error text, so the renderer can pick its own copy without printing
+ * anything an outside party chose.
+ *
+ * @param {any} err
+ * @returns {'read-only' | 'permission' | 'unknown'}
+ */
+export function classifyInstallFailure(err) {
+    const code = String(err?.code || '');
+    const message = String(err?.message || err || '');
+    if (code === 'EROFS' || /read[- ]only/i.test(message)) return 'read-only';
+    if (code === 'EACCES' || code === 'EPERM') return 'permission';
+    return 'unknown';
 }
 
 function defaultLoader() {
