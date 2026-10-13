@@ -23,6 +23,7 @@
 // once Messaging caches kick in; until then each mount probes
 // independently; that's tolerable given typical mount counts).
 
+import { useId, useState } from 'react';
 import { useReachability } from '../hooks/useReachability.js';
 import { registry as registryLib } from '../../index.js';
 import styles from './ReachabilityBanner.module.css';
@@ -37,6 +38,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.startupGraceMs] override the cold-start silence window
  */
 export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGraceMs }) {
+    const detailsId = useId();
+    const [expanded, setExpanded] = useState(false);
     const { loading, overall, perChain, refresh, lastChecked } = useReachability({
         chainIds,
         intervalMs,
@@ -56,30 +59,39 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             role="status"
             aria-live="polite"
             aria-atomic="true"
-            className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
+            className={`${styles.notice} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
-            <span className={styles.icon} aria-hidden="true">
-                {overall === 'offline' ? '⛔' : '⚠'}
-            </span>
-            <div className={styles.body}>
+            <div className={styles.banner}>
+                <span className={styles.icon} aria-hidden="true">
+                    {overall === 'offline' ? '⛔' : '⚠'}
+                </span>
                 <div className={styles.title}>
-                    {overall === 'offline'
-                        ? 'Wallet is offline'
-                        : 'Some wallet information is unavailable'}
+                    {overall === 'offline' ? 'Wallet offline' : 'Network issues'}
                 </div>
+                <button
+                    type="button"
+                    className={styles.detailsToggle}
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    onClick={() => setExpanded((value) => !value)}
+                >
+                    Details
+                </button>
+                <button
+                    type="button"
+                    className={styles.retry}
+                    onClick={refresh}
+                    disabled={loading}
+                >
+                    {loading ? 'Checking…' : 'Try again'}
+                </button>
+            </div>
+            <div id={detailsId} className={styles.detailPanel} hidden={!expanded}>
                 <div className={styles.detail}>
                     {summary}
                     {staleness ? <span className={styles.staleness}> {staleness}</span> : null}
                 </div>
             </div>
-            <button
-                type="button"
-                className={styles.retry}
-                onClick={refresh}
-                disabled={loading}
-            >
-                {loading ? 'Checking…' : 'Try again'}
-            </button>
         </div>
     );
 }
