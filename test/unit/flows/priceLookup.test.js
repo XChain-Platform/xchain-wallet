@@ -19,6 +19,7 @@ import {
     subscribeFiatRates,
     _resetPriceLookupForTests,
     coinToFiat,
+    coinToFiatExact,
     fiatToCoin,
 } from '../../../packages/core/src/flows/priceLookup.js';
 
@@ -193,6 +194,8 @@ describe('flows/priceLookup', () => {
     it('conversion helpers keep their contract', () => {
         const rate = { rate: 40000 };
         expect(coinToFiat('0.5', rate)).toBe(20000);
+        expect(coinToFiatExact('9007199254740993.01', { ...rate, rate: 1 }))
+            .toBe('9007199254740993.01');
         expect(coinToFiat('junk', rate)).toBeNull();
         expect(fiatToCoin('20000', rate)).toBe('0.5');
         expect(fiatToCoin('40000', { rate: 0 })).toBeNull();

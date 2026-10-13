@@ -22,6 +22,7 @@
 // component renders nothing rather than misleading copy.
 
 import { useEffect, useState } from 'react';
+import { formatElapsedTime, formatLocalDateTime } from '../utils/dateTime.js';
 import styles from './StalenessLabel.module.css';
 
 const TICK_MS = 30_000;
@@ -46,14 +47,14 @@ export function StalenessLabel({ lastSyncedAt, prefix = 'Last synced', warnAfter
 
     const diffMs = Math.max(0, Date.now() - lastSyncedAt);
     const stale = typeof warnAfterMs === 'number' && diffMs >= warnAfterMs;
-    const text = `${prefix} ${formatAgo(diffMs)} ago`;
+    const text = `${prefix} ${formatAgo(diffMs)}`;
 
     return (
         <span
             className={`${styles.label} ${stale ? styles.stale : ''} ${className || ''}`}
             role="status"
             aria-live="off"
-            title={new Date(lastSyncedAt).toLocaleString()}
+            title={formatLocalDateTime(lastSyncedAt) || undefined}
         >
             {text}
         </span>
@@ -62,8 +63,5 @@ export function StalenessLabel({ lastSyncedAt, prefix = 'Last synced', warnAfter
 
 /** Exported for the smoke test + reuse in callers that build their own copy. */
 export function formatAgo(diffMs) {
-    if (diffMs < 60_000) return `${Math.max(1, Math.round(diffMs / 1000))}s`;
-    if (diffMs < 3_600_000) return `${Math.round(diffMs / 60_000)}m`;
-    if (diffMs < 86_400_000) return `${Math.round(diffMs / 3_600_000)}h`;
-    return `${Math.round(diffMs / 86_400_000)}d`;
+    return formatElapsedTime(diffMs);
 }

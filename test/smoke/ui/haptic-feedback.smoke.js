@@ -36,6 +36,10 @@ const lockedSrc = readFileSync(
     join(root, 'packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx'),
     'utf8',
 );
+const copyButtonSrc = readFileSync(
+    join(root, 'packages', 'core', 'src', 'ui', 'CopyButton.jsx'),
+    'utf8',
+);
 
 // 1. The hook exports its public function and the named-pulse map.
 assert.ok(/export function useHaptic\(/.test(hookSrc), 'useHaptic exports the hook');
@@ -87,6 +91,8 @@ assert.ok(/record\.variant === 'success'[\s\S]*haptic\.success\(\)/.test(toastSr
     'ToastHost fires haptic.success for success toasts');
 assert.ok(/haptic\.tap\(\)/.test(toastSrc),
     'ToastHost fires haptic.tap for default toasts');
+assert.ok(/<HapticProvider value=\{haptic\}>/.test(toastSrc),
+    'ToastHost shares its guarded haptic instance with child controls');
 
 // 7. Send.jsx wires success on broadcast and error on submit failure.
 assert.ok(/from '\.\.\/hooks\/useHaptic\.js'/.test(sendSrc),
@@ -110,4 +116,10 @@ assert.ok(/function finishUnlock\([\s\S]{0,600}?onUnlocked\?\.\(\);/.test(locked
 assert.ok((lockedSrc.match(/haptic\.error\(\)/g) || []).length >= 2,
     'Locked.jsx fires haptic.error on at least two failure branches (bad password + biometric / non-bad-password)');
 
-console.log('OK: useHaptic + ToastHost / Send / Locked wiring smoke (8 checks)');
+// 9. Copy controls use tap for a completed copy and error for a failed copy.
+assert.ok(/const haptic = useHapticFeedback\(\);/.test(copyButtonSrc),
+    'CopyButton reads the shared guarded haptic instance');
+assert.ok(/if \(ok\)[\s\S]*haptic\.tap\(\)[\s\S]*else[\s\S]*haptic\.error\(\)/.test(copyButtonSrc),
+    'CopyButton maps successful copies to tap and failed copies to error');
+
+console.log('OK: useHaptic + ToastHost / Send / Locked / CopyButton wiring smoke (9 checks)');

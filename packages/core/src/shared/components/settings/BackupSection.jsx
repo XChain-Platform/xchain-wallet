@@ -54,6 +54,8 @@ import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { copyText } from '../../clipboard.js';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
@@ -820,6 +822,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                 onChange={(e) => setMn(e.target.value)}
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
+                autoComplete="off"
                 aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
@@ -840,6 +843,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     <span>Addresses to check:</span>
                     <input
                         type="number"
+                        inputMode="numeric"
                         min={1}
                         max={100}
                         step={1}
@@ -1106,6 +1110,7 @@ function BackupExportResult({ result, onDone }) {
                 value={location}
                 onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
                 aria-label="Backup file HTTPS address"
+                autoComplete="off"
                 style={passwordStyle}
             />
             {pointerError ? <Status text={pointerError} tone="error" /> : null}
@@ -1280,20 +1285,19 @@ function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
     const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const haptic = useHapticFeedback();
 
     const copyTxid = async () => {
         setCopyStatus(null);
         setCopyError(null);
-        if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
-            setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        const { ok } = await copyText(txid);
+        if (ok) {
+            setCopyStatus('Transaction ID copied.');
+            haptic.tap();
             return;
         }
-        try {
-            await navigator.clipboard.writeText(txid);
-            setCopyStatus('Transaction ID copied.');
-        } catch {
-            setCopyError('Could not copy the transaction ID. Select it and copy it manually.');
-        }
+        setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        haptic.error();
     };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.

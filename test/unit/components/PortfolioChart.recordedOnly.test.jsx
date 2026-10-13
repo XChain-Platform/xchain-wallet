@@ -16,7 +16,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { PortfolioChart } from '../../../packages/core/src/shared/components/PortfolioChart.jsx';
+import {
+    PortfolioChart,
+    resampleTo,
+} from '../../../packages/core/src/shared/components/PortfolioChart.jsx';
 import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/flows/demoMode.js';
 
 // 0.5 BTC at $80,000: a valued row, so the chart has something to draw.
@@ -73,6 +76,22 @@ describe('PortfolioChart on a real wallet', () => {
         mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline } } });
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         expect(screen.queryByText(/No price history/)).toBeNull();
+    });
+
+    it('draws a neutral, centered line when only one recorded price is available', async () => {
+        mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline: [70000] } } });
+
+        await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
+        expect(document.querySelector('svg polyline').getAttribute('stroke'))
+            .toBe('var(--xc-text-muted)');
+        expect(screen.getByRole('img', { name: 'Price trend, unchanged' })).toBeInTheDocument();
+    });
+});
+
+describe('resampleTo', () => {
+    it('expands a single point and safely rejects an empty source', () => {
+        expect(resampleTo([7], 4)).toEqual([7, 7, 7, 7]);
+        expect(resampleTo([], 4)).toEqual([]);
     });
 });
 

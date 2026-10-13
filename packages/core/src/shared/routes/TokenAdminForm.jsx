@@ -1431,7 +1431,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={mintStartEstimate
                             ? `Block height when public minting starts. Est. ${mintStartEstimate}.`
                             : 'Block height when public minting starts. Leave blank to open immediately.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={mintStartBlock}
                         onChange={(e) => setMintStartBlock(e.target.value)}
                         autoComplete="off"
@@ -1442,7 +1442,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={mintStopEstimate
                             ? `Block height when public minting ends. Est. ${mintStopEstimate}.`
                             : 'Block height when public minting ends. Leave blank to keep it open.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={mintStopBlock}
                         onChange={(e) => setMintStopBlock(e.target.value)}
                         autoComplete="off"
@@ -1522,7 +1522,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"

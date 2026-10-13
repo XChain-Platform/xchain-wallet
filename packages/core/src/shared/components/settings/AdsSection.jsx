@@ -90,10 +90,16 @@ export function AdsSection() {
         <div style={STACK}>
             <ToggleRow
                 label="Automatic Donation System"
-                hint="Sets aside a small amount on each outgoing transaction and sends it as one donation once it reaches the amount you choose below."
+                hint="It sets aside a small amount when you send a transaction and sends it as one donation once it adds up. Turning it off stops further set-asides; the pending total stays unchanged unless you turn ADS back on."
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
+
+            <div role="status" aria-live="polite" style={{ ...ROW_HINT, padding: '0 var(--xc-space-3)' }}>
+                {settings.ads.enabled
+                    ? 'On. New outgoing transactions add to the pending donation total.'
+                    : 'Off. New outgoing transactions do not add to the pending donation total.'}
+            </div>
 
             {chainIds.length === 0 ? (
                 <Status text="No chains set up for donations yet. Each one is added automatically when you activate that chain." />
@@ -108,6 +114,9 @@ export function AdsSection() {
                 const resolved = resolveAdsChainConfig(chainState, descriptor);
                 const perTxIsDefault = chainState.perTxAmountSats == null;
                 const triggerIsDefault = chainState.triggerAmountSats == null;
+                const transactionsToThreshold = resolved.perTxAmountSats > 0
+                    ? Math.ceil(resolved.triggerAmountSats / resolved.perTxAmountSats)
+                    : null;
                 const displayName = descriptor?.displayName || chainId;
                 const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'
                     ? ` · ${descriptor.networkKind}`
@@ -122,7 +131,7 @@ export function AdsSection() {
 
                         <div style={FIELD_ROW}>
                             <span style={SUBTLE}>
-                                Per tx (sats)
+                                Set aside per outgoing transaction (sats)
                                 {perTxIsDefault ? ' · default' : ' · custom'}
                             </span>
                             <input
@@ -150,14 +159,21 @@ export function AdsSection() {
                         </div>
 
                         <div style={FIELD_ROW}>
-                            <span style={SUBTLE}>
-                                Send when accumulated (sats)
-                                {triggerIsDefault ? ' · default' : ' · custom'}
-                                <InfoTip
-                                    aria="Trigger threshold help"
-                                    label="The wallet sets aside a small amount per chain and sends it as one donation transaction once it reaches this amount. Waiting for a bigger amount means one network fee covers a bigger donation; set it too high and the donation never fires before you stop using the wallet. 'default' follows this release's recommended amount (future releases may retune it); clear the field to go back to it."
-                                />
-                            </span>
+                            <div>
+                                <span style={SUBTLE}>
+                                    Send donation when pending reaches (sats)
+                                    {triggerIsDefault ? ' · default' : ' · custom'}
+                                    <InfoTip
+                                        aria="Trigger threshold help"
+                                        label="This threshold controls how often donations are sent. Once the pending total reaches it, the donation is included with the next outgoing transaction. A larger threshold means donations are sent less often, so one network fee covers a larger donation. 'default' follows this release's recommended amount; clear the field to restore it."
+                                    />
+                                </span>
+                                <div style={ROW_HINT}>
+                                    {transactionsToThreshold === null
+                                        ? 'No pending amount is added while the per-transaction amount is 0.'
+                                        : `About ${transactionsToThreshold.toLocaleString()} outgoing ${transactionsToThreshold === 1 ? 'transaction' : 'transactions'} to reach the threshold, then sent with the next one.`}
+                                </div>
+                            </div>
                             <input
                                 type="number"
                                 min={0}
@@ -194,17 +210,18 @@ export function AdsSection() {
                         </div>
 
                         <div style={ROW}>
-                            <span style={ROW_LABEL}>Lifetime stats</span>
+                            <span style={ROW_LABEL}>Pending donation</span>
+                            <span style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-xs)' }}>
+                                {chainState.accumulatedSats.toLocaleString()} sats
+                            </span>
+                        </div>
+
+                        <div style={ROW}>
+                            <span style={ROW_LABEL}>Lifetime donations</span>
                             <span style={{ color: 'var(--xc-text)', fontSize: 'var(--xc-text-xs)' }}>
                                 {chainState.lifetimeDonatedSats.toLocaleString()} sats
                                 {' · '}
                                 {chainState.lifetimeTxCount} {chainState.lifetimeTxCount === 1 ? 'tx' : 'txs'}
-                                {chainState.accumulatedSats > 0 ? (
-                                    <>
-                                        {' · '}
-                                        <span style={SUBTLE}>{chainState.accumulatedSats.toLocaleString()} accumulated</span>
-                                    </>
-                                ) : null}
                             </span>
                         </div>
                         {chainState.lifetimeDonatedSats > 0 ? (

@@ -1,0 +1,121 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import React from 'react';
+
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { MAX_MEMO_LENGTH } from '../../../packages/core/src/shared/utils/memoLimit.js';
+
+const CHAIN = 'bitcoin-mainnet';
+const FROM = 'bc1qsendersendersendersendersendersendersa';
+const CHANGE = 'bc1qzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3w7nf4f';
+const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const UTXOS = [
+    { txid: '11'.repeat(32), vout: 0, value: 100000, scriptPubKey: '0014aa' },
+    { txid: '22'.repeat(32), vout: 1, value: 200000, scriptPubKey: '0014bb' },
+];
+
+function mount() {
+    const base = {
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [
+                { id: 'source', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
+                { id: 'change', address: CHANGE, publicKey: '02cd', derivationPath: "m/84'/0'/0'/0/1", source: 'hd' },
+            ],
+        }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'source', address: FROM } }),
+        getAddressBalances: vi.fn().mockResolvedValue({
+            native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+            tokens: [{ tick: 'PEPE', quantity: '1000', divisibility: 0 }],
+        }),
+        getAddressUtxos: vi.fn().mockResolvedValue({ utxos: UTXOS }),
+        getSettings: vi.fn().mockResolvedValue({
+            grace: { testSendThresholdSats: 0 },
+            fees: { [CHAIN]: { strategy: null, customSatsPerKb: null, rbfByDefault: true } },
+        }),
+        signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        getSignerStatus: vi.fn().mockResolvedValue({ unlocked: true }),
+        listContacts: vi.fn().mockResolvedValue([]),
+        getAddressHistory: vi.fn().mockResolvedValue([]),
+        gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
+        composeForConfirm: vi.fn().mockResolvedValue({
+            psbt: '70736274ff',
+            encoding: 'OP_RETURN',
+            actionString: 'SEND|0|PEPE|1|' + TO,
+            version: 0,
+            chainId: CHAIN,
+            networkFeeSats: 1000,
+            decoded: { summary: 'Send 1 PEPE', details: [], warnings: [] },
+        }),
+        preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+    };
+    const messaging = new Proxy(base, {
+        get(target, prop) {
+            if (prop in target) return target[prop];
+            if (typeof prop !== 'string') return undefined;
+            const stub = vi.fn().mockResolvedValue(null);
+            target[prop] = stub;
+            return stub;
+        },
+    });
+    render(
+        <MessagingProvider shell="web" messaging={messaging}>
+            <Send walletId="wallet-1" onBack={() => {}} />
+        </MessagingProvider>,
+    );
+    return messaging;
+}
+
+async function fillSend() {
+    fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'PEPE' } });
+    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '1' } });
+    fireEvent.click(screen.getByText('Advanced'));
+}
+
+afterEach(() => cleanup());
+
+describe('Send advanced choices', () => {
+    it('counts memo characters and refuses the network-invalid length before compose', async () => {
+        const messaging = mount();
+        await fillSend();
+        const memo = screen.getByLabelText('Memo');
+        fireEvent.change(memo, { target: { value: 'm'.repeat(MAX_MEMO_LENGTH + 1) } });
+
+        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} characters.`, { exact: false }))
+            .toBeInTheDocument();
+        expect(screen.getByText(/network accepts at most 250/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('composes selected inputs and change, then repeats every advanced choice on review', async () => {
+        const messaging = mount();
+        await fillSend();
+        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'invoice 7' } });
+        await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
+        fireEvent.click(screen.getByLabelText('Coin control enabled'));
+        fireEvent.click(screen.getByLabelText(/0\.001 BTC/));
+        fireEvent.change(screen.getByLabelText('Change address'), { target: { value: 'change' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0]).toMatchObject({
+            memo: 'invoice 7',
+            rbf: true,
+            change: CHANGE,
+            utxos: [UTXOS[0]],
+        });
+
+        const review = await screen.findByLabelText('Advanced send choices');
+        expect(within(review).getByText('invoice 7')).toBeInTheDocument();
+        expect(within(review).getByText('Allowed')).toBeInTheDocument();
+        expect(within(review).getByText('1 selected input')).toBeInTheDocument();
+        expect(within(review).getByText(CHANGE)).toBeInTheDocument();
+    });
+});

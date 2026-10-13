@@ -153,7 +153,7 @@ describe('SharedListDirectory', () => {
         expect(screen.getByText('Treasury assets')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'missing' } });
-        expect(screen.getByText('No shared lists match your search.')).toBeTruthy();
+        expect(screen.getByText('No matching shared lists')).toBeTruthy();
         expect(screen.queryByText('No shared lists are available.')).toBeNull();
     });
 

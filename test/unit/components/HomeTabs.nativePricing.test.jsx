@@ -17,7 +17,7 @@
 // coin.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { TotalBalanceHero } from '../../../packages/core/src/shared/components/TotalBalanceHero.jsx';
@@ -121,6 +121,69 @@ describe('Home native rows on a real wallet', () => {
         release();
         await waitFor(() => expect(within(hero()).getByText('$40,000.00')).toBeInTheDocument());
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
+    });
+});
+
+describe('Home token rows on a real wallet', () => {
+    it('prices only the DEX-traded token and keeps the count aligned with the rows', async () => {
+        const calls = [];
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+            fetch: async (url) => {
+                calls.push(url);
+                if (url.includes('/api/price_snapshots/')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            data: [{ coin_pair: 'BTC/USD', price: '80000', block_timestamp: FRESH_TS }],
+                        }),
+                    };
+                }
+                if (url.includes('/api/market/MARKET/BTC')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            data: [{
+                                tick1: 'MARKET',
+                                tick2: 'BTC',
+                                tick1_price: '0.000001',
+                                tick2_price: '1000000',
+                                last_updated: FRESH_TS,
+                            }],
+                        }),
+                    };
+                }
+                if (url.includes('/api/market/UNKNOWN/BTC')) {
+                    return { ok: true, json: async () => ({ data: [] }) };
+                }
+                return { ok: false, status: 404, json: async () => ({}) };
+            },
+        });
+        mount({
+            balances: {
+                'bitcoin-mainnet': [{
+                    address: 'bitcoin-mainnet-addr',
+                    balances: {
+                        tokens: [
+                            { tick: 'MARKET', quantity: '100000000', divisibility: 8 },
+                            { tick: 'UNKNOWN', quantity: '100000000', divisibility: 8 },
+                        ],
+                    },
+                }],
+            },
+        });
+
+        expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument();
+        await waitFor(() => expect(within(hero()).getByText('1 token not priced')).toBeInTheDocument());
+        expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
+        expect(document.body.textContent).not.toContain('$80,000.00');
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument();
+        const unknown = document.querySelector('[data-balance-key="bitcoin-mainnet:UNKNOWN"]');
+        expect(unknown.textContent).not.toContain('$');
+        expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
     });
 });
 

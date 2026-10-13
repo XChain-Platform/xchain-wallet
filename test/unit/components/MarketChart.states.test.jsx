@@ -7,22 +7,34 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+const reducedMotionHarness = vi.hoisted(() => ({ value: false }));
 const chartHarness = vi.hoisted(() => {
     const setData = vi.fn();
     const fitContent = vi.fn();
     const remove = vi.fn();
+    const chartApplyOptions = vi.fn();
+    const seriesApplyOptions = vi.fn();
+    const addLineSeries = vi.fn(() => ({ setData, applyOptions: seriesApplyOptions }));
     return {
         setData,
         fitContent,
         remove,
+        chartApplyOptions,
+        seriesApplyOptions,
+        addLineSeries,
         createChart: vi.fn(() => ({
-            addLineSeries: () => ({ setData }),
+            addLineSeries,
             timeScale: () => ({ fitContent }),
+            applyOptions: chartApplyOptions,
             remove,
         })),
     };
 });
 
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useReducedMotion: () => reducedMotionHarness.value,
+}));
 vi.mock('lightweight-charts', () => ({ createChart: chartHarness.createChart }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -30,6 +42,7 @@ import { MarketChart } from '../../../packages/core/src/shared/components/Market
 
 afterEach(() => {
     cleanup();
+    reducedMotionHarness.value = false;
     vi.clearAllMocks();
 });
 
@@ -88,6 +101,57 @@ describe('MarketChart states and timeframes', () => {
                 { time: 120, value: 0.02 },
             ]);
         });
+    });
+
+    it('colors a falling series from the danger token and keeps flat data neutral', async () => {
+        const computedStyle = vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+            color: 'rgb(1, 2, 3)',
+            getPropertyValue: (name) => ({
+                '--xc-text': '#111111',
+                '--xc-text-muted': '#777777',
+                '--xc-border': '#222222',
+                '--xc-accent-primary': '#333333',
+                '--xc-success': '#00aa00',
+                '--xc-danger': '#cc0000',
+            }[name] || ''),
+        });
+        renderChart(vi.fn().mockResolvedValue([
+            { price: '0.02', amount: '10', type: 'buy', timestamp: 60 },
+            { price: '0.01', amount: '20', type: 'sell', timestamp: 3660 },
+        ]));
+
+        await waitFor(() => {
+            expect(chartHarness.seriesApplyOptions).toHaveBeenCalledWith({ color: '#cc0000' });
+        });
+        expect(chartHarness.createChart.mock.calls.at(-1)[1]).toMatchObject({
+            layout: { textColor: '#111111' },
+            rightPriceScale: { borderColor: '#222222' },
+            timeScale: { borderColor: '#222222' },
+        });
+
+        cleanup();
+        renderChart(vi.fn().mockResolvedValue([
+            { price: '0.01', amount: '10', type: 'buy', timestamp: 60 },
+            { price: '0.01', amount: '20', type: 'sell', timestamp: 3660 },
+        ]));
+        await waitFor(() => {
+            expect(chartHarness.seriesApplyOptions).toHaveBeenLastCalledWith({ color: '#333333' });
+        });
+        computedStyle.mockRestore();
+    });
+
+    it('resizes the canvas with its container and disables momentum for reduced motion', async () => {
+        reducedMotionHarness.value = true;
+        renderChart(vi.fn().mockResolvedValue([]));
+        await waitFor(() => {
+            expect(chartHarness.createChart.mock.calls.at(-1)[1].kineticScroll)
+                .toEqual({ mouse: false, touch: false });
+        });
+
+        const container = screen.getByLabelText('Price chart');
+        vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ width: 288.9 });
+        act(() => window.dispatchEvent(new Event('resize')));
+        expect(chartHarness.chartApplyOptions).toHaveBeenCalledWith({ width: 288 });
     });
 
     it('surfaces a history failure without also showing the empty state', async () => {

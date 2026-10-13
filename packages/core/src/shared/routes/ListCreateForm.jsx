@@ -551,6 +551,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <FormPage
                 label="Review list"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
                 actions={(
                     <>
                         <Button
@@ -614,7 +617,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
             </FormPage>,
         );
     }
@@ -675,6 +677,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         <FormPage
             label="Create list"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -740,8 +744,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 : 'Paste addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
                     </label>
                     {/* Wraps, and drives a hidden file input from a real
@@ -751,6 +756,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <input
                             {...recipientsDrop.pickerProps}
                             aria-label="Upload CSV of addresses"
+                            autoComplete="off"
                         />
                         <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
                             Upload CSV
@@ -881,7 +887,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
             </p>
 
-            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
         </FormPage>,
     );
 }
@@ -946,7 +951,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<EmptyState title="No matching contact addresses on this chain." />);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
     }
 
     return wrap(

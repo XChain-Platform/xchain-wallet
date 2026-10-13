@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
     useHaptic: () => mocks.haptic,
+    HapticProvider: ({ children }) => children,
 }));
 
 import { ToastHost, useToast } from '../../../../packages/core/src/shared/components/ToastHost.jsx';

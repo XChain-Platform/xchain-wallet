@@ -67,7 +67,8 @@ export function useCommandPalette(opts = {}) {
         const onKey = (e) => {
             // Cmd+key (mac) / Ctrl+key (win/linux). We accept either
             // modifier so both platforms get the same binding.
-            if ((e.key || '').toLowerCase() === comboKey && (e.metaKey || e.ctrlKey) && !e.altKey) {
+            if ((e.key || '').toLowerCase() === comboKey
+                && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
                 setOpen((v) => !v);
             }
