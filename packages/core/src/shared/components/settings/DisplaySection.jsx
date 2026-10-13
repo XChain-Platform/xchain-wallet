@@ -307,14 +307,14 @@ export function DisplaySection() {
             <h3 style={SECTION_HEADER}>Balance display</h3>
             <ToggleRow
                 label="Hide small balances"
-                hint="Collapse balances below the selected threshold into an expandable section. Pinned and escrowed balances stay visible."
+                hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
                 checked={settings.privacy?.hideSmallBalances === true}
                 onChange={(next) => updateDisplay({ privacy: { hideSmallBalances: next } })}
             />
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
-                    <span style={ROW_HINT}>Dust uses each network&apos;s relay limit and 0.0001 units for divisible tokens. Other choices apply in whole asset units.</span>
+                    <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
                 </div>
                 <select
                     aria-label="Small-balance threshold"
@@ -331,7 +331,7 @@ export function DisplaySection() {
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
-                    <span style={ROW_HINT}>Formatting changes display only. Stored and submitted amounts keep their exact value.</span>
+                    <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
                 </div>
                 <select
                     aria-label="Balance number format"
@@ -347,11 +347,11 @@ export function DisplaySection() {
 
             <h3 style={SECTION_HEADER}>Row affordances</h3>
             <p style={SECTION_HINT}>
-                Whether each balance row shows a quick pin / hide button. Off by default to keep rows clean. Your existing pinned and hidden tokens still apply either way and can be managed below.
+                Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active.
             </p>
             <ToggleRow
                 label="Show pin button on rows"
-                hint="Display a star on each balance row to pin / unpin the token from Home."
+                hint="Display a star on each balance row for pinning or unpinning the token on Home."
                 checked={showPinAffordance}
                 onChange={setPinAffordance}
             />
@@ -527,7 +527,7 @@ export function DisplaySection() {
 
             <h3 style={SECTION_HEADER}>List preferences</h3>
             <p style={SECTION_HINT}>
-                Each balance and history list remembers the chain filter you last selected. Reset to start every list at "show all".
+                Remember the last selected chain filter for each balance and history list until you reset every list to "show all."
             </p>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>

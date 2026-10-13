@@ -90,7 +90,7 @@ export function AdsSection() {
         <div style={STACK}>
             <ToggleRow
                 label="Automatic Donation System"
-                hint="It sets aside a small amount when you send a transaction and sends it as one donation once it adds up. Turning it off stops further set-asides; the pending total stays unchanged unless you turn ADS back on."
+                hint="It sets aside a small amount when you send a transaction and sends it as one donation once it adds up; turning it off stops further set-asides without clearing the pending total."
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
@@ -167,7 +167,7 @@ export function AdsSection() {
                                     {triggerIsDefault ? ' · default' : ' · custom'}
                                     <InfoTip
                                         aria="Trigger threshold help"
-                                        label="This threshold controls how often donations are sent. Once the pending total reaches it, the donation is included with the next outgoing transaction. A larger threshold means donations are sent less often, so one network fee covers a larger donation. 'default' follows this release's recommended amount; clear the field to restore it."
+                                        label="After this threshold is reached, the donation is included with the next outgoing transaction; larger thresholds share one network fee across more donations, and 'default' uses this release's recommendation."
                                     />
                                 </span>
                                 <div style={ROW_HINT}>

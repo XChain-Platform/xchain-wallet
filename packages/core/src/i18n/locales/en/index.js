@@ -65,7 +65,7 @@ export const en = {
     'send.testGate.sendSmall': 'Send a small test first',
     'send.testGate.continue': 'Continue with the full amount',
     'send.signerMode':
-        'This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it cannot send them to the network. To send from this device, change Wallet mode in Settings.',
+        'This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it cannot send them to the network. To send from this device, change the mode under Settings, Wallet mode.',
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
     'send.queued.body':
         "Your transaction is signed but could not reach the network. It is waiting in the queued-transactions banner and only goes out when you broadcast it from there. The wallet reminds you when the network is back. Don't send this payment again.",

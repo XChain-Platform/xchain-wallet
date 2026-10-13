@@ -431,7 +431,7 @@ export function BackupSection({ activeWallet }) {
             ) : pendingPassword !== null ? (
                 <PasswordPrompt
                     label="Backup password"
-                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters. It encrypts this backup file and is separate from your wallet password. Your browser saves the file to its configured download location, usually the Downloads folder.`}
+                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters to encrypt this file separately from your wallet password before the browser saves it to its configured download location, usually the Downloads folder.`}
                     busy={exporting}
                     operationTime={exportTime}
                     onCancel={cancelExport}
@@ -442,7 +442,7 @@ export function BackupSection({ activeWallet }) {
                 <BackupRow
                     label="Export encrypted backup"
                     /* Spec §19.4 */
-                    hint="Saves an encrypted .xchain-wallet file with the wallet, addresses, labels, contacts, settings, and pending transactions. Keep both the file and its separate backup password."
+                    hint="Save the wallet, addresses, labels, contacts, settings, and pending transactions in an encrypted .xchain-wallet file that requires its separate backup password."
                     actionLabel="Export…"
                     disabled={!activeWallet}
                     onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
@@ -472,7 +472,7 @@ export function BackupSection({ activeWallet }) {
             ) : (
                 <BackupRow
                     label="Back up recovery phrase"
-                    hint="Reveal the wallet's recovery phrase so you can copy it onto paper or another device. Requires the wallet password every time."
+                    hint="Use the wallet password to reveal the words for copying to paper or another device."
                     actionLabel="Show…"
                     disabled={!activeWallet}
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
@@ -494,7 +494,7 @@ export function BackupSection({ activeWallet }) {
                 <BackupRow
                     label="Test backup (dry-run restore)"
                     /* Spec §19.6 */
-                    hint="Check that a recovery phrase matches this wallet's existing addresses. Nothing is saved, and the phrase is erased from memory after the check."
+                    hint="Check a recovery phrase against this wallet's existing addresses without saving it and erase it from memory afterward."
                     actionLabel="Test…"
                     disabled={!activeWallet}
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}

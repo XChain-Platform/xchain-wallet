@@ -22,20 +22,20 @@ const MODE_OPTIONS = /** @type {const} */ ([
     {
         value: 'full',
         label: 'Normal',
-        hint: 'Sign and broadcast transactions on this device. Password and hardware-signing prompts are available.',
+        hint: 'Sign and broadcast transactions on this device with password or hardware-signing prompts.',
         confirmation: 'Normal mode can use this device\'s private keys to sign and broadcast transactions.',
     },
     {
         value: 'watcher',
         label: 'Watcher (watch-only)',
-        hint: 'View balances and build unsigned transactions. This device never asks for a signing password or signs them.',
-        confirmation: 'Watcher mode stops this device from signing. Transaction actions produce unsigned PSBTs to move to a separate signer.',
+        hint: 'View balances and build unsigned transactions without password prompts or signing on this device.',
+        confirmation: 'Transaction actions produce unsigned PSBTs for a separate signer because watcher mode stops this device from signing.',
     },
     {
         value: 'signer',
         label: 'Signer (air-gapped)',
-        hint: 'Sign transactions pasted in from a watcher wallet. Send / receive screens are hidden; this wallet does not broadcast.',
-        confirmation: 'Signer mode hides Send and Receive. This device signs imported PSBTs but does not broadcast them.',
+        hint: 'Sign transactions from a watcher wallet without showing send or receive screens or broadcasting from this device.',
+        confirmation: 'Signer mode hides Send and Receive, signs imported PSBTs, and does not broadcast them.',
     },
 ]);
 
@@ -95,7 +95,7 @@ export function WalletModeSection() {
                     marginBottom: 'var(--xc-space-1)',
                 }}
             >
-                Choose how this wallet handles transactions. Watcher and Signer are paired modes for air-gapped signing.
+                Choose how this wallet handles transactions; watcher and signer are paired modes for air-gapped signing.
             </legend>
             {MODE_OPTIONS.map((opt) => (
                 <label

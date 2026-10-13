@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
 function mount(props = {}) {
     const messaging = {
@@ -38,6 +39,20 @@ function searchFor(value) {
 afterEach(cleanup);
 
 describe('Settings search', () => {
+    it('uses action-oriented, one-sentence descriptions for inline sections', () => {
+        mount();
+
+        expect(screen.getByText('Choose the theme, accent color, and motion preference.')).toBeTruthy();
+        expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
+        expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
+        expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
+        expect(screen.getByText('Export or import the address book.')).toBeTruthy();
+    });
+
+    it('uses sentence case for Settings references in English copy', () => {
+        expect(en['send.signerMode']).toContain('Settings, Wallet mode');
+    });
+
     it.each([
         ['password', 'Backup'],
         ['lock', 'Safety'],

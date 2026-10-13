@@ -96,7 +96,7 @@ const settingsSrc = readFileSync(
 );
 assert.ok(/import \{ DisplaySection \} from '\.\.\/components\/settings\/DisplaySection\.jsx'/.test(settingsSrc),
     'Settings.jsx imports DisplaySection');
-assert.ok(/id: 'display',[\s\S]{0,400}?Component: DisplaySection/.test(settingsSrc),
+assert.ok(/id: 'display',[\s\S]{0,600}?Component: DisplaySection/.test(settingsSrc),
     'Settings.jsx registers a display section bound to DisplaySection');
 assert.ok(/keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star'/.test(settingsSrc),
     'display section ships search keywords so it surfaces in Settings search');

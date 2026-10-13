@@ -109,7 +109,7 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
             />
             <ToggleRow
                 label="Show variant popover"
-                hint="Web app only. Shows a floating switcher for previewing each wallet layout. Requires Developer Mode."
+                hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
                 checked={Boolean(settings.showVariantBadge)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('showVariantBadge', v)}
@@ -123,7 +123,7 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow
                 label="Auto-approve localhost dApps"
-                hint="Lets local development apps connect without asking first. Signing still requires the separate setting below."
+                hint="Let local development apps connect without asking while continuing to require the signing setting below."
                 checked={Boolean(settings.autoApproveLocalhost)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('autoApproveLocalhost', v)}
@@ -152,7 +152,7 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
     return (
         <SettingsFieldRow
             label="Cache password for localhost auto-sign"
-            hint="After you approve one sign request from a localhost dApp, reuse that password for further sign requests for this long, instead of prompting each time. The password is held in memory only and cleared when the browser closes. Off by default. Requires Developer Mode. For local development only."
+            hint="In Developer Mode, keep an approved localhost dApp password in memory for the selected time so later sign requests do not prompt again, then clear it when the browser closes."
         >
             <select
                 value={current}
