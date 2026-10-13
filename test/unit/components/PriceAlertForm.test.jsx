@@ -11,6 +11,19 @@ import { PriceAlertForm } from '../../../packages/core/src/shared/components/Pri
 afterEach(() => cleanup());
 
 describe('PriceAlertForm', () => {
+    it('explains why an empty target keeps the primary action disabled', () => {
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
+        const action = screen.getByRole('button', { name: 'Add alert' });
+
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'price-alert-disabled-reason');
+        expect(screen.getByRole('status')).toHaveTextContent('Enter a target price to continue.');
+        expect(screen.getByLabelText('Target price')).toHaveAttribute(
+            'aria-describedby',
+            'price-alert-disabled-reason',
+        );
+    });
+
     it('normalizes grouped decimal input and submits the numeric target', async () => {
         const onCreate = vi.fn().mockResolvedValue(undefined);
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);

@@ -90,11 +90,22 @@ export function Skeleton({
  * @param {boolean} [props.avatar]   default true
  * @param {string} [props.titleWidth]  e.g. '60%'
  * @param {string} [props.subtitleWidth] e.g. '40%'
+ * @param {number | string} [props.height] exact loaded-row height
+ * @param {number | string} [props.avatarSize] exact loaded-avatar size
  */
-function SkeletonRow({ avatar = true, titleWidth = '60%', subtitleWidth = '40%' } = {}) {
+function SkeletonRow({
+    avatar = true,
+    titleWidth = '60%',
+    subtitleWidth = '40%',
+    height,
+    avatarSize,
+} = {}) {
+    const rowStyle = height === undefined
+        ? undefined
+        : { height: typeof height === 'number' ? `${height}px` : height };
     return (
-        <div className={styles.row} aria-hidden="true">
-            {avatar ? <Skeleton shape="avatar" /> : null}
+        <div className={styles.row} style={rowStyle} aria-hidden="true">
+            {avatar ? <Skeleton shape="avatar" width={avatarSize} height={avatarSize} /> : null}
             <span className={styles.rowText}>
                 <Skeleton shape="title" width={titleWidth} />
                 <Skeleton shape="text" width={subtitleWidth} />
@@ -109,13 +120,20 @@ function SkeletonRow({ avatar = true, titleWidth = '60%', subtitleWidth = '40%' 
  * @param {object} props
  * @param {number} props.rows
  * @param {boolean} [props.avatar]
+ * @param {number | string} [props.rowHeight]
+ * @param {number | string} [props.avatarSize]
  */
-function SkeletonList({ rows, avatar = true }) {
+function SkeletonList({ rows, avatar = true, rowHeight, avatarSize }) {
     const count = Math.max(0, Math.floor(rows));
     return (
         <div className={styles.list} aria-hidden="true">
             {Array.from({ length: count }, (_, i) => (
-                <SkeletonRow key={i} avatar={avatar} />
+                <SkeletonRow
+                    key={i}
+                    avatar={avatar}
+                    height={rowHeight}
+                    avatarSize={avatarSize}
+                />
             ))}
         </div>
     );

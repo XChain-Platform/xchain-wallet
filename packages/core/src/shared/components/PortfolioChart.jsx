@@ -89,7 +89,11 @@ export function PortfolioChart({ rows, walletId }) {
             return undefined;
         }
         let cancelled = false;
-        messaging.getNativePricesRequest({ chainIds: nativeChainIds, includeSparkline: true })
+        messaging.getNativePricesRequest({
+            chainIds: nativeChainIds,
+            includeSparkline: true,
+            fiatCurrency,
+        })
             .then((res) => {
                 if (cancelled) return;
                 if (res?.disabled) { setPriceMap({}); return; }
@@ -97,7 +101,7 @@ export function PortfolioChart({ rows, walletId }) {
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // A demo wallet's id is a fresh UUID on every demo session, and the
     // synthesized walk below is seeded by it, so the demo chart (and the

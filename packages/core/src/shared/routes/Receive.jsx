@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, Input, MultisigBadge, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -128,6 +128,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // newest-address effect and resets the pick, which is the right
     // default for a new chain.
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
+    const [labelDraft, setLabelDraft] = useState('');
+    const [labelSaving, setLabelSaving] = useState(false);
+    const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
     const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
     const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const [renderedQr, setRenderedQr] = useState(
@@ -263,6 +266,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     useEffect(() => {
         setHwVerify({ status: 'idle', message: '' });
     }, [address?.id]);
+
+    useEffect(() => {
+        setLabelDraft(address?.label || '');
+        setLabelError(null);
+    }, [address?.id, address?.label]);
 
     useEffect(() => {
         const surface = qrSurfaceRef.current;
@@ -594,6 +602,37 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
     }, [activeChainId, addressType, generating, messaging, walletId, accountId]);
 
+    const saveAddressLabel = useCallback(async () => {
+        if (!address?.id || labelSaving) return;
+        if (typeof messaging.setAddressLabel !== 'function') {
+            setLabelError('This app cannot save address labels.');
+            return;
+        }
+        const next = labelDraft.trim();
+        setLabelSaving(true);
+        setLabelError(null);
+        try {
+            await messaging.setAddressLabel(address.id, next);
+            setAddress((current) => (
+                current?.id === address.id ? { ...current, label: next } : current
+            ));
+            setChainsByWallet((current) => Object.fromEntries(
+                Object.entries(current || {}).map(([chainId, records]) => [
+                    chainId,
+                    Array.isArray(records)
+                        ? records.map((record) => record?.id === address.id
+                            ? { ...record, label: next }
+                            : record)
+                        : records,
+                ]),
+            ));
+        } catch {
+            setLabelError('Could not save that label. Try again.');
+        } finally {
+            setLabelSaving(false);
+        }
+    }, [address?.id, labelDraft, labelSaving, messaging]);
+
     // QR image actions. Copy writes the rendered PNG when the clipboard can
     // accept images. Share always offers the payment request, and attaches
     // the PNG only when the platform reports file-share support.
@@ -834,9 +873,32 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     title="Tap to copy payment request"
                     hint="Tap the address to copy its payment request."
                     style={{ cursor: 'text', userSelect: 'text' }}
+                    wrapReadOnlyAddress
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"
                 />
+            ) : null}
+
+            {address?.id ? (
+                <div className={styles.labelEditor}>
+                    <Input
+                        label="Address label"
+                        value={labelDraft}
+                        onChange={(event) => setLabelDraft(event.target.value)}
+                        placeholder="Add a label"
+                        autoComplete="off"
+                        error={labelError || undefined}
+                    />
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        loading={labelSaving}
+                        disabled={labelSaving || labelDraft.trim() === (address.label || '')}
+                        onClick={saveAddressLabel}
+                    >
+                        Save label
+                    </Button>
+                </div>
             ) : null}
 
             {descriptor ? (() => {
@@ -906,7 +968,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                View address on explorer
+                                View address on explorer <span aria-hidden="true">↗</span>
                             </a>
                         ) : null}
                     </div>

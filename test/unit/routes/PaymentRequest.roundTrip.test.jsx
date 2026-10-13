@@ -5,8 +5,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { base58check } from '@scure/base';
+import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { ADDRESS_PARAMS } from '../../../packages/core/src/shared/utils/addressValidation.js';
 
 const { qrToDataURL } = vi.hoisted(() => ({
     qrToDataURL: vi.fn(async () => 'data:image/png;base64,iVBORw0KGgo='),
@@ -37,11 +40,15 @@ const CHAINS = registry.supportedChains().filter((descriptor) => (
 const AMOUNT = '12.34567891';
 const LABEL = 'Café savings 東京';
 const NATIVE_TICK = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+const bsc = base58check(sha256);
 
 function recordFor(descriptor, prefix) {
+    const version = ADDRESS_PARAMS[descriptor.coin][descriptor.networkKind].p2pkh;
+    const marker = [...`${prefix}-${descriptor.id}`]
+        .reduce((total, character) => total + character.charCodeAt(0), 0) % 256;
     return {
         id: `${prefix}-${descriptor.id}`,
-        address: `${prefix}-address-${descriptor.id}`,
+        address: bsc.encode(new Uint8Array([version, ...new Uint8Array(20).fill(marker)])),
         addressType: descriptor.defaultAddressType,
         derivationPath: "m/84'/0'/0'/0/0",
         source: 'hd',
@@ -159,7 +166,7 @@ async function pasteRequestIntoSend(descriptor, request) {
     await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(initialSource.address));
     fireEvent.paste(to, { clipboardData: { getData: () => request } });
     await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(source.address));
-    expect(to).toHaveValue(`receive-address-${descriptor.id}`);
+    expect(to).toHaveValue(recordFor(descriptor, 'receive').address);
     expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
 
     fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'ROUNDTRIP' } });

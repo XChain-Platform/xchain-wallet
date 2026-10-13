@@ -220,8 +220,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
     // included. Watcher mode still branches: it encodes, it
     // never signs. Unlike the other action
     // forms the wire action/params are built HOST-side (the SDK's controller
-    // helper lives there), so the built pair is stashed for the confirm
-    // page's decoded intent.
+    // helper lives there) and passed directly to the confirm page.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const singleEncode = !isWatcherMode;
     const passwordValueRef = useRef('');
@@ -236,10 +235,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         software: 'advancedAction',
         hardware: 'advancedActionHw',
     });
-    const [builtAction, setBuiltAction] = useState(
-        /** @type {{ action: string, params: object } | null} */ (null),
-    );
-
     // Label the pending record: on the wire a bind is an ADDRESS or ISSUE, not a bind.
     const bindSummary = () => {
         const verb = unbind ? 'Unbind' : 'Bind';
@@ -267,7 +262,6 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 ...(!unbind && cooldownBlocks.trim() !== '' && { cooldownBlocks: cooldownBlocks.trim() }),
                 ...(memo.trim() !== '' && { memo: memo.trim() }),
             });
-            setBuiltAction({ action, params });
             const res = await actionConfirm.run({
                 chainId,
                 from,
