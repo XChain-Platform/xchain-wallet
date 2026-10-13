@@ -15,6 +15,7 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 import {
     clearDemoWalletId,
     clearLockoutState,
@@ -24,12 +25,13 @@ import {
 
 let reload;
 
-function mount() {
+function mount({ messaging = { unlockWallet: vi.fn() }, onUnlocked = vi.fn() } = {}) {
     render(
-        <MessagingProvider shell="web" messaging={{ unlockWallet: vi.fn() }}>
-            <Locked onUnlocked={() => {}} />
+        <MessagingProvider shell="web" messaging={messaging}>
+            <Locked onUnlocked={onUnlocked} />
         </MessagingProvider>,
     );
+    return { messaging, onUnlocked };
 }
 
 function openForgotDialog() {
@@ -56,6 +58,48 @@ afterEach(() => {
 });
 
 describe('Locked forgot-password wipe', () => {
+    it('keeps keyboard focus in the wipe dialog, closes on Escape, and continues to unlock', async () => {
+        const user = userEvent.setup();
+        const messaging = { unlockWallet: vi.fn().mockResolvedValue({}) };
+        const onUnlocked = vi.fn();
+        mount({ messaging, onUnlocked });
+
+        const password = screen.getByLabelText('Password');
+        fireEvent.change(password, { target: { value: 'secret' } });
+        password.focus();
+        await user.tab();
+        const trigger = screen.getByRole('button', { name: 'Forgot password?' });
+        expect(trigger).toHaveFocus();
+        await user.keyboard('{Enter}');
+
+        let confirm = screen.getByLabelText('Type WIPE to confirm');
+        await waitFor(() => expect(confirm).toHaveFocus());
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('dialog', { name: 'Wipe wallet data' })).toBeNull();
+        expect(trigger).toHaveFocus();
+
+        await user.keyboard('{Enter}');
+        confirm = screen.getByLabelText('Type WIPE to confirm');
+        await waitFor(() => expect(confirm).toHaveFocus());
+        fireEvent.change(confirm, { target: { value: 'WIPE' } });
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Wipe wallet data' })).toHaveFocus();
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+        await user.tab();
+        expect(confirm).toHaveFocus();
+        await user.tab();
+        await user.tab();
+        await user.keyboard('{Enter}');
+        expect(trigger).toHaveFocus();
+
+        await user.tab();
+        expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(messaging.unlockWallet).toHaveBeenCalledWith('secret'));
+        expect(onUnlocked).toHaveBeenCalledOnce();
+    });
+
     it('names the local data being destroyed and requires the typed confirmation', () => {
         mount();
         const dialog = openForgotDialog();
