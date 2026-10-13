@@ -70,10 +70,19 @@ export async function removeWallet({ vault, walletId }) {
     const addressesToDelete = allAddresses.filter((addr) =>
         (addr.accountId && accountIds.has(addr.accountId)) || importedAddrIds.has(addr.id),
     );
-    const addressStrings = new Set(addressesToDelete.map((a) => a.address));
+    const addressIdsToDelete = new Set(addressesToDelete.map((a) => a.id));
+    const pendingScopesToDelete = new Set(addressesToDelete.map(pendingScopeForAddress));
+    const survivingPendingScopes = new Set(
+        allAddresses
+            .filter((address) => !addressIdsToDelete.has(address.id))
+            .map(pendingScopeForAddress),
+    );
 
     const allPendingTxs = await vault.pendingTxs.list();
-    const pendingTxsToDelete = allPendingTxs.filter((p) => addressStrings.has(p.fromAddress));
+    const pendingTxsToDelete = allPendingTxs.filter((pending) => {
+        const scope = pendingScopeForPendingTx(pending);
+        return pendingScopesToDelete.has(scope) && !survivingPendingScopes.has(scope);
+    });
 
     const pendingAirdrops = await vault.pendingAirdrops.findBy('walletId', walletId);
     const pendingDeploys = await vault.pendingDeploys.findBy('walletId', walletId);
@@ -127,4 +136,12 @@ export async function removeWallet({ vault, walletId }) {
 
 async function deleteRecords(collection, records) {
     for (const record of records) await collection.delete(record.id);
+}
+
+function pendingScopeForAddress(address) {
+    return JSON.stringify([address.chain, address.network, address.address]);
+}
+
+function pendingScopeForPendingTx(pending) {
+    return JSON.stringify([pending.chain, pending.network, pending.fromAddress]);
 }
