@@ -408,6 +408,12 @@ describe('ListPage.module.css: fluid list width', () => {
     it('lets the toolbar wrap', () => {
         expect(ruleBody(text, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
     });
+
+    it('uses the shared section rhythm and tightens a header to its content', () => {
+        expect(ruleBody(text, '.page')).toMatch(/gap:\s*var\(--xc-section-gap\)/);
+        expect(ruleBody(text, '.page > [data-xc-section-header] + *'))
+            .toMatch(/margin-block-start:\s*calc\(var\(--xc-section-header-gap\) - var\(--xc-section-gap\)\)/);
+    });
 });
 
 describe('page gutter ownership', () => {
@@ -521,11 +527,41 @@ describe('<SectionHeader>', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Expired' })).toBeInTheDocument();
         expect(screen.getByText('Do not pay these.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Expired' }).parentElement.parentElement)
+            .toHaveAttribute('data-xc-section-header');
     });
 
     it('honours the heading level and id', () => {
         render(<SectionHeader title="Rows" as="h3" id="rows-h" />);
         expect(screen.getByRole('heading', { level: 3 })).toHaveAttribute('id', 'rows-h');
+    });
+});
+
+describe('list page rhythm tokens', () => {
+    const tokens = css('tokens.css');
+    const sectionHeader = css('SectionHeader.module.css');
+    const emptyState = css('EmptyState.module.css');
+    const balanceList = readFileSync(
+        join(coreSrcDir(), 'shared', 'components', 'BalanceList.module.css'),
+        'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+
+    it('defines one section gap, header gap, and list row padding', () => {
+        expect(tokens).toMatch(/--xc-section-gap:\s*var\(--xc-space-4\)/);
+        expect(tokens).toMatch(/--xc-section-header-gap:\s*var\(--xc-space-2\)/);
+        expect(tokens).toMatch(/--xc-list-row-padding:\s*var\(--xc-space-3\)/);
+    });
+
+    it('uses gaps instead of child margins inside headers and empty states', () => {
+        expect(ruleBody(sectionHeader, '.text')).toMatch(/gap:\s*var\(--xc-space-1\)/);
+        expect(ruleBody(sectionHeader, '.description')).toMatch(/margin:\s*0/);
+        expect(ruleBody(emptyState, '.wrap')).toMatch(/gap:\s*var\(--xc-section-header-gap\)/);
+        expect(ruleBody(emptyState, '.action')).not.toMatch(/margin/);
+    });
+
+    it('uses the shared padding for balance rows and list footer rows', () => {
+        expect(ruleBody(balanceList, '.row')).toMatch(/padding:\s*var\(--xc-list-row-padding\)/);
+        expect(ruleBody(balanceList, '.hiddenToggle')).toMatch(/padding:\s*var\(--xc-list-row-padding\)/);
     });
 });
 

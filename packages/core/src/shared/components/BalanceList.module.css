@@ -11,7 +11,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
+    padding: var(--xc-list-row-padding);
     border-top: 1px solid var(--xc-border);
     width: 100%;
     text-align: start;
@@ -271,7 +271,7 @@
 .hiddenToggle {
     border: 0;
     background: transparent;
-    padding: var(--xc-space-3);
+    padding: var(--xc-list-row-padding);
     border-top: 1px dashed var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);

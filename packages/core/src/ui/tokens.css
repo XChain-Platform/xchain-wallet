@@ -39,6 +39,11 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
+    /* List pages share one vertical rhythm across content states. */
+    --xc-section-gap: var(--xc-space-4);
+    --xc-section-header-gap: var(--xc-space-2);
+    --xc-list-row-padding: var(--xc-space-3);
+
     /* Screen owns page-edge spacing so route content stays geometry-free. */
     --xc-page-gutter: var(--xc-space-3);
     --xc-page-top: var(--xc-space-3);
