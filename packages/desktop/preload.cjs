@@ -23,7 +23,7 @@
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
-// - `xchainWalletBridge.wipeStorage()`. The shared
+//   - `xchainWalletBridge.wipeStorage()`. The shared
 //     `wipeWalletStorage` helper can only reach localStorage +
 //     IndexedDB, and this shell keeps its vault, kdfParams meta,
 //     session key and unlock throttle in files under userData. Without
@@ -99,13 +99,113 @@ const UPDATER_STATE_CHANNEL = 'xchain:updater-state';
 const DEEP_LINK_CHANNEL = 'xchain:uri';
 const DEEP_LINK_TAKE_CHANNEL = 'xchain:deep-link-take';
 
+function assertArgumentCount(method, args, expected) {
+    if (args.length !== expected) {
+        throw new TypeError(`${method}: expected ${expected} argument${expected === 1 ? '' : 's'}`);
+    }
+}
+
+function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function assertRecord(method, value) {
+    if (!isRecord(value)) throw new TypeError(`${method}: expected an object`);
+}
+
+function assertAllowedKeys(method, value, allowed) {
+    for (const key of Object.keys(value)) {
+        if (!allowed.includes(key)) throw new TypeError(`${method}: unexpected property "${key}"`);
+    }
+}
+
+function assertListener(method, args) {
+    assertArgumentCount(method, args, 1);
+    if (typeof args[0] !== 'function') throw new TypeError(`${method}: listener must be a function`);
+    return args[0];
+}
+
+function assertNoArguments(method, args) {
+    assertArgumentCount(method, args, 0);
+}
+
+function validateMessage(args) {
+    const method = 'xchainWalletBridge.sendMessage';
+    assertArgumentCount(method, args, 1);
+    const message = args[0];
+    assertRecord(method, message);
+    assertAllowedKeys(method, message, ['type', 'request']);
+    if (typeof message.type !== 'string' || message.type.trim().length === 0) {
+        throw new TypeError(`${method}: type must be a non-empty string`);
+    }
+    return message;
+}
+
+function validateOpenDetached(args) {
+    const method = 'xchainWalletWindow.openDetached';
+    assertArgumentCount(method, args, 1);
+    const options = args[0];
+    assertRecord(method, options);
+    assertAllowedKeys(method, options, ['initialView', 'initialContext']);
+    if (options.initialView !== undefined
+        && (typeof options.initialView !== 'string' || options.initialView.trim().length === 0)) {
+        throw new TypeError(`${method}: initialView must be a non-empty string`);
+    }
+    if (options.initialContext !== undefined && !isRecord(options.initialContext)) {
+        throw new TypeError(`${method}: initialContext must be an object`);
+    }
+    if (options.initialView === undefined && options.initialContext === undefined) {
+        throw new TypeError(`${method}: initialView or initialContext is required`);
+    }
+    return options;
+}
+
+function validateSignerMessage(args) {
+    const method = 'xchainWalletSignerBridge.postMessage';
+    assertArgumentCount(method, args, 1);
+    const message = args[0];
+    assertRecord(method, message);
+
+    if (message.kind === 'register' || message.kind === 'unregister') {
+        assertAllowedKeys(method, message, ['kind', 'signerIds']);
+        if (!Array.isArray(message.signerIds)
+            || message.signerIds.some((id) => typeof id !== 'string' || id.length === 0)) {
+            throw new TypeError(`${method}: signerIds must be an array of non-empty strings`);
+        }
+        return message;
+    }
+
+    if (message.kind === 'response') {
+        assertAllowedKeys(method, message, ['kind', 'reqId', 'ok', 'result', 'error']);
+        if (!Number.isSafeInteger(message.reqId) || message.reqId < 1) {
+            throw new TypeError(`${method}: reqId must be a positive safe integer`);
+        }
+        if (typeof message.ok !== 'boolean') {
+            throw new TypeError(`${method}: ok must be a boolean`);
+        }
+        if (!message.ok) {
+            if (!isRecord(message.error)
+                || typeof message.error.name !== 'string'
+                || typeof message.error.message !== 'string') {
+                throw new TypeError(`${method}: error must contain string name and message properties`);
+            }
+            assertAllowedKeys(method, message.error, ['name', 'message']);
+        } else if (Object.hasOwn(message, 'error')) {
+            throw new TypeError(`${method}: successful responses cannot contain error`);
+        }
+        return message;
+    }
+
+    throw new TypeError(`${method}: unsupported message kind`);
+}
+
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
     /**
      * @param {{ type: string, request?: unknown }} message
      * @returns {Promise<import('./main/messageHost.js').IpcResponse>}   type-only: this sandboxed preload may require nothing but electron
      */
     sendMessage(message) {
-        return ipcRenderer.invoke(MESSAGE_CHANNEL, message);
+        return ipcRenderer.invoke(MESSAGE_CHANNEL, validateMessage(arguments));
     },
     /**
      * Clear every wallet store this shell owns under userData (vault
@@ -116,6 +216,7 @@ contextBridge.exposeInMainWorld('xchainWalletBridge', {
      * @returns {Promise<{ ok: true, cleared: string[] } | { ok: false, cleared?: string[], error: string }>}
      */
     wipeStorage() {
+        assertNoArguments('xchainWalletBridge.wipeStorage', arguments);
         return ipcRenderer.invoke(WIPE_STORAGE_CHANNEL);
     },
 });
@@ -125,11 +226,11 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      * Ask main to open a fresh BrowserWindow pre-routed to the given
      * view + context. Used by §24.6 detach-pending-tx and any future
      * "Open in new window" affordance.
-     * @param {{ initialView?: string, initialContext?: any }} args
+     * @param {{ initialView?: string, initialContext?: object }} args
      * @returns {Promise<{ ok: true, windowId: number } | { ok: false, error: string }>}
      */
     openDetached(args) {
-        return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, args);
+        return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, validateOpenDetached(arguments));
     },
     /**
      * Subscribe to process-wide session and active-wallet changes made by a
@@ -138,9 +239,13 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      * @returns {() => void}
      */
     onStateChange(listener) {
+        listener = assertListener('xchainWalletWindow.onStateChange', arguments);
         const wrapped = (_event, payload) => { listener(payload); };
         ipcRenderer.on(STATE_CHANGE_CHANNEL, wrapped);
-        return () => ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletWindow.onStateChange unsubscribe', arguments);
+            ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
+        };
     },
 });
 
@@ -163,9 +268,13 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
      * @returns {() => void}
      */
     onEvent(listener) {
+        listener = assertListener('xchainWalletUpdater.onEvent', arguments);
         const wrapped = (_event, payload) => { listener(payload); };
         ipcRenderer.on(UPDATER_EVENT_CHANNEL, wrapped);
-        return () => ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletUpdater.onEvent unsubscribe', arguments);
+            ipcRenderer.removeListener(UPDATER_EVENT_CHANNEL, wrapped);
+        };
     },
     /**
      * The most recent updater event, or null if none has fired yet.
@@ -178,6 +287,7 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
      * @returns {Promise<{type: string, info?: any} | null>}
      */
     getState() {
+        assertNoArguments('xchainWalletUpdater.getState', arguments);
         return ipcRenderer.invoke(UPDATER_STATE_CHANNEL);
     },
     /**
@@ -187,7 +297,13 @@ contextBridge.exposeInMainWorld('xchainWalletUpdater', {
      * @param {'check' | 'download' | 'restart'} [action]
      * @returns {Promise<{ ok: boolean, reason?: string }>}
      */
-    install(action = 'download') {
+    install(...args) {
+        const method = 'xchainWalletUpdater.install';
+        if (args.length > 1) throw new TypeError(`${method}: expected at most 1 argument`);
+        const action = args.length === 0 ? 'download' : args[0];
+        if (action !== 'check' && action !== 'download' && action !== 'restart') {
+            throw new TypeError(`${method}: action must be check, download or restart`);
+        }
         return ipcRenderer.invoke(UPDATER_INSTALL_CHANNEL, action);
     },
 });
@@ -200,9 +316,13 @@ contextBridge.exposeInMainWorld('xchainWalletDeepLink', {
      * @returns {() => void}
      */
     onUri(listener) {
+        listener = assertListener('xchainWalletDeepLink.onUri', arguments);
         const wrapped = (_event, payload) => { listener(payload); };
         ipcRenderer.on(DEEP_LINK_CHANNEL, wrapped);
-        return () => ipcRenderer.removeListener(DEEP_LINK_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletDeepLink.onUri unsubscribe', arguments);
+            ipcRenderer.removeListener(DEEP_LINK_CHANNEL, wrapped);
+        };
     },
     /**
      * Claim the parked deep link, or null when there is none. Each link is
@@ -210,6 +330,7 @@ contextBridge.exposeInMainWorld('xchainWalletDeepLink', {
      * @returns {Promise<{ scheme: string, raw: string, parsed: any } | null>}
      */
     takePending() {
+        assertNoArguments('xchainWalletDeepLink.takePending', arguments);
         return ipcRenderer.invoke(DEEP_LINK_TAKE_CHANNEL);
     },
 });
@@ -223,6 +344,7 @@ contextBridge.exposeInMainWorld('xchainWalletRegistry', {
      * @returns {Promise<{ ok: true, descriptors: object[], generatedAt?: string } | { ok: false, reason?: string }>}
      */
     getRemoteDescriptors() {
+        assertNoArguments('xchainWalletRegistry.getRemoteDescriptors', arguments);
         return ipcRenderer.invoke(CHAIN_REGISTRY_CHANNEL);
     },
 });
@@ -231,10 +353,12 @@ contextBridge.exposeInMainWorld('xchainWalletSignerBridge', {
     /**
      * Renderer → main. Fire-and-forget; the reply (when one is
      * warranted) arrives on the `onMessage` stream.
-     * @param {any} msg
+     * @param {{ kind: 'register' | 'unregister', signerIds: string[] }
+     *   | { kind: 'response', reqId: number, ok: boolean, result?: unknown,
+     *       error?: { name: string, message: string } }} msg
      */
     postMessage(msg) {
-        ipcRenderer.send(SIGNER_BRIDGE_CHANNEL, msg);
+        ipcRenderer.send(SIGNER_BRIDGE_CHANNEL, validateSignerMessage(arguments));
     },
     /**
      * Subscribe to main → renderer messages. Returns an unsubscribe.
@@ -242,8 +366,12 @@ contextBridge.exposeInMainWorld('xchainWalletSignerBridge', {
      * @returns {() => void}
      */
     onMessage(listener) {
+        listener = assertListener('xchainWalletSignerBridge.onMessage', arguments);
         const wrapped = (_event, msg) => { listener(msg); };
         ipcRenderer.on(SIGNER_BRIDGE_CHANNEL, wrapped);
-        return () => ipcRenderer.removeListener(SIGNER_BRIDGE_CHANNEL, wrapped);
+        return function unsubscribe() {
+            assertNoArguments('xchainWalletSignerBridge.onMessage unsubscribe', arguments);
+            ipcRenderer.removeListener(SIGNER_BRIDGE_CHANNEL, wrapped);
+        };
     },
 });
