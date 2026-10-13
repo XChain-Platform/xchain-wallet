@@ -32,6 +32,10 @@ import {
     settingsCustomToDisplayRate,
 } from '../../../flows/feeEstimate.js';
 import { useSettings } from '../../hooks/useSettings.js';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../../utils/amountFormat.js';
 import { INPUT, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -137,16 +141,18 @@ export function FeesSection() {
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    defaultValue={settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate)}
+                                    defaultValue={formatWithThousands(settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate))}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.
                                         const raw = e.target.value.trim();
-                                        const displayRate = Number(raw);
-                                        if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)
-                                            || !Number.isFinite(displayRate)) {
+                                        const canonical = normalizeLocalizedDecimal(raw);
+                                        const displayRate = canonical !== null && canonical !== '' && canonical !== '.'
+                                            ? Number(canonical)
+                                            : Number.NaN;
+                                        if (!Number.isFinite(displayRate) || displayRate < 0) {
                                             setRateErrors((current) => ({
                                                 ...current,
-                                                [chainId]: 'Enter a non-negative custom fee rate.',
+                                                [chainId]: 'Enter a non-negative decimal fee rate.',
                                             }));
                                             return;
                                         }

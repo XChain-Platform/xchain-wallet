@@ -84,12 +84,22 @@ describe('desktop window bounds memory', () => {
         expect(restored).toEqual({ width: 900, height: 700 });
     });
 
-    it('keeps a position with a useful visible edge on a current display', () => {
+    it('clamps a partly visible position into the current display work area', () => {
         const bounds = { x: -800, y: 100, width: 900, height: 700 };
         expect(restoreWindowBounds(
             bounds,
             [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
-        )).toEqual(bounds);
+        )).toEqual({ x: 0, y: 100, width: 900, height: 700 });
+    });
+
+    it('shrinks an oversized saved window to the display that contains it', () => {
+        expect(restoreWindowBounds(
+            { x: 2100, y: 100, width: 2500, height: 1400 },
+            [
+                { workArea: { x: 0, y: 0, width: 1920, height: 1080 } },
+                { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } },
+            ],
+        )).toEqual({ x: 1920, y: 0, width: 1280, height: 1024 });
     });
 
     it('cascades an additional window without changing its remembered size', () => {
