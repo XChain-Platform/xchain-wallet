@@ -38,6 +38,7 @@ import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { AddAccountForm } from '@xchain-wallet/core/shared/routes/AddAccountForm.jsx';
@@ -2652,6 +2653,9 @@ function AppInner() {
                         }}
                     />
                 );
+            }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
             }
             // §49 / Cluster G FOLLOWUP 4: QueuedBroadcastBanner is now
             // mounted in FullLayoutWithNav.header below so it persists
