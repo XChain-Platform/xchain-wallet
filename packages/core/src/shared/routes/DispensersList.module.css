@@ -38,6 +38,9 @@
 }
 
 .list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
     background: var(--xc-surface);
@@ -46,23 +49,16 @@
     overflow: hidden;
 }
 
-.row {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border: none;
+.listItem + .listItem {
     border-top: 1px solid var(--xc-border);
-    background: transparent;
-    width: 100%;
-    text-align: start;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
 }
 
-.row:first-of-type {
-    border-top: none;
+.row {
+    padding: var(--xc-space-3);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
 }
 
 .row:hover {
@@ -241,6 +237,12 @@
         min-width: 0;
         max-width: 100%;
         align-items: flex-start;
+    }
+
+    .row > :last-child {
+        grid-column: 2;
+        max-width: 100%;
+        justify-content: flex-start;
     }
 
     .status {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -425,21 +425,22 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     />
                 )
             ) : (
-                <div className={local.list} role="list">
+                <ul className={local.list}>
                     {visibleRows.map((row) => (
-                        <DispenserRow
-                            key={`${row.chainId}:${row.action_index}`}
-                            row={row}
-                            label={row.address ? dispenserLabels[row.address] : undefined}
-                            oracleFeeds={oracleFeedsFor(row.chainId, row)}
-                            cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
-                            nowMs={nowMs}
-                            chainClock={chainClocks[row.chainId] || null}
-                            onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
-                            allowRemoteImages={allowRemoteImages}
-                        />
+                        <li className={local.listItem} key={`${row.chainId}:${row.action_index}`}>
+                            <DispenserRow
+                                row={row}
+                                label={row.address ? dispenserLabels[row.address] : undefined}
+                                oracleFeeds={oracleFeedsFor(row.chainId, row)}
+                                cancelTimestamp={cancelTimes[`${row.chainId}:${row.action_index}`]}
+                                nowMs={nowMs}
+                                chainClock={chainClocks[row.chainId] || null}
+                                onSelect={() => onOpenDispenser(row.chainId, String(row.action_index))}
+                                allowRemoteImages={allowRemoteImages}
+                            />
+                        </li>
                     ))}
-                </div>
+                </ul>
             )}
         </ListPage>,
     );
@@ -471,14 +472,12 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
         ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
         : status;
     return (
-        <Button
+        <ListRow
             type="button"
             className={local.row}
-            role="listitem"
             onClick={onSelect}
             aria-label={`Open ${row.give_tick || '?'} dispenser #${row.action_index ?? '?'}`}
-        >
-            <div className={local.iconWrap}>
+            leading={<span className={local.iconWrap}>
                 <span
                     className={local.iconLetter}
                     style={{ background: tickerColor(row.give_tick || '?'), color: '#FFFFFF' }}
@@ -509,15 +508,14 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     decoding="async"
                     />
                 ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>
-                    {label ? `${label}: ` : ''}{row.give_tick || '?'}
-                </div>
-                <div className={local.subtitle}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                </div>
-                <div className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</div>
+            </span>}
+            title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
+            subtitle={(
+                <span className={local.body}>
+                    <span className={local.subtitle}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
+                    </span>
+                    <span className={local.subtitle}>{dispenserRateLabel(row, oracleFeeds)}</span>
                 {/* Escrow is only stated when it is known. The explorer's
                     dispenser LIST lane carries no escrow column (remaining is
                     derived per action, in the detail read path), so on real
@@ -526,20 +524,21 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     dispenser had not funded yet (D-40). Open the dispenser to
                     see its live balance. */}
                 {row.escrow_remaining != null && !isTerminal ? (
-                    <div className={local.subtitle}>
+                    <span className={local.subtitle}>
                         {`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}
-                    </div>
+                    </span>
                 ) : null}
-            </div>
-            <div className={local.trailing}>
+                </span>
+            )}
+            trailing={<span className={local.trailing}>
                 <span
                     className={`${local.status} ${local[`status_${status}`] || ''}`}
                     title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
                 >
                     {badge}
                 </span>
-            </div>
-        </Button>
+            </span>}
+        />
     );
 }
 

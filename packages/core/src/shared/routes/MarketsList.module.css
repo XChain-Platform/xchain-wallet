@@ -16,8 +16,7 @@
     background: var(--xc-bg-muted);
 }
 
-.assetButton > span,
-.marketButton > span {
+.assetButton > span {
     display: contents;
 }
 
