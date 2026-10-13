@@ -24,7 +24,7 @@
     padding: 0 4px;
     line-height: 1;
     font-size: 14px;
-    touch-action: none;
+    touch-action: pinch-zoom;
 }
 
 .grip:active {
