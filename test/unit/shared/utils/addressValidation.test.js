@@ -240,6 +240,12 @@ describe('detectAddressChain', () => {
         expect(detectAddressChain(legacy(0x00).slice(0, -1))).toBeNull();
         expect(detectAddressChain('tb1qnotreallyvalid')).toBeNull();
     });
+
+    it('rejects mixed-case bech32 instead of repairing it before checksum validation', () => {
+        const mixedCase = `${REAL_BCRT.slice(0, 6).toUpperCase()}${REAL_BCRT.slice(6)}`;
+        expect(detectAddressChain(mixedCase)).toBeNull();
+        expect(isValidAddressForChain(mixedCase, 'bitcoin', 'regtest')).toBe(false);
+    });
 });
 
 describe('detectAddressCoin', () => {
