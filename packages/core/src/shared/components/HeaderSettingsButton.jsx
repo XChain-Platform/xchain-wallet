@@ -11,11 +11,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { ConfirmModal } from './ConfirmModal.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import {
     activeNetworkLabel,
     activeNetworkOptions,
-    confirmActiveNetworkSwitch,
+    activeNetworkSwitchCopy,
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
@@ -78,6 +80,7 @@ export function HeaderSettingsButton({
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
+    const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
     // The system Back gesture and Escape close this before it leaves the
@@ -134,7 +137,12 @@ export function HeaderSettingsButton({
 
     const switchNetwork = async (next) => {
         if (next === currentNetwork) return;
-        if (!confirmActiveNetworkSwitch(currentNetwork, next)) return;
+        const copy = activeNetworkSwitchCopy(currentNetwork, next);
+        const confirmed = await confirmDialog.confirm({
+            ...copy,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
         setSwitchingNetwork(true);
         try {
             await onActiveNetworkChange(next);
@@ -226,7 +234,7 @@ export function HeaderSettingsButton({
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}
-                                disabled={switchingNetwork}
+                                disabled={switchingNetwork || Boolean(confirmDialog.request)}
                                 onChange={(event) => switchNetwork(event.target.value)}
                                 aria-label="Active network in header"
                             >
@@ -262,6 +270,13 @@ export function HeaderSettingsButton({
                         </div>
                     ) : null}
                 </div>
+            ) : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
             ) : null}
         </div>
     );

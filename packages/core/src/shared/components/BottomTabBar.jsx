@@ -74,9 +74,17 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
+const MORE_OWNED_VIEWS = new Set([
+    'account-picker',
+    'account-rename',
+    'add-account',
+]);
+
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
     const routeGroup = activeLeftNavItem(currentView);
-    if (routeGroup === 'settings') return 'more';
+    if (routeGroup === 'settings'
+        || SHEET_PRIMARY.some((row) => row.id === routeGroup)
+        || MORE_OWNED_VIEWS.has(currentView)) return 'more';
     return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
 }
 

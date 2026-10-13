@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
@@ -24,6 +24,8 @@ import { FullLayoutWithNav, LeftNav } from '../../../packages/core/src/shared/co
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
+import { persistActiveNetwork } from '../../../packages/core/src/shared/utils/activeNetworkSwitch.js';
+import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 
 afterEach(() => {
     cleanup();
@@ -344,7 +346,6 @@ describe('HeaderSettingsButton section gating', () => {
 
     it('shows the active network badge and confirms a header switch', async () => {
         const onActiveNetworkChange = vi.fn().mockResolvedValue(undefined);
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(
             <HeaderSettingsButton
                 activeNetwork="testnet"
@@ -359,8 +360,11 @@ describe('HeaderSettingsButton section gating', () => {
             target: { value: 'regtest' },
         });
 
-        expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/refresh balances and history for Regtest/));
-        expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest');
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
+        expect(dialog).toHaveTextContent('Unlock the wallet again after it reloads.');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(onActiveNetworkChange).toHaveBeenCalledWith('regtest'));
     });
 
     it('does not guess a network badge before settings load', () => {
@@ -376,7 +380,6 @@ describe('HeaderSettingsButton section gating', () => {
 
     it('keeps the current network when the header confirmation is cancelled', () => {
         const onActiveNetworkChange = vi.fn();
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
         render(
             <HeaderSettingsButton
                 activeNetwork="mainnet"
@@ -388,9 +391,40 @@ describe('HeaderSettingsButton section gating', () => {
         const select = screen.getByLabelText('Active network in header');
         expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
         fireEvent.change(select, { target: { value: 'testnet' } });
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Switch to Testnet?' }))
+            .getByRole('button', { name: 'Cancel' }));
 
         expect(onActiveNetworkChange).not.toHaveBeenCalled();
         expect(select.value).toBe('mainnet');
+    });
+
+    it('clears a stale destination after persisting a network switch', async () => {
+        const walletId = 'network-switch-wallet';
+        writeLastView(walletId, 'contacts');
+        const setActiveNetwork = vi.fn().mockResolvedValue({ activeNetwork: 'testnet' });
+
+        await persistActiveNetwork({
+            messaging: { setActiveNetwork },
+            walletId,
+            network: 'testnet',
+        });
+
+        expect(setActiveNetwork).toHaveBeenCalledWith({ walletId, network: 'testnet' });
+        expect(readLastView(walletId)).toBeNull();
+    });
+
+    it('keeps the saved destination when network persistence fails', async () => {
+        const walletId = 'failed-network-switch-wallet';
+        writeLastView(walletId, 'contacts');
+
+        await expect(persistActiveNetwork({
+            messaging: { setActiveNetwork: vi.fn().mockRejectedValue(new Error('offline')) },
+            walletId,
+            network: 'testnet',
+        })).rejects.toThrow('offline');
+
+        expect(readLastView(walletId)).toBe('contacts');
+        writeLastView(walletId, 'home');
     });
 
     it('marks the trigger active when a non-default wallet or account is selected', () => {
