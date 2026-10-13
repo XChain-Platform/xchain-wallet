@@ -2905,6 +2905,7 @@ function AppInner() {
                                     activeNetwork={activeNetwork}
                                     developerMode={developerMode}
                                     onActiveNetworkChange={handleActiveNetworkChange}
+                                    onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
                                     // Cross-site navigation for the *.xchain.io family.
                                     // Web only: the extension popup and desktop app do
                                     // not pass this, so they render no switcher.

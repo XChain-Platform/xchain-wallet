@@ -37,7 +37,7 @@ import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockP
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
-import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -2709,7 +2709,12 @@ function AppInner() {
                     }
                     header={
                         <>
-                            <WatchOnlyBadge visible={isWatcherMode} />
+                            <AppHeader
+                                onCommandPalette={palette.openPalette}
+                                onLock={handleNavLock}
+                                isWatcherMode={isWatcherMode}
+                                onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                            />
                             {activeWalletId ? (
                                 <>
                                     {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
