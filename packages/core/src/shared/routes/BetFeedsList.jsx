@@ -15,6 +15,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedsList.module.css';
+import rowStyles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -218,16 +219,18 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                 <Button
                                     type="button"
                                     onClick={() => onOpenMarket(chainId, id)}
-                                    className={local.marketRow}
+                                    className={rowStyles.entry}
                                 >
-                                    <span className={local.marketHeader}>
-                                        <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
-                                        <StatusPill status={m.feed_status} />
+                                    <span className={rowStyles.entryText}>
+                                        <span className={local.marketHeader}>
+                                            <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
+                                            <StatusPill status={m.feed_status} />
+                                        </span>
+                                        <span className={local.marketDetail}>{String(label).slice(0, 100)}</span>
+                                        {outcomes.length ? (
+                                            <span className={local.marketDetail}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
+                                        ) : null}
                                     </span>
-                                    <span className={local.marketDetail}>{String(label).slice(0, 100)}</span>
-                                    {outcomes.length ? (
-                                        <span className={local.marketDetail}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
-                                    ) : null}
                                 </Button>
                             </li>
                         );

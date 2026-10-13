@@ -3,20 +3,6 @@
    DispensersList. Chip colors follow FeeSelector's color-mix pattern
    so they track the theme's danger/warning tokens. */
 
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-4) 0;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
-
 .hint {
     margin: 0 0 var(--xc-space-3);
     font-size: var(--xc-text-sm);

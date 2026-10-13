@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+    ListPage,
     Screen,
     PageHeader,
     Icon,
@@ -46,7 +47,6 @@ const STAKING_COIN = 'bitcoin';
 export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const btcChainIds = useMemo(
         () => chainRegistry.byCoin(STAKING_COIN).map((d) => d.id),
@@ -92,9 +92,9 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
+            <ListPage>
                 {children}
-            </div>
+            </ListPage>
         </Screen>
     );
 
@@ -118,13 +118,13 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                             <button
                                 key={cid}
                                 type="button"
-                                className={local.chainBtn}
+                                className={styles.entry}
                                 onClick={() => onPickValidator(cid)}
                             >
                                 {iconUrl ? (
                                     <img src={iconUrl} alt="" aria-hidden="true" className={local.chainIcon} />
                                 ) : null}
-                                <span>{d?.displayName || cid}</span>
+                                <span className={local.chainLabel}>{d?.displayName || cid}</span>
                             </button>
                         );
                     })}
@@ -147,7 +147,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
             <div className={local.options}>
                 <button
                     type="button"
-                    className={local.option}
+                    className={styles.entry}
                     disabled={noStakingChain}
                     onClick={() => {
                         if (stakingChains.length === 1) onPickValidator(stakingChains[0]);
@@ -164,7 +164,7 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                 </button>
                 <button
                     type="button"
-                    className={local.option}
+                    className={styles.entry}
                     disabled={noStakingChain}
                     onClick={() => onPickContract()}
                 >
