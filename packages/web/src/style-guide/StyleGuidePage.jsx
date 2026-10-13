@@ -13,7 +13,11 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { VIEWS, ViewContext, ViewFrame, WidthTriptych, useViewState } from './frames.jsx';
-import { ColorPaletteSection } from './sections/ColorPaletteSection.jsx';
+import {
+    DesignTokensSection,
+    DOCUMENTED_TOKENS,
+    TOKEN_GROUPS,
+} from './sections/DesignTokensSection.jsx';
 import { TypographySection } from './sections/TypographySection.jsx';
 import { SpacingSection } from './sections/SpacingSection.jsx';
 import { IconsSection } from './sections/IconsSection.jsx';
@@ -71,7 +75,7 @@ import {
 // canonical going forward.
 
 export const SECTIONS = [
-    { id: 'color-palette',         label: 'Color palette',          Component: ColorPaletteSection },
+    { id: 'design-tokens',         label: 'Design tokens',          Component: DesignTokensSection },
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection, primitives: ['Icon'] },
@@ -122,6 +126,8 @@ export const SECTIONS = [
 export const DOCUMENTED_PRIMITIVES = Object.freeze(
     SECTIONS.flatMap(({ primitives = [] }) => primitives),
 );
+
+export { DOCUMENTED_TOKENS, TOKEN_GROUPS };
 
 export function StyleGuidePage() {
     const [view, setView] = useViewState();
