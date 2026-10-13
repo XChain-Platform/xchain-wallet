@@ -6,10 +6,9 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Home and the command palette show a wallet's holdings through one loader.
-// They used to load separately, and in a demo wallet the palette read the
-// chain (empty) while Home showed the sample holdings, so a coin opened from
-// the palette read 0 against Home's 100.
+// Home and the command palette show a wallet's holdings through one loader,
+// so a demo wallet's coin opened from the palette reads the same sample
+// holdings Home shows, never the empty chain.
 
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { loadDisplayBalances } from '../../../packages/core/src/shared/utils/displayBalances.js';
