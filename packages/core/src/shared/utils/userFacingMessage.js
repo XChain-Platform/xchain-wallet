@@ -53,6 +53,26 @@ export function containsInternalErrorIdentifier(value) {
     return ERROR_CODE.test(text) || INTERNAL_NAME.test(text);
 }
 
+// Storage and other web platform failures arrive as DOMExceptions, whose
+// message is browser or engine detail (and can quote what was being stored).
+// Their names stay recognisable after a messaging hop strips the class, so
+// those names count too. App-defined error classes are NOT in this set: their
+// names end in Error as well, but they carry copy written for the user (a wrong
+// password, a locked hardware wallet), and the text checks below judge them.
+// AbortError and NotAllowedError are left out because the wallet throws its
+// own errors under those names.
+const PLATFORM_EXCEPTION_NAMES = new Set([
+    'QuotaExceededError', 'DataCloneError', 'DataError', 'InvalidStateError',
+    'NotReadableError', 'UnknownError', 'TransactionInactiveError', 'ReadOnlyError',
+    'VersionError', 'ConstraintError', 'NotFoundError', 'SecurityError',
+    'EncodingError', 'InvalidAccessError', 'OperationError',
+]);
+
+function isPlatformException(e) {
+    if (typeof DOMException !== 'undefined' && e instanceof DOMException) return true;
+    return PLATFORM_EXCEPTION_NAMES.has(String(e.name || ''));
+}
+
 function errorText(err) {
     const raw = (err && typeof err === 'object')
         ? (/** @type {any} */ (err).message || '')
@@ -111,7 +131,7 @@ export function isDeveloperMessage(err) {
     if (err && typeof err === 'object') {
         const e = /** @type {any} */ (err);
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
-        if (INTERNAL_NAME.test(String(e.name || ''))) return true;
+        if (isPlatformException(e)) return true;
         if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
