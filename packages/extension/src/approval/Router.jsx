@@ -63,6 +63,23 @@ function ApprovalRoute() {
         window.close();
     }, [id]);
 
+    useEffect(() => {
+        if (!data) return undefined;
+
+        // The footer puts Reject first, so keyboard entry starts on the safe
+        // decision for every approval kind without stealing focus again.
+        document.querySelector('footer button')?.focus();
+
+        function handleKeyDown(event) {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            void reject();
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [data, reject]);
+
     if (error) {
         return (
             <Screen variant="popup">

@@ -8,6 +8,7 @@ const FOCUSABLE = [
     'button',
     'input:not([type="hidden"])',
     'select',
+    'summary',
     'textarea',
     '[tabindex]',
 ].join(',');
@@ -17,6 +18,7 @@ function focusableElements() {
         !element.disabled
         && !element.hidden
         && !element.closest('[inert]')
+        && (!element.closest('details:not([open])') || element.matches('details > summary'))
         && element.getAttribute('aria-hidden') !== 'true'
         && Number(element.getAttribute('tabindex') ?? 0) >= 0
     ));
@@ -25,6 +27,15 @@ function focusableElements() {
 function pressKey(key, init = {}) {
     const target = document.activeElement || document.body;
     const proceeds = fireEvent.keyDown(target, { key, ...init });
+    if (
+        proceeds
+        && key.length === 1
+        && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+        && !target.readOnly
+        && !target.disabled
+    ) {
+        fireEvent.change(target, { target: { value: `${target.value}${key}` } });
+    }
     fireEvent.keyUp(target, { key, ...init });
     if (!proceeds || key !== 'Enter') return;
 
