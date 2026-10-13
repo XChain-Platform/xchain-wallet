@@ -129,9 +129,9 @@ describe('ActionConfirmScreen From row (#40)', () => {
 
         const row = screen.getByTestId('confirm-source');
         expect(row.textContent).toMatch(/^From/);
-        // AddressText truncates for display and carries the full string on
-        // title, which is what a user comparing against their address list
-        // needs to be able to read.
+        // The final review keeps the complete address visible and also
+        // exposes it through the title attribute.
+        expect(row.textContent).toContain(SOFTWARE_ADDRESS);
         expect(row.querySelector('[title]')?.getAttribute('title')).toBe(SOFTWARE_ADDRESS);
     });
 

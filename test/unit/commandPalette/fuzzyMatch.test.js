@@ -52,6 +52,14 @@ describe('scoreCommand', () => {
         expect(keywordHit).toBeGreaterThan(0);
     });
 
+    it('keeps loose title matches above exact keyword matches', () => {
+        const titleHit = scoreCommand('backup', cmd('Settings → Backup'));
+        const keywordHit = scoreCommand('backup', cmd('Recovery guide', {
+            keywords: ['backup'],
+        }));
+        expect(titleHit).toBeGreaterThan(keywordHit);
+    });
+
     it('finds a command by a keyword the title does not contain', () => {
         expect(scoreCommand('dex', cmd('Open markets', { keywords: ['dex', 'exchange'] }))).toBeGreaterThan(0);
     });

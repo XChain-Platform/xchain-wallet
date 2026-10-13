@@ -34,7 +34,7 @@ const walletPickerCss = readFileSync(
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
         expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*55%;/s);
-        expect(balanceCss.match(/overflow-wrap:\s*anywhere;/g)).toHaveLength(2);
+        expect(balanceCss.match(/overflow-wrap:\s*anywhere;/g)).toHaveLength(3);
         expect(walletPickerCss).toMatch(/\.rowText\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*flex-wrap:\s*wrap;/s);
     });

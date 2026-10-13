@@ -32,6 +32,10 @@ export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const FEE_STRATEGIES = /** @type {const} */ (['low', 'normal', 'fast', 'custom']);
 export const REDUCED_MOTION_MODES = /** @type {const} */ (['auto', 'always', 'never']);
 export const BACKUP_REMINDER_CADENCES = /** @type {const} */ (['off', 'monthly', 'quarterly']);
+export const SMALL_BALANCE_THRESHOLDS = /** @type {const} */ (['dust', '0.0001', '0.01', '1']);
+export const SMALL_BALANCE_THRESHOLD_DEFAULT = 'dust';
+export const NUMBER_FORMATS = /** @type {const} */ (['full', 'trim', 'plain']);
+export const NUMBER_FORMAT_DEFAULT = 'full';
 
 // §20 / G039: wallet mode. `full` is the everyday wallet (sign + broadcast on
 // this device). `watcher` builds unsigned PSBTs against pubkeys / xpubs and
@@ -240,6 +244,8 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {string[]} [hiddenTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user hid (collapsed into the Hidden section at the bottom of each tab) (§27.4 / G073)
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant: when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings > Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant: when true, balance rows render a per-row hide affordance. Default false; the Settings > Display unhide list still works regardless.
+ * @property {typeof SMALL_BALANCE_THRESHOLDS[number]} [smallBalanceThreshold]                               v3-tolerant: threshold used when privacy.hideSmallBalances is enabled. `dust` keeps the chain-aware relay/token heuristic; decimal values are whole asset units.
+ * @property {typeof NUMBER_FORMATS[number]} [numberFormat]                                                  v3-tolerant: balance amount presentation. `full` preserves asset precision, `trim` removes insignificant trailing zeros, and `plain` also omits digit grouping.
  * @property {{ bindings?: Record<string, string> }} [keyboard]                                              v2-tolerant: §34.1 keyboard-shortcut overrides. `bindings` maps a shortcut id from keyboard/shortcuts.js to a binding string ('mod+k' / '?' / 'g h'); unknown ids and invalid strings are ignored at resolve time (resolveBindings), so a stale override can't break dispatch.
  * @property {boolean} [verifyProofs]                                                                      v2-tolerant: when true (default), the wallet cryptographically verifies token balances + actions against quorum-signed SPV checkpoints and badges each row. Set false to skip the extra proof traffic. Seam for a future pinned validator set / trusted checkpoint.
  * @property {boolean} [showVariantBadge]                                                                    v2-tolerant (web shell only). When true AND developerMode is on, the floating dev variant switcher (small / full / sidebar / extension preview) renders. Default false, so production never shows it.
@@ -356,6 +362,8 @@ export function createDefaultSettings() {
         hiddenTokens: [],
         showPinAffordance: false,
         showHideAffordance: false,
+        smallBalanceThreshold: SMALL_BALANCE_THRESHOLD_DEFAULT,
+        numberFormat: NUMBER_FORMAT_DEFAULT,
         showFiatInHistory: false,
         quietHours: { ...QUIET_HOURS_DEFAULT },
         verifyProofs: true,
@@ -565,6 +573,22 @@ export function validateSettings(record) {
             'showHideAffordance',
             isBoolean(r.showHideAffordance),
             'must be a boolean when present',
+        );
+    }
+    if (r.smallBalanceThreshold !== undefined) {
+        check(
+            errors,
+            'smallBalanceThreshold',
+            isOneOf(r.smallBalanceThreshold, SMALL_BALANCE_THRESHOLDS),
+            `must be one of ${SMALL_BALANCE_THRESHOLDS.join(', ')}`,
+        );
+    }
+    if (r.numberFormat !== undefined) {
+        check(
+            errors,
+            'numberFormat',
+            isOneOf(r.numberFormat, NUMBER_FORMATS),
+            `must be one of ${NUMBER_FORMATS.join(', ')}`,
         );
     }
     if (r.verifyProofs !== undefined) {

@@ -99,7 +99,7 @@ describe('the Privacy panel after', () => {
     it('leaves the rows that still govern something in place', () => {
         render(<PrivacySection />);
         expect(screen.getByText('Change-address rotation')).toBeTruthy();
-        expect(screen.getByText('Hide small balances')).toBeTruthy();
+        expect(screen.queryByText('Hide small balances')).toBeNull();
         expect(screen.getByText('Form draft retention')).toBeTruthy();
     });
 });

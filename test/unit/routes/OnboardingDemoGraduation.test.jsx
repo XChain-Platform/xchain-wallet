@@ -156,7 +156,7 @@ describe('Onboarding add-wallet lane inside the demo', () => {
         fireEvent.click(screen.getByRole('button', { name: /Clear demo & create new wallet/ }));
 
         await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-        expect(screen.getByRole('alert').textContent).toMatch(/Could not confirm/);
+        expect(screen.getByRole('alert').textContent).toMatch(/Could not verify/);
         expect(onCreate).not.toHaveBeenCalled();
         expect(reloadCount).toBe(0);
         expect(globalThis.localStorage.getItem(META_KEY)).toBe('{"kdfParams":"demo"}');
@@ -169,7 +169,8 @@ describe('Onboarding add-wallet lane inside the demo', () => {
             mode: 'add',
             messaging: {
                 removeWallet: async () => { throw new Error('vault is locked'); },
-                listWallets: async () => [],
+                // Still occupied: only an empty vault turns a rejected removal into a retry.
+                listWallets: async () => [{ walletId: 'demo-1' }],
             },
         });
 
