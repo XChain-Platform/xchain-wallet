@@ -101,4 +101,15 @@ describe('extension bottom navigation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         expect(screen.getByRole('button', { name: 'Messaging' })).toHaveAttribute('aria-current', 'page');
     });
+
+    it.each(['contacts', 'account-picker'])(
+        'marks More as current for the %s destination',
+        (initialView) => {
+            render(<NavigationHarness initialView={initialView} />);
+            expect(screen.getByRole('button', { name: 'More' }))
+                .toHaveAttribute('aria-current', 'page');
+            expect(screen.getByRole('button', { name: 'Home' }))
+                .not.toHaveAttribute('aria-current');
+        },
+    );
 });

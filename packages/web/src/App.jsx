@@ -49,6 +49,7 @@ import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduat
 import { createLaunchRouteState } from '@xchain-wallet/core/shared/utils/launchRouteState.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
+import { persistActiveNetwork } from '@xchain-wallet/core/shared/utils/activeNetworkSwitch.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
@@ -498,7 +499,7 @@ function AppInner() {
     // only destination-network addresses, balances, and history.
     const handleActiveNetworkChange = useCallback(async (network) => {
         if (!activeWalletId) throw new Error('An active wallet is required to switch networks.');
-        await messaging.setActiveNetwork({ walletId: activeWalletId, network });
+        await persistActiveNetwork({ messaging, walletId: activeWalletId, network });
         window.location.reload();
     }, [activeWalletId]);
     // Unread-message count for the active wallet + account, surfaced as a badge

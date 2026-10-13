@@ -13,11 +13,12 @@ import { Button, Icon } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { OverlaySurface } from './OverlaySurface.jsx';
-import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import {
     activeNetworkLabel,
     activeNetworkOptions,
+    activeNetworkSwitchCopy,
     normalizeActiveNetwork,
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
@@ -137,11 +138,9 @@ export function HeaderSettingsButton({
 
     const switchNetwork = async (next) => {
         if (next === currentNetwork) return;
-        const from = activeNetworkLabel(currentNetwork);
-        const to = activeNetworkLabel(next);
+        const copy = activeNetworkSwitchCopy(currentNetwork, next);
         const confirmed = await confirmDialog.confirm({
-            title: `Switch from ${from} to ${to}?`,
-            message: `The wallet will reload and refresh balances and history for ${to}. ${from} data stays saved and hidden until you switch back.`,
+            ...copy,
             confirmLabel: 'Switch network',
         });
         if (!confirmed) return;
@@ -236,7 +235,7 @@ export function HeaderSettingsButton({
                             <select
                                 className={styles.networkSelect}
                                 value={currentNetwork}
-                                disabled={switchingNetwork}
+                                disabled={switchingNetwork || Boolean(confirmDialog.request)}
                                 onChange={(event) => switchNetwork(event.target.value)}
                                 aria-label="Active network in header"
                             >

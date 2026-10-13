@@ -25,6 +25,8 @@ import { ShortcutHelp } from '../../../packages/core/src/shared/keyboard/Shortcu
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
 import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
+import { persistActiveNetwork } from '../../../packages/core/src/shared/utils/activeNetworkSwitch.js';
+import { readLastView, writeLastView } from '../../../packages/core/src/shared/utils/lastViewMemory.js';
 
 afterEach(() => {
     cleanup();
@@ -368,8 +370,8 @@ describe('HeaderSettingsButton section gating', () => {
             target: { value: 'regtest' },
         });
 
-        const dialog = screen.getByRole('dialog', { name: 'Switch from Testnet to Regtest?' });
-        expect(dialog).toHaveTextContent(/refresh balances and history for Regtest/);
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Regtest?' });
+        expect(dialog).toHaveTextContent('Unlock the wallet again after it reloads.');
         expect(nativeConfirm).not.toHaveBeenCalled();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Switch network' }));
 
@@ -400,12 +402,41 @@ describe('HeaderSettingsButton section gating', () => {
         const select = screen.getByLabelText('Active network in header');
         expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
         fireEvent.change(select, { target: { value: 'testnet' } });
-        const dialog = screen.getByRole('dialog', { name: 'Switch from Mainnet to Testnet?' });
+        const dialog = screen.getByRole('dialog', { name: 'Switch to Testnet?' });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
         await waitFor(() => expect(dialog).not.toBeInTheDocument());
         expect(onActiveNetworkChange).not.toHaveBeenCalled();
         expect(select.value).toBe('mainnet');
+    });
+
+    it('clears a stale destination after persisting a network switch', async () => {
+        const walletId = 'network-switch-wallet';
+        writeLastView(walletId, 'contacts');
+        const setActiveNetwork = vi.fn().mockResolvedValue({ activeNetwork: 'testnet' });
+
+        await persistActiveNetwork({
+            messaging: { setActiveNetwork },
+            walletId,
+            network: 'testnet',
+        });
+
+        expect(setActiveNetwork).toHaveBeenCalledWith({ walletId, network: 'testnet' });
+        expect(readLastView(walletId)).toBeNull();
+    });
+
+    it('keeps the saved destination when network persistence fails', async () => {
+        const walletId = 'failed-network-switch-wallet';
+        writeLastView(walletId, 'contacts');
+
+        await expect(persistActiveNetwork({
+            messaging: { setActiveNetwork: vi.fn().mockRejectedValue(new Error('offline')) },
+            walletId,
+            network: 'testnet',
+        })).rejects.toThrow('offline');
+
+        expect(readLastView(walletId)).toBe('contacts');
+        writeLastView(walletId, 'home');
     });
 
     it('marks the trigger active when a non-default wallet or account is selected', () => {
