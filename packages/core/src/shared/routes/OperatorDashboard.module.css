@@ -1,3 +1,28 @@
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+    align-items: start;
+}
+
+/* The doubled class outranks ListPage's 48rem readable cap, so the metric
+ * cards can use a wide desktop pane. */
+.dashboard.dashboard {
+    max-width: 72rem;
+}
+
+.dashboard > :not(section) {
+    grid-column: 1 / -1;
+}
+
+.dashboard > section {
+    min-width: 0;
+    margin: 0;
+    padding: var(--xc-space-4);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
 .identity {
     display: flex;
     align-items: center;
