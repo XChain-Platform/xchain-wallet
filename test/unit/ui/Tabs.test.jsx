@@ -79,6 +79,8 @@ describe('<Tabs>', () => {
         expect(css).toMatch(/\.tabs\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
         expect(css).toMatch(/\.tabs\s*\{[^}]*overflow-x:\s*auto/s);
         expect(css).toMatch(/\.tabs::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
+        // A short tab row shrinks and wraps its labels before it ever scrolls.
+        expect(css).toMatch(/\.tab\s*\{[^}]*flex:\s*0 1 auto;[^}]*min-width:\s*0;[^}]*white-space:\s*normal;/s);
     });
 
     it('can disable every tab while an owning flow is busy', () => {
