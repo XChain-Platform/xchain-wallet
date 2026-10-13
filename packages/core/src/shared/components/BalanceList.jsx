@@ -10,8 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
-import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { EmptyState, MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
@@ -71,12 +70,12 @@ export function BalanceList({
     if (!rows || rows.length === 0) {
         const hasEmptyAction = Boolean(emptyActionLabel) && typeof onEmptyAction === 'function';
         return (
-            <EmptyStateNudge
+            <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
                 actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? 'Receive' : undefined)}
                 onAction={hasEmptyAction ? onEmptyAction : onReceive}
-                icon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
+                actionIcon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
         );
     }
