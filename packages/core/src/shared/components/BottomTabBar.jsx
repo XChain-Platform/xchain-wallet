@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
-import { formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
+import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -71,6 +71,12 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
+function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
+    const routeGroup = activeLeftNavItem(currentView);
+    if (routeGroup === 'settings') return 'more';
+    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
+}
+
 function scrollMainToTop() {
     const main = typeof document === 'undefined' ? null : document.getElementById('xc-main');
     if (main) main.scrollTop = 0;
@@ -88,6 +94,7 @@ export function BottomTabBar({
     badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
+    const [rovingTab, setRovingTab] = useState(null);
     const moreTriggerRef = useRef(null);
     const sheetRef = useRef(null);
     // The system Back gesture closes this before it leaves the screen.
@@ -139,23 +146,44 @@ export function BottomTabBar({
     // Messaging lives behind "More", so any unread inside the sheet also needs a
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
-    const activeSheetRow = sheetRows.find((row) => isNavItemActive(row.id, currentView));
-    const moreActive = Boolean(activeSheetRow)
-        || isNavItemActive('settings', currentView)
-        || currentView === 'menu'
-        || currentView === 'alerts';
+    const activeTab = bottomTabOwner(currentView, primaryTabs);
+    const moreActive = activeTab === 'more';
+    const primaryIds = primaryTabs.map((tab) => tab.id);
+    const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
+        ? rovingTab
+        : (moreActive ? 'more' : (activeTab || primaryIds[0]));
+
+    const onBarKeyDown = (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-bottom-tab]');
+        if (!current) return;
+        const tabs = Array.from(e.currentTarget.querySelectorAll('[data-bottom-tab]'));
+        const index = tabs.indexOf(current);
+        let next = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (index + 1) % tabs.length;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (index - 1 + tabs.length) % tabs.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = tabs.length - 1;
+        if (next === null || next === index) return;
+        e.preventDefault();
+        tabs[next].focus();
+        tabs[next].click();
+    };
 
     return (
         <>
-            <nav className={styles.bar} aria-label="Bottom navigation">
+            <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
                 {primaryTabs.map((tab) => {
-                    const active = !moreActive && isNavItemActive(tab.id, currentView);
+                    const active = tab.id === activeTab;
                     return (
                         <button
                             key={tab.id}
                             type="button"
+                            data-bottom-tab={tab.id}
+                            tabIndex={tabStop === tab.id ? 0 : -1}
                             className={`${styles.tab} ${active ? styles.tabActive : ''}`}
                             aria-current={active ? 'page' : undefined}
+                            onFocus={() => setRovingTab(tab.id)}
                             onClick={() => {
                                 if (active) scrollMainToTop();
                                 onSelect(tab.id);
@@ -169,12 +197,16 @@ export function BottomTabBar({
                     );
                 })}
                 <button
+                    id="xc-bottom-sheet-title"
                     ref={moreTriggerRef}
                     type="button"
+                    data-bottom-tab="more"
+                    tabIndex={tabStop === 'more' ? 0 : -1}
                     className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
                     aria-current={moreActive ? 'page' : undefined}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
+                    onFocus={() => setRovingTab('more')}
                     onClick={() => setSheetOpen((v) => !v)}
                 >
                     <span className={styles.tabIcon} aria-hidden="true">
@@ -201,7 +233,7 @@ export function BottomTabBar({
                         id="xc-bottom-sheet"
                         role="dialog"
                         aria-modal="true"
-                        aria-label="More navigation"
+                        aria-labelledby="xc-bottom-sheet-title"
                         className={styles.sheet}
                     >
                         <div className={styles.handle} aria-hidden="true" />

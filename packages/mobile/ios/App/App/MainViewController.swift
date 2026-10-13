@@ -46,6 +46,14 @@ class MainViewController: CAPBridgeViewController {
         cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(cover)
         launchCover = cover
+
+        let edgeBack = UIScreenEdgePanGestureRecognizer(
+            target: self,
+            action: #selector(handleEdgeBack(_:))
+        )
+        edgeBack.edges = .left
+        edgeBack.cancelsTouchesInView = false
+        view.addGestureRecognizer(edgeBack)
     }
 
     override func capacitorDidLoad() {
@@ -64,8 +72,25 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(XChainLinksPlugin())
         bridge?.registerPluginInstance(XChainSplashPlugin())
 
+        // WebKit history does not know about route-local review steps or
+        // signing locks. The app-owned edge gesture routes through the same
+        // handler as the visible Back control instead.
+        webView?.allowsBackForwardNavigationGestures = false
+
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
+    }
+
+    /// Complete a deliberate left-edge swipe through the SPA back stack.
+    @objc private func handleEdgeBack(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        let distance = gesture.translation(in: view).x
+        let velocity = gesture.velocity(in: view).x
+        let committed = distance >= min(view.bounds.width * 0.25, 120) || velocity >= 600
+        guard committed else { return }
+        webView?.evaluateJavaScript(
+            "window.dispatchEvent(new Event('xchain:native-edge-back'))"
+        )
     }
 
     fileprivate func markShellReady() {

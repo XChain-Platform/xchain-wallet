@@ -56,6 +56,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
+import S from './MySwapsView.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -261,7 +262,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            action={onCreateSwap ? <Button variant="secondary" size="sm" onClick={onCreateSwap}>New swap</Button> : undefined}
+            trailing={onCreateSwap ? <Button variant="secondary" size="sm" onClick={onCreateSwap}>New swap</Button> : undefined}
         />
     );
     const wrap = (children) => (
@@ -309,27 +310,38 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const expText = swapExpiryLabel(it.live?.expiration ?? it.row.expiration, nowSec);
         const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
         const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
-        const chip = status === 'open'
-            ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
-            : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
+        const statusLabel = status === 'open' ? 'Open' : (CLOSED_LABELS[status] || 'Invalid');
+        const chip = (
+            <span
+                className={`${L.chip} ${status === 'open' ? L.chipOpen : L.chipExpired} ${S.statusBadge}`}
+                aria-label={`Status: ${statusLabel}`}
+            >
+                {statusLabel}
+            </span>
+        );
         return (
             <li key={it.key} className={L.row}>
                 <div className={L.rowMain}>
-                    <div className={L.rowHead}>
-                        <span className={L.rowTitle}>Give {give} → get {get}</span>
+                    <div className={`${L.rowHead} ${S.rowHead}`}>
+                        <span className={`${L.rowTitle} ${S.amounts}`} aria-label={`Give ${give}; get ${get}`}>
+                            <span className={S.side}><span className={S.sideLabel}>Give</span> {give}</span>
+                            <span className={S.side}><span className={S.sideLabel}>Get</span> {get}</span>
+                        </span>
                         {chip}
                     </div>
-                    <div className={L.rowMeta}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{it.row.action_index}
-                        {' · '}<AddressText address={it.owner.address} />
+                    <div className={`${L.rowMeta} ${S.rowMeta}`}>
+                        <span className={S.metaItem}>
+                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
+                        </span>
+                        <span className={S.metaItem}>#{it.row.action_index}</span>
+                        <span className={S.metaItem}><AddressText address={it.owner.address} /></span>
                     </div>
                     {expText ? <div className={L.rowDetail}>{expText}</div> : null}
                     <div className={L.rowDetail}>
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
                 </div>
-                <div className={L.rowActions}>
+                <div className={`${L.rowActions} ${S.rowActions}`}>
                     <Button
                         variant="secondary"
                         size="sm"
@@ -560,9 +572,15 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                 </Button>
             )}
         >
-            <p className={F.summary}>
-                Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
-                {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
+            <p className={`${F.summary} ${S.detailAmounts}`} aria-label="Swap amounts">
+                <span className={S.side}>
+                    <span className={S.sideLabel}>Give</span>{' '}
+                    {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)}
+                </span>
+                <span className={S.side}>
+                    <span className={S.sideLabel}>Get</span>{' '}
+                    {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
+                </span>
             </p>
             <dl className={F.detailsList}>
                 <dt className={F.detailsLabel}>Chain</dt>

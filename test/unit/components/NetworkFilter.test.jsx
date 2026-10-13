@@ -9,8 +9,12 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { NetworkFilter } from '../../../packages/core/src/shared/components/NetworkFilter.jsx';
+import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
+import { useWalletFilters } from '../../../packages/core/src/shared/hooks/useWalletFilters.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const descriptors = {
     bitcoin: { displayName: 'Bitcoin', color: '#f7931a' },
@@ -51,6 +55,8 @@ function openList() {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    globalThis.localStorage?.removeItem('xc:homeFilters:wallet-a');
+    globalThis.localStorage?.removeItem('xc:homeFilters:wallet-b');
 });
 
 describe('NetworkFilter trigger', () => {
@@ -130,6 +136,36 @@ describe('NetworkFilter dismissal', () => {
     });
 });
 
+describe('NetworkFilter keyboard navigation', () => {
+    it('opens on ArrowDown, moves among options, and returns focus on Escape', () => {
+        mount({ value: 'litecoin' });
+        const trigger = screen.getByRole('button', { name: /Litecoin/ });
+
+        fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+        const selected = screen.getByRole('option', { name: /^Litecoin/ });
+        expect(selected).toHaveFocus();
+
+        fireEvent.keyDown(selected, { key: 'ArrowDown' });
+        expect(screen.getByRole('option', { name: /^Dogecoin/ })).toHaveFocus();
+        fireEvent.keyDown(document.activeElement, { key: 'Home' });
+        expect(screen.getByRole('option', { name: /^All networks/ })).toHaveFocus();
+
+        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(trigger).toHaveFocus();
+    });
+
+    it('moves from a large-list search field into the options', () => {
+        mount({ coinFamilies: manyFamilies });
+        openList();
+        const search = screen.getByPlaceholderText('Search networks…');
+
+        expect(search).toHaveFocus();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
+        expect(screen.getByRole('option', { name: /^All networks/ })).toHaveFocus();
+    });
+});
+
 describe('NetworkFilter search', () => {
     it('only offers search for more than six families', () => {
         mount();
@@ -182,5 +218,57 @@ describe('NetworkFilter search', () => {
         expect(within(listbox).getByRole('option', { name: /^Litecoin/ })).toHaveTextContent('LTC');
         expect(within(listbox).getByRole('option', { name: /^Dogecoin/ })).toHaveTextContent('DOGE');
         expect(within(listbox).getByRole('option', { name: /^Ethereum/ })).toHaveTextContent('ETHEREUM');
+    });
+});
+
+describe('shared network filter surfaces', () => {
+    it('uses the canonical filter for compact dropdowns and clears through All networks', () => {
+        const onChange = vi.fn();
+        render(<NetworkFilterDropdown value="dogecoin" onChange={onChange} />);
+        const trigger = screen.getByRole('button', { name: 'Filter by network' });
+
+        expect(trigger).toHaveTextContent('Dogecoin');
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('option', { name: /^All networks/ }));
+        expect(onChange).toHaveBeenCalledWith('all');
+    });
+
+    it('allows both toolbar controls to shrink inside a 320px viewport', () => {
+        const css = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/NetworkFilterDropdown.module.css',
+        ), 'utf8');
+        const wrapper = css.match(/\.networkWrap\s*\{[^}]*\}/)?.[0] || '';
+
+        expect(wrapper).toMatch(/flex:\s*1 1 0/);
+        expect(wrapper).toMatch(/min-width:\s*0/);
+        expect(wrapper).not.toMatch(/min-width:\s*10\.5rem/);
+    });
+});
+
+describe('wallet filter persistence', () => {
+    it('restores network and token filters independently for each wallet', () => {
+        const { result, rerender } = renderHook(
+            ({ walletId }) => useWalletFilters(walletId),
+            { initialProps: { walletId: 'wallet-a' } },
+        );
+
+        act(() => {
+            result.current.setNetworkFilter('litecoin');
+            result.current.setTokenQuery('pep');
+        });
+        expect(JSON.parse(globalThis.localStorage.getItem('xc:homeFilters:wallet-a'))).toMatchObject({
+            networkFilter: 'litecoin',
+            tokenQuery: 'pep',
+        });
+
+        rerender({ walletId: 'wallet-b' });
+        expect(result.current.networkFilter).toBe('all');
+        expect(result.current.tokenQuery).toBe('');
+        act(() => result.current.setNetworkFilter('dogecoin'));
+
+        rerender({ walletId: 'wallet-a' });
+        expect(result.current.networkFilter).toBe('litecoin');
+        expect(result.current.tokenQuery).toBe('pep');
     });
 });

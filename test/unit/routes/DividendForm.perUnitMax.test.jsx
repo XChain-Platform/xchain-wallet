@@ -19,8 +19,8 @@
 // balance can actually pay, and a hand-typed over-payout must stop at the
 // form rather than three screens later behind a "sign anyway" tick.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
@@ -115,17 +115,16 @@ function mountDividend({
 // The dividend ticker is only settable through the shared TokenPicker, so
 // every case opens it and takes the XCHAIN row, exactly as a user does.
 async function pickDividendToken() {
-    fireEvent.click(await screen.findByRole('button', { name: /Dividend token/i }));
-    const row = await waitFor(() => {
-        const hit = Array.from(document.querySelectorAll('button'))
-            .find((b) => (b.textContent || '').includes('XCHAIN'));
-        if (!hit) throw new Error('no XCHAIN row in the token picker');
-        return hit;
-    }, { timeout: 3000 });
+    await flushTimers();
+    fireEvent.click(screen.getByRole('button', { name: /Dividend token/i }));
+    await flushTimers();
+    const row = Array.from(document.querySelectorAll('button'))
+        .find((button) => (button.textContent || '').includes('XCHAIN'));
+    if (!row) throw new Error('no XCHAIN row in the token picker');
     fireEvent.click(row);
 }
 
-const amountField = () => screen.findByLabelText(/^Per-unit amount/);
+const amountField = () => screen.getByLabelText(/^Per-unit amount/);
 const maxButton = () => screen.getByRole('button', { name: /max available/i });
 // Hidden Max and inert Max are both acceptable; a LIVE Max on an
 // uncomputable rate is not.
@@ -135,32 +134,50 @@ const submitButton = () => screen.getByRole('button', { name: /^(Pay dividend|Pr
 // The summary line is assembled from several JSX expressions inside one
 // paragraph, so its text lands in separate DOM text nodes; match against
 // the rendered text as a whole.
-const expectText = (re, timeout = 3000) => waitFor(
-    () => expect(document.body.textContent).toMatch(re),
-    { timeout },
-);
+async function flushTimers() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
+
+const maxReady = async () => {
+    await flushTimers();
+    expect(maxButton().disabled).toBe(false);
+};
+
+const expectText = async (re) => {
+    await flushTimers();
+    expect(document.body.textContent).toMatch(re);
+};
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
 
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    vi.useRealTimers();
 });
 
 describe('DividendForm Max fills a rate, not the balance', () => {
     it('fills balance / eligible units, not the whole balance', async () => {
         mountDividend();
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
+        await maxReady();
         fireEvent.click(maxButton());
         // 4,999 XCHAIN across 500 units = 9.998 per unit. The old, wrong
         // number was the balance itself.
-        await waitFor(async () => expect((await amountField()).value).toBe('9.998'));
-        expect((await amountField()).value).not.toBe('4,999');
+        expect(amountField().value).toBe('9.998');
+        expect(amountField().value).not.toBe('4,999');
     });
 
     it('quotes a total distribution the balance can actually pay', async () => {
         mountDividend();
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
+        await maxReady();
         fireEvent.click(maxButton());
         // The form's own summary line: 9.998 x 500 = 4,999, the balance.
         // It used to read ~2,499,500 off the same click.
@@ -183,9 +200,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             divisibility: 0,
         });
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
+        await maxReady();
         fireEvent.click(maxButton());
-        await waitFor(async () => expect((await amountField()).value).toBe('3'));
+        expect(amountField().value).toBe('3');
     });
 
     it('excludes the source address from the divisor, as the payout does', async () => {
@@ -198,9 +215,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             ],
         });
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
+        await maxReady();
         fireEvent.click(maxButton());
-        await waitFor(async () => expect((await amountField()).value).toBe('9.998'));
+        expect(amountField().value).toBe('9.998');
     });
 
     it('offers no Max when nobody is eligible to receive', async () => {
@@ -209,16 +226,16 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         await expectText(/0 eligible holders/);
         const max = maxButtonOrNull();
         expect(max === null || max.disabled).toBe(true);
-        expect((await amountField()).value).toBe('');
+        expect(amountField().value).toBe('');
     });
 
     it('blocks a hand-typed over-payout at the form, before composing', async () => {
         const messaging = mountDividend();
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
-        fireEvent.change(await amountField(), { target: { value: '4999' } });
+        await maxReady();
+        fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'This pays ~2,499,500 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -234,12 +251,13 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             },
         });
         await pickDividendToken();
-        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+        fireEvent.change(amountField(), { target: { value: '9.998' } });
+        await flushTimers();
 
-        const cost = await screen.findByTestId('dividend-cost-preview', {}, { timeout: 3000 });
-        await waitFor(() => expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN'));
+        const cost = screen.getByTestId('dividend-cost-preview');
+        expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN');
         expect(cost.textContent).toContain('includes 1 XCHAIN protocol fee');
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'Total token cost is ~5,000 XCHAIN: 4,999 payout + 1 protocol fee, but this address holds 4,999 XCHAIN.',
         );
 
@@ -274,9 +292,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             divisibility: 0,
         });
         await pickDividendToken();
-        fireEvent.change(await amountField(), { target: { value: '1.5' } });
+        fireEvent.change(amountField(), { target: { value: '1.5' } });
         fireEvent.click(submitButton());
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert')).toHaveTextContent(
             'Per-unit amount must be a whole number because XCHAIN is indivisible.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -285,10 +303,11 @@ describe('DividendForm Max fills a rate, not the balance', () => {
     it('lets a payable rate through to composing', async () => {
         const messaging = mountDividend();
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
-        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+        await maxReady();
+        fireEvent.change(amountField(), { target: { value: '9.998' } });
         fireEvent.click(submitButton());
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        await flushTimers();
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({
             VERSION: '0', TICK: 'S19MINT', DIVIDEND_TICK: 'XCHAIN', AMOUNT: '9.998',
         });
@@ -314,9 +333,10 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             ),
         );
         await pickDividendToken();
-        fireEvent.change(await amountField(), { target: { value: '4999' } });
+        fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        await flushTimers();
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
     });
 });
 
@@ -325,10 +345,11 @@ describe('DividendForm review hint', () => {
         // Only a watcher wallet stops on the in-form review step before encoding.
         mountDividend({ walletMode: 'watcher' });
         await pickDividendToken();
-        await waitFor(() => expect(maxButton().disabled).toBe(false), { timeout: 3000 });
-        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+        await maxReady();
+        fireEvent.change(amountField(), { target: { value: '9.998' } });
         fireEvent.click(submitButton());
-        const hint = await screen.findByTestId('dividend-review-fee-hint', {}, { timeout: 3000 });
+        await flushTimers();
+        const hint = screen.getByTestId('dividend-review-fee-hint');
         expect(hint.textContent).toMatch(/holds enough XCHAIN\s+to cover the full payout/);
         expect(hint.textContent).toMatch(/grows with the number\s+of holders paid/);
         expect(hint.textContent).not.toMatch(/§|database hits|DIVIDEND ticker|DIVIDEND charges/);

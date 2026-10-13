@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -20,6 +20,7 @@ import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
@@ -57,6 +58,7 @@ export function MarketsList({
     const variant = screenVariantFor(shell);
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
     const [watchlist, setWatchlist] = useState(/** @type {any[]} */ ([]));
@@ -378,9 +380,12 @@ export function MarketsList({
                                         return (
                                             <button
                                                 key={opt.id}
+                                                id={`${tabsId}-tab-${opt.id}`}
                                                 type="button"
                                                 role="tab"
                                                 aria-selected={active}
+                                                aria-controls={`${tabsId}-panel`}
+                                                tabIndex={active ? 0 : -1}
                                                 className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
                                                 onClick={() => {
                                                     setTab(opt.id);
@@ -397,85 +402,95 @@ export function MarketsList({
                     </div>
                 )}
             >
-
-                <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
-                    {!selectedAsset ? (
-                        <EmptyState
-                            title="No asset selected"
-                            body="Choose a coin or token to view its markets."
-                        />
-                    ) : marketsLoading && !hasCachedMarkets ? (
-                        <div role="status" aria-label="Loading markets">
-                            <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
-                        </div>
-                    ) : loadError ? (
-                        <StatusMessage
-                            variant="error"
-                            className={styles.hint}
-                            recovery={{
-                                label: 'Try again',
-                                onAction: () => {
-                                    setSettledAssetKey(null);
-                                    setLoading(true);
-                                    setMarketsReload((value) => value + 1);
-                                },
-                            }}
-                        >
-                            {loadError}
-                        </StatusMessage>
-                    ) : displayMarkets.length === 0 ? (
-                        <EmptyState
-                            title={filtersHideAllMarkets
-                                ? 'No results for these filters'
-                                : debouncedSearch.trim()
-                                ? 'No matches'
-                                : tab === 'watchlist'
-                                    ? 'Empty watchlist'
-                                    : `No markets for ${selectedAsset.tick}`}
-                            body={debouncedSearch.trim()
-                                ? `No markets match "${debouncedSearch.trim()}".`
-                                : filtersHideAllMarkets
-                                ? 'Reset the filters to see all markets.'
-                                : tab === 'watchlist'
-                                    ? `Starred markets for ${selectedAsset.tick} appear here.`
-                                    : 'No pairs found involving this asset on its chain.'}
-                            actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
-                            onAction={filtersHideAllMarkets ? resetFilters : undefined}
-                        />
-                    ) : (
-                    <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
-                        <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
-                                <MarketRow
-                                    key={`${m.tick1}::${m.tick2}`}
-                                    chainId={selectedAsset.chainId}
-                                    selectedTick={selectedAsset.tick}
-                                    tick1={m.tick1}
-                                    tick2={m.tick2}
-                                    name1={m.name1}
-                                    name2={m.name2}
-                                    lastPrice={m.lastPrice}
-                                    change24h={m.change24h}
-                                    depth={m.depth}
-                                    starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
-                                    onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
-                                    openDisabled={networkOffline}
-                                    onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
-                                    first={idx === 0}
-                                />
-                            ))}
-                        </ul>
-                        {displayMarkets.length > visibleMarketCount ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
+                <div
+                    id={selectedAsset ? `${tabsId}-panel` : undefined}
+                    role={selectedAsset ? 'tabpanel' : undefined}
+                    aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
+                >
+                    <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
+                        {!selectedAsset ? (
+                            <EmptyState
+                                title="No asset selected"
+                                body="Choose a coin or token to view its markets."
+                            />
+                        ) : marketsLoading && !hasCachedMarkets ? (
+                            <div role="status" aria-label="Loading markets">
+                                <Skeleton.List rows={5} rowHeight={60} avatarSize={36} />
+                            </div>
+                        ) : loadError ? (
+                            <StatusMessage
+                                variant="error"
+                                className={styles.hint}
+                                recovery={{
+                                    label: 'Try again',
+                                    onAction: () => {
+                                        setSettledAssetKey(null);
+                                        setLoading(true);
+                                        setMarketsReload((value) => value + 1);
+                                    },
+                                }}
                             >
-                                Load more markets
-                            </Button>
-                        ) : null}
+                                {loadError}
+                            </StatusMessage>
+                        ) : displayMarkets.length === 0 ? (
+                            <EmptyState
+                                title={filtersHideAllMarkets
+                                    ? 'No results for these filters'
+                                    : debouncedSearch.trim()
+                                    ? 'No matches'
+                                    : tab === 'watchlist'
+                                        ? 'Empty watchlist'
+                                        : `No markets for ${selectedAsset.tick}`}
+                                body={debouncedSearch.trim()
+                                    ? `No markets match "${debouncedSearch.trim()}".`
+                                    : filtersHideAllMarkets
+                                    ? 'Reset the filters to see all markets.'
+                                    : tab === 'watchlist'
+                                        ? `Starred markets for ${selectedAsset.tick} appear here.`
+                                        : 'No pairs found involving this asset on its chain.'}
+                                actionLabel={filtersHideAllMarkets ? 'Reset filters' : undefined}
+                                onAction={filtersHideAllMarkets ? resetFilters : undefined}
+                            />
+                        ) : (
+                        <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
+                            <ul ref={marketResultsRef} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
+                                    <MarketRow
+                                        key={`${m.tick1}::${m.tick2}`}
+                                        chainId={selectedAsset.chainId}
+                                        selectedTick={selectedAsset.tick}
+                                        tick1={m.tick1}
+                                        tick2={m.tick2}
+                                        name1={m.name1}
+                                        name2={m.name2}
+                                        lastPrice={m.lastPrice}
+                                        change24h={m.change24h}
+                                        depth={m.depth}
+                                        starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
+                                        onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
+                                        openDisabled={networkOffline}
+                                        onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
+                                        first={idx === 0}
+                                    />
+                                ))}
+                            </ul>
+                            {displayMarkets.length > visibleMarketCount ? (
+                                <div className={marketsStyles.pagination} aria-live="polite">
+                                    <span className={marketsStyles.paginationCount}>
+                                        {visibleMarketCount.toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
+                                    >
+                                        Load more markets
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </div>
+                        )}
                     </div>
-                    )}
                 </div>
             </ListPage>
         </Screen>
@@ -508,9 +523,10 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
         : tick1.toUpperCase() === selUpper ? name2
         : name1;
     const changeNum = change24h ? parseFloat(String(change24h).replace(/[^\d.+-]/g, '')) : NaN;
-    const changeColor = Number.isFinite(changeNum)
-        ? (changeNum > 0 ? 'var(--xc-success)' : changeNum < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
-        : 'var(--xc-text-muted)';
+    const changeDisplay = percentChangeDisplay(changeNum);
+    const changeColor = changeDisplay?.direction === 'positive'
+        ? 'var(--xc-success)'
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
@@ -598,18 +614,21 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 gap: '2px',
             }}>
                 {change24h ? (
-                    <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        fontSize: 'var(--xc-text-sm)',
-                        fontWeight: 600,
-                        color: changeColor,
-                    }}>
-                        {change24h}
-                        {Number.isFinite(changeNum) && changeNum !== 0 ? (
+                    <span
+                        aria-label={changeDisplay ? `24-hour change. ${changeDisplay.label}` : undefined}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            fontSize: 'var(--xc-text-sm)',
+                            fontWeight: 600,
+                            color: changeColor,
+                        }}
+                    >
+                        {changeDisplay?.text ?? change24h}
+                        {changeDisplay && changeDisplay.direction !== 'neutral' ? (
                             <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changeNum > 0 ? '▲' : '▼'}
+                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
                             </span>
                         ) : null}
                     </span>
