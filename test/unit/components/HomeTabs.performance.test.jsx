@@ -29,6 +29,9 @@ const mocks = vi.hoisted(() => {
         chainIds,
         emptyObject: {},
         historyByChain,
+        chainIconSmallUrl: vi.fn(() => null),
+        nativeRates: {},
+        tokenRates: {},
         synthesizeDemoHistory: vi.fn((chainId) => historyByChain[chainId] || []),
         useCollectibleKeys: vi.fn(() => new Set()),
     };
@@ -58,11 +61,14 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 vi.mock('../../../packages/core/src/shared/hooks/useBalancesHidden.js', () => ({
     useBalancesHidden: () => [false],
 }));
-vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
-    useNativeFiatRates: () => mocks.emptyObject,
-    useTokenFiatRates: () => mocks.emptyObject,
-    priceNativeRows: (rows) => rows,
-    priceTokenRows: (rows) => rows,
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => ({
+    ...await importOriginal(),
+    useNativeFiatRates: () => mocks.nativeRates,
+    useTokenFiatRates: () => mocks.tokenRates,
+}));
+vi.mock('@xchain-wallet/core/branding/branding.js', async (importOriginal) => ({
+    ...await importOriginal(),
+    chainIconSmallUrl: mocks.chainIconSmallUrl,
 }));
 vi.mock('@xchain-wallet/core/flows', () => ({
     isDemoWallet: (walletId) => walletId === 'performance-wallet',
@@ -109,6 +115,33 @@ function largeBalances() {
     }));
 }
 
+function nativeBalances(quantities = {}) {
+    return Object.fromEntries(mocks.chainIds.map((chainId, chainIndex) => {
+        const nativeTick = chainIndex === 0 ? 'BTC' : chainIndex === 1 ? 'LTC' : 'DOGE';
+        return [chainId, [{
+            address: `render-count-address-${chainIndex}`,
+            balances: {
+                native: {
+                    tick: nativeTick,
+                    displayName: nativeTick,
+                    quantity: quantities[chainId] || '100000000',
+                    divisibility: 8,
+                    fiatRate: null,
+                },
+                tokens: [],
+            },
+        }]];
+    }));
+}
+
+function rowRenderCounts() {
+    const counts = new Map();
+    for (const [chainId] of mocks.chainIconSmallUrl.mock.calls) {
+        counts.set(chainId, (counts.get(chainId) || 0) + 1);
+    }
+    return Object.fromEntries(counts);
+}
+
 function mountLargeHome(onRender) {
     return render(
         <Profiler id="large-home" onRender={onRender}>
@@ -126,6 +159,9 @@ beforeEach(() => {
     localStorage.clear();
     mocks.synthesizeDemoHistory.mockClear();
     mocks.useCollectibleKeys.mockClear();
+    mocks.chainIconSmallUrl.mockClear();
+    mocks.nativeRates = {};
+    mocks.tokenRates = {};
 });
 
 afterEach(() => {
@@ -194,5 +230,63 @@ describe('Home large-wallet performance', () => {
 
         expect(initialRowReads).toBeGreaterThanOrEqual(300);
         expect(rowReads).toBe(initialRowReads);
+    });
+
+    it('renders only the balance row changed by a price or balance update', () => {
+        const bitcoinRate = { rate: 1, source: 'oracle', fetchedAt: '2026-10-13T12:00:00.000Z' };
+        const litecoinRate = { rate: 1, source: 'oracle', fetchedAt: '2026-10-13T12:00:00.000Z' };
+        const dogecoinRate = { rate: 1, source: 'oracle', fetchedAt: '2026-10-13T12:00:00.000Z' };
+        mocks.nativeRates = {
+            bitcoin: bitcoinRate,
+            litecoin: litecoinRate,
+            dogecoin: dogecoinRate,
+        };
+        const balances = nativeBalances();
+        const view = render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={balances}
+                balancesFetchedAt={1}
+                walletId="render-count-wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(rowRenderCounts()).toEqual({
+            'bitcoin-mainnet': 1,
+            'litecoin-mainnet': 1,
+            'dogecoin-mainnet': 1,
+        });
+
+        mocks.chainIconSmallUrl.mockClear();
+        mocks.nativeRates = {
+            bitcoin: { ...bitcoinRate, rate: 2, fetchedAt: '2026-10-13T12:01:00.000Z' },
+            litecoin: litecoinRate,
+            dogecoin: dogecoinRate,
+        };
+        view.rerender(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={balances}
+                balancesFetchedAt={2}
+                walletId="render-count-wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(rowRenderCounts()).toEqual({ 'bitcoin-mainnet': 1 });
+
+        mocks.chainIconSmallUrl.mockClear();
+        view.rerender(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={nativeBalances({ 'litecoin-mainnet': '200000000' })}
+                balancesFetchedAt={3}
+                walletId="render-count-wallet"
+                networkFilter="all"
+            />,
+        );
+
+        expect(rowRenderCounts()).toEqual({ 'litecoin-mainnet': 1 });
     });
 });
