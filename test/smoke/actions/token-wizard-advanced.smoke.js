@@ -215,7 +215,7 @@ assert.ok(
 // --- 10. CSS ------------------------------------------------------------
 
 for (const cls of [
-    'advanced', 'advancedBody', 'advancedHeading',
+    'advanced', 'advancedBody',
     'lockFlagRow', 'lockFlagHint', 'listRow',
 ]) {
     assert.ok(
@@ -223,5 +223,12 @@ for (const cls of [
         `TokenWizard.module.css ships .${cls}`,
     );
 }
+assert.ok(
+    /<FormSection\s+title="Locks \(permanent\)"/.test(src)
+        && /<FormSection\s+title="Callback"/.test(src)
+        && /<FormSection\s+title="Access lists"/.test(src),
+    'advanced groups delegate their headings and layout to FormSection',
+);
+assert.ok(!/\.advancedHeading[\s,{:]/.test(css), 'advanced groups have no route-level heading style');
 
 console.log('OK: token wizard advanced smoke (PC-06: create-time lock matrix + callback trio + access lists folded into the Custom template; shared LOCK_FLAGS + ListPickerScreen; create-only future-block and divisibility rails)');

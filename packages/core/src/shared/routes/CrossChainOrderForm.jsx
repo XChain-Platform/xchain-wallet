@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -421,11 +421,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         }
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Cross-chain order broadcast</h2>
+                <SectionHeader title="Cross-chain order broadcast" />
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Give-chain transaction</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : <p className={styles.hint}>Broadcast complete.</p>}
                 <p className={styles.hint}>
@@ -504,6 +505,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     Offer {giveOwnership ? `ownership of ${giveTick}` : `${giveAmount} ${giveTick}`} on {giveDescriptor?.displayName || giveChainId} for
                     {' '}{getOwnership ? `ownership of ${getTick}` : `${getAmount} ${getTick}`} on {getDescriptor?.displayName || getChainId}.
                 </p>
+                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow label="Give chain" value={giveDescriptor ? <ChainBadge descriptor={giveDescriptor} size="sm" /> : giveChainId} />
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
@@ -603,6 +605,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         spellCheck={false}
                     />
                     <label className={styles.checkRow}>
+                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
                         <input
                             type="checkbox"
                             checked={giveOwnership}
@@ -640,7 +643,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
                     />
-                    <Input
+                    <AddressField
                         label="Receive at"
                         hint="Your address on the get chain. Each fill is released to it."
                         value={getAddress}
@@ -663,6 +666,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         spellCheck={false}
                     />
                     <label className={styles.checkRow}>
+                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
                         <input
                             type="checkbox"
                             checked={getOwnership}
@@ -690,10 +694,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             <FormSection title="Order settings">
                     <p className={styles.successLabel}>Expiration</p>
                     <label className={styles.checkRow}>
+                        {/* Native radio remains because the UI kit has no segmented radio control. */}
                         <input type="radio" name="xorder-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                         {' '}Default window
                     </label>
                     <label className={styles.checkRow}>
+                        {/* Native radio remains because the UI kit has no segmented radio control. */}
                         <input type="radio" name="xorder-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                         {' '}Expire at a specific time
                     </label>

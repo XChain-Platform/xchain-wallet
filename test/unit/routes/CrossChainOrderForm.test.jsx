@@ -171,8 +171,8 @@ async function placeAndApprove(utils) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
+        const approve = utils.getAllByRole('button', { name: /approve/i })
+            .find((button) => !button.disabled);
         if (!approve) throw new Error('no enabled Approve button on the confirm page');
         fireEvent.click(approve);
         await drainMicrotasks();

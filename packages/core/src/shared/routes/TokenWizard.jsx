@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -756,11 +756,12 @@ export function TokenWizard({ walletId, onBack }) {
         }
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Token issued</h2>
+                <SectionHeader title="Token issued" />
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : (
                     <p className={styles.hint}>Broadcast complete.</p>
@@ -794,6 +795,7 @@ export function TokenWizard({ walletId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>{decoded?.summary}</p>
+                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow label="Template" value={templateLabel(template)} />
                     {displayName.trim() ? (
@@ -1113,27 +1115,29 @@ const TEMPLATES = [
 function renderTemplateStage({ onPick }) {
     return (
         <ListPage intro="Choose a template.">
+            {/* Native list markup preserves template-list semantics because the UI kit has no list primitive. */}
             <ul className={styles.templateGrid}>
                 {TEMPLATES.map((t) => (
+                    // Native list items preserve list semantics because the UI kit has no list-item primitive.
                     <li key={t.id}>
-                        <button
+                        <Button
                             type="button"
-                            className={
-                                t.interactive
-                                    ? styles.templateCard
-                                    : `${styles.templateCard} ${styles.templateCardDisabled}`
-                            }
+                            variant="secondary"
+                            block
+                            icon={null}
                             onClick={() => t.interactive && onPick(t.id)}
                             disabled={!t.interactive}
                             aria-disabled={!t.interactive}
                             title={t.interactive ? undefined : 'No dedicated form for this template yet. Use the Custom template instead.'}
                         >
-                            <span className={styles.templateName}>{t.name}</span>
-                            <span className={styles.templateTag}>{t.tagline}</span>
-                            {!t.interactive ? (
-                                <span className={styles.templateSoon}>Use the Custom template for now</span>
-                            ) : null}
-                        </button>
+                            <span className={styles.templateContent}>
+                                <span className={styles.templateName}>{t.name}</span>
+                                <span className={styles.templateTag}>{t.tagline}</span>
+                                {!t.interactive ? (
+                                    <span className={styles.templateSoon}>Use the Custom template for now</span>
+                                ) : null}
+                            </span>
+                        </Button>
                     </li>
                 ))}
             </ul>
@@ -1316,6 +1320,7 @@ function renderDetailsStage({
             ) : null}
             {show.divisible ? (
                 <label className={styles.checkRow}>
+                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
                     <input
                         type="checkbox"
                         checked={divisible}
@@ -1392,6 +1397,7 @@ function renderDetailsStage({
             ) : null}
             {show.lockOnCreate ? (
                 <label className={styles.checkRow}>
+                    {/* Native checkbox remains because the UI kit has no checkbox control. */}
                     <input
                         type="checkbox"
                         checked={lockOnCreate}
@@ -1401,7 +1407,7 @@ function renderDetailsStage({
                 </label>
             ) : null}
             {show.transferTo ? (
-                <Input
+                <AddressField
                     label="Transfer ownership to (optional)"
                     hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                     value={transferTo}
@@ -1412,7 +1418,7 @@ function renderDetailsStage({
                 />
             ) : null}
             {show.transferSupplyTo ? (
-                <Input
+                <AddressField
                     label="Send the initial mint to (optional)"
                     hint="Leave blank to keep the minted tokens at the issuing address."
                     value={transferSupplyTo}
@@ -1488,130 +1494,132 @@ function AdvancedIssuePanel({
                         rejects any value, it rejects the whole issuance and does not issue the token.
                     </p>
 
-                    <h3 className={styles.advancedHeading}>Locks (permanent)</h3>
-                    <p className={styles.hint}>
-                        Each flag is a one-way switch. Once the token is issued with a
-                        lock set, it can never be unlocked.
-                    </p>
-                    <div role="group" aria-label="Lock flags">
-                        {LOCK_FLAGS.map((f) => {
-                            const forced = !!forcedByShortcut[f.key];
-                            return (
-                                <div key={f.key} className={styles.lockFlagRow}>
-                                    <label className={styles.checkRow}>
-                                        <input
-                                            type="checkbox"
-                                            checked={forced || !!lockChecks[f.key]}
-                                            disabled={forced}
-                                            onChange={(e) => setLockChecks({
-                                                ...lockChecks,
-                                                [f.key]: e.target.checked,
-                                            })}
-                                        />
-                                        <span>
-                                            {f.label}
-                                            {forced ? ' (set by "Lock supply + minting immediately")' : ''}
-                                        </span>
-                                    </label>
-                                    <p className={styles.lockFlagHint}>{f.hint}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <FormSection
+                        title="Locks (permanent)"
+                        headingLevel="h3"
+                        description="Each flag is a one-way switch. Once the token is issued with a lock set, it can never be unlocked."
+                    >
+                        <div role="group" aria-label="Lock flags">
+                            {LOCK_FLAGS.map((f) => {
+                                const forced = !!forcedByShortcut[f.key];
+                                return (
+                                    <div key={f.key} className={styles.lockFlagRow}>
+                                        <label className={styles.checkRow}>
+                                            {/* Native checkbox remains because the UI kit has no checkbox control. */}
+                                            <input
+                                                type="checkbox"
+                                                checked={forced || !!lockChecks[f.key]}
+                                                disabled={forced}
+                                                onChange={(e) => setLockChecks({
+                                                    ...lockChecks,
+                                                    [f.key]: e.target.checked,
+                                                })}
+                                            />
+                                            <span>
+                                                {f.label}
+                                                {forced ? ' (set by "Lock supply + minting immediately")' : ''}
+                                            </span>
+                                        </label>
+                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </FormSection>
 
-                    <h3 className={styles.advancedHeading}>Callback</h3>
-                    <p className={styles.hint}>
-                        A callback lets you later recall <strong>all</strong> of this token
-                        back to your address in one action, paying every holder a set amount
-                        of another token per unit they held. It can only be configured before
-                        any supply is distributed, so setting it during issuance guarantees
-                        it is available.
-                    </p>
-                    <Input
-                        label="Callback token (optional)"
-                        hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
-                        value={callbackTick}
-                        onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
-                        autoComplete="off"
-                        autoCapitalize="characters"
-                        autoCorrect="off"
-                        spellCheck={false}
-                    />
-                    <Input
-                        label="Payout per unit"
-                        hint={callbackTickDecimals != null
-                            ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
-                            : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
-                        inputMode="decimal"
-                        value={callbackAmount}
-                        onChange={(e) => setCallbackAmount(e.target.value)}
-                        autoComplete="off"
-                    />
-                    <Input
-                        label="Callback allowed from block"
-                        hint={callbackBlockEstimate
-                            ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
-                            : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="numeric"
-                        value={callbackBlock}
-                        onChange={(e) => setCallbackBlock(e.target.value)}
-                        autoComplete="off"
-                    />
-                    {currentHeight != null ? (
+                    <FormSection
+                        title="Callback"
+                        headingLevel="h3"
+                        description={<>A callback lets you later recall <strong>all</strong> of this token back to your address in one action, paying every holder a set amount of another token per unit they held. It can only be configured before any supply is distributed, so setting it during issuance guarantees it is available.</>}
+                    >
+                        <Input
+                            label="Callback token (optional)"
+                            hint="The ticker holders are paid in when you call back. Must be a token you'll hold enough of to cover every holder."
+                            value={callbackTick}
+                            onChange={(e) => setCallbackTick(e.target.value.toUpperCase())}
+                            autoComplete="off"
+                            autoCapitalize="characters"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                        <Input
+                            label="Payout per unit"
+                            hint={callbackTickDecimals != null
+                                ? `How much of ${callbackTick} each holder receives per unit they hold. Up to ${callbackTickDecimals} decimal place${callbackTickDecimals === 1 ? '' : 's'}.`
+                                : 'How much of the callback token each holder receives per unit they hold. Whole numbers only until the wallet can confirm the callback token is divisible.'}
+                            inputMode="decimal"
+                            value={callbackAmount}
+                            onChange={(e) => setCallbackAmount(e.target.value)}
+                            autoComplete="off"
+                        />
+                        <Input
+                            label="Callback allowed from block"
+                            hint={callbackBlockEstimate
+                                ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
+                                : 'The earliest block height you can trigger the callback. Must be a future block.'}
+                            inputMode="numeric"
+                            value={callbackBlock}
+                            onChange={(e) => setCallbackBlock(e.target.value)}
+                            autoComplete="off"
+                        />
+                        {currentHeight != null ? (
+                            <p className={styles.hint}>
+                                Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
+                                Date above is a rough estimate; real block times vary.
+                            </p>
+                        ) : null}
+                    </FormSection>
+
+                    <FormSection
+                        title="Access lists"
+                        headingLevel="h3"
+                        description="Restrict who can interact with the token by pointing it at address lists you've published. An allow-list permits only its members; a block-list denies its members. Create one in My Lists first."
+                    >
+                        {/* Value-and-action rows remain custom because the UI kit has no list-picker field. */}
+                        <div className={styles.listRow}>
+                            <div className={styles.fromLine}>
+                                <span className={styles.detailsLabel}>Allow-list</span>
+                                <span className={styles.detailsValue}>
+                                    {allowListIdx
+                                        ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
+                                        : 'None (anyone may interact)'}
+                                </span>
+                            </div>
+                            <Button type="button" variant="ghost" onClick={() => onPickList('allow')}>
+                                {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
+                            </Button>
+                            {allowListIdx ? (
+                                <Button type="button" variant="ghost" onClick={() => onClearList('allow')}>
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </div>
+                        {/* Value-and-action rows remain custom because the UI kit has no list-picker field. */}
+                        <div className={styles.listRow}>
+                            <div className={styles.fromLine}>
+                                <span className={styles.detailsLabel}>Block-list</span>
+                                <span className={styles.detailsValue}>
+                                    {blockListIdx
+                                        ? `${listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
+                                        : 'None'}
+                                </span>
+                            </div>
+                            <Button type="button" variant="ghost" onClick={() => onPickList('block')}>
+                                {blockListIdx ? 'Change block-list' : 'Choose block-list'}
+                            </Button>
+                            {blockListIdx ? (
+                                <Button type="button" variant="ghost" onClick={() => onClearList('block')}>
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </div>
                         <p className={styles.hint}>
-                            Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
-                            Date above is a rough estimate; real block times vary.
+                            Removing a list here only clears it before the token exists. Once
+                            issued, a bound list can be replaced but never removed: the
+                            protocol has no "clear" for one. To lift a restriction later, point
+                            it at an empty address list.
                         </p>
-                    ) : null}
-
-                    <h3 className={styles.advancedHeading}>Access lists</h3>
-                    <p className={styles.hint}>
-                        Restrict who can interact with the token by pointing it at address
-                        lists you've published. An allow-list permits only its members; a
-                        block-list denies its members. Create one in My Lists first.
-                    </p>
-                    <div className={styles.listRow}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Allow-list</span>
-                            <span className={styles.detailsValue}>
-                                {allowListIdx
-                                    ? `${listLabel(allowListIdx, allowListName)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None (anyone may interact)'}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => onPickList('allow')}>
-                            {allowListIdx ? 'Change allow-list' : 'Choose allow-list'}
-                        </Button>
-                        {allowListIdx ? (
-                            <Button type="button" variant="ghost" onClick={() => onClearList('allow')}>
-                                Remove
-                            </Button>
-                        ) : null}
-                    </div>
-                    <div className={styles.listRow}>
-                        <div className={styles.fromLine}>
-                            <span className={styles.detailsLabel}>Block-list</span>
-                            <span className={styles.detailsValue}>
-                                {blockListIdx
-                                    ? `${listLabel(blockListIdx, blockListName)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}`
-                                    : 'None'}
-                            </span>
-                        </div>
-                        <Button type="button" variant="ghost" onClick={() => onPickList('block')}>
-                            {blockListIdx ? 'Change block-list' : 'Choose block-list'}
-                        </Button>
-                        {blockListIdx ? (
-                            <Button type="button" variant="ghost" onClick={() => onClearList('block')}>
-                                Remove
-                            </Button>
-                        ) : null}
-                    </div>
-                    <p className={styles.hint}>
-                        Removing a list here only clears it before the token exists. Once
-                        issued, a bound list can be replaced but never removed: the
-                        protocol has no "clear" for one. To lift a restriction later, point
-                        it at an empty address list.
-                    </p>
+                    </FormSection>
 
                     {warnings.length > 0 ? (
                         <div role="alert" className={styles.warnings}>
