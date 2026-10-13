@@ -34,7 +34,7 @@ import {
     SMALL_BALANCE_THRESHOLD_DEFAULT,
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
-import { INPUT, ROW, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -236,7 +236,7 @@ export function DisplaySection() {
                 onChange={(next) => updateDisplay({ privacy: { hideSmallBalances: next } })}
             />
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Dust uses each network&apos;s relay limit and 0.0001 units for divisible tokens. Other choices apply in whole asset units.</span>
                 </div>
@@ -253,7 +253,7 @@ export function DisplaySection() {
                 </select>
             </div>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Formatting changes display only. Stored and submitted amounts keep their exact value.</span>
                 </div>

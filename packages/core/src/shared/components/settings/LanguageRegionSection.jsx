@@ -24,6 +24,7 @@ import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import {
     ROW,
+    ROW_COPY,
     ROW_HINT,
     ROW_VALUE,
     SELECT,
@@ -163,7 +164,7 @@ export function LanguageRegionSection() {
     return (
         <div style={STACK}>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Language</span>
                     <span style={ROW_HINT}>Choose the language used for wallet navigation, settings, and messages.</span>
                 </div>
@@ -179,7 +180,7 @@ export function LanguageRegionSection() {
                 </select>
             </div>
             <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>Fiat currency</span>
                     <span style={ROW_HINT}>Show estimated wallet values in this currency. Asset balances are unchanged.</span>
                 </div>

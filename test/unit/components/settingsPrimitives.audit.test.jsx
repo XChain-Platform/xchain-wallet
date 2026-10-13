@@ -23,6 +23,12 @@ vi.mock('../../../packages/core/src/shared/components/LogConsole.jsx', () => ({
 const { ToggleRow } = await import(
     '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx'
 );
+const { DisplaySection } = await import(
+    '../../../packages/core/src/shared/components/settings/DisplaySection.jsx'
+);
+const { LanguageRegionSection } = await import(
+    '../../../packages/core/src/shared/components/settings/LanguageRegionSection.jsx'
+);
 const { AppearanceSection } = await import(
     '../../../packages/core/src/shared/components/settings/AppearanceSection.jsx'
 );
@@ -56,6 +62,21 @@ afterEach(() => {
 });
 
 describe('shared settings row semantics', () => {
+    it('wraps the currency and threshold controls before their label copy is squeezed', () => {
+        render(<LanguageRegionSection />);
+        const currencyCopy = screen.getByText('Fiat currency').parentElement;
+        expect(currencyCopy.parentElement.style.flexWrap).toBe('wrap');
+        expect(currencyCopy.style.flex).toBe('1 1 280px');
+        expect(currencyCopy.style.minWidth).toBe('min(100%, 280px)');
+
+        cleanup();
+        render(<DisplaySection />);
+        const thresholdCopy = screen.getByText('Small-balance threshold').parentElement;
+        expect(thresholdCopy.parentElement.style.flexWrap).toBe('wrap');
+        expect(thresholdCopy.style.flex).toBe('1 1 280px');
+        expect(thresholdCopy.style.minWidth).toBe('min(100%, 280px)');
+    });
+
     it('pairs a toggle label and description with its checked state', () => {
         const onChange = vi.fn();
         render(
