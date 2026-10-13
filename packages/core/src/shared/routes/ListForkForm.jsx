@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -1065,18 +1065,12 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
-                                <div className={styles.listMemberToggle}>
-                                    <Input
-                                        id={`fork-current-member-${index}`}
-                                        type="checkbox"
-                                        checked={keep.has(item)}
-                                        onChange={() => toggleKeep(item)}
-                                        className={styles.listMemberCheckbox}
-                                    />
-                                    <label htmlFor={`fork-current-member-${index}`}>
-                                        <code>{item}</code>
-                                    </label>
-                                </div>
+                                <Checkbox
+                                    id={`fork-current-member-${index}`}
+                                    label={<code>{item}</code>}
+                                    checked={keep.has(item)}
+                                    onChange={() => toggleKeep(item)}
+                                />
                             </li>
                         ))}
                     </ul>

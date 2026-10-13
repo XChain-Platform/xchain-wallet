@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -734,15 +734,12 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                         : 'The native actions this guard is asked about. One binding per class.'}
             </p>
 
-            <label className={styles.checkRow}>
-                {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
-                <input
-                    type="checkbox"
-                    checked={unbind}
-                    onChange={(e) => setUnbind(e.target.checked)}
-                />
-                <span>Unbind (remove the controller) instead of binding</span>
-            </label>
+            <Checkbox
+                className={styles.checkRow}
+                label="Unbind (remove the controller) instead of binding"
+                checked={unbind}
+                onChange={(e) => setUnbind(e.target.checked)}
+            />
 
             {!unbind ? (
                 <Input

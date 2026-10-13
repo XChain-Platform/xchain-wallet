@@ -1134,9 +1134,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Vote',
             fill: (utils) => {
                 // Approval mode: tick the first option.
-                const box = utils.container.querySelector('input[type="checkbox"]');
-                if (!box) throw new Error('no option checkbox on the ballot editor');
-                fireEvent.click(box);
+                fireEvent.click(utils.getByRole('checkbox', { name: '0: Yes' }));
             },
         });
 
