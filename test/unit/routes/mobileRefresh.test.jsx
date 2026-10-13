@@ -60,7 +60,7 @@ describe('mobile refresh', () => {
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
-        expect(await screen.findByText('BTC')).toBeInTheDocument();
+        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Refresh balances' }));
 
         const refreshing = screen.getByRole('button', { name: 'Refreshing balances…' });
@@ -71,7 +71,7 @@ describe('mobile refresh', () => {
         await act(async () => { held.reject(new Error('Failed to fetch')); });
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
-        expect(screen.getByText('BTC')).toBeInTheDocument();
+        expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
     });
 
@@ -109,11 +109,11 @@ describe('mobile refresh', () => {
             <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
         ));
 
-        expect(await screen.findByText('BTC')).toBeInTheDocument();
+        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Refresh balances' }));
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
-        expect(screen.getByText('BTC')).toBeInTheDocument();
+        expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
         expect(screen.queryByText(/retrying/)).toBeNull();
     });
 
