@@ -900,6 +900,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 label="Address"
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                                error={addAddrError}
                                 placeholder=""
                                 autoFocus
                                 autoComplete="off"
@@ -910,9 +911,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
-                            {addAddrError ? (
-                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
-                            ) : null}
                             <div className={picker.modalActions}>
                                 <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>

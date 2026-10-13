@@ -35,6 +35,8 @@
 //       heading, several paragraphs, a button group). `<StatusMessage>`
 //       wraps its children in a `<span>`, so a panel migrated through it
 //       would put block content inside inline content.
+//   (f) field errors. These use the compact shared Input error row because
+//       the control references the message through `aria-describedby`.
 //
 // Static source-analysis smoke, matching error-recovery-sweep.smoke.js.
 
@@ -128,6 +130,7 @@ for (const f of files) {
         if (!/role="alert"/.test(tag)) continue;
         if (/style=/.test(tag)) continue;                                    // (c)
         if (/data-testid/.test(tag)) continue;                               // (b)
+        if (/className=\{inputStyles\.error\}/.test(tag)) continue;          // (f)
         const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(tag);
         if (cls && /warn/i.test(cls[1])) continue;                           // (a)
         // (e): peek at the body. A row whose children are block elements is a
@@ -147,7 +150,7 @@ assert.deepEqual(
 // --- 6. named call sites, so a wholesale revert cannot pass -----------
 
 const named = {
-    'packages/core/src/shared/components/TokenField.jsx': /<StatusMessage variant="error" id=\{errorId\} className=\{styles\.error\}>\{error\}<\/StatusMessage>/,
+    'packages/core/src/shared/components/TokenField.jsx': /<div id=\{errorId\} className=\{inputStyles\.error\} role="alert">\{error\}<\/div>/,
     'packages/core/src/shared/routes/ResumeConfirm.jsx': /<StatusMessage variant="error">\{error\}<\/StatusMessage>/,
     'packages/core/src/shared/routes/Send.jsx': /<StatusMessage variant="error" className=\{styles\.error\}>\{loadError\}<\/StatusMessage>/,
 };
