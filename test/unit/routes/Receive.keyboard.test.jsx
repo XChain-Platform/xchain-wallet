@@ -111,7 +111,7 @@ describe('Receive keyboard operation', () => {
         const chainPicker = screen.getByRole('button', { name: /All networks/ });
         expect(document.activeElement).toBe(chainPicker);
         await user.keyboard('{Enter}');
-        await user.tab();
+        // Opening the list moves focus to the selected option.
         expect(document.activeElement).toBe(screen.getByRole('option', { name: /^All networks/ }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('option', { name: /^Bitcoin/ }));
@@ -121,7 +121,8 @@ describe('Receive keyboard operation', () => {
         await user.keyboard('{Enter}');
 
         expect(document.activeElement).toBe(chainPicker);
-        const kindTabs = screen.getAllByRole('tab');
+        // Kind tabs use a roving tabindex: only the selected tab is a tab stop.
+        const kindTabs = screen.getAllByRole('tab').filter((tab) => tab.getAttribute('tabindex') !== '-1');
         for (const tab of kindTabs) {
             await user.tab();
             expect(document.activeElement).toBe(tab);
