@@ -64,6 +64,14 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+.input:is([type='date'], [type='datetime-local'], [type='time']) {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
 .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
     cursor: pointer;
     opacity: 0.7;

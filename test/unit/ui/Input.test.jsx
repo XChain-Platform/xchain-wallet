@@ -342,6 +342,18 @@ describe('<Input>', () => {
         expect(onChange.mock.calls[0][0].target.value).toBe(max);
     });
 
+    it('constrains native date and time controls to their container', () => {
+        const css = readFileSync('packages/core/src/ui/Input.module.css', 'utf8');
+        const rule = /\.input:is\(\[type='date'\], \[type='datetime-local'\], \[type='time'\]\)\s*\{([^}]*)\}/s
+            .exec(css)?.[1];
+
+        expect(rule).toMatch(/-webkit-appearance:\s*none/);
+        expect(rule).toMatch(/appearance:\s*none/);
+        expect(rule).toMatch(/box-sizing:\s*border-box/);
+        expect(rule).toMatch(/width:\s*100%/);
+        expect(rule).toMatch(/min-width:\s*0/);
+    });
+
     it('explains date range violations and clears the error after a valid entry', () => {
         render(
             <Input
