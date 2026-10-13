@@ -17,12 +17,9 @@
 // are written down, because a residual `role="alert"` is otherwise
 // indistinguishable from one the sweep simply missed:
 //
-//   (a) warning-styled rows. `<StatusMessage>` ships status / error /
-//       success and has no `warning`. Its `error` variant paints solid
-//       `--xc-danger` with white text, so migrating an amber
-//       `.warnings` container would silently promote every warning on the
-//       send path into an error. Those keep their own markup until the
-//       primitive grows a fourth variant.
+//   (a) warning-styled panels whose bespoke block layout does not fit the
+//       message-row primitive. They keep their own markup, but warning message
+//       rows use the primitive's warning variant.
 //   (b) rows carrying `data-testid`. `<StatusMessage>` has no pass-through
 //       for it, and the confirm-refusal / psbt-undecodable hooks are what
 //       the fail-closed regression tests query.
@@ -91,14 +88,15 @@ for (const f of adopters) {
     );
 }
 
-// --- 3. carve-out (a): no warning-styled row wears the error variant ---
+// --- 3. warning-styled message rows use the warning variant ------------
 
 for (const el of elements) {
     const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(el.attrs);
-    assert.ok(
-        !cls || !/warn/i.test(cls[1]),
-        `${el.file}: <StatusMessage> carries the warning-styled class \`${cls && cls[1]}\`; `
-        + 'the primitive has no warning variant, so its error styling would recolour a warning as an error',
+    if (!cls || !/warn/i.test(cls[1])) continue;
+    assert.match(
+        el.attrs,
+        /variant="warning"/,
+        `${el.file}: a warning-styled <StatusMessage> must use variant="warning"`,
     );
 }
 
@@ -171,12 +169,12 @@ assert.match(
     'Send.module.css.warnings no longer keys off --xc-warning; revisit carve-out (a)',
 );
 
-// StatusMessage still ships exactly three variants, which is why (a) exists.
+// StatusMessage owns the complete semantic status set.
 const primitive = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.jsx'), 'utf8');
 assert.match(
     primitive,
-    /'status' \| 'error' \| 'success'/,
-    'StatusMessage variant set changed; re-run the sweep against the new variants',
+    /'status' \| 'info' \| 'warning' \| 'error' \| 'success'/,
+    'StatusMessage must expose info, warning, error and success variants',
 );
 assert.ok(
     !/data-testid/.test(primitive),
@@ -190,10 +188,10 @@ assert.ok(
 // public tester saw "a blank red bar", 2026-09-02). Compound selectors keep
 // the variant colours above any single-class caller override.
 const primitiveCss = readFileSync(join(root, 'packages/core/src/ui/StatusMessage.module.css'), 'utf8');
-for (const variant of ['status', 'error', 'success']) {
+for (const variant of ['status', 'info', 'warning', 'error', 'success']) {
     assert.match(
         primitiveCss,
-        new RegExp(`^\\.row\\.${variant} \\{`, 'm'),
+        new RegExp(`^\\.row\\.${variant}(?:,| \\{)`, 'm'),
         `StatusMessage.module.css paints the ${variant} variant through the compound .row.${variant} selector`,
     );
     assert.ok(

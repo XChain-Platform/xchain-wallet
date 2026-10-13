@@ -128,7 +128,7 @@
     border-color: var(--xc-danger);
 }
 .invalid:focus {
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+    box-shadow: 0 0 0 3px var(--xc-danger-bg);
 }
 
 .hint {

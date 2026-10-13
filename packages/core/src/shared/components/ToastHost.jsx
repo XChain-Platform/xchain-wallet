@@ -23,7 +23,7 @@ const ACTION_MIN_DURATION_MS = 12000;
  *   actionLabel?: string,
  *   onAction?: () => void | Promise<void>,
  *   durationMs?: number,
- *   variant?: 'default' | 'success' | 'error',
+ *   variant?: 'default' | 'info' | 'warning' | 'success' | 'error',
  * }} ToastInput
  */
 
@@ -84,6 +84,7 @@ export function ToastHost({ children }) {
             return prev.map((toast, index) => (index === existingIndex ? record : toast));
         });
         if (record.variant === 'error') haptic.error();
+        else if (record.variant === 'warning') haptic.warn();
         else if (record.variant === 'success') haptic.success();
         else haptic.tap();
         return id;
@@ -171,10 +172,11 @@ export function ToastHost({ children }) {
 }
 
 function ToastItem({ toast, onAction, onDismiss }) {
-    const variant = toast.variant || 'default';
+    const presentation = TOAST_PRESENTATION[toast.variant || 'default'] || TOAST_PRESENTATION.default;
     return (
         <div
-            className={`${styles.toast} ${styles[`variant_${variant}`] || ''}`}
+            className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
+            data-variant={presentation.tone}
             onKeyDown={(event) => {
                 if (event.key !== 'Escape') return;
                 event.preventDefault();
@@ -182,6 +184,7 @@ function ToastItem({ toast, onAction, onDismiss }) {
                 onDismiss();
             }}
         >
+            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <span className={styles.message}>{toast.message}</span>
             <div className={styles.controls}>
                 {toast.actionLabel && toast.onAction ? (
@@ -205,6 +208,14 @@ function ToastItem({ toast, onAction, onDismiss }) {
         </div>
     );
 }
+
+const TOAST_PRESENTATION = {
+    default: { tone: 'info', icon: 'ℹ' },
+    info: { tone: 'info', icon: 'ℹ' },
+    warning: { tone: 'warning', icon: '⚠' },
+    success: { tone: 'success', icon: '✓' },
+    error: { tone: 'error', icon: '✕' },
+};
 
 /**
  * Hook for routes / components that want to surface a toast. Falls back

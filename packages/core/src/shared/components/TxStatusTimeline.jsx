@@ -57,7 +57,7 @@ const MEMPOOL_STAGE_COPY = {
     failed: {
         label: 'Failed',
         done: false,
-        warn: true,
+        error: true,
         sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
     },
 };
@@ -244,11 +244,12 @@ export function TxStatusTimeline({
                     <li
                         key={s.key}
                         className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                            + (s.warn ? ` ${styles.rowWarn}` : '')}
+                            + (s.warn ? ` ${styles.rowWarn}` : '')
+                            + (s.error ? ` ${styles.rowError}` : '')}
                         aria-current={current ? 'step' : undefined}
                     >
                         <span className={styles.dot} aria-hidden="true">
-                            {s.warn ? '!' : (s.done ? '●' : '○')}
+                            {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
                         </span>
                         {i < stages.length - 1 ? (
                             <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
