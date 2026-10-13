@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -22,6 +22,12 @@ import {
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+
+export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
+    if (typeof src !== 'string' || src.length === 0) return false;
+    if (allowRemoteImages) return true;
+    return /^(?:data:|blob:)/i.test(src);
+}
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -49,7 +55,8 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
- * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
+ * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
+ * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  */
 export function BalanceList({
     rows,
@@ -72,6 +79,7 @@ export function BalanceList({
     numberFormat = 'full',
     showChain = false,
     fiatCurrency = 'USD',
+    allowRemoteImages = true,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
@@ -113,6 +121,7 @@ export function BalanceList({
             ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.tick}`)),
         ]
         : visible;
+    const labelChains = showChain || new Set(rows.map((row) => row.chainId).filter(Boolean)).size > 1;
     return (
         // Every row is a listitem wrapper around its details button and its
         // pin and hide controls, so the container stays a list in both modes.
@@ -134,7 +143,8 @@ export function BalanceList({
                         hidden={false}
                         onToggleHide={onToggleHide}
                         verify={verifyMap ? verifyMap[key] : null}
-                        showChain={showChain}
+                        showChain={labelChains}
+                        allowRemoteImages={allowRemoteImages}
                     />
                 );
             })}
@@ -167,7 +177,8 @@ export function BalanceList({
                                 hidden
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
+                                allowRemoteImages={allowRemoteImages}
                             />
                         );
                     }) : null}
@@ -202,7 +213,8 @@ export function BalanceList({
                                 hidden={false}
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
+                                allowRemoteImages={allowRemoteImages}
                             />
                         );
                     }) : null}
@@ -212,9 +224,12 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD', numberFormat = 'full' }) {
+function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
+        ? row.imageUrl
+        : null;
     // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
@@ -251,6 +266,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
     );
+    const hasPending = safeBigInt(row.pendingQuantity) > 0n;
     const clickable = typeof onSelect === 'function';
     const actionLabel = clickable && typeof getActionLabel === 'function'
         ? getActionLabel(row)
@@ -265,12 +281,17 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
             fiatRate: row.fiatRate,
             fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
-            imageUrl: row.imageUrl,
+            imageUrl: tokenImageUrl,
         })
         : undefined;
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
     const ContentTag = clickable ? 'button' : 'div';
+    const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
+    const escrowLabel = row.escrowed ? escrowLine(row) : null;
+    const fiatLabel = row.unavailable === 'partial'
+        ? `At least ${formatRowFiat(row, fiat, fiatCurrency)}`
+        : formatRowFiat(row, fiat, fiatCurrency);
     return (
         <div
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
@@ -284,31 +305,38 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 aria-label={clickable ? actionLabel : undefined}
             >
                 <div className={styles.iconWrap}>
+                    <span
+                        className={styles.iconLetter}
+                        style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
+                        aria-hidden="true"
+                    >
+                        {row.tick.slice(0, 1) || '?'}
+                    </span>
                     {isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
-                    ) : row.imageUrl ? (
                         <img
-                            src={row.imageUrl}
+                            src={chainIconUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ position: 'absolute', inset: 0 }}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                    ) : tokenImageUrl ? (
+                        <img
+                            src={tokenImageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.iconImg}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ position: 'absolute', inset: 0 }}
                             onError={(e) => {
-                                // If the published image 404s, fall back to
-                                // the letter chip by hiding the broken img;
-                                // the next render still has imageUrl set, so
-                                // we can't swap to <span>, so just hide.
                                 e.currentTarget.style.display = 'none';
                             }}
                         />
-                    ) : (
-                        <span
-                            className={styles.iconLetter}
-                            style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
-                            aria-hidden="true"
-                        >
-                            {row.tick.slice(0, 1)}
-                        </span>
-                    )}
+                    ) : null}
                     {!isNative && chainIconUrl ? (
                         <img
                             src={chainIconUrl}
@@ -316,6 +344,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             aria-hidden="true"
                             title={row.chainDisplayName}
                             className={styles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
                         />
                     ) : null}
                 </div>
@@ -334,7 +364,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                         ) : null}
                     </div>
-                    <div className={styles.subtitle}>{subtitle}</div>
+                    <div className={styles.subtitle} title={subtitle}>{subtitle}</div>
                 </div>
                 <div className={styles.amounts}>
                     <div className={styles.qty}>
@@ -348,11 +378,23 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             ? '•••••'
                             : row.unavailable === 'all'
                                 ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                                : formatAmount(row.quantity, row.divisibility, numberFormat)}
+                                : (
+                                    <FitAmount title={quantityLabel}>
+                                        {quantityLabel}
+                                        {hasPending ? <span className={styles.subtitle}> confirmed</span> : null}
+                                    </FitAmount>
+                                )}
                     </div>
+                    {hasPending ? (
+                        <div className={styles.fiat} data-testid="balance-pending">
+                            {balancesHidden
+                                ? '••• pending'
+                                : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
+                        </div>
+                    ) : null}
                     {row.escrowed ? (
                         <div className={styles.fiat} data-testid="balance-escrowed">
-                            {balancesHidden ? '•••' : escrowLine(row)}
+                            {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
                         </div>
                     ) : null}
                     <div className={styles.fiat}>
@@ -361,8 +403,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                             : row.unavailable === 'all'
                                 ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                                 : row.unavailable === 'partial'
-                                    ? <span title={row.unavailableReason || undefined}>At least {formatRowFiat(row, fiat, fiatCurrency)}</span>
-                                    : formatRowFiat(row, fiat, fiatCurrency)}
+                                    ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
+                                    : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
                     </div>
                 </div>
             </ContentTag>
@@ -399,6 +441,55 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 </button>
             ) : null}
         </div>
+    );
+}
+
+function FitAmount({ children, title }) {
+    const containerRef = useRef(null);
+    const innerRef = useRef(null);
+    const [scale, setScale] = useState(1);
+
+    useLayoutEffect(() => {
+        const container = containerRef.current;
+        const inner = innerRef.current;
+        if (!container || !inner) return undefined;
+        let cancelled = false;
+        const measure = () => {
+            if (cancelled) return;
+            inner.style.transform = 'scale(1)';
+            const available = Math.max(0, container.clientWidth - 2);
+            const required = inner.scrollWidth;
+            const next = available > 0 && required > available ? available / required : 1;
+            inner.style.transform = `scale(${next})`;
+            setScale(next);
+        };
+        measure();
+        document.fonts?.ready?.then(measure);
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => {
+                cancelled = true;
+                window.removeEventListener('resize', measure);
+            };
+        }
+        const observer = new ResizeObserver(measure);
+        observer.observe(container);
+        return () => {
+            cancelled = true;
+            observer.disconnect();
+        };
+    }, [children]);
+
+    return (
+        <span ref={containerRef} className={styles.amountFit} title={title}>
+            <span
+                ref={innerRef}
+                className={styles.amountFitInner}
+                style={{ transform: `scale(${scale})` }}
+            >
+                {children}
+            </span>
+        </span>
     );
 }
 
@@ -449,11 +540,11 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
 /**
  * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
  *
- * Zero is always dust, which is the case the user actually hits: an empty
- * LTC / DOGE row on a Bitcoin-only wallet. Above zero, native rows compare
- * against their chain's threshold, and divisible tokens against a ten-thousandth
- * of a unit (the same magnitude the spam heuristic already calls airdrop dust).
- * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
+ * Zero confirmed quantity is dust only when no pending native funds exist.
+ * Above zero, native rows compare against their chain's threshold, and
+ * divisible tokens against a ten-thousandth of a unit (the same magnitude the
+ * spam heuristic already calls airdrop dust). An indivisible token is never
+ * dust: one unit is one whole thing, usually an NFT.
  *
  * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
  * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
@@ -461,7 +552,7 @@ const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
  */
 export function isSmallBalanceRow(row, threshold = 'dust') {
     if (!row) return false;
-    if (row.escrowed || row.unavailable) return false;
+    if (row.escrowed || row.unavailable || safeBigInt(row.pendingQuantity) > 0n) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
@@ -565,6 +656,10 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     });
                 }
                 nativeAcc.quantity += safeBigInt(b.native.quantity);
+                if (b.native.pendingQuantity != null) {
+                    nativeAcc.pendingQuantity = (nativeAcc.pendingQuantity || 0n)
+                        + safeBigInt(b.native.pendingQuantity);
+                }
             }
 
             if (Array.isArray(b.tokens)) {
@@ -621,7 +716,11 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
         if (nativeAcc) out.push(nativeAcc);
         for (const acc of tokenAcc.values()) out.push(acc);
     }
-    return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
+    return out.map((r) => ({
+        ...r,
+        quantity: r.quantity.toString(),
+        ...(r.pendingQuantity == null ? {} : { pendingQuantity: r.pendingQuantity.toString() }),
+    }));
 }
 
 /**

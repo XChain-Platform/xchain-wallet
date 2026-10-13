@@ -31,6 +31,11 @@ function ThrowingRoute() {
     throw new Error('route render failed');
 }
 
+function TransientRoute({ shouldFail }) {
+    if (shouldFail()) throw new Error('private render details');
+    return <h1>Recovered route</h1>;
+}
+
 function TestRouter() {
     const [route, setRoute] = useState('broken');
     return (
@@ -67,5 +72,29 @@ describe('RouteErrorBoundary', () => {
         expect(screen.queryByRole('button', { name: 'Back to Home' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
         expect(onReload).toHaveBeenCalledOnce();
+    });
+
+    it('retries a render without exposing the error or stack trace', async () => {
+        let failed = true;
+        const stackMarker = 'secret/component/file.jsx:42';
+        function FailingRoute() {
+            if (failed) {
+                const error = new Error('private render details');
+                error.stack = stackMarker;
+                throw error;
+            }
+            return <TransientRoute shouldFail={() => false} />;
+        }
+
+        render(
+            <RouteErrorBoundary onRetry={() => { failed = false; }}>
+                <FailingRoute />
+            </RouteErrorBoundary>,
+        );
+
+        expect(screen.queryByText('private render details')).toBeNull();
+        expect(screen.queryByText(stackMarker)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Recovered route' })).toBeTruthy());
     });
 });

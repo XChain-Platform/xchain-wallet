@@ -45,6 +45,7 @@ import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { multiplyAmounts } from '../../market/orderMath.js';
 import { baseUnitsToCoinText } from '../../market/obligationStatus.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import styles from './MarketTrading.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -720,7 +721,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
+            <div className={styles.sideToggle} role="group" aria-label="Order side">
                 <button
                     type="button"
                     onClick={() => setSide('buy')}
@@ -762,20 +763,22 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     Sell {tick1}
                 </button>
             </div>
-            <Input
-                label={`Price (${tick2})`}
-                value={price}
-                onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
-                inputMode="decimal"
-                autoComplete="off"
-            />
-            <Input
-                label={`Size (${tick1})`}
-                value={size}
-                onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
-                inputMode="decimal"
-                autoComplete="off"
-            />
+            <div className={styles.priceAmountFields} role="group" aria-label="Price and amount">
+                <Input
+                    label={`Price (${tick2})`}
+                    value={price}
+                    onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+                <Input
+                    label={`Size (${tick1})`}
+                    value={size}
+                    onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                />
+            </div>
             <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -797,8 +800,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     value={expirationId}
                     onChange={(e) => setExpirationId(e.target.value)}
                     style={{
-                        appearance: 'none',
-                        padding: 'var(--xc-space-2) calc(var(--xc-space-3) + 16px) var(--xc-space-2) var(--xc-space-3)',
+                        padding: 'var(--xc-space-2) var(--xc-space-3)',
                         fontFamily: 'var(--xc-font-sans)',
                         fontSize: 'var(--xc-text-md)',
                         color: 'var(--xc-text)',
@@ -809,10 +811,6 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                         width: '100%',
                         cursor: 'pointer',
                         font: 'inherit',
-                        backgroundImage:
-                            'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\' viewBox=\'0 0 10 6\'><path fill=\'%23888\' d=\'M0 0l5 6 5-6z\'/></svg>")',
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'right var(--xc-space-3) center',
                     }}
                 >
                     {EXPIRATION_PRESETS.map((p) => (

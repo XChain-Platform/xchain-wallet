@@ -100,7 +100,7 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
  * renderer parses via its own action decoder).
  *
  * @param {import('electron').App} app
- * @param {{ onDeepLink: (evt: DeepLinkEvent) => void }} opts
+ * @param {{ onDeepLink: (evt: DeepLinkEvent) => void, onSecondInstance?: () => void }} opts
  * @returns {{ gotLock: boolean }}  false means another instance already holds it and we should quit
  *
  * @typedef {Object} DeepLinkEvent
@@ -108,7 +108,7 @@ export function updateCoinSchemeOptIn(app, optedInSchemes) {
  * @property {string} raw                     the URI as received
  * @property {import('@xchain-wallet/core/uri/bip21.js').Bip21Uri | null} parsed   non-null for bitcoin/litecoin/dogecoin
  */
-export function attachDeepLinkHandlers(app, { onDeepLink }) {
+export function attachDeepLinkHandlers(app, { onDeepLink, onSecondInstance }) {
     if (typeof onDeepLink !== 'function') {
         throw new Error('attachDeepLinkHandlers: onDeepLink must be a function');
     }
@@ -124,8 +124,10 @@ export function attachDeepLinkHandlers(app, { onDeepLink }) {
 
     // Windows/Linux subsequent launches: the OS passes the URL through
     // the second-instance's argv. We scan for anything matching our
-    // schemes and dispatch.
+    // schemes and dispatch. Raising the existing window is independent of
+    // whether the launch carries a deep link.
     app.on('second-instance', (_event, argv, _cwd) => {
+        onSecondInstance?.();
         const url = findDeepLinkInArgv(argv);
         if (url) dispatch(url, onDeepLink);
     });
@@ -133,9 +135,8 @@ export function attachDeepLinkHandlers(app, { onDeepLink }) {
     // First-launch URL (Windows/Linux): may already be on our own argv.
     const initial = findDeepLinkInArgv(process.argv);
     if (initial) {
-        // Defer to after whenReady so the renderer exists; `app.whenReady`
-        // resolving is the caller's responsibility; we just queue on
-        // next tick so the caller can attach listeners after us.
+        // Queue on the next turn so main can install its lifecycle handlers.
+        // Main parks the event until its first renderer can claim it.
         setImmediate(() => dispatch(initial, onDeepLink));
     }
 

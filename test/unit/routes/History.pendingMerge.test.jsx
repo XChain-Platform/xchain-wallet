@@ -22,6 +22,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import { livePendingTxs } from '../../../packages/core/src/flows/pendingTxFeed.js';
+import { DROPPED_GRACE_MS } from '../../../packages/core/src/shared/utils/pendingHistory.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -245,6 +246,45 @@ describe('History shows unconfirmed transactions', () => {
         vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
+    });
+
+    it('keeps an incoming row when it leaves the mempool and labels it dropped', async () => {
+        const { messaging, view } = mountHistory({ mempool: [mempoolRow()] });
+        await waitFor(() => expect(
+            view.container.querySelector('[data-pending-state="seen"]'),
+        ).toBeTruthy());
+
+        vi.useFakeTimers({ toFake: ['Date'] });
+        messaging.getAddressMempool.mockRejectedValueOnce(new Error('temporary outage'));
+        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        window.dispatchEvent(new Event('focus'));
+        await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(2));
+        expect(view.container.querySelector(`[data-history-key="pending:${CHAIN}:${PENDING_HASH}"]`))
+            .toBeTruthy();
+        expect(view.container.querySelector('[data-pending-state="seen"]')).toBeTruthy();
+
+        messaging.getAddressMempool.mockResolvedValueOnce([]);
+        vi.setSystemTime(Date.now() + DROPPED_GRACE_MS + 1);
+        window.dispatchEvent(new Event('focus'));
+        await waitFor(() => expect(messaging.getAddressMempool).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(
+            view.container.querySelector('[data-pending-state="dropped"]'),
+        ).toBeTruthy());
+        expect(view.container.querySelector(`[data-history-key="pending:${CHAIN}:${PENDING_HASH}"]`))
+            .toBeTruthy();
+    });
+
+    it('refreshes confirmation counts from the advancing indexer watermark', async () => {
+        const { messaging } = mountHistory({ history: [confirmedRow(CONFIRMED_HASH)] });
+        messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7710 });
+        await waitFor(() => expect(screen.getByText('4 Confirms')).toBeTruthy());
+
+        vi.useFakeTimers({ toFake: ['Date'] });
+        messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7712 });
+        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        window.dispatchEvent(new Event('focus'));
+        await waitFor(() => expect(messaging.getIndexerWatermark).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.getByText('6 Confirms')).toBeTruthy());
     });
 });
 

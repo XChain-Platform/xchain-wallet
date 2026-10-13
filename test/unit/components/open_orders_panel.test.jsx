@@ -138,6 +138,8 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         const messaging = mountPanel();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        expect(screen.getByText(/Cancel order #17\?/)).toBeTruthy();
+        expect(screen.getByText('This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
         expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();

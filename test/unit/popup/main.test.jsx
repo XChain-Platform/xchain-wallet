@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const mocks = vi.hoisted(() => ({
     createRoot: vi.fn(),
@@ -53,6 +55,25 @@ beforeEach(() => {
 });
 
 describe('popup entrypoint', () => {
+    it('caps the popup root at 360px and lets narrower viewports shrink', () => {
+        const popupHtml = readFileSync(
+            join(process.cwd(), 'packages/extension/popup.html'),
+            'utf8',
+        );
+        const popupCss = readFileSync(
+            join(process.cwd(), 'packages/extension/src/popup/popup.css'),
+            'utf8',
+        );
+        const documentRule = popupCss.match(/html\s*\{([^}]*)\}/s)?.[1] || '';
+        const popupRootRule = popupCss.match(/#xchain-popup-root\s*\{([^}]*)\}/s)?.[1] || '';
+
+        expect(popupHtml).toContain('href="./src/popup/popup.css"');
+        expect(documentRule).toMatch(/^\s*width:\s*min\(360px,\s*100vw\);/m);
+        expect(popupRootRule).toMatch(/^\s*width:\s*100%;/m);
+        expect(popupRootRule).toMatch(/^\s*max-width:\s*100%;/m);
+        expect(popupRootRule).toMatch(/^\s*min-width:\s*0;/m);
+    });
+
     it('installs shell services, starts registry sync, and mounts the app', async () => {
         await import('../../../packages/extension/src/popup/main.jsx');
 

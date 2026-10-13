@@ -156,7 +156,7 @@ describe('RenameAccountForm submission failures', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
         await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
     });
 });

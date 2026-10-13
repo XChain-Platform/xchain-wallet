@@ -48,12 +48,14 @@ const ICONS = {
  * @property {'contacts' | 'addresses'} [icon]
  * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
+ * @property {boolean} [wrapReadOnlyAddress]
  */
 export const AddressField = forwardRef(function AddressField(
     {
         icon,
         onIconClick,
         iconLabel,
+        wrapReadOnlyAddress = false,
         size = 'md',
         label,
         disabled,
@@ -72,6 +74,7 @@ export const AddressField = forwardRef(function AddressField(
         size === 'lg' ? styles.lg : '',
         label ? '' : styles.noLabel,
         showReadOnlyAddress ? styles.readOnly : '',
+        showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
     ].filter(Boolean).join(' ');
 
     const handlePaste = (event) => {
@@ -111,7 +114,7 @@ export const AddressField = forwardRef(function AddressField(
             />
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">
-                    <AddressText address={value} />
+                    <AddressText address={value} truncate={!wrapReadOnlyAddress} />
                 </span>
             ) : null}
             {IconComponent ? (

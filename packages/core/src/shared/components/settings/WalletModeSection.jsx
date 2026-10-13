@@ -12,10 +12,11 @@
 // signing surface, so the choice stays pending until the user confirms it.
 
 import { useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ConfirmModal } from '../ConfirmModal.jsx';
+import { useBackHandler } from '../../../ui/backStack.js';
 
 const MODE_OPTIONS = /** @type {const} */ ([
     {
@@ -43,6 +44,7 @@ export function WalletModeSection() {
     const [pending, setPending] = useState(/** @type {typeof WALLET_MODES[number] | null} */ (null));
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+    useBackHandler(pending ? () => setPending(null) : undefined, saving);
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -128,32 +130,15 @@ export function WalletModeSection() {
                 </label>
             ))}
             {pendingOption ? (
-                <div
-                    role="alertdialog"
-                    aria-labelledby="walletMode-confirm-title"
-                    aria-describedby="walletMode-confirm-copy"
-                    style={{
-                        ...STACK,
-                        padding: 'var(--xc-space-3)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        background: 'var(--xc-surface-raised)',
-                    }}
-                >
-                    <strong id="walletMode-confirm-title" style={{ color: 'var(--xc-text)' }}>
-                        Switch to {pendingOption.label} mode?
-                    </strong>
-                    <span id="walletMode-confirm-copy" style={ROW_HINT}>
-                        {pendingOption.confirmation}
-                    </span>
-                    {saveError ? <span role="alert" style={{ color: 'var(--xc-danger)' }}>{saveError}</span> : null}
-                    <span style={{ ...ROW, justifyContent: 'flex-end' }}>
-                        <Button type="button" variant="secondary" onClick={() => setPending(null)} disabled={saving}>Cancel</Button>
-                        <Button type="button" variant="primary" onClick={confirmChange} disabled={saving}>
-                            {saving ? 'Saving…' : 'Confirm mode change'}
-                        </Button>
-                    </span>
-                </div>
+                <ConfirmModal
+                    title={`Switch to ${pendingOption.label} mode?`}
+                    message={pendingOption.confirmation}
+                    confirmLabel="Confirm mode change"
+                    busy={saving}
+                    error={saveError}
+                    onConfirm={confirmChange}
+                    onCancel={() => setPending(null)}
+                />
             ) : null}
         </fieldset>
     );

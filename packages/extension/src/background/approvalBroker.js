@@ -153,6 +153,26 @@ export class ApprovalBroker {
     /** Test helper: inspect the in-memory map. */
     _pendingSize() { return this._pending.size; }
 
+    /**
+     * Reject every parked approval and clear the toolbar badge.
+     * Lock and wipe call this so requests from an ended session cannot remain
+     * actionable or restore attention state after teardown.
+     */
+    async cancelAll() {
+        const entries = [...this._pending.values()];
+        this._pending.clear();
+        this._queueBadgeUpdate();
+
+        await Promise.all(entries.map(async (entry) => {
+            entry.deferred.resolve({ approved: false });
+            if (entry.windowId == null || !this._windows?.remove) return;
+            try {
+                await this._windows.remove(entry.windowId);
+            } catch (_err) { /* window may already be gone */ }
+        }));
+        await this._badgeUpdate;
+    }
+
     // -- Internals -------------------------------------------------------
 
     /**
@@ -188,9 +208,15 @@ export class ApprovalBroker {
                 focused: true,
             }),
         )
-            .then((win) => {
+            .then(async (win) => {
                 const current = this._pending.get(id);
-                if (current) current.windowId = win?.id ?? null;
+                if (current) {
+                    current.windowId = win?.id ?? null;
+                } else if (win?.id != null && this._windows?.remove) {
+                    try {
+                        await this._windows.remove(win.id);
+                    } catch (_err) { /* window may already be gone */ }
+                }
             })
             .catch((err) => {
                 this._pending.delete(id);
