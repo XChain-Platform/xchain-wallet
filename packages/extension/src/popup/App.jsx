@@ -66,6 +66,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
@@ -522,6 +523,36 @@ function AppInner({ canOpenInTab }) {
             );
     }, [extensionHandoff]);
 
+    function clearTransientActionState() {
+        setFormReturnView(null);
+        setTokenAdminInitialPicker(null);
+        setTokenDetailRef(null);
+        setSweepCtx(null);
+        setResumeAirdropId(null);
+        setResumeConfirmSession(null);
+        setPrivateKeyAddress(null);
+        setAddressPrefsTarget(null);
+        setResumeCoinpay(null);
+        setListForkRef(null);
+        setSellNameRef(null);
+        setComposePrefill(null);
+        setStakingRef(null);
+        setSendPrefill(null);
+        setScannedPsbt(null);
+        setExecutePrefill(null);
+        setParallelPrefill(null);
+        setSendBackTo('home');
+    }
+
+    function handleLock() {
+        return lockImmediately({
+            lockWallet: messaging.lockWallet,
+            clearTransientState: clearTransientActionState,
+            showLocked: () => setStatus({ state: 'locked' }),
+            recover: refresh,
+        });
+    }
+
     useEffect(() => { refresh(); }, [refresh]);
 
     useEffect(() => attachSurfaceStateListener((event) => {
@@ -764,7 +795,7 @@ function AppInner({ canOpenInTab }) {
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
-            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            lock: handleLock,
             refresh,
             scan: () => palette.navigate('scan'),
             switchWallet: () => palette.navigate('wallet-picker'),
@@ -814,7 +845,7 @@ function AppInner({ canOpenInTab }) {
         overrides: settings?.keyboard?.bindings,
         handlers: {
             navigate: setUnlockedView,
-            lock: () => { messaging.lockWallet().then(refresh).catch(refresh); },
+            lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
     });
@@ -2707,7 +2738,7 @@ function AppInner({ canOpenInTab }) {
                         onOpenSettings={() => openSettingsSection(null)}
                         // No header here either, so Home shows the lock
                         // button that web and desktop keep in their header.
-                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                        onLockWallet={handleLock}
                     />
                 </Fragment>
             );
@@ -2727,7 +2758,7 @@ function AppInner({ canOpenInTab }) {
                         <BottomTabBar
                             currentView={unlockedView}
                             onSelect={setUnlockedView}
-                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onLock={handleLock}
                             onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                             onOpenSettings={() => openSettingsSection(null)}
                             hasVmAddress={hasVmAddress}
