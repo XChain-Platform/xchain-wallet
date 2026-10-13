@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -218,6 +218,17 @@ export function ConfirmActionModal({
         setApproveDisabled(true);      // sync, this tick
         Promise.resolve(onApprove({})).catch(() => {}).finally(() => setApproveDisabled(false));
     }, [approveDisabled, canApprove, credentialsReady, refusal, onApprove]);
+
+    useEffect(() => {
+        if (!open || exitsLocked) return undefined;
+        const handleKeyDown = (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            onReject();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [open, exitsLocked, onReject]);
 
     if (!open) return null;
 

@@ -19,7 +19,7 @@
 // in a helper: it was the hook not asking.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, act, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
@@ -28,6 +28,7 @@ import { BroadcastForm } from '../../../packages/core/src/shared/routes/Broadcas
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
 import { useActionForm } from '../../../packages/core/src/shared/hooks/useActionForm.js';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
@@ -122,6 +123,51 @@ describe('useActionForm chain default follows the last-used chain', () => {
         expect(await screen.findByRole('button', { name: /^Network: Dogecoin/ })).toBeInTheDocument();
         const from = await screen.findByLabelText('From address');
         await waitFor(() => expect(from.value).toBe(ADDR_DOGE.address));
+    });
+
+    it('Create Order follows visual tab order, reviews only valid Enter, and Escape returns to its fields', async () => {
+        const user = userEvent.setup();
+        const composeForConfirm = vi.fn().mockResolvedValue({
+            psbt: 'aa00',
+            encoding: 'psbt',
+            actionString: 'ACT',
+            version: 0,
+            decoded: { summary: 'Create order', details: [], warnings: [] },
+        });
+        const messaging = messagingWith({
+            composeForConfirm,
+            preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+        });
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <CreateOrderForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const ticker = await screen.findByLabelText('Ticker');
+        ticker.focus();
+        await user.tab();
+        expect(document.activeElement).toHaveAccessibleName('Trade ownership of this ticker (not a balance)');
+        await user.tab();
+        const giveAmount = screen.getByLabelText('Amount');
+        expect(document.activeElement).toBe(giveAmount);
+
+        await user.keyboard('{Enter}');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Enter the ticker you are offering.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(ticker, { target: { value: 'KEYS' } });
+        fireEvent.change(giveAmount, { target: { value: '10' } });
+        const getAmount = screen.getByLabelText('Amount (DOGE)');
+        fireEvent.change(getAmount, { target: { value: '1' } });
+        getAmount.focus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+        expect(await screen.findByLabelText('Ticker')).toHaveValue('KEYS');
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
     });
 
     it('an explicit initialChainId wins over the last-used chain', async () => {

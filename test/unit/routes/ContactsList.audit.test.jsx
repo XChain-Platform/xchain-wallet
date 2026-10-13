@@ -8,6 +8,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const BTC = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const LTC = 'ltc1qg82rffhs37lynnvf3tfxcuvtlhm0fwwpv3l5z6';
@@ -69,6 +70,40 @@ afterEach(() => {
 });
 
 describe('ContactsList audited behavior', () => {
+    it('edits a contact in visual tab order and saves from Enter only when valid', async () => {
+        const user = userEvent.setup();
+        const messaging = makeMessaging([
+            contact('alice', 'Alice', BTC, '2026-01-01T00:00:00.000Z'),
+        ]);
+        mount(messaging);
+
+        const row = (await screen.findByText('Alice')).closest('button');
+        row.focus();
+        await user.keyboard('{Enter}');
+        const edit = screen.getByRole('button', { name: 'Edit' });
+        edit.focus();
+        await user.keyboard('{Enter}');
+
+        const name = screen.getByLabelText('Name');
+        name.focus();
+        await user.tab();
+        const notes = screen.getByLabelText('Notes');
+        expect(document.activeElement).toBe(notes);
+        await user.tab();
+        expect(document.activeElement).toHaveAccessibleName('Save');
+
+        fireEvent.change(name, { target: { value: '' } });
+        name.focus();
+        await user.keyboard('{Enter}');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.');
+        expect(messaging.saveContact).not.toHaveBeenCalled();
+
+        fireEvent.change(name, { target: { value: 'Alice Keys' } });
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledOnce());
+        expect(messaging.saveContact.mock.calls[0][0].record.name).toBe('Alice Keys');
+    });
+
     it('leaves an empty contact form directly but confirms before discarding real input', async () => {
         mount(makeMessaging([]));
         const add = await screen.findByRole('button', { name: 'Add contact' });

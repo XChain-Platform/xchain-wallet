@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -95,6 +95,10 @@ describe('DispenserForm numeric validation', () => {
         await act(async () => { await drainMicrotasks(); });
         expect(utils.composeForConfirm).toHaveBeenCalledTimes(1);
         expect(utils.getByTestId('confirm-modal')).toBeInTheDocument();
+
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(utils.getByLabelText(/^Give amount/)).toHaveValue('10'));
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
     });
 
     it('refuses a malformed trigger price before composing', async () => {
