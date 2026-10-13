@@ -29,6 +29,7 @@ import {
 
 const readCss = (path) => readFileSync(path, 'utf8');
 const buttonCss = readCss('packages/core/src/ui/Button.module.css');
+const chipCss = readCss('packages/core/src/ui/Chip.module.css');
 const pageHeaderCss = readCss('packages/core/src/ui/PageHeader.module.css');
 const homeCss = readCss('packages/core/src/shared/routes/Home.module.css');
 const sendCss = readCss('packages/core/src/shared/routes/Send.module.css');
@@ -80,7 +81,7 @@ const SCREEN_TEXT_RULES = {
     ],
     History: [
         [historyCss, '.segBtn'],
-        [historyCss, '.chip'],
+        [chipCss, '.chip'],
         [historyCss, '.detailAction'],
         [historyCss, '.moreMenuItem'],
         [historyCss, '.detailTab'],
@@ -106,7 +107,7 @@ const BUTTON_TEXT_RULES = [
     [homeCss, '.quickActionMoreItem'],
     [sendCss, '.detailsToggle'],
     [historyCss, '.segBtn'],
-    [historyCss, '.chip'],
+    [chipCss, '.toggle'],
     [historyCss, '.detailAction'],
     [historyCss, '.moreMenuItem'],
     [historyCss, '.detailTab'],

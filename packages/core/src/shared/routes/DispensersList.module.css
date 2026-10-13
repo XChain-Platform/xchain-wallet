@@ -2,16 +2,6 @@
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
-    margin-bottom: calc(var(--xc-space-1) + 2px);
-}
-
 .search {
     flex: 1 1 0;
     min-width: 0;

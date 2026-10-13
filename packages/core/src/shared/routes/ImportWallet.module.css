@@ -109,19 +109,6 @@
     font-family: var(--xc-font-mono);
 }
 
-.error {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-on-danger);
-    background: var(--xc-danger);
-    border: 1px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    margin: 0 0 var(--xc-space-3);
-    line-height: 1.4;
-    text-align: center;
-    font-weight: 500;
-}
-
 .actionsPopup {
     display: flex;
     gap: var(--xc-space-2);

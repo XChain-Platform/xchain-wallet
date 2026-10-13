@@ -5,63 +5,8 @@
     width: 100%;
 }
 
-/* ───── Tab strip ───── */
-
 .tabsRow {
     display: contents;
-}
-
-.tabs {
-    display: flex;
-    gap: var(--xc-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
-    padding-bottom: 1px;          /* pull active underline below the rule */
-    margin-bottom: -1px;
-    scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    /* Side padding tightens on narrow windows so all five tabs fit: at the
-       desktop app's 360px minimum the strip overflowed by 11px and hid half
-       of "Activity" behind a scrollbar the strip deliberately does not show
-       (2026-10-12). Full padding from about 480px up. */
-    padding: var(--xc-space-3) clamp(6px, 2.5vw, var(--xc-space-3));
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    transition: color var(--xc-transition), border-color var(--xc-transition);
-    flex: 0 0 auto;
-}
-
-.tab:hover {
-    color: var(--xc-text);
-}
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-.tabLabel {
-    font-weight: 700;
 }
 
 .sortControl {
@@ -102,12 +47,6 @@
         align-items: stretch;
         border-bottom: 1px solid var(--xc-border);
         margin-bottom: -1px;
-    }
-
-    .tabs {
-        min-width: 0;
-        border-bottom: 0;
-        margin-bottom: 0;
     }
 
     .sortControl {
@@ -179,12 +118,6 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-}
-
-.staleness {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--xc-space-1) 0 var(--xc-space-2);
 }
 
 /* One-line rule statement above a tab's content. Muted and small: it
