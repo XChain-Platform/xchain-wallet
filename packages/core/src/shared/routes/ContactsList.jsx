@@ -330,7 +330,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         } else {
             setScanFromEdit(false);
             setMode(scanFromEdit ? 'edit' : 'list');
-            showToast({ message: 'No address detected in that QR code.' });
+            showToast({ message: 'No address detected in that QR code.', variant: 'error' });
         }
     }
 

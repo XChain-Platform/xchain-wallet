@@ -54,8 +54,9 @@ import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { copyText } from '../../clipboard.js';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
+import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -1283,6 +1284,7 @@ function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
     const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const haptic = useHapticFeedback();
 
     const copyTxid = async () => {
         setCopyStatus(null);
@@ -1290,9 +1292,11 @@ function PublishLabelsReport({ result, onDone }) {
         const { ok } = await copyText(txid);
         if (ok) {
             setCopyStatus('Transaction ID copied.');
+            haptic.tap();
             return;
         }
         setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
+        haptic.error();
     };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.

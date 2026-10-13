@@ -35,6 +35,7 @@ import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
 import { copyText } from '../clipboard.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './WatcherResultPanel.module.css';
 
 /**
@@ -55,6 +56,7 @@ export function WatcherResultPanel({
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const haptic = useHapticFeedback();
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -69,8 +71,10 @@ export function WatcherResultPanel({
         if (!psbtHex) return;
         const { ok } = await copyText(psbtHex);
         setCopyState(ok ? 'copied' : 'failed');
+        if (ok) haptic.tap();
+        else haptic.error();
         setTimeout(() => setCopyState('idle'), 1500);
-    }, [psbtHex]);
+    }, [haptic, psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
     return (

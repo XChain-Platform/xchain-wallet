@@ -67,6 +67,7 @@ import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -1891,7 +1892,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 const { ok } = await copyText(shareUrl);
                 showToast({
                     message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'success' : 'error',
+                    variant: ok ? 'default' : 'error',
                 });
             },
         });
@@ -2513,6 +2514,7 @@ function copyLabelForDetailField(key) {
 function CopyIconButton({ value, label = 'Copy to clipboard' }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
+    const haptic = useHapticFeedback();
     const handleClick = async (event) => {
         event.stopPropagation();
         const text = String(value ?? '');
@@ -2520,6 +2522,7 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
         if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
+            haptic.tap();
             return;
         }
         showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });

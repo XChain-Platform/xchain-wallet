@@ -26,6 +26,7 @@ import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
 import {
     feePreferenceLabel,
@@ -150,6 +151,7 @@ export function AddressList({
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
     const { showToast } = useToast();
+    const haptic = useHapticFeedback();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -1056,6 +1058,7 @@ export function AddressList({
             if (ok) {
                 setAddrCopied(true);
                 setTimeout(() => setAddrCopied(false), 1200);
+                haptic.tap();
                 return;
             }
             showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });

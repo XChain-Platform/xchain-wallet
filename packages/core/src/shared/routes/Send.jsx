@@ -2149,7 +2149,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             const { ok } = await copyText(txid);
             showToast({
                 message: ok ? 'Transaction ID copied.' : 'Copy failed: clipboard unavailable',
-                variant: ok ? 'success' : 'error',
+                variant: ok ? 'default' : 'error',
             });
         };
 

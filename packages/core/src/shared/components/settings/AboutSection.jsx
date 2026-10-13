@@ -38,6 +38,8 @@ import {
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
 import { ToggleRow } from './_settingsPrimitives.jsx';
+import { copyText } from '../../clipboard.js';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
 
 const ROW = {
     display: 'flex',
@@ -67,6 +69,7 @@ const PARAGRAPH = { margin: 0 };
 
 export function AboutSection() {
     const { messaging } = useMessaging();
+    const haptic = useHapticFeedback();
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -105,9 +108,11 @@ export function AboutSection() {
                 throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
             }
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
+            haptic.tap();
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
             setError(err?.message || 'Could not copy diagnostics.');
+            haptic.error();
         } finally {
             setBusy(false);
         }

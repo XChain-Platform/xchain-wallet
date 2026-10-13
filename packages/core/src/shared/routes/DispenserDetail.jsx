@@ -37,6 +37,7 @@ import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
@@ -128,6 +129,7 @@ const ADDRESS_CELL_STYLE = {
  *   terms; a shell that does not pass it gets no Open again button
  */
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
+    const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -779,9 +781,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             setCopyError(null);
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
+            haptic.tap();
             return;
         }
         setCopied(null);
+        haptic.error();
         setCopyError('Copy failed: clipboard unavailable');
     }
 
