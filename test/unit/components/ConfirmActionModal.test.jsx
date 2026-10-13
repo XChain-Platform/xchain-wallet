@@ -57,6 +57,14 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('contract-call-warning')).toBeNull();
     });
 
+    it('uses the bare approve fallback when no decoded action is available', () => {
+        render(<ConfirmActionModal {...base({ decoded: null })} />);
+
+        expect(screen.getByTestId('confirm-chain-badge')).toHaveTextContent('Bitcoin');
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    });
+
     it('uses a short warning only when approving a contract call', () => {
         render(<ConfirmActionModal {...base({
             decoded: { summary: 'Call contract #21', details: [], warnings: [] },
