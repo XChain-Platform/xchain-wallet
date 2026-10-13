@@ -49,7 +49,7 @@
     top: 100%;
     inset-inline-start: 0;
     inset-inline-end: 0;
-    z-index: 50;
+    z-index: var(--xc-z-dropdown);
     margin-top: 4px;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
