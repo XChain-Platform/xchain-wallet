@@ -219,7 +219,7 @@ export function measureInPage() {
 }
 
 /** A sweep bound to one page, one venue and one output directory. */
-export function createSweep(page, { venue, outDir, restart = () => page.goto('/') }) {
+export function createSweep(page, { venue, outDir, restart = () => page.goto('/'), onScreen = null }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
@@ -234,6 +234,11 @@ export function createSweep(page, { venue, outDir, restart = () => page.goto('/'
             result = await page.evaluate(measureInPage);
         } catch (err) {
             result = { error: String(err?.message || err) };
+        }
+        // Extra per-screen audits (the axe sweep) hook in here; a failure in one
+        // is reported on the screen's line, never thrown into the walk.
+        if (onScreen) {
+            try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
         }
         try {
             await page.screenshot({ path: join(outDir, `${slug}.png`) });
