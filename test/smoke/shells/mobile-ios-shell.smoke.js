@@ -207,6 +207,24 @@ const disabledPluginsSrc = readFileSync(
     'utf8',
 );
 
+// The native edge gesture must enter the SPA handler stack. WebKit history
+// bypasses route-local confirmation state and the signing-time back lock.
+assert.match(
+    mainVCSrc,
+    /UIScreenEdgePanGestureRecognizer[\s\S]*?edges = \.left[\s\S]*?addGestureRecognizer/,
+    'iOS Back must start at the left screen edge',
+);
+assert.match(
+    mainVCSrc,
+    /allowsBackForwardNavigationGestures = false/,
+    'WebKit history swipes must not bypass the shared back stack',
+);
+assert.match(
+    mainVCSrc,
+    /dispatchEvent\(new Event\('xchain:native-edge-back'\)\)/,
+    'a completed iOS edge swipe must dispatch to the shared back stack',
+);
+
 // Assert the CALLS, from inside capacitorDidLoad - not merely that functions
 // by these names exist. Deleting the call site while leaving the definition is
 // the realistic regression (a merge, a revert), and the first version of this

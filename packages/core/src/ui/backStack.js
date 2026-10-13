@@ -31,13 +31,20 @@ const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history
 
 const capacitorApp = () => globalThis.Capacitor?.Plugins?.App;
 
+const topHandler = () => handlers[handlers.length - 1];
+
 function onNativeBack() {
-    const top = handlers[handlers.length - 1];
+    const top = topHandler();
     if (top) {
         top.run();
         return;
     }
     capacitorApp()?.minimizeApp?.();
+}
+
+/** iOS edge Back belongs only to in-app navigation and never exits the app. */
+function onNativeEdgeBack() {
+    topHandler()?.run();
 }
 
 /** Keep one Capacitor listener alive so Back on a root screen can minimize. */
@@ -126,6 +133,7 @@ export function registerBackHandler(run, kind = 'overlay') {
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
         window.addEventListener('keydown', onKeyDown, true);
+        window.addEventListener('xchain:native-edge-back', onNativeEdgeBack);
         listening = true;
     }
     const entry = { run, kind };
@@ -185,6 +193,7 @@ export function resetBackStackForTests() {
     if (listening && typeof window !== 'undefined') {
         window.removeEventListener('popstate', onPopState);
         window.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('xchain:native-edge-back', onNativeEdgeBack);
     }
     listening = false;
     routeHistoryManaged = false;
