@@ -249,6 +249,19 @@ function nativeTickerFor(descriptor) {
     return tickerForDescriptor(descriptor);
 }
 
+function hasMeaningfulSendDraft(values) {
+    if (!values || typeof values !== 'object') return false;
+    if ([values.toAddress, values.amount, values.memo]
+        .some((value) => String(value || '').trim().length > 0)) return true;
+
+    const tick = String(values.tick || '').trim().toUpperCase();
+    if (!tick) return false;
+    const descriptor = typeof values.chainId === 'string'
+        ? chainRegistry.get(values.chainId)
+        : null;
+    return tick !== nativeTickerFor(descriptor);
+}
+
 function utxoKey(utxo) {
     return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
 }
@@ -533,10 +546,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
-    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    const [draftPending, setDraftPending] = useState(
+        () => !hasMeaningfulSendDraft(draft.load()),
+    );
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
-        draft.save({ chainId, toAddress, tick, amount, memo });
+        const values = { chainId, toAddress, tick, amount, memo };
+        if (hasMeaningfulSendDraft(values)) draft.save(values);
+        else draft.clear();
     }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -3097,7 +3114,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     // stage === 'form'
-    const draftBanner = draft.hasDraft() && !draftPending ? (
+    const draftBanner = hasMeaningfulSendDraft(draft.load()) && !draftPending ? (
         <StatusMessage
             variant="status"
             recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
