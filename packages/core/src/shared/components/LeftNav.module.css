@@ -97,6 +97,15 @@
     outline: none;
 }
 
+/* The route container takes focus from code, so it shows no ring on screen,
+   but forced-colors mode gets a system-colour ring so focus is never lost. */
+@media (forced-colors: active) {
+    .routeFocusTarget:focus {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}
+
 /* compact tier (< 640px): the bottom tab bar owns navigation.
    FullLayoutWithNav already withholds the nav slot here, so this rule is
    the belt-and-braces for any shell that renders a sidebar anyway. */
