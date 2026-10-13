@@ -71,7 +71,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
-import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
+import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
@@ -2665,6 +2665,14 @@ function AppInner() {
             return (
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
+                    header={(
+                        <AppHeader
+                            onCommandPalette={palette.openPalette}
+                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            isWatcherMode={isWatcherMode}
+                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                        />
+                    )}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
@@ -2681,7 +2689,6 @@ function AppInner() {
                     {activeWalletId ? (
                         <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                     ) : null}
-                    <WatchOnlyBadge visible={isWatcherMode} />
                     <ScrollRestoration routeKey={unlockedView}>
                         <RouteErrorBoundary
                             resetKey={`${unlockedView}:${palette.navigationKey}`}
