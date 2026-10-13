@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -33,14 +33,20 @@ import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
+import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const HOLDERS_PAGE_SIZE = 25;
 
 /**
  * §27.6 token detail page (G071).
@@ -67,6 +73,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
  * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
+ * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -82,6 +89,7 @@ export function TokenDetail({
     displayName,
     divisibility = 8,
     fiatRate = null,
+    fiatRateSource = null,
     quantity = '0',
     imageUrl: rowImageUrl = null,
     onBack,
@@ -132,7 +140,13 @@ export function TokenDetail({
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
+    const [holdersMoreError, setHoldersMoreError] = useState(/** @type {string | null} */ (null));
     const [holdersLoading, setHoldersLoading] = useState(false);
+    const [holdersLoadingMore, setHoldersLoadingMore] = useState(false);
+    const [holdersPage, setHoldersPage] = useState(0);
+    const [holdersTotal, setHoldersTotal] = useState(/** @type {number | null} */ (null));
+    const [holdersHasMore, setHoldersHasMore] = useState(false);
+    const holdersRequestId = useRef(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last holders fetch; drives a
     // staleness label inside the holders panel so the user can tell at
     // a glance whether the listing is live.
@@ -153,15 +167,29 @@ export function TokenDetail({
             return undefined;
         }
         let cancelled = false;
+        holdersRequestId.current += 1;
         setHolders(null);
         setHoldersLoading(true);
+        setHoldersLoadingMore(false);
         setHoldersError(null);
-        messaging.getHoldersForToken({ chainId, tick: tick })
+        setHoldersMoreError(null);
+        setHoldersPage(0);
+        setHoldersTotal(null);
+        setHoldersHasMore(false);
+        messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: 1, limit: HOLDERS_PAGE_SIZE },
+        })
             .then((resp) => {
                 if (cancelled) return;
-                const list = extractHolderRows(resp);
+                const list = uniqueRows(extractHolderRows(resp), holderIdentity);
+                const page = explorerPage(resp, extractHolderRows(resp), 1, HOLDERS_PAGE_SIZE);
                 setHolders(list);
                 setHoldersFetchedAt(Date.now());
+                setHoldersPage(1);
+                setHoldersTotal(page.total);
+                setHoldersHasMore(page.hasMore);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -170,6 +198,35 @@ export function TokenDetail({
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
     }, [holdersOpen, isNative, tick, chainId, messaging]);
+
+    const loadMoreHolders = useCallback(() => {
+        if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
+        const nextPage = holdersPage + 1;
+        const requestId = holdersRequestId.current;
+        const before = holders || [];
+        setHoldersLoadingMore(true);
+        setHoldersMoreError(null);
+        messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: nextPage, limit: HOLDERS_PAGE_SIZE },
+        }).then((resp) => {
+            if (requestId !== holdersRequestId.current) return;
+            const pageRows = extractHolderRows(resp);
+            const page = explorerPage(resp, pageRows, nextPage, HOLDERS_PAGE_SIZE);
+            const merged = uniqueRows([...before, ...pageRows], holderIdentity);
+            setHolders(merged);
+            setHoldersHasMore(page.hasMore && merged.length > before.length);
+            setHoldersPage(nextPage);
+            setHoldersTotal(page.total);
+            setHoldersFetchedAt(Date.now());
+        }).catch((err) => {
+            if (requestId !== holdersRequestId.current) return;
+            setHoldersMoreError(readFailureMessage(err, 'load more holders'));
+        }).finally(() => {
+            if (requestId === holdersRequestId.current) setHoldersLoadingMore(false);
+        });
+    }, [chainId, holders, holdersHasMore, holdersLoading, holdersLoadingMore, holdersPage, messaging, tick]);
 
     useEffect(() => {
         if (!holdersOpen || isNative) return undefined;
@@ -332,6 +389,12 @@ export function TokenDetail({
     }
 
     const fiatAvailable = fiat != null && isFinite(fiat);
+    const hasDexPrice = !isNative && (
+        fiatRateSource === 'market'
+        || (assetInfo?.marketPrice != null
+            && Number.isFinite(Number(assetInfo.marketPrice))
+            && Number(assetInfo.marketPrice) > 0)
+    );
     // Amount + unit code are kept separate so the unit can render as a
     // smaller styled span next to the digits (matches the Home total-
     // balance hero treatment). For BTC the code is the tick ticker;
@@ -423,6 +486,7 @@ export function TokenDetail({
                                     <AutoShrinkText>
                                         {`≈ ${secondaryAmount}`}
                                         <span className={styles.balanceHeroNoteCode}>{secondaryCode}</span>
+                                        {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
                             </div>
@@ -463,6 +527,7 @@ export function TokenDetail({
                             chainId={chainId}
                             hasMarketData={hasMarketData}
                             fiatRate={fiatRate}
+                            fiatRateSource={fiatRateSource}
                             fiatCurrency={fiatCurrency}
                         />
                     </div>
@@ -624,6 +689,11 @@ export function TokenDetail({
                                         holdersLoading={holdersLoading}
                                         holdersError={holdersError}
                                         holdersFetchedAt={holdersFetchedAt}
+                                        holdersHasMore={holdersHasMore}
+                                        holdersLoadingMore={holdersLoadingMore}
+                                        holdersMoreError={holdersMoreError}
+                                        holdersTotal={holdersTotal}
+                                        onLoadMore={loadMoreHolders}
                                         divisibility={divisibility}
                                     />
                                 </>
@@ -754,7 +824,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
+function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency }) {
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
@@ -768,6 +838,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
 
     let priceCell = 'N/A';
+    let priceLabel = 'Price';
     let marketCapCell = 'N/A';
     let floorCell = 'N/A';
     let pctTone24h;
@@ -823,7 +894,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                         <Sparkline series={sparkline} height={40} />
                     </div>
                 ) : !hint ? (
-                    <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
                 ) : null}
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
@@ -859,13 +930,16 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     const nativeTick = nativeTickerOf(chainId);
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
     if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
+        priceLabel = 'Price (DEX)';
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
             const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
             if (marketCap !== null) {
-                const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
-                    .format(marketCap);
+                const formatted = formatDecimalAmount(marketCap, undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 4,
+                });
                 marketCapCell = `${formatted} ${nativeTick}`;
             }
         }
@@ -878,6 +952,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             sparkline = synth.sparkline;
         }
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
+        if (fiatRateSource === 'market') priceLabel = 'Price (DEX)';
         priceCell = formatFiat(fiatRate, fiatCurrency);
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
@@ -894,7 +969,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     return (
         <>
             <section className={styles.stats}>
-                <StatCell label="Price" value={priceCell} />
+                <StatCell label={priceLabel} value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
                 <StatCell label="24h" value={pct24h} tone={pctTone24h} />
             </section>
@@ -903,7 +978,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                     <Sparkline series={sparkline} height={40} />
                 </div>
             ) : !hint ? (
-                <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
+                <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
             ) : null}
             {sparkline && isDemo ? (
                 <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
@@ -1073,7 +1148,8 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
     if (!hasAbout) {
         return (
             <EmptyState
-                title="No additional information published for this token yet."
+                title="No additional information"
+                body="Information published by the token issuer appears here."
                 titleAs="p"
             />
         );
@@ -1183,7 +1259,8 @@ function MediaPanel({ isNative, assetInfo }) {
     if (subtabs.length === 0) {
         return (
             <EmptyState
-                title="No images, audio, video, or files published for this token yet."
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
                 titleAs="p"
             />
         );
@@ -1639,7 +1716,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     if (!groups || groups.length === 0) {
         return (
             <EmptyState
-                title={`No token-gated content published for ${tick}.`}
+                title="No token-gated content"
                 body="Holders unlock creator drops, packs, and sealed bundles here when the issuer publishes locked content for this token."
                 titleAs="p"
             />
@@ -2113,22 +2190,37 @@ function UnlockedFileLink({ name, type, onOpen }) {
     );
 }
 
-function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
+function HoldersPanel({
+    holders,
+    holdersLoading,
+    holdersError,
+    holdersFetchedAt,
+    holdersHasMore,
+    holdersLoadingMore,
+    holdersMoreError,
+    holdersTotal,
+    onLoadMore,
+    divisibility,
+}) {
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) {
-        return <EmptyState title="No holders yet." body="Mint or distribute supply to populate this list." titleAs="p" />;
+        return <EmptyState title="No holders yet" body="Mint or distribute supply to populate this list." titleAs="p" />;
     }
+    const count = holdersTotal != null && holdersTotal > holders.length
+        ? `${holders.length} of ${holdersTotal}`
+        : String(holders.length);
     return (
         <section className={styles.infoCard} aria-label="Holders">
+            <SectionHeader title={`Holders (${count})`} />
             {holdersFetchedAt ? (
                 <div className={styles.holdersStaleness}>
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
             <ol className={styles.holdersList}>
-                {holders.slice(0, 25).map((h, i) => (
-                    <li key={`${h.address || ''}:${i}`} className={styles.holdersRow}>
+                {holders.map((h, i) => (
+                    <li key={holderIdentity(h) || `holder:${i}`} className={styles.holdersRow}>
                         <span className={styles.holdersAddrWrap}>
                             <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
                                 {shorten(h.address || h.ADDRESS || 'unknown')}
@@ -2148,8 +2240,20 @@ function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt,
                     </li>
                 ))}
             </ol>
+            {holdersMoreError ? (
+                <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
+            ) : null}
+            {holdersHasMore ? (
+                <Button type="button" variant="secondary" loading={holdersLoadingMore} onClick={onLoadMore}>
+                    Load more holders
+                </Button>
+            ) : null}
         </section>
     );
+}
+
+function holderIdentity(holder) {
+    return holder?.address ?? holder?.ADDRESS ?? null;
 }
 
 function StatCell({ label, value, tone }) {
@@ -2195,7 +2299,7 @@ function kindLabel(kind) {
 
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
-    return desc?.coin ? desc.coin.toUpperCase() : '';
+    return tickerForCoin(desc?.coin);
 }
 
 function shorten(addr) {
@@ -2215,23 +2319,7 @@ function safeBigInt(v) {
 }
 
 function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    // Always render to full divisibility; trailing zeros are kept so
-    // 0.04210000 BTC reads as 0.04210000 (not 0.0421). Matches the Home
-    // BalanceList convention and what users coming from BTC-native
-    // accounting expect.
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return formatAtomicAmount(quantityStr, divisibility);
 }
 
 function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -2249,21 +2337,7 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
 // if the code is unknown to Intl.
 function formatFiatNumber(value, currency) {
     if (value === null || value === undefined) return 'N/A';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const formatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = formatter.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) {
-            return `<${formatter.format(minorUnit)}`;
-        }
-        return formatter.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
+    return formatFiatAmount(String(value), currency);
 }
 
 // Fits its children on a single line by measuring overflow with a

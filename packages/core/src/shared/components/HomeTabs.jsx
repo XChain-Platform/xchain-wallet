@@ -35,7 +35,14 @@ import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useNativeFiatRates, priceNativeRows } from '../hooks/useFiatRate.js';
+import {
+    useNativeFiatRates,
+    useTokenFiatRates,
+    priceNativeRows,
+    priceTokenRows,
+} from '../hooks/useFiatRate.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
+import { formatRelativeTime } from '../utils/dateTime.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -103,7 +110,29 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         refreshKey: balancesFetchedAt,
     });
-    const allRows = useMemo(() => priceNativeRows(builtRows, nativeRates), [builtRows, nativeRates]);
+    const tokenRequests = useMemo(() => {
+        if (settingsLoading || isDemoWallet(walletId)) return [];
+        return builtRows
+            .filter((r) => r.kind !== 'native' && typeof r.fiatRate !== 'number')
+            .map((r) => {
+                const descriptor = chainRegistry.get(r.chainId);
+                return {
+                    chainCoin: descriptor?.coin,
+                    tick: r.tick,
+                    nativeTicker: tickerForCoin(descriptor?.coin),
+                };
+            });
+    }, [builtRows, chainRegistry, settingsLoading, walletId]);
+    const tokenRates = useTokenFiatRates({
+        tokens: tokenRequests,
+        fiatCurrency: settings?.fiatCurrency || 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshKey: balancesFetchedAt,
+    });
+    const allRows = useMemo(
+        () => priceTokenRows(priceNativeRows(builtRows, nativeRates), tokenRates),
+        [builtRows, nativeRates, tokenRates],
+    );
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
@@ -229,7 +258,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                         emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
                         emptyBody={networkFilter === 'all'
                             ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
-                            : undefined}
+                            : 'Coins on this network appear here after this wallet receives them.'}
                         onReceive={networkFilter === 'all' ? onReceive : undefined}
                         onSelectToken={onSelectToken}
                         pinnedKeys={pinnedKeys}
@@ -251,11 +280,10 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             ? 'No matching tokens'
                             : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
                         emptyBody={tokenQueryTrim
-                            ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see all tokens.`
+                            ? `No held tokens match "${tokenQuery.trim()}".`
                             : (networkFilter === 'all'
                                 ? 'Browse markets or accept a token transfer to populate this view.'
-                                : undefined)}
-                        onReceive={!tokenQueryTrim && networkFilter === 'all' ? onReceive : undefined}
+                                : 'Tokens on this network appear here after this wallet receives them.')}
                         emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
                         onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
                         onSelectToken={onSelectToken}
@@ -306,7 +334,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                             emptyTitle={networkFilter === 'all' ? 'No collectibles yet' : 'No collectibles on this network'}
                             emptyBody={networkFilter === 'all'
                                 ? 'Indivisible tokens with a permanently locked supply (Rare Pepe, Ordinals, Bitcoin Stamps) appear here once received.'
-                                : undefined}
+                                : 'Collectibles on this network appear here after this wallet receives them.'}
                             onReceive={networkFilter === 'all' ? onReceive : undefined}
                             onSelectToken={onSelectToken}
                             pinnedKeys={pinnedKeys}
@@ -447,16 +475,6 @@ function shortenAddress(s) {
     return `${s.slice(0, 6)}…${s.slice(-4)}`;
 }
 
-function relativeTime(epochSec) {
-    if (!epochSec) return '';
-    const now = Math.floor(Date.now() / 1000);
-    const d = now - epochSec;
-    if (d < 60) return `${Math.max(1, d)}s ago`;
-    if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-    if (d < 86_400) return `${Math.floor(d / 3600)}h ago`;
-    return `${Math.floor(d / 86_400)}d ago`;
-}
-
 // Format a satoshi-string amount using the tick's divisibility. Plain
 // string math, no BigInt; these are demo values and stay small.
 function formatAmount(raw, divisibility) {
@@ -582,7 +600,7 @@ function ActivityRow({ entry, walletAddresses, assetLookup, chainTip, onClick })
                         )}
                         {entry.timestamp ? (
                             <span className={styles.rowRelativeTime}>
-                                {relativeTime(entry.timestamp)}
+                                {formatRelativeTime(entry.timestamp)}
                             </span>
                         ) : null}
                     </div>
@@ -806,7 +824,7 @@ function DemoDefiList({ networkFilter, balances, onSelectEntry }) {
                                     )}
                                     {p.timestamp ? (
                                         <span className={styles.rowRelativeTime}>
-                                            {relativeTime(p.timestamp)}
+                                            {formatRelativeTime(p.timestamp)}
                                         </span>
                                     ) : null}
                                 </div>

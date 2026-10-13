@@ -38,6 +38,26 @@ function mountRejecting(err) {
     );
 }
 
+function mountAccount() {
+    const messaging = {
+        getSettings: () => Promise.resolve({}),
+        getCoSignerAccount: () => Promise.resolve({
+            id: 'acct-1',
+            name: 'Treasury agent',
+            chainId: 'bitcoin-regtest',
+            aggregateAddress: 'bcrt1qfundingaddress',
+            enabled: true,
+            policy: { allowedActions: [] },
+            window: { entries: [] },
+        }),
+    };
+    return render(
+        <MessagingProvider shell="extension" messaging={messaging}>
+            <CoSignerAccountDetail accountId="acct-1" onBack={() => {}} />
+        </MessagingProvider>,
+    );
+}
+
 describe('CoSignerAccountDetail load-error copy', () => {
     it('shows house copy when the flow throws its function-prefixed precondition error', async () => {
         mountRejecting(new Error('getCoSignerAccount: id is required'));
@@ -64,5 +84,13 @@ describe('CoSignerAccountDetail load-error copy', () => {
         await waitFor(() => {
             expect(screen.getByText('This agent account was revoked on another device.')).toBeTruthy();
         });
+    });
+});
+
+describe('CoSignerAccountDetail clipboard control', () => {
+    it('names the funding address copied by the button', async () => {
+        mountAccount();
+
+        expect(await screen.findByRole('button', { name: 'Copy funding address' })).toBeTruthy();
     });
 });

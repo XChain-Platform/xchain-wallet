@@ -26,8 +26,10 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
+import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 // Resolves coin-code URIs (xchain:TBTC/...) to chainIds in the boot-time
@@ -68,6 +70,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { ResumeConfirm } from '@xchain-wallet/core/shared/routes/ResumeConfirm.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyBadge.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
@@ -80,6 +83,8 @@ import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -157,9 +162,13 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 // Connect from Trezor's hosted script instead; the extension ships
 // Ledger (WebHID) + software signing only. PairSignerForm renders the
 // Trezor option disabled when `pairTrezor` is null.
-import { registerSigner as registerLocalSigner } from './signerBridge.js';
+import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import {
+    applySurfaceStateEvent,
+    attachSurfaceStateListener,
+} from '../shared/surfaceStateSync.js';
 import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
@@ -208,7 +217,9 @@ export function App() {
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
-                <AppInner />
+                <RouteErrorBoundary>
+                    <AppInner />
+                </RouteErrorBoundary>
             </ToastHost>
         </MessagingProvider>
     );
@@ -216,6 +227,7 @@ export function App() {
 
 function AppInner() {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
@@ -224,7 +236,7 @@ function AppInner() {
         () => takePostDemoIntent() || 'welcome',
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -242,13 +254,17 @@ function AppInner() {
         setTokenAdminInitialPicker(null);
         setUnlockedView(target);
     };
-    // Prefill helpers: surface (chainId, tick) to forms when launched
-    // from ManageToken so the LockedTokenContext chip renders instead
-    // of the ticker / chain picker.
-    const fromManage = formReturnView === 'manage-token';
+    // ManageToken and the Developer Mode faucet lock their chain and ticker
+    // into the form so the user cannot redirect the requested token action.
+    const fromManage = formReturnView === 'manage-token' || formReturnView === 'settings';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
+    const handleFaucetMint = ({ chainId, tick }) => {
+        setTokenDetailRef({ chainId, tick });
+        setFormReturnView('settings');
+        setUnlockedView('mint');
+    };
     const [historyInitialQuery, setHistoryInitialQuery] = useState('');
     // M2.4: the entry the History route should open on, set when the user
     // follows the send success card straight to their new transaction. It is
@@ -266,7 +282,7 @@ function AppInner() {
     // visit (e.g. entering from TokenDetail then re-entering from the
     // home menu should return to home, not back to TokenDetail).
     const [historyReturnTo, setHistoryReturnTo] = useState(
-        /** @type {'home' | 'token-detail'} */ ('home'),
+        /** @type {'home' | 'token-detail' | 'manage-token'} */ ('home'),
     );
     // Selected entry for the standalone ActionDetail view. Set when the
     // user clicks a row in History or in Home's Activity tab; cleared
@@ -344,6 +360,7 @@ function AppInner() {
     // Quick "Message sent" confirmation modal, shown over the view the user
     // is returned to after a compose-form send succeeds.
     const [messageSentNotice, setMessageSentNotice] = useState(false);
+    const [deepLinkNotice, setDeepLinkNotice] = useState(/** @type {string | null} */ (null));
     // §47 / Cluster L FOLLOWUP 2: `web+xchain:` deep links arriving via
     // the manifest's `protocol_handlers` route to popup.html?uri=<uri>.
     // Parsed on mount, prefill goes into the Send route, then the param
@@ -471,6 +488,23 @@ function AppInner() {
 
     useEffect(() => { refresh(); }, [refresh]);
 
+    useEffect(() => attachSurfaceStateListener((event) => {
+        applySurfaceStateEvent(event, {
+            refreshSession: refresh,
+            selectWallet: (walletId) => {
+                writeActiveWallet(walletId);
+                setActiveWalletId(walletId);
+                setUnlockedView('home');
+            },
+            settingsChanged: (next) => {
+                if (typeof window === 'undefined') return;
+                window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: next }));
+            },
+            // Chain-scoped routes load from the active network when they mount.
+            remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
+        });
+    }), [refresh]);
+
     // §47 / Cluster L FOLLOWUP 2: consume `?uri=` from popup.html's
     // location.search when the popup boots. Manifest's
     // `protocol_handlers` block routes `web+xchain:` clicks here. Strip
@@ -482,47 +516,24 @@ function AppInner() {
         const raw = params.get('uri');
         if (!raw) return;
         try {
-            // Pass the registry so coin-code URIs (xchain:TBTC/...) resolve to
-            // a chainId; without it intent.chainId is always undefined, which
-            // Send tolerated but contract routes cannot.
-            //
-            // `hardenUriIntentText` neutralizes the free-text
-            // fields (memo/tick/method/params) before they ever become
-            // prefill state, since this is the first point a query-string
-            // value from a `web+xchain:` click becomes something the popup
-            // renders. `address` stays whatever the link sent; see the
-            // function's own comment for why.
-            const intent = coreUri.hardenUriIntentText(
-                coreUri.parseXchainUri(raw, { chainRegistry: APP_CHAIN_REGISTRY }),
-            );
-            if (intent && intent.kind === 'send') {
-                setSendPrefill({
-                    address: intent.address,
-                    amount: intent.amount,
-                    tick: intent.tick,
-                    chainId: intent.chainId,
-                    memo: intent.memo,
-                });
-                setUnlockedView('send');
-                launchRouteState.current.remember('send');
-            } else if (intent && intent.kind === 'receive') {
-                setUnlockedView('receive');
-                launchRouteState.current.remember('receive');
-            } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
-                // Explorer Write-tab deep link: land on the EXECUTE form
-                // prefilled. Unroutable without a contract index and a
-                // resolved chain, so both are required.
-                setContractRef({ chainId: intent.chainId, contractActionIndex: intent.contractActionIndex });
-                setExecutePrefill({
-                    method: intent.method || '',
-                    paramsText: intent.executeParams || '',
-                });
-                setUnlockedView('contract-execute');
-                launchRouteState.current.remember('contract-execute');
+            const route = deepLinkRoute(raw, APP_CHAIN_REGISTRY);
+            if (!route) return;
+            if (route.view === 'deep-link-error') {
+                setDeepLinkNotice(route.message);
+                pendingUriView.current = null;
+                return;
             }
+            if (route.view === 'send') setSendPrefill(route.sendPrefill);
+            if (route.view === 'contract-execute') {
+                setContractRef(route.contractRef);
+                setExecutePrefill(route.executePrefill);
+            }
+            setUnlockedView(route.view);
+            launchRouteState.current.remember(route.view);
+            pendingUriView.current = route.view;
         } catch {
-            // Parser surfaces unknown via kind === 'unknown'; defensive
-            // try/catch in case future parser changes regress.
+            // The shared router returns an error route for malformed input;
+            // this remains defensive against an unexpected parser failure.
         } finally {
             params.delete('uri');
             const next = params.toString();
@@ -635,7 +646,7 @@ function AppInner() {
     // The wallet-mode gate on the spend surfaces. Signer mode
     // promises on its own settings screen that Send / Receive are hidden,
     // so the nav rails and the command palette drop both entries.
-    const { isSignerMode } = useWalletMode();
+    const { isSignerMode, isWatcherMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
     // per-wallet in localStorage). Restricted to context-free views;
@@ -1373,6 +1384,7 @@ function AppInner() {
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
                         onSignerPaired={registerLocalSigner}
+                        onSignerUnpaired={unregisterLocalSigner}
                     />
                 );
             }
@@ -1660,6 +1672,7 @@ function AppInner() {
                         chainId={betRef.chainId}
                         feedIndex={betRef.feedIndex}
                         onOpenOracle={(chainId, address) => { setBetRef({ ...betRef, chainId, oracleAddress: address }); setUnlockedView('bet-oracle-record'); }}
+                        onSettleMarket={() => setUnlockedView('bet-oracle-console')}
                         onBack={() => setUnlockedView('bet-markets')}
                     />
                 );
@@ -2185,6 +2198,7 @@ function AppInner() {
                         displayName={tokenDetailRef.displayName}
                         divisibility={tokenDetailRef.divisibility}
                         fiatRate={tokenDetailRef.fiatRate}
+                        fiatRateSource={tokenDetailRef.fiatRateSource}
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}
@@ -2218,6 +2232,15 @@ function AppInner() {
                             setHistoryInitialChainCoin(scope.chainCoin);
                             setHistoryReturnTo('token-detail');
                             setUnlockedView('history');
+                        }}
+                        onBuy={() => {
+                            setMarketsAsset({
+                                chainId: tokenDetailRef.chainId,
+                                tick: tokenDetailRef.tick,
+                                kind: tokenDetailRef.kind,
+                                displayName: tokenDetailRef.displayName,
+                            });
+                            setUnlockedView('markets');
                         }}
                         // Same hop MyTokens' onSelectTick uses: tokenDetailRef
                         // already carries this tick's chainId/tick, so Manage
@@ -2305,7 +2328,8 @@ function AppInner() {
                             const scope = historyScopeForAsset(tokenDetailRef);
                             setHistoryInitialQuery(scope.searchQuery);
                             setHistoryInitialChainCoin(scope.chainCoin);
-                            setHistoryReturnTo('home');
+                            setHistoryInitialFocus(null);
+                            setHistoryReturnTo('manage-token');
                             setUnlockedView('history');
                         }}
                     />
@@ -2411,6 +2435,7 @@ function AppInner() {
                             } : undefined
                         }
                         initialSubpageId={settingsInitialSection}
+                        onNavigateToMint={handleFaucetMint}
                     />
                 );
             }
@@ -2620,17 +2645,43 @@ function AppInner() {
             );
             })();
             return (
-                <>
+                <FullLayoutWithNav
+                    bottomBar={(
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={setUnlockedView}
+                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onOpenSettings={() => openSettingsSection(null)}
+                            hasVmAddress={hasVmAddress}
+                            hasDexSurface
+                            isSignerMode={isSignerMode}
+                        />
+                    )}
+                >
                     {activeWalletId ? (
                         <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                     ) : null}
-                    <Suspense fallback={<Skeleton.List rows={5} />}>
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                    </Suspense>
+                    <WatchOnlyBadge visible={isWatcherMode} />
+                    <RouteErrorBoundary
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                    >
+                        <Suspense fallback={<Skeleton.List rows={5} />}>
+                            <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
+                        </Suspense>
+                    </RouteErrorBoundary>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
                             onClose={() => setMessageSentNotice(false)}
+                        />
+                    ) : null}
+                    {deepLinkNotice ? (
+                        <NoticeModal
+                            title="Cannot open link"
+                            message={deepLinkNotice}
+                            onClose={() => setDeepLinkNotice(null)}
                         />
                     ) : null}
                     <CommandPalette
@@ -2640,7 +2691,7 @@ function AppInner() {
                         parseQuery={paletteParseQuery}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
-                </>
+                </FullLayoutWithNav>
             );
         }
         default:

@@ -11,10 +11,9 @@
 import { useMemo } from 'react';
 
 /**
- * Pure-SVG sparkline. Renders the series as a single polyline scaled
- * to a 100×100 viewBox; min/max are computed from the series so the
- * line uses the full vertical extent. Stroke color flips green/red
- * based on whether the last point is above or below the first.
+ * Pure-SVG sparkline. Renders finite samples as a polyline inside a
+ * padded 100×100 viewBox so endpoint strokes remain visible. Rising,
+ * falling, and unchanged series use their semantic theme tokens.
  *
  * @param {object} props
  * @param {number[] | null | undefined} props.series
@@ -22,30 +21,40 @@ import { useMemo } from 'react';
  * @param {number} [props.strokeWidth=1.5]
  */
 export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
+    const values = useMemo(
+        () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
+        [series],
+    );
     const points = useMemo(() => {
-        if (!Array.isArray(series) || series.length < 2) return null;
-        const min = Math.min(...series);
-        const max = Math.max(...series);
-        const range = max - min || 1;
-        const xStep = 100 / (series.length - 1);
-        return series
+        if (values.length === 0) return null;
+        if (values.length === 1) return '48.00,50.00 52.00,50.00';
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const flat = max === min;
+        const range = max - min;
+        const xStep = 98 / (values.length - 1);
+        return values
             .map((v, i) => {
-                const x = i * xStep;
-                const y = 100 - ((v - min) / range) * 100;
+                const x = 1 + i * xStep;
+                const y = flat ? 50 : 99 - ((v - min) / range) * 98;
                 return `${x.toFixed(2)},${y.toFixed(2)}`;
             })
             .join(' ');
-    }, [series]);
+    }, [values]);
     if (!points) return null;
-    const tone = series[series.length - 1] >= series[0] ? 'positive' : 'negative';
-    const stroke = tone === 'positive' ? 'var(--xc-success, #14b86c)' : 'var(--xc-danger, #d93838)';
+    const first = values[0];
+    const last = values[values.length - 1];
+    const tone = last > first ? 'up' : last < first ? 'down' : 'unchanged';
+    const stroke = tone === 'up'
+        ? 'var(--xc-success)'
+        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
     return (
         <svg
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             style={{ display: 'block', width: '100%', height }}
             role="img"
-            aria-label="Price trend"
+            aria-label={`Price trend, ${tone}`}
         >
             <polyline
                 fill="none"

@@ -105,7 +105,7 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
         expect(screen.getByText('No matching balances')).toBeInTheDocument();
-        expect(screen.getByText('Nothing matches "missing asset". Clear the filter to see everything.'))
+        expect(screen.getByText('No balances match "missing asset".'))
             .toBeInTheDocument();
     });
 

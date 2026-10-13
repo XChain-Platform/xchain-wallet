@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -168,6 +168,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const actionsRef = useRef(null);
 
     const loadContacts = useCallback(async () => {
+        setLoadError(null);
         try {
             const rows = await messaging.listContacts();
             setContacts(Array.isArray(rows) ? rows : []);
@@ -329,7 +330,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         } else {
             setScanFromEdit(false);
             setMode(scanFromEdit ? 'edit' : 'list');
-            showToast({ message: 'No address detected in that QR code.' });
+            showToast({ message: 'No address detected in that QR code.', variant: 'error' });
         }
     }
 
@@ -544,16 +545,28 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setContacts(null);
+                        return loadContacts();
+                    },
+                }}
+            >
+                {loadError}
+            </StatusMessage>,
         );
     }
 
     if (contacts === null) {
-        return wrap(<p className={styles.hint}>Loading contacts…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading contacts">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
 
     if (mode === 'scan') {
@@ -576,7 +589,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="New contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -593,6 +606,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         setFormEntries([{ ...entry0, address, chain: chainFor(address) }]);
                     }}
                     placeholder=""
+                    autoComplete="off"
                 />
                 <NetworkReadout
                     address={entry0.address}
@@ -622,7 +636,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="Edit contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -792,6 +806,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
                                 placeholder=""
                                 autoFocus
+                                autoComplete="off"
                             />
                             <NetworkReadout
                                 address={addAddrValue}
@@ -820,6 +835,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <>
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
                     className={picker.search}
                     placeholder="Search"
                     value={query}
@@ -880,11 +897,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             ) : null}
             {contacts.length === 0 ? (
                 <EmptyState
-                    title="No contacts yet."
-                    body="Tap + to add one and label addresses across the inbox and history."
+                    title="No contacts yet"
+                    body="Saved contacts label addresses across the inbox and history."
                 />
             ) : filteredContacts.length === 0 ? (
-                <EmptyState title="No contacts match your filters." />
+                <EmptyState title="No matching contacts" body="Try a different search or network filter." />
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {

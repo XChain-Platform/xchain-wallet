@@ -372,10 +372,11 @@ describe('submitFailureMessage adopts the encoder mapper', () => {
         expect(copy).not.toContain('internal refusal');
     });
 
-    it('keeps a form-authored opener when its fallback includes the raw error', () => {
+    it('does not keep a form-authored opener when it embeds the raw error', () => {
         const err = new Error('sendToken: params.TICK is required');
         const fallback = `Couldn't mint. ${err.message}`;
-        expect(submitFailureMessage(err, { fallback })).toBe(fallback);
+        expect(submitFailureMessage(err, { fallback }))
+            .toBe("Couldn't complete this. Something went wrong. Try again.");
     });
 
     it('humanizes a connection error when the fallback is exactly the raw text', () => {

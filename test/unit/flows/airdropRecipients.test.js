@@ -49,6 +49,13 @@ describe('parseCsv recipient imports', () => {
         expect(parseCsv(`\uFEFF\n\naddress,label\n${MAINNET_BECH32},primary\n`))
             .toEqual([MAINNET_BECH32]);
     });
+
+    it('does not turn a quoted multiline label into another address', () => {
+        expect(parseCsv(
+            `"address","label"\r\n${MAINNET_BECH32},"primary\nwallet"\r\n${MAINNET_LEGACY},second\r\n`,
+        )).toEqual([MAINNET_BECH32, MAINNET_LEGACY]);
+    });
+
 });
 
 describe('classifyRecipients - network-aware validation', () => {

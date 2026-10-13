@@ -47,7 +47,7 @@ export function CollectiblesView({
     rows,
     demo = false,
     emptyTitle = 'No collectibles yet',
-    emptyBody,
+    emptyBody = 'Collectibles appear here after this wallet receives them.',
     onReceive,
     onSelectToken,
     pinnedKeys,
@@ -162,6 +162,7 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
             imageUrl: effectiveImageUrl,
         })

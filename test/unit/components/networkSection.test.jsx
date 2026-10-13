@@ -75,4 +75,35 @@ describe('NetworkSection', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Wallet is locked.');
         expect(screen.getByLabelText('Active network')).toHaveValue('mainnet');
     });
+
+    it('reloads once after a confirmed switch has been persisted', async () => {
+        const reload = vi.fn();
+        setActiveNetworkSpy.mockResolvedValueOnce({ settings: { activeNetwork: 'testnet' } });
+        render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={reload} />);
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+        expect(setActiveNetworkSpy).toHaveBeenCalledWith({ walletId: 'wallet-1', network: 'testnet' });
+    });
+
+    it('falls back to the settings write when there is no wallet id', async () => {
+        const reload = vi.fn();
+        updateSpy.mockResolvedValueOnce({ activeNetwork: 'testnet' });
+        render(<NetworkSection reload={reload} />);
+        fireEvent.change(screen.getByLabelText('Active network'), { target: { value: 'testnet' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
+
+        await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+        expect(updateSpy).toHaveBeenCalledWith({ activeNetwork: 'testnet' });
+        expect(setActiveNetworkSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps Regtest listed when it is the persisted network even with developer mode off', () => {
+        settingsRecord = { activeNetwork: 'regtest', developerMode: false };
+        render(<NetworkSection activeWallet={{ id: 'wallet-1' }} reload={() => {}} />);
+        const select = screen.getByLabelText('Active network');
+        expect(select).toHaveValue('regtest');
+        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet', 'regtest']);
+    });
 });

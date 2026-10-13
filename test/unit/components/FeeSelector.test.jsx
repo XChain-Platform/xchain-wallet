@@ -29,6 +29,13 @@ const tiers = {
     unit: 'sat/vB',
 };
 
+const fallbackTiers = {
+    ...tiers,
+    low: { ...tiers.low, source: 'static-placeholder' },
+    normal: { ...tiers.normal, source: 'static-placeholder' },
+    fast: { ...tiers.fast, source: 'static-placeholder' },
+};
+
 afterEach(cleanup);
 
 function ControlledSelector({ initialValue = { mode: 'normal' }, ...props }) {
@@ -125,5 +132,23 @@ describe('FeeSelector', () => {
             />,
         );
         expect(screen.getByText('about 0.00000625 USD')).toBeTruthy();
+    });
+
+    it('shows the fallback note while keeping Custom editable', () => {
+        render(
+            <ControlledSelector
+                tiers={fallbackTiers}
+                initialValue={{ mode: 'normal' }}
+            />,
+        );
+
+        expect(screen.getByText(/Using safe default rates/)).toBeTruthy();
+        fireEvent.keyDown(screen.getByRole('slider', { name: 'Network fee' }), { key: 'End' });
+
+        const customInput = screen.getByLabelText('Custom fee rate (sat/vB)');
+        expect(customInput.disabled).toBe(false);
+        fireEvent.change(customInput, { target: { value: '7.5' } });
+        expect(customInput.value).toBe('7.5');
+        expect(screen.getByText(/Custom fees remain available/)).toBeTruthy();
     });
 });

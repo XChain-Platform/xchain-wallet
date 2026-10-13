@@ -13,6 +13,7 @@ import { renderHook, act, cleanup, waitFor } from '@testing-library/react';
 import {
     useConfirmAction, ConfirmActionBusyError, UserRejectedError,
 } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { isAutoLockHeld } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
 
 afterEach(() => cleanup());
 
@@ -97,6 +98,30 @@ describe('useConfirmAction', () => {
         await waitFor(() => expect(result.current.phase).toBe('ready'));
         await act(async () => { await result.current.approve({ password: 'pw' }); });
         await expect(p).resolves.toEqual({ txid: 'T' });
+    });
+
+    it('holds auto-lock until an approved signing request settles', async () => {
+        const { result } = renderHook(() => useConfirmAction());
+        let finishSigning;
+        const signing = new Promise((resolve) => { finishSigning = resolve; });
+        let p;
+        await act(async () => {
+            p = result.current.confirm({
+                compose: async () => COMPOSED,
+                onApprove: () => signing,
+                chainId: 'btc',
+                preflight: preflightWith(),
+            });
+        });
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+
+        let approving;
+        await act(async () => { approving = result.current.approve({}); });
+        expect(isAutoLockHeld()).toBe(true);
+
+        await act(async () => { finishSigning({ txid: 'T' }); await approving; });
+        await expect(p).resolves.toEqual({ txid: 'T' });
+        expect(isAutoLockHeld()).toBe(false);
     });
 
     it('rejects with user-rejected on reject()', async () => {

@@ -418,6 +418,10 @@ function UrlField({ label, value, placeholder, onChange }) {
             <div style={FIELD_LABEL}>{label}</div>
             <input
                 type="url"
+                enterKeyHint="done"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={value}
                 placeholder={placeholder}
                 onChange={(e) => onChange(e.target.value)}
