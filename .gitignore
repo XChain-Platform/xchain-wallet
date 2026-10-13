@@ -46,6 +46,8 @@
 
 # Coverage output (c8/nyc) - generated, not source
 coverage/
+!test/unit/coverage/
+!test/unit/coverage/uncoveredRiskModules.test.js
 .nyc_output/
 .claude/
 

@@ -69,68 +69,73 @@ export async function runExample(): Promise<ExampleReport> {
     report.connected = true;
     report.accountCount = conn.accounts.length;
 
-    const chains = await provider.getActiveChains();
-    const chainId = chains[0];
-    if (!chainId) return report;
+    // Release the permissioned session on every connected exit, including
+    // incomplete chain data and thrown provider calls.
+    try {
+        const chains = await provider.getActiveChains();
+        const chainId = chains[0];
+        if (!chainId) return report;
 
-    const addresses = await provider.getAddresses(chainId);
-    const fromAddress = addresses[0]?.address;
-    if (!fromAddress) return report;
+        const addresses = await provider.getAddresses(chainId);
+        const fromAddress = addresses[0]?.address;
+        if (!fromAddress) return report;
 
-    await provider.getBalances(chainId, fromAddress);
+        await provider.getBalances(chainId, fromAddress);
 
-    const signInParams = makeSignInParams(APP_ID);
-    const signIn = await provider.signIn(signInParams);
-    if (signIn.ok) {
-        // A challenge that will not parse is a FAILURE, never a pass. Written as
-        // `reparsed && validate(...)`, an unparseable challenge yielded null and
-        // read as "no validation failure": the extension emitted ISO timestamps
-        // where the spec declares epoch ms, so parseSignInChallenge returned null
-        // for every real sign-in and this example still reported ok.
-        const reparsed = parseSignInChallenge(signIn.challenge);
-        report.signInOk = reparsed !== null &&
-            validateSignInChallenge(reparsed, {
-                appId: APP_ID,
-                // The origin your backend expects the sign-in to come
-                // from - here the page the example runs on. A challenge
-                // stamped with any other origin must be rejected.
-                origin: globalThis.location?.origin ?? '',
-                nonce: signInParams.nonce,
-            }) === null;
+        const signInParams = makeSignInParams(APP_ID);
+        const signIn = await provider.signIn(signInParams);
+        if (signIn.ok) {
+            // A challenge that will not parse is a FAILURE, never a pass. Written as
+            // `reparsed && validate(...)`, an unparseable challenge yielded null and
+            // read as "no validation failure": the extension emitted ISO timestamps
+            // where the spec declares epoch ms, so parseSignInChallenge returned null
+            // for every real sign-in and this example still reported ok.
+            const reparsed = parseSignInChallenge(signIn.challenge);
+            report.signInOk = reparsed !== null &&
+                validateSignInChallenge(reparsed, {
+                    appId: APP_ID,
+                    // The origin your backend expects the sign-in to come
+                    // from - here the page the example runs on. A challenge
+                    // stamped with any other origin must be rejected.
+                    origin: globalThis.location?.origin ?? '',
+                    nonce: signInParams.nonce,
+                }) === null;
+        }
+
+        const signMsg = await provider.signMessage({
+            chainId,
+            address: fromAddress,
+            message: 'Hello from example.com',
+        });
+        report.signMessageOk = signMsg.ok;
+
+        const sendParams: SignActionParams<SendActionParams> = {
+            chainId,
+            action: 'SEND',
+            params: {
+                fromAddress,
+                toAddress: 'bcrt1qrecipientaddress0000000000000000000000',
+                asset: 'BTC',
+                amountRaw: '10000',
+                memo: 'example send',
+            },
+        };
+        const sendResult = await provider.signAction(sendParams);
+        if (sendResult.ok) report.sendTxid = sendResult.txid;
+
+        // Phase 2+ action - expected to be rejected by a Phase 1 wallet.
+        const issueResult = await provider.signAction({
+            chainId,
+            action: 'ISSUE',
+            params: { asset: 'NEWCOIN', quantity: '1000000', divisibility: 0 },
+        });
+        report.issueRejectedAsUnsupported =
+            !issueResult.ok && issueResult.error === 'UNSUPPORTED_ACTION';
+
+        return report;
+    } finally {
+        await provider.disconnect();
     }
-
-    const signMsg = await provider.signMessage({
-        chainId,
-        address: fromAddress,
-        message: 'Hello from example.com',
-    });
-    report.signMessageOk = signMsg.ok;
-
-    const sendParams: SignActionParams<SendActionParams> = {
-        chainId,
-        action: 'SEND',
-        params: {
-            fromAddress,
-            toAddress: 'bcrt1qrecipientaddress0000000000000000000000',
-            asset: 'BTC',
-            amountRaw: '10000',
-            memo: 'example send',
-        },
-    };
-    const sendResult = await provider.signAction(sendParams);
-    if (sendResult.ok) report.sendTxid = sendResult.txid;
-
-    // Phase 2+ action - expected to be rejected by a Phase 1 wallet.
-    const issueResult = await provider.signAction({
-        chainId,
-        action: 'ISSUE',
-        params: { asset: 'NEWCOIN', quantity: '1000000', divisibility: 0 },
-    });
-    report.issueRejectedAsUnsupported =
-        !issueResult.ok && issueResult.error === 'UNSUPPORTED_ACTION';
-
-    await provider.disconnect();
-    return report;
 }
 
 // ---------------------------------------------------------------------------
