@@ -141,6 +141,9 @@ export class VaultWindowStore {
         /** @type {WindowState | null} */
         this._state = null;
         this._dirty = false;
+        this._revision = 0;
+        this._loadPromise = null;
+        this._flushPromise = null;
         /** @type {WindowEntry[]} entries snapshot() could not accumulate */
         this._quarantined = [];
     }
@@ -153,30 +156,50 @@ export class VaultWindowStore {
      */
     async load() {
         if (this._state) return;
+        if (!this._loadPromise) this._loadPromise = this._loadState();
+        const task = this._loadPromise;
+        try {
+            await task;
+        } finally {
+            if (this._loadPromise === task) this._loadPromise = null;
+        }
+    }
+
+    async _loadState() {
         let raw;
         try {
             raw = await this._persistence.read();
         } catch (e) {
             throw new WindowStateCorruptError(e?.message ?? String(e));
         }
-        if (raw === null || raw === undefined) {
+        if (raw === null) {
             this._state = { version: WINDOW_STATE_VERSION, entries: [] };
             return;
         }
-        if (typeof raw !== 'object' || !Array.isArray(raw.entries)) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Array.isArray(raw.entries)) {
             throw new WindowStateCorruptError('entries missing or not an array');
         }
+        if (raw.version !== WINDOW_STATE_VERSION) {
+            throw new WindowStateCorruptError(
+                `unsupported version ${String(raw.version)} (expected ${WINDOW_STATE_VERSION})`,
+            );
+        }
+        if (raw.lastSeen !== undefined && (!Number.isFinite(raw.lastSeen) || raw.lastSeen < 0)) {
+            throw new WindowStateCorruptError('lastSeen is not a valid timestamp');
+        }
         for (const e of raw.entries) {
-            if (!e || typeof e.t !== 'number' || !Number.isFinite(e.t)) {
+            if (!e || typeof e !== 'object' || Array.isArray(e)
+                || typeof e.t !== 'number' || !Number.isFinite(e.t) || e.t < 0) {
                 throw new WindowStateCorruptError('an entry has no valid timestamp');
             }
+            this._validateEntry(e, WindowStateCorruptError);
         }
         const entries = raw.entries.map((e) => ({ ...e }));
         // G19: the rolling window trusts wall-clock time, so a clock the daemon
         // does not control is part of the trust boundary. Refuse a future-dated
         // timestamp by clamping it to now (dropping it would LOOSEN the budget,
         // the wrong direction to fail in) and record that the clock moved back.
-        const now = this._now();
+        const now = this._readNow();
         this._clockWarnings = [];
         if (Number.isFinite(raw.lastSeen) && raw.lastSeen > now + CLOCK_SKEW_TOLERANCE_MS) {
             this._clockWarnings.push('window state was last written in the future: the clock moved backward');
@@ -186,7 +209,9 @@ export class VaultWindowStore {
             if (e.t > now + CLOCK_SKEW_TOLERANCE_MS) { e.t = now; clamped++; }
         }
         if (clamped) this._clockWarnings.push(`${clamped} entry timestamp(s) were in the future and were clamped`);
-        this._state = { version: WINDOW_STATE_VERSION, entries, lastSeen: raw.lastSeen };
+        const lastSeen = raw.lastSeen > now + CLOCK_SKEW_TOLERANCE_MS ? now : raw.lastSeen;
+        this._state = { version: WINDOW_STATE_VERSION, entries, lastSeen };
+        if (clamped || lastSeen !== raw.lastSeen) this._markDirty();
     }
 
     _ensureLoaded() {
@@ -195,10 +220,53 @@ export class VaultWindowStore {
         }
     }
 
+    _readNow() {
+        const now = this._now();
+        if (!Number.isFinite(now) || now < 0) {
+            throw new Error('VaultWindowStore: clock must return a non-negative finite timestamp');
+        }
+        return now;
+    }
+
+    _validateEntry(entry, ErrorType = Error) {
+        for (const field of ['action', 'tick']) {
+            if (entry[field] !== undefined && entry[field] !== null
+                && typeof entry[field] !== 'string') {
+                throw new ErrorType(`an entry has an invalid ${field}`);
+            }
+        }
+        if (entry.txid !== undefined && entry.txid !== null && typeof entry.txid !== 'string') {
+            throw new ErrorType('an entry has an invalid txid');
+        }
+        if (entry.amount !== undefined && entry.amount !== null) {
+            if (typeof entry.amount !== 'string' && typeof entry.amount !== 'number') {
+                throw new ErrorType('an entry has an invalid amount');
+            }
+            let scaled;
+            try {
+                scaled = toScaled(entry.amount);
+            } catch {
+                throw new ErrorType('an entry has an invalid amount');
+            }
+            if (scaled.value < 0n) {
+                throw new ErrorType('an entry has a negative amount');
+            }
+        }
+    }
+
+    _markDirty() {
+        this._dirty = true;
+        this._revision += 1;
+    }
+
     // Drop entries older than the window; mutates the in-memory state.
     _prune() {
-        const cutoff = this._now() - this._hours * 3600 * 1000;
-        this._state.entries = this._state.entries.filter((e) => e.t >= cutoff);
+        const cutoff = this._readNow() - this._hours * 3600 * 1000;
+        const entries = this._state.entries.filter((e) => e.t >= cutoff);
+        if (entries.length !== this._state.entries.length) {
+            this._state.entries = entries;
+            this._markDirty();
+        }
     }
 
     /**
@@ -216,9 +284,8 @@ export class VaultWindowStore {
      * then, that throw repeats on every later request - a remote freeze of the
      * account, which on a plain 2-of-2 means funds stuck for good (G1).
      *
-     * An entry that still cannot be accumulated (a row written before this fix)
-     * is quarantined and reported rather than allowed to throw. It keeps
-     * counting toward `count`, so quarantining can only tighten the budget.
+     * Persisted entries are validated during load so malformed amounts fail
+     * closed instead of disappearing from a per-tick total.
      * @returns {{ count: number, perTick: Record<string, string> }}
      */
     snapshot() {
@@ -234,20 +301,12 @@ export class VaultWindowStore {
             // so the cap bound each transaction independently rather than the window.
             const key = (e.tick === undefined || e.tick === null)
                 ? UNRESOLVED_TICK_BUCKET : String(e.tick).toUpperCase();
-            try {
-                perTick[key] = addDecimalStrings(perTick[key] ?? '0', e.amount);
-            } catch (err) {
-                this._quarantined.push(e);
-            }
+            perTick[key] = addDecimalStrings(perTick[key] ?? '0', e.amount);
         }
         return { count: this._state.entries.length, perTick };
     }
 
-    /**
-     * Entries this store could not accumulate. Non-empty means the persisted
-     * window is under-counting amounts (never over-counting).
-     * @returns {WindowEntry[]}
-     */
+    /** @returns {WindowEntry[]} always empty because malformed entries fail during load */
     quarantined() {
         return this._quarantined.slice();
     }
@@ -272,12 +331,13 @@ export class VaultWindowStore {
      */
     record({ action, tick, amount, txid } = {}) {
         this._ensureLoaded();
+        this._validateEntry({ action, tick, amount, txid });
         this._prune();
-        const now = this._now();
+        const now = this._readNow();
         this._state.entries.push({ t: now, action, tick, amount, txid: txid ?? null });
         // Stamped so a backward clock step across a reload is detectable (G19).
         this._state.lastSeen = Math.max(now, Number.isFinite(this._state.lastSeen) ? this._state.lastSeen : now);
-        this._dirty = true;
+        this._markDirty();
     }
 
     /** @returns {boolean} whether there are unpersisted writes */
@@ -292,14 +352,28 @@ export class VaultWindowStore {
      * @returns {Promise<void>}
      */
     async flush() {
-        if (!this._dirty || !this._state) return;
-        await this._persistence.write({
-            version: WINDOW_STATE_VERSION,
-            entries: this._state.entries,
-            // Carried so the next load can tell the clock moved backward (G19).
-            lastSeen: this._state.lastSeen ?? this._now(),
-        });
-        this._dirty = false;
+        while (this._dirty && this._state) {
+            if (!this._flushPromise) {
+                const revision = this._revision;
+                const snapshot = {
+                    version: WINDOW_STATE_VERSION,
+                    entries: this._state.entries.map((entry) => ({ ...entry })),
+                    // Carried so the next load can tell the clock moved backward (G19).
+                    lastSeen: this._state.lastSeen ?? this._readNow(),
+                };
+                let task;
+                task = Promise.resolve()
+                    .then(() => this._persistence.write(snapshot))
+                    .then(() => {
+                        if (this._revision === revision) this._dirty = false;
+                    })
+                    .finally(() => {
+                        if (this._flushPromise === task) this._flushPromise = null;
+                    });
+                this._flushPromise = task;
+            }
+            await this._flushPromise;
+        }
     }
 }
 
@@ -310,16 +384,16 @@ export class VaultWindowStore {
  * @returns {WindowPersistence & { dump: () => WindowState | null }}
  */
 export function createInMemoryWindowPersistence(initial = null) {
-    let store = initial ? JSON.parse(JSON.stringify(initial)) : null;
+    let store = initial === null ? null : JSON.parse(JSON.stringify(initial));
     return {
         async read() {
-            return store ? JSON.parse(JSON.stringify(store)) : null;
+            return store === null ? null : JSON.parse(JSON.stringify(store));
         },
         async write(state) {
             store = JSON.parse(JSON.stringify(state));
         },
         dump() {
-            return store ? JSON.parse(JSON.stringify(store)) : null;
+            return store === null ? null : JSON.parse(JSON.stringify(store));
         },
     };
 }

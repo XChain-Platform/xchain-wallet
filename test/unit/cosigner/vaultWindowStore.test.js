@@ -73,7 +73,7 @@ describe('cosigner/VaultWindowStore load fail-closed', () => {
 
     it('throws when an entry has no valid timestamp (never silently resets)', async () => {
         const store = new VaultWindowStore({
-            persistence: createInMemoryWindowPersistence({ entries: [{ action: 'SEND' }] }),
+            persistence: createInMemoryWindowPersistence({ version: 1, entries: [{ action: 'SEND' }] }),
             hours: 24,
         });
         await expect(store.load()).rejects.toBeInstanceOf(WindowStateCorruptError);
@@ -86,12 +86,65 @@ describe('cosigner/VaultWindowStore load fail-closed', () => {
         });
         await expect(store.load()).rejects.toBeInstanceOf(WindowStateCorruptError);
     });
+
+    it('rejects undefined reads and unsupported versions instead of resetting the budget', async () => {
+        const undefinedStore = new VaultWindowStore({
+            persistence: { async read() { return undefined; }, async write() {} },
+            hours: 24,
+        });
+        const futureStore = new VaultWindowStore({
+            persistence: createInMemoryWindowPersistence({ version: 2, entries: [] }),
+            hours: 24,
+        });
+
+        await expect(undefinedStore.load()).rejects.toBeInstanceOf(WindowStateCorruptError);
+        await expect(futureStore.load()).rejects.toThrow(/unsupported version/);
+    });
+
+    it('rejects malformed or negative amounts instead of omitting them from per-tick usage', async () => {
+        for (const amount of ['not-a-number', '-1']) {
+            const store = new VaultWindowStore({
+                persistence: createInMemoryWindowPersistence({
+                    version: 1,
+                    entries: [{ t: 1000, action: 'SEND', tick: 'X', amount }],
+                }),
+                hours: 24,
+                now: () => 1000,
+            });
+            await expect(store.load()).rejects.toBeInstanceOf(WindowStateCorruptError);
+        }
+    });
+
+    it('coalesces concurrent loads so a late read cannot replace live state', async () => {
+        let reads = 0;
+        let releaseRead;
+        const readGate = new Promise((resolve) => { releaseRead = resolve; });
+        const store = new VaultWindowStore({
+            persistence: {
+                async read() {
+                    reads += 1;
+                    await readGate;
+                    return { version: 1, entries: [] };
+                },
+                async write() {},
+            },
+            hours: 24,
+        });
+
+        const first = store.load();
+        const second = store.load();
+        expect(reads).toBe(1);
+        releaseRead();
+        await Promise.all([first, second]);
+        expect(store.snapshot().count).toBe(0);
+    });
 });
 
 describe('cosigner/VaultWindowStore snapshot + record', () => {
     it('sums perTick amounts and counts entries', async () => {
         const now = () => 1_000_000_000_000;
         const persistence = createInMemoryWindowPersistence({
+            version: 1,
             entries: [
                 { t: now(), action: 'SEND', tick: 'XCHAIN', amount: '1.5' },
                 { t: now(), action: 'SEND', tick: 'XCHAIN', amount: '2.25' },
@@ -109,6 +162,7 @@ describe('cosigner/VaultWindowStore snapshot + record', () => {
     it('sums ticker case variants into the chain identity bucket', async () => {
         const now = () => 1_000_000_000_000;
         const persistence = createInMemoryWindowPersistence({
+            version: 1,
             entries: [
                 { t: now(), action: 'SEND', tick: 'MiXeD', amount: '1.5' },
                 { t: now(), action: 'SEND', tick: 'MIXED', amount: '2.25' },
@@ -125,6 +179,7 @@ describe('cosigner/VaultWindowStore snapshot + record', () => {
         const nowMs = 1_000_000_000_000;
         const hourMs = 3600 * 1000;
         const persistence = createInMemoryWindowPersistence({
+            version: 1,
             entries: [
                 { t: nowMs - 30 * hourMs, action: 'SEND', tick: 'X', amount: '5' }, // older than 24h -> pruned
                 { t: nowMs - 1 * hourMs, action: 'SEND', tick: 'X', amount: '7' },   // within window
@@ -135,6 +190,24 @@ describe('cosigner/VaultWindowStore snapshot + record', () => {
         const snap = store.snapshot();
         expect(snap.count).toBe(1);
         expect(snap.perTick).toEqual({ X: '7' });
+    });
+
+    it('persists pruning so expired entries cannot reappear after reload', async () => {
+        const nowMs = 1_000_000_000_000;
+        const persistence = createInMemoryWindowPersistence({
+            version: 1,
+            entries: [{ t: nowMs - 25 * 3600 * 1000, action: 'SEND', tick: 'X', amount: '5' }],
+        });
+        const store = new VaultWindowStore({ persistence, hours: 24, now: () => nowMs });
+        await store.load();
+
+        expect(store.snapshot().count).toBe(0);
+        expect(store.dirty).toBe(true);
+        await store.flush();
+
+        const reopened = new VaultWindowStore({ persistence, hours: 24, now: () => nowMs - 2 * 3600 * 1000 });
+        await reopened.load();
+        expect(reopened.snapshot().count).toBe(0);
     });
 
     it('consumes budget in memory immediately, then persists on flush', async () => {
@@ -161,6 +234,52 @@ describe('cosigner/VaultWindowStore snapshot + record', () => {
         const reopened = new VaultWindowStore({ persistence, hours: 24, now: () => nowMs });
         await reopened.load();
         expect(reopened.snapshot()).toEqual({ count: 1, perTick: { X: '4' } });
+    });
+
+    it('persists a record added while a flush is in flight', async () => {
+        let stored = null;
+        let releaseWrite;
+        let markWriteStarted;
+        const writeGate = new Promise((resolve) => { releaseWrite = resolve; });
+        const writeStarted = new Promise((resolve) => { markWriteStarted = resolve; });
+        let writes = 0;
+        const persistence = {
+            async read() { return null; },
+            async write(state) {
+                writes += 1;
+                if (writes === 1) {
+                    markWriteStarted();
+                    await writeGate;
+                }
+                stored = JSON.parse(JSON.stringify(state));
+            },
+        };
+        const store = new VaultWindowStore({ persistence, hours: 24, now: () => 2000 });
+        await store.load();
+        store.record({ action: 'SEND', tick: 'X', amount: '1' });
+
+        const flushing = store.flush();
+        await writeStarted;
+        store.record({ action: 'SEND', tick: 'X', amount: '2' });
+        releaseWrite();
+        await flushing;
+
+        expect(writes).toBe(2);
+        expect(stored.entries).toHaveLength(2);
+        expect(store.dirty).toBe(false);
+    });
+
+    it('rejects invalid amounts before adding a record', async () => {
+        const store = new VaultWindowStore({
+            persistence: createInMemoryWindowPersistence(),
+            hours: 24,
+        });
+        await store.load();
+
+        expect(() => store.record({ action: 'SEND', tick: 'X', amount: '-1' })).toThrow(/negative amount/);
+        expect(() => store.record({ action: 'SEND', tick: 'X', amount: {} })).toThrow(/invalid amount/);
+        expect(store.snapshot().count).toBe(0);
+        expect(store.dirty).toBe(false);
     });
 
     it('flush is a no-op when nothing was recorded (deny path leaves no write)', async () => {
