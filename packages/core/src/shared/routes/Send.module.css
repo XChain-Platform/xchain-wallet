@@ -1,9 +1,3 @@
-.card {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-}
-
 .pickerLabel {
     display: flex;
     flex-direction: column;
