@@ -1363,6 +1363,9 @@ export async function createWalletLocal(req) {
             strengthBits,
             bip39Passphrase,
             kdfParams,
+            // Same password, same params: the wallet seal reuses the vault
+            // key instead of paying a second Argon2id round.
+            masterKey,
         });
         await v.save();
         vault = v;
@@ -1375,6 +1378,8 @@ export async function createWalletLocal(req) {
             bip39Passphrase,
             chainRegistry,
             sdkRegistry,
+            masterKey,
+            masterKeyKdfParams: kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1463,6 +1468,9 @@ export async function importMnemonicLocal(req) {
             bip39Passphrase,
             origin,
             kdfParams,
+            // Same password, same params: the wallet seal reuses the vault
+            // key instead of paying a second Argon2id round.
+            masterKey,
         });
         await v.save();
         vault = v;
@@ -1475,6 +1483,8 @@ export async function importMnemonicLocal(req) {
             bip39Passphrase,
             chainRegistry,
             sdkRegistry,
+            masterKey,
+            masterKeyKdfParams: kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1498,6 +1508,8 @@ export async function importMnemonicLocal(req) {
             walletId: result.wallet.id,
             password,
             bip39Passphrase,
+            masterKey,
+            masterKeyKdfParams: kdfParams,
             chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
                 ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
                 : activeChainIds,
@@ -1530,9 +1542,14 @@ export async function importMnemonicLocal(req) {
  * and turns it into a `null` result the import screen reads as "nothing
  * restored" rather than "the import failed".
  *
- * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, chainIds: string[] }} opts
+ * `masterKey` is the import's own key, lent for the seed decrypt and
+ * zeroed by the caller.
+ *
+ * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, masterKey: Uint8Array, masterKeyKdfParams: object, chainIds: string[] }} opts
  */
-async function restoreLabelSyncBestEffort({ flowsNs, vault: v, walletId, password, bip39Passphrase, chainIds }) {
+async function restoreLabelSyncBestEffort({
+    flowsNs, vault: v, walletId, password, bip39Passphrase, masterKey, masterKeyKdfParams, chainIds,
+}) {
     if (typeof flowsNs?.restoreLabelSyncAfterImport !== 'function') return null;
     try {
         return await flowsNs.restoreLabelSyncAfterImport({
@@ -1542,6 +1559,8 @@ async function restoreLabelSyncBestEffort({ flowsNs, vault: v, walletId, passwor
             bip39Passphrase,
             chainIds,
             sdkRegistry,
+            masterKey,
+            masterKeyKdfParams,
         });
     } catch (err) {
         console.error('[xchain-wallet/web] label-sync restore skipped:', err);
@@ -1639,6 +1658,10 @@ export async function importBackupLocal(req) {
             password,
             chainRegistry,
             sdkRegistry,
+            // Matches only a wallet sealed under the vault's own params. The
+            // re-key gives a restored wallet a fresh salt, so today it derives.
+            masterKey,
+            masterKeyKdfParams: kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1752,6 +1775,11 @@ export async function unlockWalletLocal(req) {
                 bip39Passphrase,
                 chainRegistry,
                 sdkRegistry,
+                // A wallet sealed under the vault's own params (the onboarding
+                // wallet) opens with this key instead of a second Argon2id
+                // round; the pool never keeps it, and the finally below zeroes it.
+                masterKey,
+                masterKeyKdfParams: meta.kdfParams,
             });
         } catch (_err) { /* best-effort, see above */ }
         // A typed 25th word that reproduced NONE of the passphrase wallets'

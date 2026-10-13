@@ -47,6 +47,7 @@ import {
     computeLabelSyncDiscoveryName,
     decodeLabelSyncPayload,
     encodeLabelSyncPayload,
+    kdfParamsEqual,
 } from '../crypto/index.js';
 import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { bip39MnemonicToSeed } from '../crypto/mnemonic.js';
@@ -543,10 +544,14 @@ export async function publishLabelsNow(opts) {
  * master key (ours to zero, unlike a signer's) so that passphrase can be
  * opened without a second Argon2id round.
  *
- * @param {{ wallet: import('../schemas/wallet.js').Wallet, password: string, bip39Passphrase?: string }} opts
+ * `masterKey`, when given, is a key already derived from `password` under
+ * this wallet's own kdfParams; decryptWalletSeed copies it, and the caller
+ * keeps and zeroes its own buffer.
+ *
+ * @param {{ wallet: import('../schemas/wallet.js').Wallet, password: string, bip39Passphrase?: string, masterKey?: Uint8Array }} opts
  * @returns {Promise<Uint8Array>}
  */
-async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '' }) {
+async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '', masterKey }) {
     const format = wallet.format ?? 'bip39';
     let sessionMasterKey = null;
     const plaintext = await decryptWalletSeed({
@@ -554,6 +559,7 @@ async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '' }) {
         encryptedSeed: wallet.encryptedSeed,
         kdfParams: wallet.kdfParams,
         aad: wallet.aad,
+        masterKey,
         retainMasterKey: (k) => { sessionMasterKey = k; },
     });
     let passphraseBytes = null;
@@ -588,6 +594,8 @@ async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '' }) {
  * @property {'overwrite' | 'preserve'} [onConflict]   default 'overwrite'; a fresh import has nothing to preserve
  * @property {number} [maxCandidates]
  * @property {number} [perChainTimeoutMs]  default LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS; a chain past it is reported as an error
+ * @property {Uint8Array} [masterKey]       a key already derived from `password` under `masterKeyKdfParams` (the import's own key); used only when the wallet's kdfParams equal those, so the seed opens without another Argon2id round. Copied, never zeroed here: the caller zeroes its own
+ * @property {import('../crypto/kdf.js').KdfParams} [masterKeyKdfParams]  the params `masterKey` was derived with
  */
 
 /** How long one chain's explorer may take before the restore stops waiting on it. */
@@ -684,6 +692,8 @@ export async function restoreLabelSyncAfterImport({
     onConflict = 'overwrite',
     maxCandidates = LABEL_SYNC_MAX_CANDIDATES,
     perChainTimeoutMs = LABEL_SYNC_RESTORE_CHAIN_TIMEOUT_MS,
+    masterKey,
+    masterKeyKdfParams,
 }) {
     if (!vault) throw new Error('restoreLabelSyncAfterImport: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
@@ -721,7 +731,14 @@ export async function restoreLabelSyncAfterImport({
 
     // One commitment key for every chain: the seed is opened once and the
     // key is zeroed on the way out whatever happens in between.
-    const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
+    const seed = await deriveLabelSyncSeed({
+        wallet,
+        password,
+        bip39Passphrase,
+        masterKey: masterKey !== undefined && kdfParamsEqual(wallet.kdfParams, masterKeyKdfParams)
+            ? masterKey
+            : undefined,
+    });
     let commitmentKey;
     try {
         commitmentKey = computeLabelSyncCommitmentKey(seed);

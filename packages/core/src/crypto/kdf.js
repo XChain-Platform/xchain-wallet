@@ -292,6 +292,42 @@ export function copyMasterKey(masterKey) {
 }
 
 /**
+ * Whether two KdfParams derive the same key from the same password: same
+ * algorithm, same salt BYTES, same iterations, memory and parallelism. A
+ * caller that already holds the key for `a` may reuse it for `b` only when
+ * this is true. Salts compare decoded, so two encodings of one salt match.
+ * Any malformed input is "not equal", never a throw: the caller then derives
+ * normally and the derivation reports the bad params itself.
+ *
+ * @param {KdfParams | null | undefined} a
+ * @param {KdfParams | null | undefined} b
+ * @returns {boolean}
+ */
+export function kdfParamsEqual(a, b) {
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    if (a.algorithm !== b.algorithm
+        || a.iterations !== b.iterations
+        || a.memory !== b.memory
+        || a.parallelism !== b.parallelism) {
+        return false;
+    }
+    if (typeof a.salt !== 'string' || typeof b.salt !== 'string') return false;
+    let saltA;
+    let saltB;
+    try {
+        saltA = base64ToBytes(a.salt);
+        saltB = base64ToBytes(b.salt);
+    } catch {
+        return false;
+    }
+    if (saltA.length === 0 || saltA.length !== saltB.length) return false;
+    for (let i = 0; i < saltA.length; i += 1) {
+        if (saltA[i] !== saltB[i]) return false;
+    }
+    return true;
+}
+
+/**
  * Build a fresh KdfParams with a random 16-byte salt and the floor
  * tuning. Callers can override `iterations` / `memory` after measuring
  * a calibration run on the user's device.

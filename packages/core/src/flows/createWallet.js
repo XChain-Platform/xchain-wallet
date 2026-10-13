@@ -31,6 +31,7 @@ import { persistHdWallet } from './_persistHdWallet.js';
  * @property {number} [strengthBits]                           128 | 160 | 192 | 224 | 256
  * @property {string} [bip39Passphrase]                        §15.6 25th word
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams] override per-device calibration
+ * @property {Uint8Array} [masterKey]                         key already derived from `password` under `kdfParams` (required with it); copied, never zeroed here, the caller zeroes its own
  */
 
 /**
@@ -55,6 +56,7 @@ export async function createWallet({
     strengthBits = BIP39_DEFAULT_STRENGTH_BITS,
     bip39Passphrase = '',
     kdfParams,
+    masterKey,
     activeNetwork,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
@@ -91,6 +93,7 @@ export async function createWallet({
         name,
         accountName: 'Main',
         kdfParams,
+        masterKey,
         vault,
         chainRegistry,
         sdkRegistry,

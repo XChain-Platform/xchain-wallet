@@ -95,6 +95,7 @@ export function detectMnemonicFormat(normalized) {
  * @property {string} [bip39Passphrase]                        BIP39 only; rejected on Counterwallet
  * @property {'created' | 'imported-mnemonic' | 'imported-freewallet' | 'imported-xchain-backup'} [origin]  default derived from format
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
+ * @property {Uint8Array} [masterKey]                         key already derived from `password` under `kdfParams` (required with it); copied, never zeroed here, the caller zeroes its own
  */
 
 /**
@@ -121,6 +122,7 @@ export async function importMnemonic({
     bip39Passphrase = '',
     origin,
     kdfParams,
+    masterKey,
     activeNetwork,
 }) {
     if (typeof password !== 'string' || password.length === 0) {
@@ -191,6 +193,7 @@ export async function importMnemonic({
         name,
         accountName: 'Main',
         kdfParams,
+        masterKey,
         vault,
         chainRegistry,
         sdkRegistry,
