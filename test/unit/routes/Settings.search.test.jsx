@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import { ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 function mount(props = {}) {
     const messaging = {
@@ -75,6 +76,32 @@ describe('Settings search', () => {
 
         expect(screen.getByText('Theme and reduced motion.')).toBeTruthy();
         expect(screen.queryByText(/accent color/i)).toBeNull();
+    });
+
+    it('starts drilldowns at the top and restores the settings list position', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
+                <ScrollRestoration routeKey="settings">
+                    <Settings onBack={() => {}} />
+                </ScrollRestoration>
+            </MessagingContext.Provider>,
+        );
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 418;
+
+        fireEvent.click(screen.getByRole('button', { name: /Network & endpoints/ }));
+
+        expect(main.scrollTop).toBe(0);
+        main.scrollTop = 73;
+        fireEvent.click(screen.getByRole('button', { name: 'Back to settings' }));
+        expect(main.scrollTop).toBe(418);
+
+        fireEvent.click(screen.getByRole('button', { name: /Network & endpoints/ }));
+        expect(main.scrollTop).toBe(0);
     });
 
     it('shows a plain empty state for no match and clearing restores the list', () => {

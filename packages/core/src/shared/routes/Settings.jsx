@@ -361,7 +361,12 @@ export function Settings({
                 />
             );
             return (
-                <Screen variant={variant} header={subpageHeader}>
+                <Screen
+                    variant={variant}
+                    header={subpageHeader}
+                    scrollKey={section.id}
+                    restoreScroll={false}
+                >
                     <ListPage className={settingsStyles.page} data-settings-layout="responsive">
                         <SectionComponent
                             key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
@@ -380,7 +385,7 @@ export function Settings({
     const header = <PageHeader onBack={onBack} title="Settings" />;
 
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} scrollKey="list">
             <ListPage
                 className={settingsStyles.page}
                 data-settings-layout="responsive"
