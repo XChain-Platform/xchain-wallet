@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { RecentTradesPanel } from '../../../packages/core/src/shared/components/RecentTradesPanel.jsx';
@@ -15,13 +15,37 @@ afterEach(() => cleanup());
 
 function deferred() {
     let resolve;
-    const promise = new Promise((resolvePromise) => {
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
         resolve = resolvePromise;
+        reject = rejectPromise;
     });
-    return { promise, resolve };
+    return { promise, resolve, reject };
 }
 
 describe('trading history panel display states', () => {
+    it('distinguishes empty and failed Recent Trades requests', async () => {
+        const getMarketHistory = vi.fn().mockResolvedValueOnce([])
+            .mockRejectedValueOnce(new Error('network unavailable'));
+        const view = render(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory }}>
+                <RecentTradesPanel chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('No trades yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={{ getMarketHistory }}>
+                <RecentTradesPanel chainId={CHAIN} tick1="XCHAIN" tick2="DOGE" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load recent trades.");
+        expect(screen.queryByText('No trades yet.')).toBeNull();
+    });
+
     it('keeps Recent Trades busy until data resolves and aligns numeric rows', async () => {
         const request = deferred();
         render(
@@ -96,5 +120,73 @@ describe('trading history panel display states', () => {
         expect(side.style.color).toBe('var(--xc-danger)');
         expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
         expect(screen.getByRole('region', { name: 'Trade history' })).not.toHaveAttribute('aria-busy');
+    });
+
+    it('distinguishes empty Trade History from address and history failures', async () => {
+        const getAddressesByChain = vi.fn()
+            .mockResolvedValueOnce({ [CHAIN]: [] })
+            .mockRejectedValueOnce(new Error('address service unavailable'))
+            .mockResolvedValueOnce({ [CHAIN]: [OWNER] });
+        const getMarketHistory = vi.fn().mockRejectedValue(new Error('history service unavailable'));
+        const messaging = { getAddressesByChain, getMarketHistory };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TradeHistoryPanel walletId="wallet-empty" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('No trades on this market yet.')).toBeInTheDocument();
+        expect(getMarketHistory).not.toHaveBeenCalled();
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TradeHistoryPanel walletId="wallet-address-failure" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your trade history.");
+        expect(screen.queryByText('No trades on this market yet.')).toBeNull();
+
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TradeHistoryPanel walletId="wallet-history-failure" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your trade history.");
+        expect(getMarketHistory).toHaveBeenCalledWith({
+            chainId: CHAIN,
+            tick1: 'XCHAIN',
+            tick2: 'BTC',
+            address: OWNER.address,
+        });
+        expect(screen.queryByText('No trades on this market yet.')).toBeNull();
+    });
+
+    it('removes stale Trade History rows when refresh fails', async () => {
+        const getMarketHistory = vi.fn()
+            .mockResolvedValueOnce([{
+                action_index: 3,
+                type: 'buy',
+                price: '3.5',
+                amount: '4',
+                timestamp: 1_800_000_000,
+            }])
+            .mockRejectedValueOnce(new Error('network unavailable'));
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [OWNER] }),
+                getMarketHistory,
+            }}>
+                <TradeHistoryPanel walletId="wallet-1" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('3.5')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your trade history.");
+        expect(screen.queryByText('3.5')).toBeNull();
+        expect(screen.queryByText('No trades on this market yet.')).toBeNull();
     });
 });

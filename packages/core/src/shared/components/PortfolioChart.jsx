@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { Sparkline, synthesizeTokenChart } from './Sparkline.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -19,6 +20,7 @@ import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { fiatValue } from './BalanceList.jsx';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -79,16 +81,31 @@ export function PortfolioChart({ rows, walletId }) {
     // A demo wallet prices itself from its own fixtures, like every other
     // number on this screen (see TotalBalanceHero for the whole argument).
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    const [priceLoading, setPriceLoading] = useState(!isDemo && nativeChainIds.length > 0);
+    const [priceError, setPriceError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         if (isDemo) {
             setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            setPriceLoading(false);
+            setPriceError(null);
             return undefined;
         }
-        if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
+        if (nativeChainIds.length === 0) {
             setPriceMap({});
+            setPriceLoading(false);
+            setPriceError(null);
+            return undefined;
+        }
+        if (typeof messaging?.getNativePricesRequest !== 'function') {
+            setPriceMap({});
+            setPriceLoading(false);
+            setPriceError('Price history is unavailable.');
             return undefined;
         }
         let cancelled = false;
+        setPriceMap({});
+        setPriceLoading(true);
+        setPriceError(null);
         messaging.getNativePricesRequest({
             chainIds: nativeChainIds,
             includeSparkline: true,
@@ -96,10 +113,16 @@ export function PortfolioChart({ rows, walletId }) {
         })
             .then((res) => {
                 if (cancelled) return;
-                if (res?.disabled) { setPriceMap({}); return; }
+                if (res?.disabled) { setPriceMap({}); setPriceLoading(false); return; }
                 setPriceMap(res?.prices || {});
+                setPriceLoading(false);
             })
-            .catch(() => { if (!cancelled) setPriceMap({}); });
+            .catch((err) => {
+                if (cancelled) return;
+                setPriceMap({});
+                setPriceLoading(false);
+                setPriceError(readFailureMessage(err, 'load portfolio price history'));
+            });
         return () => { cancelled = true; };
     }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -146,7 +169,11 @@ export function PortfolioChart({ rows, walletId }) {
     if (!chartVisible || !hasBalance) return null;
 
     return (
-        <section className={styles.wrap} aria-label="Portfolio performance">
+        <section
+            className={styles.wrap}
+            aria-label="Portfolio performance"
+            aria-busy={priceLoading || undefined}
+        >
             <div
                 id={chartPanelId}
                 role="tabpanel"
@@ -160,7 +187,11 @@ export function PortfolioChart({ rows, walletId }) {
                             : ''}
                     </div>
                 ) : null}
-                {hasData ? (
+                {priceLoading ? (
+                    <StatusMessage variant="status">Loading price history…</StatusMessage>
+                ) : priceError ? (
+                    <StatusMessage variant="error">{priceError}</StatusMessage>
+                ) : hasData ? (
                     <div className={styles.chart}>
                         <Sparkline
                             series={series}
