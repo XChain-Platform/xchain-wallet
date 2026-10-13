@@ -93,6 +93,12 @@ describe('platform detection', () => {
         expect(hasNativeVault()).toBe(false);
     });
 
+    it('ignores a Capacitor-shaped global without the native platform detector', () => {
+        globalThis.Capacitor = { Plugins: { XChainVault: fakePlugin() } };
+        expect(hasNativeVault()).toBe(false);
+        expect(getNativeVault()).toBeNull();
+    });
+
     it('ignores a plugin object that does not implement the contract', () => {
         globalThis.Capacitor = {
             isNativePlatform: () => true,
