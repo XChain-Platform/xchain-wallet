@@ -673,10 +673,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     // path asks for them.
                     pollThrottleRef.current.succeed();
                     balancesScopeRef.current = `${walletId}:${accountId || ''}`;
+                    setBalances(b);
+                    setBalancesFetchedAt(Date.now());
                     freshBalances = b;
                     freshFetchedAt = Date.now();
-                    setBalances(b);
-                    setBalancesFetchedAt(freshFetchedAt);
                 }
                 setCachedBalancesUpdating(false);
                 if (wait && !refreshHasFailure) {
