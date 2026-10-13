@@ -164,6 +164,26 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
     });
 
+    it('keeps testnet and regtest labels beside their displayed amounts', () => {
+        render(
+            <BalanceList rows={[
+                row('TBTC', {
+                    chainId: 'bitcoin-testnet',
+                    networkKind: 'testnet',
+                }),
+                row('RBTC', {
+                    chainId: 'bitcoin-regtest',
+                    networkKind: 'regtest',
+                }),
+            ]} />,
+        );
+
+        expect(screen.getByText('TBTC · testnet').closest('[role="listitem"]'))
+            .toHaveTextContent('1.00000000');
+        expect(screen.getByText('RBTC · regtest').closest('[role="listitem"]'))
+            .toHaveTextContent('1.00000000');
+    });
+
     it('labels confirmed and pending amounts separately', () => {
         const [pending] = buildBalanceRows({
             'bitcoin-mainnet': [{

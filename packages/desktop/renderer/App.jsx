@@ -150,6 +150,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -2707,7 +2708,12 @@ function AppInner() {
                             badges={{ messaging: messagingUnread }}
                         />
                     }
-                    header={<WatchOnlyBadge visible={isWatcherMode} />}
+                    header={
+                        <>
+                            <NetworkBanner activeNetwork={settings?.activeNetwork} />
+                            <WatchOnlyBadge visible={isWatcherMode} />
+                        </>
+                    }
                     notices={
                         activeWalletId ? (
                             <>

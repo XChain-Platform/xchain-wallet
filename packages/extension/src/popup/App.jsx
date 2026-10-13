@@ -84,6 +84,7 @@ import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
+import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
@@ -2715,6 +2716,7 @@ function AppInner({ canOpenInTab }) {
             return (
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
+                    header={<NetworkBanner activeNetwork={settings?.activeNetwork} />}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
