@@ -247,7 +247,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('wallet B is a second wallet and offers the coin', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             // navigate:false - this add-wallet flow starts at the onboarding
             // welcome INSIDE the unlocked shell, and a goto would throw the
             // session away and land back on wallet A.
@@ -456,7 +456,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('wallet B mirrors it with auto-pay ARMED', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             await createWallet(page, { password: PASSWORD, name: 'Autopay Taker', navigate: false });
             await gotoPalette(page, 'Switch wallet');
             await page.getByRole('button', { name: /Autopay Taker/ }).first().click();

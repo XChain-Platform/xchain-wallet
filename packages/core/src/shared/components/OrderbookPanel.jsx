@@ -33,6 +33,8 @@ import {
     trimAmountTail,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import tableStyles from './DataTable.module.css';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './MarketTrading.module.css';
 
 const POLL_INTERVAL_MS = 5000;
@@ -59,8 +61,6 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
         setLoading(true);
         const tick = async () => {
             if (cancelled) return;
-            if (typeof document !== 'undefined'
-                && document.visibilityState === 'hidden') return;
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
                 if (cancelled) return;
@@ -84,11 +84,11 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 setLoading(false);
             }
         };
-        tick();
-        const handle = setInterval(tick, POLL_INTERVAL_MS);
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
+        const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
         return () => {
             cancelled = true;
-            clearInterval(handle);
+            stopPollInterval();
         };
     }, [messaging, chainId, tick1, tick2, demo, retryKey]);
 
@@ -159,24 +159,16 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
             tabIndex={0}
         >
             <div className={styles.levelsTable}>
-                <p style={{ margin: '0 0 0.25rem', fontSize: '0.75rem', fontWeight: 700 }}>{title}</p>
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
-                        gap: '0.25rem',
-                        fontSize: '0.75rem',
-                        color: 'var(--xc-text-muted)',
-                        padding: '0 0.25rem 0.25rem',
-                        textAlign: 'right',
-                        fontVariantNumeric: 'tabular-nums',
-                    }}
-                >
-                    <span>Price ({tick2})</span>
-                    <span>Size ({tick1})</span>
-                    <span>Total ({tick1})</span>
-                </div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <table className={tableStyles.table}>
+                    <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
+                    <thead>
+                        <tr>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price ({tick2})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Total ({tick1})</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     {levels.map((level) => (
                         <LevelRow
                             key={`${side}-${level.displayPrice}`}
@@ -186,7 +178,8 @@ function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, 
                             onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
                         />
                     ))}
-                </ul>
+                    </tbody>
+                </table>
             </div>
         </div>
     );
@@ -200,66 +193,41 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
     const depthColor = side === 'bid'
         ? 'rgba(38, 166, 154, 0.18)'
         : 'rgba(239, 83, 80, 0.18)';
-    const content = (
-        <div
+    return (
+        <tr
             style={{
-                position: 'relative',
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1.35fr) repeat(2, minmax(0, 1fr))',
-                gap: '0.25rem',
-                padding: '0.15rem 0.25rem',
-                fontSize: '0.8rem',
-                textAlign: 'right',
-                fontVariantNumeric: 'tabular-nums',
+                background: `linear-gradient(to ${side === 'bid' ? 'left' : 'right'}, ${depthColor} ${depthPct}%, transparent ${depthPct}%)`,
             }}
         >
-            <span
-                aria-hidden="true"
-                style={{
-                    position: 'absolute',
-                    top: 0, bottom: 0,
-                    [side === 'bid' ? 'right' : 'left']: 0,
-                    width: `${depthPct}%`,
-                    background: depthColor,
-                    pointerEvents: 'none',
-                }}
-            />
-            <span
+            <td
+                className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                data-label="Price"
                 title={level.displayPrice}
-                style={{ position: 'relative', color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger)' }}
+                style={{ color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger)' }}
             >
-                {formatBookNumber(level.displayPrice)}
-            </span>
-            <span title={level.displaySize} style={{ position: 'relative' }}>
+                {onPick ? (
+                    <button
+                        type="button"
+                        onClick={onPick}
+                        aria-label={`Pick ${side === 'bid' ? 'buy bid' : 'sell ask'} price ${level.displayPrice}`}
+                        className={tableStyles.cellButton}
+                    >
+                        {formatBookNumber(level.displayPrice)}
+                    </button>
+                ) : formatBookNumber(level.displayPrice)}
+            </td>
+            <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Size" title={level.displaySize}>
                 {formatBookNumber(level.displaySize)}
-            </span>
-            <span title={level.cumulative} style={{ position: 'relative', color: 'var(--xc-text-muted)' }}>
-                {formatBookNumber(level.cumulative)}
-            </span>
-        </div>
-    );
-    if (!onPick) {
-        return <li>{content}</li>;
-    }
-    return (
-        <li>
-            <button
-                type="button"
-                onClick={onPick}
-                aria-label={`Pick ${side === 'bid' ? 'buy bid' : 'sell ask'} price ${level.displayPrice}`}
-                style={{
-                    display: 'block',
-                    width: '100%',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                }}
+            </td>
+            <td
+                className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                data-label="Total"
+                title={level.cumulative}
+                style={{ color: 'var(--xc-text-muted)' }}
             >
-                {content}
-            </button>
-        </li>
+                {formatBookNumber(level.cumulative)}
+            </td>
+        </tr>
     );
 }
 
