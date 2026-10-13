@@ -38,6 +38,16 @@ async function detailText(idx) {
 }
 
 describe('ListPickerScreen description detail', () => {
+    it('omits rejected lists from access-filter choices', async () => {
+        renderPicker([
+            { action_index: '10', type: '2', status: 'valid' },
+            { action_index: '11', type: '2', status: 'invalid: TYPE' },
+        ]);
+
+        expect(await screen.findByText(/list #10/)).toBeTruthy();
+        expect(screen.queryByText(/list #11/)).toBeNull();
+    });
+
     it('shows a described row description after the member count', async () => {
         const detail = Promise.withResolvers();
         renderPicker(

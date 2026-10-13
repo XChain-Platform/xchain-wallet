@@ -98,6 +98,10 @@ export function ListPickerScreen({
                     seen.add(key);
                     return true;
                 });
+                // A rejected LIST action cannot enforce an access filter and
+                // must not be offered as a bindable allow-list or block-list.
+                uniq = uniq.filter((row) => !row.status
+                    || String(row.status).trim().toLowerCase() === 'valid');
                 if (filterType) {
                     const keep = await Promise.all(uniq.map(async (row) => {
                         if (String(row.type) === String(filterType)) return true;
