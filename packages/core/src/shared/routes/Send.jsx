@@ -160,6 +160,7 @@ import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -185,6 +186,18 @@ function nativeTickerFor(descriptor) {
 }
 
 const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
+function utxoKey(utxo) {
+    return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
+}
+
+function utxoAmount(utxo) {
+    try {
+        return decimalStringFromSats(BigInt(utxo?.value ?? 0));
+    } catch {
+        return String(utxo?.value ?? '0');
+    }
+}
 
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
@@ -948,6 +961,62 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
+    const [coinControlEnabled, setCoinControlEnabled] = useState(false);
+    const [availableUtxos, setAvailableUtxos] = useState(/** @type {any[]} */ ([]));
+    const [utxoLoadState, setUtxoLoadState] = useState(
+        /** @type {'idle'|'loading'|'ready'|'error'} */ ('idle'),
+    );
+    const [selectedUtxoKeys, setSelectedUtxoKeys] = useState(
+        /** @type {Set<string>} */ (() => new Set()),
+    );
+    const [changeAddressId, setChangeAddressId] = useState('');
+
+    useEffect(() => {
+        setCoinControlEnabled(false);
+        setSelectedUtxoKeys(new Set());
+        setChangeAddressId('');
+        if (!chainId || !fromAddress || typeof messaging.getAddressUtxos !== 'function') {
+            setAvailableUtxos([]);
+            setUtxoLoadState('idle');
+            return undefined;
+        }
+        let cancelled = false;
+        setUtxoLoadState('loading');
+        messaging.getAddressUtxos(chainId, fromAddress.address)
+            .then((resultValue) => {
+                if (cancelled) return;
+                const rows = Array.isArray(resultValue)
+                    ? resultValue
+                    : (Array.isArray(resultValue?.utxos) ? resultValue.utxos : []);
+                setAvailableUtxos(rows);
+                setUtxoLoadState('ready');
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setAvailableUtxos([]);
+                setUtxoLoadState('error');
+            });
+        return () => { cancelled = true; };
+    }, [chainId, fromAddress?.id, fromAddress?.address, messaging]);
+
+    const selectedUtxos = useMemo(
+        () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
+        [availableUtxos, selectedUtxoKeys],
+    );
+    const changeAddress = useMemo(
+        () => (addressesByChain?.[chainId] || []).find((address) => address.id === changeAddressId) || null,
+        [addressesByChain, chainId, changeAddressId],
+    );
+    const automaticChangeLabel = settings?.privacy?.changeAddressRotation === true && signerReady
+        ? 'Fresh wallet address (change rotation)'
+        : (fromAddress?.address || 'Source address');
+    const changeAddressLabel = changeAddress?.address || automaticChangeLabel;
+    const coinControlLabel = coinControlEnabled
+        ? `${selectedUtxos.length} selected input${selectedUtxos.length === 1 ? '' : 's'}`
+        : 'Automatic input selection';
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
+
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
     const decoded = useMemo(() => {
@@ -1368,6 +1437,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 },
                 to,
                 rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
                 ...(feePerKb != null ? { feePerKb } : {}),
             });
             if (!quote || typeof quote.maxSats !== 'string') return null;
@@ -1380,7 +1451,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         } finally {
             setMaxBusy(false);
         }
-    }, [isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend, feePerKb]);
+    }, [
+        isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend,
+        changeAddress, coinControlEnabled, selectedUtxos, feePerKb,
+    ]);
 
     const onMax = useCallback(async () => {
         if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
@@ -1486,6 +1560,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         }
         if (/[|;]/.test(memo)) {
             setFormError('Memo cannot contain | or ; characters.');
+            return;
+        }
+        if (memoTooLong) {
+            setFormError(memoTooLong);
+            return;
+        }
+        if (coinControlEnabled && selectedUtxos.length === 0) {
+            setFormError('Choose at least one input for coin control.');
             return;
         }
         // PC-52: the extra recipients get the same checks the first one gets.
@@ -1648,6 +1730,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             amount: String(amount).trim(),
             memo: isNativeSend ? undefined : (memo.trim() || undefined),
             rbf: rbfForSend,
+            ...(changeAddress ? { change: changeAddress.address } : {}),
+            ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
             ...(feePerKb != null ? { feePerKb } : {}),
             // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
             // real multi-recipient send so a single send composes the identical
@@ -1769,7 +1853,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, password, settings, messaging, confirmAction, draft, haptic,
         isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
-        clearUndoHold, showToast,
+        clearUndoHold, showToast, changeAddress, coinControlEnabled, selectedUtxos,
     ]);
 
     async function handleSubmit(event) {
@@ -1804,6 +1888,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 amount: String(amount).trim(),
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // PC-52: multi-recipient legs, on the watcher and HW paths too
                 // (buildSendPsbt and the HW send handler take the same shape).
@@ -1985,6 +2071,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 extraCredentials={(
                     <>
                         {dispenserNoticeBlock}
+                        <dl className={styles.advancedReviewList} aria-label="Advanced send choices">
+                            <DetailRow label="Memo" value={trimmedMemo || 'None'} />
+                            <DetailRow label="Fee bumping" value={rbfForSend ? 'Allowed' : 'Not allowed'} />
+                            <DetailRow label="Coin control" value={coinControlLabel} />
+                            <DetailRow label="Change address" value={changeAddressLabel} />
+                        </dl>
                         <UndoSendToast
                             status={undoHoldActive ? undoSendStatus : 'idle'}
                             remaining={undoSendRemaining}
@@ -2204,7 +2296,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 ) : null}
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>
-                        Details ({2 + (decoded?.details?.length || 0)})
+                        Details ({6 + (decoded?.details?.length || 0)})
                     </summary>
                     <dl className={styles.detailsList}>
                         <dt className={styles.detailsLabel}>Chain</dt>
@@ -2226,6 +2318,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 }
                             />
                         ))}
+                        <DetailRow label="Memo" value={trimmedMemo || 'None'} />
+                        <DetailRow label="Fee bumping" value={rbfForSend ? 'Allowed' : 'Not allowed'} />
+                        <DetailRow label="Coin control" value={coinControlLabel} />
+                        <DetailRow label="Change address" value={changeAddressLabel} />
                     </dl>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
@@ -2776,14 +2872,82 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     a plain payment with no action at all, so there is nowhere
                     left to put one. Token sends keep it. */}
                 {isNativeSend ? null : (
-                    <Input
-                        label="Memo"
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        autoComplete="off"
-                        error={/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined}
-                    />
+                    <>
+                        <Input
+                            label="Memo"
+                            value={memo}
+                            onChange={(e) => setMemo(e.target.value)}
+                            autoComplete="off"
+                            hint={MEMO_HINT}
+                            error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
+                        />
+                        <p className={styles.balanceHint} aria-live="polite">
+                            {trimmedMemo.length} / {MAX_MEMO_LENGTH} characters.
+                        </p>
+                    </>
                 )}
+                <label className={styles.rbfRow}>
+                    <span className={styles.rbfLabel}>
+                        <span>Coin control</span>
+                        <span className={styles.rbfHint}>
+                            {utxoLoadState === 'loading'
+                                ? 'Loading spendable inputs…'
+                                : utxoLoadState === 'ready'
+                                    ? 'Choose exactly which unspent outputs fund this transaction.'
+                                    : 'Coin control is unavailable while spendable inputs cannot be loaded.'}
+                        </span>
+                    </span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label="Coin control enabled"
+                        checked={coinControlEnabled}
+                        disabled={utxoLoadState !== 'ready'}
+                        onChange={(e) => setCoinControlEnabled(e.target.checked)}
+                    />
+                </label>
+                {coinControlEnabled ? (
+                    <fieldset className={styles.coinControlList}>
+                        <legend>Inputs</legend>
+                        {availableUtxos.length > 0 ? availableUtxos.map((utxo) => {
+                            const key = utxoKey(utxo);
+                            return (
+                                <label key={key} className={styles.coinControlRow}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedUtxoKeys.has(key)}
+                                        onChange={(e) => setSelectedUtxoKeys((current) => {
+                                            const next = new Set(current);
+                                            if (e.target.checked) next.add(key);
+                                            else next.delete(key);
+                                            return next;
+                                        })}
+                                    />
+                                    <span>
+                                        {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
+                                        <small>{String(utxo.txid).slice(0, 10)}…:{utxo.vout}</small>
+                                    </span>
+                                </label>
+                            );
+                        }) : <p className={styles.hint}>No spendable inputs found.</p>}
+                    </fieldset>
+                ) : null}
+                <label className={styles.advancedSelectLabel}>
+                    <span>Change address</span>
+                    <select
+                        aria-label="Change address"
+                        value={changeAddressId}
+                        onChange={(e) => setChangeAddressId(e.target.value)}
+                    >
+                        <option value="">Automatic: {automaticChangeLabel}</option>
+                        {(addressesByChain?.[chainId] || []).map((address) => (
+                            <option key={address.id} value={address.id}>
+                                {address.label ? `${address.label}: ` : ''}{address.address}
+                            </option>
+                        ))}
+                    </select>
+                    <span className={styles.rbfHint}>Any leftover native coin returns here.</span>
+                </label>
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
@@ -2791,7 +2955,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 <label className={styles.rbfRow}>
                     <span className={styles.rbfLabel}>
                         <span>
-                            Replace-by-fee
+                            Allow fee bumping (replace-by-fee)
                             <InfoTip
                                 aria="Replace-by-fee help"
                                 label="Replace-by-fee (BIP125) lets you re-broadcast this transaction later at a higher fee, speeding up or cancelling it before it confirms."
@@ -2799,7 +2963,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         </span>
                         <span className={styles.rbfHint}>
                             {rbfSupported
-                                ? 'Keep this on to allow speeding up or cancelling the transaction before it confirms.'
+                                ? 'Allows this transaction to be sped up or cancelled with a higher fee before confirmation.'
                                 : `Fee bumping is not supported on ${descriptor?.displayName ?? 'this chain'}.`}
                         </span>
                     </span>

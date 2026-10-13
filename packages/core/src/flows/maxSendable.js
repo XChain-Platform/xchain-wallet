@@ -187,7 +187,10 @@ export async function quoteMaxSendable({
     // the compose selects from.
     let utxoTotal;
     try {
-        const res = await sdk.encoder.getUTXOs(source.trim());
+        const selected = Array.isArray(encoderOpts?.utxos) && encoderOpts.utxos.length > 0
+            ? encoderOpts.utxos
+            : null;
+        const res = selected || await sdk.encoder.getUTXOs(source.trim());
         const rows = Array.isArray(res) ? res : (Array.isArray(res?.utxos) ? res.utxos : null);
         if (!rows || rows.length === 0) return null;
         utxoTotal = 0n;

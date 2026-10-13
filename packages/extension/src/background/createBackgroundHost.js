@@ -2459,6 +2459,7 @@ export function createBackgroundHost(deps) {
                 ...(req.fee !== undefined && { fee: req.fee }),
                 ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req.rbf !== undefined && { rbf: req.rbf }),
+                ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
             };
         }
 
@@ -2471,7 +2472,14 @@ export function createBackgroundHost(deps) {
         // A caller that named its own change destination is stating where the
         // value must land; a privacy preference does not get to move it. Only
         // the default (change back to the spender) is rotated.
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.composeForConfirm: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -2506,12 +2514,20 @@ export function createBackgroundHost(deps) {
             pubkey: source.publicKey,
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
+            ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
         };
         encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
-        const { change } = await confirmChangeAndOwnAddresses({
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.quoteMaxSendable: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return flows.quoteMaxSendable({
             sdkRegistry, chainRegistry, vault, chainId,
@@ -5087,6 +5103,22 @@ export function createBackgroundHost(deps) {
 
     host.register('balances.address', async (req, { sdkRegistry, chainRegistry }) => {
         return addressBalances({ ...req, sdkRegistry, chainRegistry });
+    });
+
+    host.register('utxos.address', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const address = req?.address;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('utxos.address: chainId is required');
+        }
+        if (typeof address !== 'string' || !address) {
+            throw new Error('utxos.address: address is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getUTXOs !== 'function') {
+            throw new Error(`utxos.address: SDK unavailable for "${chainId}"`);
+        }
+        return sdk.getUTXOs(address);
     });
 
     host.register('history.address', async (req, { sdkRegistry }) => {
