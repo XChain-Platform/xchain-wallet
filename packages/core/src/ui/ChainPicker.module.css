@@ -159,9 +159,9 @@
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
     max-height: 320px;
     display: flex;
     flex-direction: column;

@@ -148,9 +148,9 @@
     margin: 0;
     padding: var(--xc-space-1);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
-    box-shadow: var(--xc-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+    box-shadow: var(--xc-shadow-md);
 }
 
 .chainPickerOption {
@@ -913,7 +913,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--xc-shadow-md);
     z-index: 20;
     display: flex;
     flex-direction: column;

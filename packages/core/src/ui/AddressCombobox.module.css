@@ -65,9 +65,9 @@
     z-index: var(--xc-z-dropdown);
     margin-top: 4px;
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--xc-shadow-md);
     max-height: 280px;
     overflow-y: auto;
     list-style: none;

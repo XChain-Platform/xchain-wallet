@@ -75,6 +75,7 @@
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-text);
     color: var(--xc-bg);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     font-weight: 400;
@@ -84,7 +85,7 @@
     overflow-wrap: anywhere;
     overflow-y: auto;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
 }
 
 .placementTop {
