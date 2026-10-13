@@ -44,6 +44,36 @@ const WalletUtils = walletModule.default ?? walletModule;
 
 /** @type {any | null} */
 let sharedTransport = null;
+/** @type {Promise<any> | null} */
+let pendingTransport = null;
+/** @type {(() => void) | null} */
+let sharedDisconnectHandler = null;
+
+function clearSharedTransport() {
+    const transport = sharedTransport;
+    const handler = sharedDisconnectHandler;
+    sharedTransport = null;
+    sharedDisconnectHandler = null;
+    if (transport && handler) {
+        const remove = transport.off ?? transport.removeListener;
+        if (typeof remove === 'function') {
+            remove.call(transport, 'disconnect', handler);
+        }
+    }
+    return transport;
+}
+
+function cacheTransport(transport) {
+    sharedTransport = transport;
+    if (typeof transport?.once !== 'function') return;
+    const onDisconnect = () => {
+        if (sharedTransport !== transport) return;
+        sharedTransport = null;
+        sharedDisconnectHandler = null;
+    };
+    sharedDisconnectHandler = onDisconnect;
+    transport.once('disconnect', onDisconnect);
+}
 
 /**
  * Lazy-create a shared WebHID transport. Subsequent calls reuse the
@@ -55,13 +85,30 @@ let sharedTransport = null;
  */
 export async function getLedgerTransport(loader = defaultTransportLoader) {
     if (sharedTransport) return sharedTransport;
-    const mod = await loader();
-    const TransportWebHID = mod?.default ?? mod;
-    if (!TransportWebHID || typeof TransportWebHID.create !== 'function') {
-        throw new Error('ledgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
-    }
-    sharedTransport = await TransportWebHID.create();
-    return sharedTransport;
+    if (pendingTransport) return pendingTransport;
+
+    const creation = (async () => {
+        try {
+            const mod = await loader();
+            const TransportWebHID = mod?.default ?? mod;
+            if (!TransportWebHID || typeof TransportWebHID.create !== 'function') {
+                throw new Error('ledgerFactory: loaded module does not look like @ledgerhq/hw-transport-webhid');
+            }
+            const transport = await TransportWebHID.create();
+            if (pendingTransport !== creation) {
+                if (typeof transport?.close === 'function') await transport.close();
+                throw new Error('ledgerFactory: transport creation was reset');
+            }
+            pendingTransport = null;
+            cacheTransport(transport);
+            return transport;
+        } catch (err) {
+            if (pendingTransport === creation) pendingTransport = null;
+            throw err;
+        }
+    })();
+    pendingTransport = creation;
+    return creation;
 }
 
 function defaultTransportLoader() {
@@ -108,7 +155,11 @@ export async function pairLedgerSigner({
 /**
  * Drop the cached transport. Primarily for tests / browser-HID
  * permission resets.
+ *
+ * @returns {Promise<void>}
  */
-export function resetLedgerTransport() {
-    sharedTransport = null;
+export async function resetLedgerTransport() {
+    pendingTransport = null;
+    const transport = clearSharedTransport();
+    if (typeof transport?.close === 'function') await transport.close();
 }
