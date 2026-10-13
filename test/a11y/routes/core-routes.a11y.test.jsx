@@ -20,7 +20,9 @@ vi.mock('qrcode', () => ({
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
-const SETTINGS = createDefaultSettings();
+// Default settings configure no chain, which Send and Receive render as the
+// no-networks empty state; enable bitcoin so the loaded forms are scanned.
+const SETTINGS = { ...createDefaultSettings(), fees: { [CHAIN]: {} } };
 
 function pending() {
     return new Promise(() => {});
