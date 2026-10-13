@@ -22,6 +22,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
+import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary.jsx';
 import { FormSection } from '../../../packages/core/src/ui/FormSection.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import { EmptyState } from '../../../packages/core/src/ui/EmptyState.jsx';
@@ -85,9 +86,54 @@ afterEach(() => {
 
 describe('page templates: exported from @xchain-wallet/core/ui', () => {
     it('exports every template primitive from the ui index', () => {
-        for (const name of ['FormPage', 'FormSection', 'ListPage', 'EmptyState', 'SectionHeader']) {
+        for (const name of ['FormPage', 'FormErrorSummary', 'FormSection', 'ListPage', 'EmptyState', 'SectionHeader']) {
             expect(typeof ui[name] === 'function' || typeof ui[name] === 'object', name).toBe(true);
         }
+    });
+});
+
+describe('<FormErrorSummary>', () => {
+    it('takes focus and links every error to its field', () => {
+        render(
+            <form>
+                <label htmlFor="ticker">Ticker</label>
+                <input id="ticker" />
+                <label htmlFor="amount">Amount</label>
+                <input id="amount" />
+                <FormErrorSummary errors={[
+                    { id: 'ticker', label: 'Ticker', message: 'Ticker is required.' },
+                    { id: 'amount', label: 'Amount', message: 'Amount must be positive.' },
+                ]} />
+            </form>,
+        );
+
+        const summary = screen.getByRole('alert', { name: 'Form errors' });
+        expect(document.activeElement).toBe(summary);
+        const links = within(summary).getAllByRole('link');
+        expect(links.map((link) => link.getAttribute('href'))).toEqual(['#ticker', '#amount']);
+
+        fireEvent.click(links[1]);
+        expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+    });
+
+    it('focuses the same error again when the submit attempt changes', () => {
+        const errors = [{ id: 'amount', label: 'Amount', message: 'Amount must be positive.' }];
+        const { rerender } = render(
+            <>
+                <input id="amount" aria-label="Amount" />
+                <FormErrorSummary errors={errors} focusKey={1} />
+            </>,
+        );
+        screen.getByLabelText('Amount').focus();
+
+        rerender(
+            <>
+                <input id="amount" aria-label="Amount" />
+                <FormErrorSummary errors={errors} focusKey={2} />
+            </>,
+        );
+
+        expect(document.activeElement).toBe(screen.getByRole('alert', { name: 'Form errors' }));
     });
 });
 

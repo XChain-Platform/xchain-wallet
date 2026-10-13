@@ -22,6 +22,7 @@ import {
     StatusMessage,
     FeeSelector,
     AddressField,
+    FormErrorSummary,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -308,6 +309,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -804,6 +806,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
@@ -1440,12 +1443,28 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         </StatusMessage>
     ) : null;
 
+    let dispenserErrorTarget;
+    if (/give amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-give', label: 'Give amount' };
+    else if (/Escrow/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-escrow', label: 'Escrow amount' };
+    else if (/positive token amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-amount', label: 'Payment amount' };
+    else if (/Payment token|token buyers pay/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-token', label: 'Payment token' };
+    else if (/trigger price/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-trigger-price', label: 'Trigger price' };
+    else if (/Oracle address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-oracle', label: 'Oracle address' };
+    else if (/Fiat amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-amount', label: 'Fiat amount' };
+    else if (/fiat currency/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-code', label: 'Fiat currency' };
+    else if (/Expiration/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-expiration', label: 'Expiration' };
+    else if (/dispenser address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-address', label: 'Dispenser address' };
+    else if (/Token ticker/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-token', label: 'Token' };
+    const dispenserErrors = formError
+        ? [{ ...dispenserErrorTarget, message: formError }]
+        : [];
+
     return wrap(
         <FormPage
             label="Create dispenser"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            status={<FormErrorSummary errors={dispenserErrors} focusKey={validationAttempt} />}
             actions={(
                 <Button
                     type="submit"
@@ -1471,6 +1490,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
                     {addressMode === 'other' ? (
                         <AddressField
+                            id="dispenser-address"
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
@@ -1529,6 +1549,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {lockedToken ? null : (
                 <TokenField
+                    id="dispenser-token"
                     label="Token"
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
@@ -1542,6 +1563,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </div>
             ) : null}
             <AmountField
+                id="dispenser-give"
                 label="Give amount (per fill)"
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
@@ -1560,6 +1582,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     : null}
             />
             <AmountField
+                id="dispenser-escrow"
                 label="Escrow amount"
                 amount={escrow}
                 tick={ticker}
@@ -1588,6 +1611,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             {payWith === 'token' ? (
                 <>
                     <Input
+                        id="dispenser-payment-token"
                         label="Payment token"
                         hint="Ticker buyers pay with (a token, not the native coin)."
                         value={getTick}
@@ -1598,6 +1622,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         spellCheck={false}
                     />
                     <Input
+                        id="dispenser-payment-amount"
                         label="Payment amount (per fill)"
                         hint="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
@@ -1612,6 +1637,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </StatusMessage>
             ) : (
                 <Input
+                    id="dispenser-trigger-price"
                     label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
                     hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
                     inputMode="decimal"
@@ -1649,6 +1675,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <label className={styles.pickerLabel}>
                         Priced in fiat (optional)
                         <select
+                            id="dispenser-fiat-code"
                             className={styles.picker}
                             value={fiatCode}
                             onChange={(e) => setFiatCode(e.target.value)}
@@ -1660,6 +1687,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         </select>
                     </label>
                     <Input
+                        id="dispenser-fiat-amount"
                         label="Fiat amount (e.g. 12.34)"
                         hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
@@ -1669,6 +1697,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     />
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
                     <Input
+                        id="dispenser-oracle"
                         label="Oracle address (optional)"
                         hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
                         value={oracleAddress}
@@ -1692,6 +1721,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             </label>
             {expMode === 'custom' ? (
                 <Input
+                    id="dispenser-expiration"
                     label="Expires"
                     type="datetime-local"
                     hint="Wall-clock time the dispenser closes. Must be in the future."

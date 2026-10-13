@@ -44,10 +44,12 @@ import styles from './AmountField.module.css';
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
  * @param {string} [props.error]                          caller-supplied validation error, forwarded to Input
+ * @param {string} [props.id]                             id forwarded to the amount input
  * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
  */
 export function AmountField({
+    id,
     label = 'Amount',
     amount,
     size = 'md',
@@ -123,6 +125,7 @@ export function AmountField({
                 <Input
                     ref={inputRef}
                     size={size}
+                    id={id}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
                     hint={hint}
                     error={inputError || error}
