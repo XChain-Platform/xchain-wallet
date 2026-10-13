@@ -95,6 +95,25 @@ describe('Automatic Donation System settings', () => {
         });
     });
 
+    it('keeps amount fields stable on wheel input and rejects exponent notation', () => {
+        render(<AdsSection />);
+
+        const amount = screen.getByLabelText('Bitcoin per-transaction amount');
+        const threshold = screen.getByLabelText('Bitcoin trigger threshold');
+        expect(amount.type).toBe('text');
+        expect(amount.inputMode).toBe('decimal');
+        expect(threshold.type).toBe('text');
+        expect(threshold.inputMode).toBe('decimal');
+
+        fireEvent.wheel(amount, { deltaY: -100 });
+        expect(amount.value).toBe('1000');
+
+        fireEvent.change(amount, { target: { value: '1e3' } });
+        fireEvent.blur(amount);
+        expect(amount.value).toBe('1000');
+        expect(update).not.toHaveBeenCalled();
+    });
+
     it('explains the threshold and makes the off state unambiguous', () => {
         settings = bitcoinSettings({ enabled: false });
         render(<AdsSection />);

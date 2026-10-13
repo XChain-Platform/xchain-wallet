@@ -135,16 +135,15 @@ export function FeesSection() {
                                     {unit}
                                 </span>
                                 <input
-                                    type="number"
+                                    type="text"
                                     inputMode="decimal"
-                                    min={0}
-                                    step="any"
                                     defaultValue={settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate)}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.
                                         const raw = e.target.value.trim();
                                         const displayRate = Number(raw);
-                                        if (raw === '' || !Number.isFinite(displayRate) || displayRate < 0) {
+                                        if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)
+                                            || !Number.isFinite(displayRate)) {
                                             setRateErrors((current) => ({
                                                 ...current,
                                                 [chainId]: 'Enter a non-negative custom fee rate.',

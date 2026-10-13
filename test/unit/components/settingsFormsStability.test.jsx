@@ -88,6 +88,22 @@ describe('settings form validation', () => {
         });
     });
 
+    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+        render(<SafetySection />);
+        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+    });
+
     it('explains the exact test-send gate and always-on recipient warnings', () => {
         render(<SafetySection />);
 
@@ -126,6 +142,32 @@ describe('settings form validation', () => {
         fireEvent.change(input, { target: { value: '' } });
         fireEvent.blur(input);
 
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert').textContent).toMatch(/non-negative custom fee rate/);
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent fee rates', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByRole('alert').textContent).toMatch(/non-negative custom fee rate/);
     });
