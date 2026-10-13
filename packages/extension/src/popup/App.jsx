@@ -75,8 +75,6 @@ import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/Comman
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
-import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
-import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -185,6 +183,7 @@ import {
     parseExtensionHandoff,
     shellForExtensionView,
 } from './launchState.js';
+import { usePopupPaletteData } from './usePopupPaletteData.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -504,6 +503,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // The route guard remains armed until the wallet becomes active because
     // per-wallet last-view restoration runs after the unlock refresh.
     const launchRouteState = useRef(createLaunchRouteState());
+    const refreshRequestId = useRef(0);
     const handoffRouteArmed = useRef(false);
     if (!handoffRouteArmed.current && (
         ['backup', 'hardware'].includes(extensionHandoff?.flow)
@@ -518,18 +518,23 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     }
 
     const refresh = useCallback(() => {
+        const requestId = ++refreshRequestId.current;
         setStatus({ state: 'loading' });
         if (extensionHandoff?.flow !== 'import') setOnboardingStep('welcome');
         setUnlockedView('home');
         connectToBackground(getSessionStatus, {
-            onRetry: () => setStatus({ state: 'reconnecting' }),
+            onRetry: () => {
+                if (requestId === refreshRequestId.current) setStatus({ state: 'reconnecting' });
+            },
         })
             .then((next) => {
+                if (requestId !== refreshRequestId.current) return;
                 setStatus(next);
                 const launchView = launchRouteState.current.takeForSession(next);
                 if (launchView) setUnlockedView(launchView);
             })
-            .catch((err) =>
+            .catch((err) => {
+                if (requestId !== refreshRequestId.current) return;
                 setStatus({
                     state: isBackgroundConnectionError(err) ? 'background-error' : 'error',
                     error: err?.message || String(err),
@@ -538,8 +543,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     // what that screen may offer. Narrowed here because this is
                     // the last point at which the error is still an error.
                     errorKind: coreStorageLib.vaultErrorKind(err),
-                }),
-            );
+                });
+            });
     }, [extensionHandoff]);
 
     function clearTransientActionState() {
@@ -572,7 +577,10 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         });
     }
 
-    useEffect(() => { refresh(); }, [refresh]);
+    useEffect(() => {
+        refresh();
+        return () => { refreshRequestId.current += 1; };
+    }, [refresh]);
 
     useEffect(() => attachSurfaceStateListener((event) => {
         applySurfaceStateEvent(event, {
@@ -769,33 +777,20 @@ function AppInner({ canOpenInTab, titleEnabled }) {
         navigate: setUnlockedView,
         currentView: unlockedView,
     });
-    const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
-    // entity search: token balances join contacts in the palette's
-    // searchable surface. a later change added connected sites, which the popup used
-    // to omit for want of a view to send them to. Same lazy contract for all
-    // three: loaded on each open, and a failed load just leaves that group
-    // out of the results.
-    const [paletteTokenRows, setPaletteTokenRows] = useState(/** @type {any[]} */ ([]));
-    const [paletteSites, setPaletteSites] = useState(/** @type {any[]} */ ([]));
-    useEffect(() => {
-        if (!palette.open || status.state !== 'unlocked' || !activeWalletId) return undefined;
-        let cancelled = false;
-        messaging.listContacts()
-            .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* palette still works without contacts */ });
-        // The balances Home shows, so a coin opened from here matches
-        // Home's figure (a demo wallet's are synthesized, not read).
-        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
-            .then((balances) => {
-                if (cancelled) return;
-                setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
-            })
-            .catch(() => { /* palette still works without token rows */ });
-        messaging.listConnectedSites()
-            .then((sites) => { if (!cancelled) setPaletteSites(Array.isArray(sites) ? sites : []); })
-            .catch(() => { /* palette still works without sites */ });
-        return () => { cancelled = true; };
-    }, [palette.open, status.state, activeWalletId, activeAccountId]);
+    const loadPaletteSites = useCallback(() => messaging.listConnectedSites(), []);
+    const {
+        contacts: paletteContacts,
+        tokenRows: paletteTokenRows,
+        sites: paletteSites,
+    } = usePopupPaletteData({
+        open: palette.open,
+        sessionState: status.state,
+        walletId: activeWalletId,
+        accountId: activeAccountId,
+        messaging,
+        chainRegistry: APP_CHAIN_REGISTRY,
+        loadSites: loadPaletteSites,
+    });
     // Deep-link into a Settings section, mirroring the web shell.
     // 'connected-sites' is the exception - it has a top-level route,
     // so send it there rather than one level down inside Settings.
