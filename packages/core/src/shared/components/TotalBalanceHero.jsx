@@ -234,7 +234,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         ) : null}
                         {hasUnpriced ? (
                             <span className={styles.metaUnpriced}>
-                                {hasChange ? ' · ' : ''}{unpriced} {unpriced === 1 ? 'token' : 'tokens'} not priced
+                                {hasChange ? ' · ' : ''}{unpricedLabel(rows)}
                             </span>
                         ) : null}
                     </span>
@@ -249,6 +249,23 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             ) : null}
         </section>
     );
+}
+
+// The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE
+// are coins, so "3 tokens not priced" misnamed them. Counts the same rows
+// `sumFiatValue` counts as unpriced.
+function unpricedLabel(rows) {
+    let coins = 0;
+    let tokens = 0;
+    for (const r of rows || []) {
+        if (sumFiatValue([r]).unpriced === 0) continue;
+        if (r?.kind === 'native') coins += 1;
+        else tokens += 1;
+    }
+    const parts = [];
+    if (coins > 0) parts.push(`${coins} ${coins === 1 ? 'coin' : 'coins'}`);
+    if (tokens > 0) parts.push(`${tokens} ${tokens === 1 ? 'token' : 'tokens'}`);
+    return `${parts.join(' and ')} not priced`;
 }
 
 // Per-row fiat value used by the 24h-change accumulator. Mirrors the

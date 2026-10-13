@@ -71,6 +71,13 @@ const COINGECKO_ID_BY_COIN = {
 /** @type {Map<string, { rate: FiatRate, fetchedAtMs: number }>} */
 const rateCache = new Map();
 
+// When each coin's last refresh resolved nothing (a 429 or outage on the
+// explorer with the fallback off or failing too). Home re-asks on every
+// balance poll, so without this a rate-limited explorer would take three
+// more requests every poll for as long as it keeps refusing.
+/** @type {Map<string, number>} */
+const coinMissAt = new Map();
+
 /** @type {Set<() => void>} */
 const listeners = new Set();
 
@@ -247,6 +254,8 @@ export async function refreshFiatRates({
     const wanted = chainCoins.filter((coin) => {
         if (typeof coin !== 'string' || coin.length === 0) return false;
         if (force) return true;
+        const missAt = coinMissAt.get(cacheKey(coin, fiatCurrency));
+        if (missAt != null && nowMs - missAt <= MISS_TTL_MS) return false;
         const hit = rateCache.get(cacheKey(coin, fiatCurrency));
         return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
     });
@@ -265,6 +274,7 @@ export async function refreshFiatRates({
             }),
             fetchedAtMs: nowMs,
         });
+        coinMissAt.delete(cacheKey(coin, fiatCurrency));
         updated.push(coin);
     };
 
@@ -289,6 +299,10 @@ export async function refreshFiatRates({
             const rates = await fetchCoingeckoRates(fetchImpl, unresolved, fiatCurrency);
             for (const [coin, rate] of Object.entries(rates)) put(coin, rate, 'coingecko');
         } catch { /* keep whatever the cache already holds */ }
+    }
+
+    for (const coin of wanted) {
+        if (!updated.includes(coin)) coinMissAt.set(cacheKey(coin, fiatCurrency), nowMs);
     }
 
     if (updated.length > 0) notifyListeners();
@@ -519,6 +533,7 @@ export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {})
 /** Test-only: clear the cache and injected deps. */
 export function _resetPriceLookupForTests() {
     rateCache.clear();
+    coinMissAt.clear();
     tokenRateCache.clear();
     listeners.clear();
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
