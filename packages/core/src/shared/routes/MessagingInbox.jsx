@@ -727,12 +727,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     return wrap(
         <ListPage
             toolbar={(
-                <>
+                <div className={local.toolbar}>
                     <Input
                         type="search"
+                        size="md"
                         enterKeyHint="search"
                         autoCapitalize="off"
-                        className={local.search}
                         placeholder="Search"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
@@ -741,8 +741,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         spellCheck={false}
                         aria-label="Search conversations"
                     />
-                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
-                </>
+                    <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
+                </div>
             )}
         >
             {handshakeRequesters.length > 0 ? (

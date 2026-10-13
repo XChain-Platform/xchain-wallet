@@ -96,6 +96,19 @@ afterEach(() => {
 });
 
 describe('MessagingInbox audit states', () => {
+    it('uses the same shared size class for the search and network controls', async () => {
+        mount(messagingFor());
+
+        await screen.findByText('No messages yet');
+        const searchField = screen.getByRole('searchbox', { name: 'Search conversations' })
+            .parentElement.parentElement;
+        const networkFilter = screen.getByRole('button', { name: 'Filter by network' })
+            .parentElement;
+
+        expect(searchField.className).toMatch(/(?:^|\s)_?md_/);
+        expect(networkFilter.className).toMatch(/(?:^|\s)_?md_/);
+    });
+
     it('renders the address empty state when the account has no messageable addresses', async () => {
         mount(messagingFor({ addresses: {} }));
 
