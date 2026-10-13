@@ -32,39 +32,53 @@ import styles from './LeftNav.module.css';
  * rows to icons with their labels clipped but still in the accessibility
  * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
- * `currentView` is matched against each item's `id`, with two soft
- * mappings so the active highlight survives drilldowns:
- *   - 'token-detail' / 'addresses' / 'wallet-picker' / 'account-picker'
- *     / 'wallet-details' / 'wallet-rename' / 'add-account' / 'add-wallet'
- *     all highlight Home (they're entered from there).
- *   - 'compose-message' highlights Messaging.
- *   - 'dispenser-explorer' / 'dispenser-detail' / 'dispenser' highlight
- *     Dispensers.
- *   - 'contract-*' / 'staking-*' / 'operator-dashboard' / 'stake-form'
- *     highlight Contracts.
- *   - 'market' highlights DEX.
- *   - 'list-detail' / 'list-create' / 'list-fork' highlight Lists.
+ * `currentView` resolves through `LEFT_NAV_VIEW_GROUPS`, so drilldowns keep
+ * their parent surface highlighted. A route that has no dedicated group
+ * resolves to Home, matching the shell's Home fallback.
  */
 
-const VIEW_GROUPS = {
-    home: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'],
+export const LEFT_NAV_VIEW_GROUPS = {
+    home: [
+        'home', 'menu', 'alerts', 'actions', 'action-detail',
+        'token-detail', 'my-tokens', 'manage-token', 'wizard', 'issue',
+        'mint', 'destroy', 'sweep', 'lock', 'mint-settings',
+        'callback-settings', 'bridge-settings', 'description', 'transfer',
+        'bridge-move', 'execute-callback', 'pause-token', 'lock-address',
+        'broadcast', 'oracle', 'controller-bind', 'dividend', 'airdrop',
+        'advanced', 'pair-signer', 'sign-message', 'verify-signature',
+        'link-form', 'attach-content', 'gated-publish', 'publish-file',
+        'project-roster', 'parallel-compose', 'batch-compose', 'sell-name',
+        'multisig-create', 'multisig-sign', 'governance-polls',
+        'governance-create-poll', 'governance-poll-detail',
+        'governance-delegate', 'cosigner-accounts', 'cosigner-provision',
+        'cosigner-detail', 'addresses', 'view-private-key',
+        'address-preferences', 'wallet-picker', 'account-picker',
+        'wallet-details', 'wallet-rename', 'account-rename', 'add-account',
+        'add-wallet', 'migrate-bip39',
+    ],
     history: ['history'],
-    send: ['send'],
-    receive: ['receive'],
-    scan: ['scan'],
-    markets: ['markets', 'market'],
+    send: ['send', 'send-picker'],
+    receive: ['receive', 'receive-picker'],
+    scan: ['scan', 'sign-psbt'],
+    markets: [
+        'markets', 'market', 'markets-picker', 'market-activity', 'swap',
+        'create-order', 'my-orders', 'my-swaps', 'cross-chain-swap',
+        'cross-chain-order', 'cross-chain-templates', 'bet-markets',
+        'bet-market-detail', 'bet-oracle-record', 'bet-create', 'my-bets',
+        'bet-oracle-console',
+    ],
     'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
-    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
+    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'contract-stake', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
     messaging: ['messaging', 'compose-message'],
     contacts: ['contacts'],
-    lists: ['lists', 'list-detail', 'list-create', 'list-fork'],
-    obligations: ['obligations'],
+    lists: ['lists', 'list-detail', 'list-create', 'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union', 'shared-lists', 'access-lists'],
+    obligations: ['obligations', 'coinpay'],
     settings: ['settings', 'connected-sites'],
 };
 
-function isActive(itemId, currentView) {
-    const group = VIEW_GROUPS[itemId];
-    return group ? group.includes(currentView) : itemId === currentView;
+export function activeLeftNavItem(currentView) {
+    return Object.entries(LEFT_NAV_VIEW_GROUPS)
+        .find(([, views]) => views.includes(currentView))?.[0] || 'home';
 }
 
 // Compact nav badge label: a count capped at "99+" so a large unread total
@@ -100,6 +114,7 @@ export function LeftNav({
     isSignerMode = false,
     badges = {},
 }) {
+    const activeItem = activeLeftNavItem(currentView);
     const primary = [
         { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
         { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
@@ -136,8 +151,35 @@ export function LeftNav({
         { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
     ];
 
+    const handleKeyDown = (event) => {
+        const direction = {
+            ArrowDown: 1,
+            ArrowRight: 1,
+            ArrowUp: -1,
+            ArrowLeft: -1,
+        }[event.key];
+        if (!direction && event.key !== 'Home' && event.key !== 'End') return;
+
+        const buttons = [...event.currentTarget.querySelectorAll('button:not(:disabled)')];
+        const currentButton = event.target.closest?.('button');
+        const currentIndex = buttons.indexOf(currentButton);
+        if (currentIndex < 0 || buttons.length === 0) return;
+
+        event.preventDefault();
+        let nextIndex;
+        if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = buttons.length - 1;
+        else nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
+        buttons[nextIndex].focus();
+        buttons[nextIndex].scrollIntoView?.({ block: 'nearest' });
+    };
+
     return (
-        <nav className={styles.nav} aria-label="Primary navigation">
+        <nav
+            className={styles.nav}
+            aria-label="Primary navigation"
+            onKeyDown={handleKeyDown}
+        >
             <div className={styles.brand}>XChain Wallet</div>
             {onCommandPalette ? (
                 <button
@@ -156,13 +198,14 @@ export function LeftNav({
             ) : null}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
-                    const active = isActive(item.id, currentView);
+                    const active = activeItem === item.id;
                     return (
                         <li key={item.id}>
                             <button
                                 type="button"
                                 className={`${styles.item} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
+                                title={item.label}
                                 onClick={() => onSelect(item.id)}
                             >
                                 <span className={styles.icon} aria-hidden="true">
@@ -182,13 +225,14 @@ export function LeftNav({
             <hr className={styles.divider} />
             <ul className={styles.list} role="list">
                 {secondary.map((item) => {
-                    const active = isActive(item.id, currentView);
+                    const active = activeItem === item.id;
                     return (
                         <li key={item.id}>
                             <button
                                 type="button"
                                 className={`${styles.item} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
+                                title={item.label}
                                 onClick={() => onSelect(item.id)}
                             >
                                 <span className={styles.icon} aria-hidden="true">
@@ -221,8 +265,9 @@ export function LeftNav({
                 {onOpenSettings ? (
                     <button
                         type="button"
-                        className={`${styles.item} ${isActive('settings', currentView) ? styles.itemActive : ''}`}
-                        aria-current={isActive('settings', currentView) ? 'page' : undefined}
+                        className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
+                        aria-current={activeItem === 'settings' ? 'page' : undefined}
+                        title="Settings"
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
@@ -235,6 +280,7 @@ export function LeftNav({
                     <button
                         type="button"
                         className={styles.item}
+                        title="Lock"
                         onClick={onLock}
                     >
                         <span className={styles.icon} aria-hidden="true">
