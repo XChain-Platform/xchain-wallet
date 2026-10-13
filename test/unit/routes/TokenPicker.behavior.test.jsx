@@ -21,6 +21,10 @@ const balanceListCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/BalanceList.module.css',
 ), 'utf8');
+const tokenPickerSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/TokenPicker.jsx',
+), 'utf8');
 const balances = {
     'bitcoin-mainnet': [{
         address: 'bc1qpicker',
@@ -222,6 +226,11 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
+    it('declares one tab stop for each asset-kind tab', () => {
+        const kindTab = tokenPickerSource.match(/<button[\s\S]*?role="tab"[\s\S]*?>/)?.[0] || '';
+        expect(kindTab.match(/\btabIndex=/g)).toHaveLength(1);
+    });
+
     it('roves one token-row tab stop and closes with Escape', async () => {
         const user = userEvent.setup();
         const onBack = vi.fn();
