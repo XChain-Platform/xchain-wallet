@@ -162,8 +162,8 @@ export function Settings({
         {
             id: 'appearance',
             title: 'Appearance',
-            description: 'Theme, accent color, reduced motion.',
-            keywords: 'appearance theme system default color motion accent dark light reduced follow',
+            description: 'Theme and reduced motion.',
+            keywords: 'appearance theme system default motion dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
         },

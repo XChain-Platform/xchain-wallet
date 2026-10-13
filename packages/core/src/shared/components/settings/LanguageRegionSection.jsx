@@ -11,10 +11,12 @@
 // LanguageRegionSection: §35.1 Language & Region panel.
 //
 // Surfaces:
-//   - Language picker driven by `availableLocales()` so a registered
-//     pseudo / additional locale shows up automatically (Cluster R
-//     FOLLOWUP 4). On change, persists `settings.language` and calls
-//     `i18n.setLocale(next)` so the live UI flips immediately.
+//   - Language picker derives its options from `availableLocales()`.
+//     Registered locales surface automatically, while pseudo-RTL stays
+//     gated on developer mode.
+//
+//     Changes persist to `settings.language` and call `i18n.setLocale(next)`
+//     so the live UI flips immediately.
 //   - Fiat currency picker for fiat-denominated balance / quote
 //     surfaces. Persisted to `settings.fiatCurrency`.
 //
@@ -35,17 +37,19 @@ import { availableLocales, setLocale as setI18nLocale } from '../../../i18n/inde
 
 // Friendly display names for known locales; we extend this map as
 // translations land. Unknown registered locales fall back to their
-// bcp47 code so a developer-registered pseudo locale still shows up.
+// bcp47 code when the picker exposes them.
 const LANGUAGE_LABELS = /** @type {Record<string, string>} */ ({
     en: 'English',
 });
 
-function buildLanguageOptions() {
+function buildLanguageOptions(developerMode) {
     const codes = availableLocales();
-    return codes.map((code) => ({
-        value: code,
-        label: LANGUAGE_LABELS[code] || code,
-    }));
+    return codes
+        .filter((code) => developerMode || code !== 'pseudo-rtl')
+        .map((code) => ({
+            value: code,
+            label: LANGUAGE_LABELS[code] || code,
+        }));
 }
 
 // This list matches the quote currencies offered by the picker. Keeping it
@@ -131,7 +135,7 @@ export function LanguageRegionSection() {
         !normalizedQuery
         || currency.code.toLocaleLowerCase().includes(normalizedQuery)
         || currency.name.toLocaleLowerCase().includes(normalizedQuery));
-    const LANGUAGES = buildLanguageOptions();
+    const LANGUAGES = buildLanguageOptions(settings.developerMode === true);
 
     const onLanguageChange = async (next) => {
         // Flip the live i18n locale first so the UI updates immediately;

@@ -70,6 +70,9 @@ describe('shared settings row semantics', () => {
         const toggle = screen.getByRole('switch', { name: 'Protect previews' });
         expect(toggle.checked).toBe(true);
         expect(describedText(toggle)).toBe('Requires confirmation before opening a preview.');
+        expect(toggle.style.appearance).toBe('none');
+        expect(toggle.style.borderRadius).toBe('999px');
+        expect(toggle.style.backgroundColor).toBe('var(--xc-accent-primary)');
 
         fireEvent.click(screen.getByText('Protect previews'));
         expect(onChange).toHaveBeenCalledWith(false);

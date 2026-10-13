@@ -47,6 +47,7 @@ const { WalletModeSection } = await import(
 
 beforeAll(() => {
     registerLocale('de-DE', {});
+    registerLocale('pseudo-rtl', {});
 });
 
 beforeEach(() => {
@@ -106,6 +107,17 @@ describe('settings form validation', () => {
         expect(languageRow.style.flexWrap).toBe('wrap');
         expect(screen.getByText(/language used for wallet navigation/)).toBeTruthy();
         expect(screen.getByText(/Asset balances are unchanged/)).toBeTruthy();
+    });
+
+    it('offers pseudo-RTL only while developer mode is enabled', () => {
+        const { rerender } = render(<LanguageRegionSection />);
+
+        expect(screen.queryByRole('option', { name: 'pseudo-rtl' })).toBeNull();
+
+        settings = { ...settings, developerMode: true };
+        rerender(<LanguageRegionSection />);
+
+        expect(screen.getByRole('option', { name: 'pseudo-rtl' })).toHaveValue('pseudo-rtl');
     });
 
     it('confirms contact imports through a danger action', async () => {
