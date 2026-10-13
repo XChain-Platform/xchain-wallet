@@ -82,7 +82,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 setAddressesByChain(byChain || {});
             })
             .catch(() => {
-                if (!cancelled) setLoadError('Could not load wallet addresses. Try again.');
+                if (!cancelled) setLoadError('Could not load addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, addressesReload]);

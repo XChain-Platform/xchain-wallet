@@ -97,7 +97,7 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         await revealSeed();
 
         expect(screen.queryByRole('button', { name: 'Print recovery sheet' })).toBeNull();
-        fireEvent.click(screen.getByLabelText('Reveal seed phrase'));
+        fireEvent.click(screen.getByLabelText('Reveal recovery phrase'));
         fireEvent.click(screen.getByRole('button', { name: 'Print recovery sheet' }));
 
         expect(print).toHaveBeenCalledOnce();

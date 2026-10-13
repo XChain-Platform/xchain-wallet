@@ -115,7 +115,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             })
             .catch(() => {
                 if (!cancelled) {
-                    setAddressesError('Could not load wallet addresses. Try again.');
+                    setAddressesError('Could not load addresses. Try again.');
                 }
             });
         return () => { cancelled = true; };
