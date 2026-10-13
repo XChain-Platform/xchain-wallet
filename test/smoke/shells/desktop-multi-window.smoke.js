@@ -95,12 +95,12 @@ assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{[^}]*?broadcastToWindows\('xchain:updat
 
 // --- 5. activate hook + first-window bootstrap --------------------------
 
-assert.ok(/buildApplicationMenu\(\);[\s\S]*?canCreateWindows = true;\s*\n\s*createWindow\(\);/.test(src),
-    'whenReady installs the menu, then opens the primary window');
+assert.ok(/buildApplicationMenu\(\);[\s\S]*?canCreateWindows = true;\s*\n\s*installTray\(\);\s*\n\s*createWindow\(\);/.test(src),
+    'whenReady installs the menu and tray, then opens the primary window');
 assert.ok(/app\.on\('activate',[\s\S]*?restoreWindowAfterIdleCheck\(\)/.test(src),
     'app.activate reveals a hidden window or opens one through the idle-check helper');
 
-// A windowless macOS app keeps the vault open, and a new renderer re-stamps
+// A windowless app keeps the vault open, and a new renderer re-stamps
 // the idle clock on its first message, so the check must finish first.
 const helper = src.slice(src.indexOf('function openWindowAfterIdleCheck('));
 assert.ok(helper.length > 0 && src.includes('function openWindowAfterIdleCheck('),
@@ -114,11 +114,13 @@ assert.ok(/function openWindowAfterIdleCheck\([\s\S]*?runWindowlessIdleGate\([\s
 const restoreHelper = src.slice(src.indexOf('function restoreWindowAfterIdleCheck('));
 assert.ok(restoreHelper.indexOf('runWindowlessIdleGate(') !== -1
     && restoreHelper.indexOf('runWindowlessIdleGate(') < restoreHelper.indexOf('revealWindow(target)'),
-    'restoring a hidden macOS window reveals it through the idle gate');
+    'restoring a hidden window reveals it through the idle gate');
 assert.ok(/applyWindowCloseConvention\(win,\s*event\)[\s\S]*?startWindowlessIdleLock\(\)/.test(src),
-    'hiding the last visible macOS window starts the windowless idle check');
-assert.ok(/platform !== 'darwin' \|\| quitting[\s\S]*?event\.preventDefault\(\);[\s\S]*?win\.hide\(\)/.test(src),
-    'macOS close hides unless the application is explicitly quitting');
+    'hiding the last visible window starts the windowless idle check');
+assert.ok(/\['darwin', 'win32', 'linux'\]\.includes\(platform\) \|\| quitting[\s\S]*?event\.preventDefault\(\);[\s\S]*?win\.hide\(\)/.test(src),
+    'window close hides on every platform unless the application is explicitly quitting');
+assert.ok(/function installTray\([\s\S]*?platform === 'darwin'[\s\S]*?new Tray\([\s\S]*?restoreWindowAfterIdleCheck\(\)/.test(src),
+    'Windows and Linux install a tray that restores the wallet through the idle gate');
 assert.ok(/function createWindow\([^)]*\)\s*\{\s*\/\/[^\n]*\n\s*stopWindowlessIdleLock\(\);/.test(src),
     'a live window stops the windowless idle check');
 
@@ -141,5 +143,5 @@ assert.ok(/new FileWindowBoundsStore\(windowBoundsPathFor\(app\.getPath\('userDa
     'normal window bounds persist, restore, and cascade against the current displays');
 
 console.log(
-    'OK: desktop-multi-window smoke (§24.6 / G057 window creation, routing, sibling state sync, macOS reopen, and remembered bounds)',
+    'OK: desktop-multi-window smoke (§24.6 / G057 window creation, routing, sibling state sync, dock and tray reopen, and remembered bounds)',
 );

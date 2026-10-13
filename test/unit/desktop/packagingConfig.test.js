@@ -35,6 +35,12 @@ describe('desktop Electron fuses', () => {
     });
 });
 
+describe('desktop runtime resources', () => {
+    it('packages the icon used by the Windows and Linux tray', () => {
+        expect(config.files).toContain('build/icon.png');
+    });
+});
+
 describe('desktop macOS packaging', () => {
     it('packages the QR camera consent text and least-privilege hardened runtime entitlements', () => {
         expect(config.mac.hardenedRuntime).toBe(true);

@@ -645,6 +645,7 @@ const config = {
         'main/**/*',
         'preload.cjs',
         'renderer/dist/**/*',
+        'build/icon.png',
         'package.json',
         '!**/node_modules/*/{test,__tests__,tests,example,examples}',
         '!**/*.map',
