@@ -10,8 +10,7 @@
 
 import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { Icon } from '@xchain-wallet/core/ui';
-import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
@@ -57,12 +56,12 @@ export function CollectiblesView({
 
     if (!rows || rows.length === 0) {
         return (
-            <EmptyStateNudge
+            <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
                 actionLabel={onReceive ? 'Receive' : undefined}
                 onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
         );
     }
