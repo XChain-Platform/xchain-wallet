@@ -44,10 +44,10 @@ describe('trading history panel display states', () => {
 
         const price = await screen.findByText('1.2500');
         const side = screen.getByText('Buy');
-        expect(price.style.textAlign).toBe('right');
-        expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+        expect(price.closest('td')).toHaveAttribute('data-label', 'Price');
+        expect(price.className).toMatch(/numeric/);
         expect(side.style.color).toBe('var(--xc-success)');
-        expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
+        expect(screen.getByRole('columnheader', { name: 'Price' }).closest('table').parentElement.style.overflowX).toBe('auto');
         expect(screen.queryByText('Loading recent trades…')).toBeNull();
     });
 
@@ -91,10 +91,10 @@ describe('trading history panel display states', () => {
 
         const price = await screen.findByText('1.25');
         const side = screen.getByText('Sell');
-        expect(price.style.textAlign).toBe('right');
-        expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+        expect(price.closest('td')).toHaveAttribute('data-label', 'Price');
+        expect(price.className).toMatch(/numeric/);
         expect(side.style.color).toBe('var(--xc-danger)');
-        expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
+        expect(screen.getByRole('columnheader', { name: 'Price' }).closest('table').parentElement.style.overflowX).toBe('auto');
         expect(screen.getByRole('region', { name: 'Trade history' })).not.toHaveAttribute('aria-busy');
     });
 });
