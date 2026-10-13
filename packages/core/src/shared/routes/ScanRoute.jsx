@@ -103,9 +103,11 @@ const PASTE_BOX = {
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {boolean} [props.embedded]
+ * @param {string} [props.titleId]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false }) {
-    const headingId = useId();
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false, titleId }) {
+    const generatedHeadingId = useId();
+    const headingId = titleId || generatedHeadingId;
     const [paste, setPaste] = useState('');
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [stopped, setStopped] = useState(false);

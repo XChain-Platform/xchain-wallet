@@ -25,15 +25,9 @@ import {
     compareDecimalStrings,
     roundDecimalString,
 } from '../utils/amountFormat.js';
+import tableStyles from './DataTable.module.css';
 
 const MAX_ROWS = 30;
-const TRADE_GRID_COLUMNS = 'minmax(5rem, 1fr) repeat(2, minmax(5rem, 1fr)) minmax(3rem, 0.6fr)';
-const NUMERIC_CELL_STYLE = {
-    minWidth: 0,
-    textAlign: 'right',
-    fontVariantNumeric: 'tabular-nums',
-    overflowWrap: 'anywhere',
-};
 
 /**
  * @param {object} props
@@ -88,7 +82,54 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 padding: '0.5rem',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Recent trades</p>
+            <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                <table className={tableStyles.table}>
+                    <caption className={tableStyles.caption}>Recent trades</caption>
+                    <thead>
+                        <tr>
+                            <th className={tableStyles.headerCell} scope="col">Time</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                            <th className={tableStyles.headerCell} scope="col">Side</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {summaries.map(({ row, summary }) => {
+                            const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                            const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
+                            return (
+                                <tr key={key}>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                        {onOpenTx && row.tx_hash ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => onOpenTx(String(row.tx_hash))}
+                                                aria-label={`Open transaction ${row.tx_hash}`}
+                                                className={tableStyles.cellButton}
+                                            >
+                                                {summary.timeLabel}
+                                            </button>
+                                        ) : summary.timeLabel}
+                                    </td>
+                                    <td
+                                        className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                                        data-label="Price"
+                                        style={{ color: sideColor }}
+                                    >
+                                        {summary.price}
+                                    </td>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                        {summary.size}
+                                    </td>
+                                    <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
+                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
             {loading ? (
                 <StatusMessage variant="status">Loading recent trades…</StatusMessage>
             ) : null}
@@ -99,78 +140,6 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
                     No trades yet.
                 </p>
-            ) : null}
-            {summaries.length > 0 ? (
-                <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                    <div
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: TRADE_GRID_COLUMNS,
-                            gap: '0.25rem',
-                            minWidth: '20rem',
-                            fontSize: '0.75rem',
-                            color: 'var(--xc-fg-muted)',
-                            padding: '0 0.25rem 0.25rem',
-                        }}
-                    >
-                        <span style={NUMERIC_CELL_STYLE}>Time</span>
-                        <span style={NUMERIC_CELL_STYLE}>Price</span>
-                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
-                        <span>Side</span>
-                    </div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '20rem' }}>
-                        {summaries.map(({ row, summary }) => {
-                            const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
-                            const content = (
-                                <div
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: TRADE_GRID_COLUMNS,
-                                        gap: '0.25rem',
-                                        padding: '0.15rem 0.25rem',
-                                        fontSize: '0.7rem',
-                                    }}
-                                >
-                                    <span style={{ ...NUMERIC_CELL_STYLE, color: 'var(--xc-fg-muted)' }}>
-                                        {summary.timeLabel}
-                                    </span>
-                                    <span style={{ ...NUMERIC_CELL_STYLE, color: sideColor }}>
-                                        {summary.price}
-                                    </span>
-                                    <span style={NUMERIC_CELL_STYLE}>{summary.size}</span>
-                                    <span style={{ color: sideColor, fontWeight: 600 }}>
-                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
-                                    </span>
-                                </div>
-                            );
-                            const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
-                            if (!onOpenTx || !row.tx_hash) {
-                                return <li key={key}>{content}</li>;
-                            }
-                            return (
-                                <li key={key}>
-                                    <button
-                                        type="button"
-                                        onClick={() => onOpenTx(String(row.tx_hash))}
-                                        aria-label={`Open transaction ${row.tx_hash}`}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            background: 'none',
-                                            border: 'none',
-                                            padding: 0,
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
-                                            color: 'inherit',
-                                        }}
-                                    >
-                                        {content}
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </div>
             ) : null}
         </section>
     );

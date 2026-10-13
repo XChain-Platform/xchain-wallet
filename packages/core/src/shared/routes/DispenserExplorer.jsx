@@ -22,6 +22,7 @@ import {
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './ActionsMenu.module.css';
+import local from './DispenserExplorer.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const RESULTS_PAGE_SIZE = 25;
@@ -263,8 +264,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         />
     );
     const toolbar = (
-        <form onSubmit={handleSearch} noValidate>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <form className={local.searchForm} onSubmit={handleSearch} noValidate>
+                <div className={local.searchModes}>
                     <label>
                         <input
                             type="radio"
@@ -286,12 +287,12 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {' '}By address
                     </label>
                 </div>
-                <label className={styles.entryDescription} style={{ display: 'block' }}>
+                <label className={`${styles.entryDescription} ${local.chainField}`}>
                     Chain
                     <select
                         value={chainFilter}
                         onChange={(e) => setChainFilter(e.target.value)}
-                        style={{ marginLeft: '0.5rem', marginBottom: '0.5rem' }}
+                        className={local.chainSelect}
                     >
                         <option value="all">All chains</option>
                         {chains.map((cid) => {
@@ -323,7 +324,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                         {searchDisabledReason}
                     </p>
                 ) : null}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <div className={local.searchActions}>
                     <Button
                         type="submit"
                         variant="primary"
@@ -408,7 +409,7 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
                 const d = chainRegistry.get(cid);
                 if (state.rows.length === 0 && !state.error) return null;
                 return (
-                    <section key={cid} style={{ marginBottom: '1rem' }}>
+                    <section key={cid} className={local.resultGroup}>
                         <SectionHeader
                             title={(
                                 <>
@@ -476,17 +477,33 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
     return (
         <Button
             type="button"
-            className={styles.entry}
+            className={`${styles.entry} ${local.resultRow}`}
             onClick={onSelect}
         >
             <span className={styles.entryLabel}>
                 {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} />
             </span>
-            <span className={styles.entryDescription}>
-                Gives {give} per fill · Price per fill: {price}
+            <span
+                className={local.resultFacts}
+                data-testid="dispenser-result-facts"
+                role="list"
+                aria-label="Dispenser terms"
+            >
+                <span className={local.factRow} role="listitem">
+                    <span className={local.factLabel}>Give per fill</span>
+                    <span className={local.factValue}>{give}</span>
+                </span>
+                <span className={local.factRow} role="listitem">
+                    <span className={local.factLabel}>Price per fill</span>
+                    <span className={local.factValue}>{price}</span>
+                </span>
+                <span className={local.factRow} role="listitem">
+                    <span className={local.factLabel}>Status</span>
+                    <span className={local.factValue}>{status}</span>
+                </span>
             </span>
-            <span className={styles.entryDescription}>
-                #{row.action_index ?? '?'} · status {status}
+            <span className={`${styles.entryDescription} ${local.resultMeta}`}>
+                #{row.action_index ?? '?'}
                 {row.source ? ` · by ` : ''}
                 {row.source ? <AddressText address={row.source} /> : null}
             </span>

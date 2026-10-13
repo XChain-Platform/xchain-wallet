@@ -23,11 +23,15 @@ import {
     parseMessageContent,
     serializeMessageContent,
 } from '../../../packages/core/src/shared/utils/messageContent.js';
+import {
+    memoLengthError,
+    utf8ByteLength,
+} from '../../../packages/core/src/shared/utils/memoLimit.js';
 
 const MAX_TEXT_LENGTH = 250;
 const MAX_MESSAGE_LENGTH = 1_048_576;
-const AT_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH);
-const OVER_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH + 1);
+const AT_LIMIT = 'é'.repeat(MAX_TEXT_LENGTH / 2);
+const OVER_LIMIT = `${AT_LIMIT}a`;
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
 const SOURCE = Object.freeze({
@@ -95,18 +99,39 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
+describe('UTF-8 transaction text measurement', () => {
+    it('counts encoded bytes and gives an explicit memo refusal', () => {
+        expect(utf8ByteLength('aé📦')).toBe(7);
+        expect(memoLengthError(AT_LIMIT)).toBeNull();
+        expect(memoLengthError(OVER_LIMIT)).toBe(
+            `Memo is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`,
+        );
+    });
+});
+
 describe('BroadcastForm text limits', () => {
+    it('passes a valid multibyte message to compose without changing it', async () => {
+        const messaging = mount(BroadcastForm, { initialChainId: BTC });
+        const message = await screen.findByLabelText('Message (optional)');
+
+        fireEvent.change(message, { target: { value: AT_LIMIT } });
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params.MESSAGE).toBe(AT_LIMIT);
+    });
+
     it('shows a live counter and disables Broadcast past the message limit', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message');
+        const message = await screen.findByLabelText('Message (optional)');
         const submit = screen.getByRole('button', { name: 'Broadcast' });
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(message, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH}.`)).toBeTruthy();
+        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
@@ -123,13 +148,13 @@ describe('ComposeMessage text limit', () => {
         const message = await screen.findByLabelText('Message');
         const submit = screen.getByRole('button', { name: 'Send message' });
 
-        fireEvent.change(message, { target: { value: 'hello' } });
-        expect(screen.getByText(`5 / ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`)).toBeTruthy();
+        fireEvent.change(message, { target: { value: '📦' } });
+        expect(screen.getByText(`4 / ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`)).toBeTruthy();
         expect(submit.disabled).toBe(false);
 
-        fireEvent.change(message, { target: { value: 'm'.repeat(MAX_MESSAGE_LENGTH + 1) } });
+        fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_LENGTH / 2)}a` } });
         expect(screen.getByText(
-            `Message is ${(MAX_MESSAGE_LENGTH + 1).toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`,
+            `Message is ${(MAX_MESSAGE_LENGTH + 1).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()} bytes.`,
         )).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
@@ -219,14 +244,14 @@ describe('LinkForm memo limit', () => {
         const submit = await screen.findByRole('button', { name: 'Link' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(0);
         expect(submit.disabled).toBe(false);
         fireEvent.click(submit);
-        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(1);
+        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(1);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -242,11 +267,11 @@ describe('CallbackForm memo limit', () => {
         const submit = await screen.findByRole('button', { name: 'Execute callback' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(/Memo is 251 characters/)).toBeTruthy();
+        expect(screen.getByText(/Memo is 251 bytes/)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

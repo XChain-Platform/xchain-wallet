@@ -52,6 +52,7 @@
 
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
 import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** How far ahead a deadline counts as "approaching". */
@@ -117,6 +118,12 @@ export class DeadlineWatcher {
         this._windowSeconds = Number.isFinite(windowSeconds) && windowSeconds > 0
             ? windowSeconds : DEFAULT_WINDOW_SECONDS;
         this._log = taggedLogger(logger, 'deadline');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'DeadlineWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
@@ -144,6 +151,7 @@ export class DeadlineWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._addressPoll.reset();
     }
 
     /**
@@ -158,6 +166,10 @@ export class DeadlineWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('DeadlineWatcher: getSettings failed', e);
                 return;
             }
@@ -165,6 +177,9 @@ export class DeadlineWatcher {
             const featureOn = !settings || !settings.notifications
                 || settings.notifications.deadlines !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             if (!this._seenLoaded) {
                 this._seenLoaded = true;
@@ -181,15 +196,6 @@ export class DeadlineWatcher {
                     }
                 }
             }
-
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('DeadlineWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
 
             const byChain = new Map();
             for (const a of addresses) {
@@ -261,7 +267,7 @@ export class DeadlineWatcher {
             await this._safeNotify({
                 kind: 'deadline-summary',
                 title: `${fresh.length} deadlines approaching`,
-                body: `${fresh.length} of your open items on ${chainLabel} run out within ${describeWindow(this._windowSeconds)}. The soonest is your ${LABEL_BY_KIND[fresh[0].kind]} ${fresh[0].remainingText}.`,
+                body: `${fresh.length} items on ${chainLabel} expire or close within ${describeWindow(this._windowSeconds)}. Your ${LABEL_BY_KIND[fresh[0].kind]} is first, ${fresh[0].remainingText}.`,
                 data: { chainId, count: fresh.length, kinds: fresh.map((d) => d.kind) },
             });
             return changed;
@@ -270,7 +276,7 @@ export class DeadlineWatcher {
         for (const d of fresh) {
             await this._safeNotify({
                 kind: 'deadline',
-                title: `Your ${LABEL_BY_KIND[d.kind]} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
+                title: `${LABEL_BY_KIND[d.kind][0].toUpperCase()}${LABEL_BY_KIND[d.kind].slice(1)} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
                 body: d.body(chainLabel),
                 data: {
                     chainId,
