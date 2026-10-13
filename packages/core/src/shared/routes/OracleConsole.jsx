@@ -335,7 +335,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             {rows && rows.length === 0 && !error ? (
                 <EmptyState
                     title="No markets yet"
-                    body="You have not created any betting markets."
+                    body="Betting markets created by this wallet appear here."
                 />
             ) : null}
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}

@@ -171,8 +171,8 @@ export function ConnectedSitesSection() {
         <div style={STACK}>
             {(!sites || sites.length === 0) ? (
                 <EmptyState
-                    title="No connected sites"
-                    body="Websites appear here after you approve their connection requests."
+                    title="No sites connected yet"
+                    body="When a website asks to connect to this wallet and you allow it, it appears here."
                     titleAs="p"
                 />
             ) : (

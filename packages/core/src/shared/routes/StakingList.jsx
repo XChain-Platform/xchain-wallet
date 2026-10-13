@@ -478,13 +478,15 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 <EmptyState
                     title={allRows.length === 0
                         ? (loadErrors.length > 0
-                            ? 'No staking positions could be loaded. Try again later.'
-                            : 'Nothing staked yet')
-                        : 'No matching stakes'}
+                            ? "Staking positions unavailable"
+                            : "Nothing staked yet")
+                        : "No matching stakes"}
                     body={allRows.length === 0
-                        ? (loadErrors.length > 0 ? undefined : 'Staking positions created by this wallet appear here.')
-                        : 'Try a different search or network filter.'}
-                    actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? 'New stake' : undefined}
+                        ? (loadErrors.length > 0
+                            ? "No staking positions could be loaded, so try again later."
+                            : "Staking positions created by this wallet appear here.")
+                        : "Try a different search or network filter."}
+                    actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? "New stake" : undefined}
                     onAction={allRows.length === 0 && loadErrors.length === 0 ? onNewStake : undefined}
                     titleAs="p"
                 />
