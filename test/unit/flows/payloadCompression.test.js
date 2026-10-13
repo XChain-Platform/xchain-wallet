@@ -113,13 +113,13 @@ describe('payloadCompression (Part B)', () => {
         });
 
         it('a payload just under the guard still inflates', async () => {
-            const body = Buffer.from('ab'.repeat(1000) + Math.random(), 'utf8');
+            const body = Buffer.from('ab'.repeat(1000) + 'fixed-entropy-0123456789abcdef', 'utf8');
             const deflated = zlib.deflateRawSync(body);
             const ratio = body.length / deflated.length;
-            if (ratio < COMPRESSION_MAX_RATIO) {
-                const r = await inflateDeflateRaw(new Uint8Array(deflated));
-                expect(r.inflated).toBe(true);
-            }
+            expect(ratio).toBeLessThan(COMPRESSION_MAX_RATIO);
+            const r = await inflateDeflateRaw(new Uint8Array(deflated));
+            expect(r.inflated).toBe(true);
+            expect(Buffer.from(r.bytes).equals(body)).toBe(true);
         });
 
         it('never throws on hostile input', async () => {

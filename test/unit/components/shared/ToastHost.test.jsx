@@ -37,19 +37,23 @@ function setup() {
 }
 
 function show(input) {
+    let id;
     act(() => {
-        toastApi.showToast(input);
+        id = toastApi.showToast(input);
     });
+    return id;
 }
 
 beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T12:00:00.000Z'));
     vi.clearAllMocks();
 });
 
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
 });
 
 describe('ToastHost', () => {
@@ -76,6 +80,28 @@ describe('ToastHost', () => {
         act(() => toastApi.announce('Saved'));
         expect(region).toHaveTextContent('Saved');
         expect(region).not.toHaveTextContent('Copied');
+    });
+
+    it('generates bounded unique ids without overflowing the visible stack', () => {
+        let state = 0x5eed1234;
+        vi.spyOn(Math, 'random').mockImplementation(() => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return state / 0x1_0000_0000;
+        });
+        setup();
+
+        const ids = Array.from({ length: 8 }, (_, index) => show({
+            message: `Generated toast ${index}`,
+            durationMs: 0,
+        }));
+
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const id of ids) {
+            expect(id).toMatch(/^toast-\d{13}-\d{1,6}$/);
+            expect(id.length).toBeLessThanOrEqual(33);
+        }
+        expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(3);
+        expect(screen.getByText('+5 more')).toBeInTheDocument();
     });
 
     it('gives queued toasts their full timeout after they become visible', () => {

@@ -19,6 +19,15 @@ import {
     __clearDispenserBadgeCache,
 } from '../../../packages/core/src/shared/components/DispenserBadge.jsx';
 import { TickerIcon } from '../../../packages/core/src/shared/components/TickerIcon.jsx';
+import { tickerColor } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+
+function luminance(hex) {
+    const [r, g, b] = [1, 3, 5].map((offset) => {
+        const channel = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
 
 beforeEach(() => {
     __clearDispenserBadgeCache();
@@ -122,6 +131,38 @@ describe('badge presentation', () => {
 });
 
 describe('TickerIcon', () => {
+    it('keeps seeded ticker fallbacks legible and inside the shared avatar bounds', () => {
+        let state = 0xa11ce55;
+        const next = () => {
+            state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+            return state;
+        };
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_';
+        const ticks = Array.from({ length: 40 }, () => Array.from(
+            { length: 1 + (next() % 80) },
+            () => alphabet[next() % alphabet.length],
+        ).join(''));
+
+        render(<>{ticks.map((tick) => (
+            <TickerIcon key={tick} chainId="bitcoin-mainnet" tick={tick} size={32} />
+        ))}</>);
+
+        const icons = screen.getAllByRole('img');
+        expect(icons).toHaveLength(ticks.length);
+        expect(new Set(ticks.map(tickerColor)).size).toBe(15);
+        icons.forEach((icon, index) => {
+            const fallback = icon.firstElementChild;
+            const background = tickerColor(ticks[index]);
+            expect(1.05 / (luminance(background) + 0.05), ticks[index])
+                .toBeGreaterThanOrEqual(4.5);
+            expect(icon.style.width).toBe('var(--xc-avatar-size-list)');
+            expect(icon.style.height).toBe('var(--xc-avatar-size-list)');
+            expect(fallback.style.width).toBe('var(--xc-avatar-size-list)');
+            expect(fallback.style.height).toBe('var(--xc-avatar-size-list)');
+            expect(fallback.textContent).toHaveLength(1);
+        });
+    });
+
     it('names a native asset and uses the list-row avatar size by default', () => {
         render(<TickerIcon chainId="bitcoin-mainnet" tick="BTC" />);
 
