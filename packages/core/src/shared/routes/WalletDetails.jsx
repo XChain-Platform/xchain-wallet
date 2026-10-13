@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
@@ -110,14 +110,18 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     if (error) {
         return (
             <Screen variant={variant} header={header}>
-                <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                <ListPage>
+                    <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                </ListPage>
             </Screen>
         );
     }
     if (!wallet) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={styles.entryDescription}>Loading…</div>
+                <ListPage>
+                    <div className={styles.entryDescription}>Loading…</div>
+                </ListPage>
             </Screen>
         );
     }
@@ -137,85 +141,87 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
 
     return (
         <Screen variant={variant} header={header}>
-            <dl className={pickerStyles.detailList}>
-                <Row label="Name" value={wallet.name || 'Unnamed wallet'} />
-                <Row label="Type" value={formatLabel} />
-                <Row label="Origin" value={originLabel} />
-                <Row
-                    label="25th-word passphrase"
-                    value={!wallet.passphraseEnabled
-                        ? 'Disabled'
-                        : wallet.passphraseStored
-                            ? 'Stored'
-                            : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
-                />
-                <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
-                <Row label="Created" value={createdLabel} />
-                {isDemo ? (
+            <ListPage>
+                <dl className={pickerStyles.detailList}>
+                    <Row label="Name" value={wallet.name || 'Unnamed wallet'} />
+                    <Row label="Type" value={formatLabel} />
+                    <Row label="Origin" value={originLabel} />
                     <Row
-                        label="Status"
-                        value={
-                            <span>
-                                Demo wallet (throwaway)
-                                {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
-                            </span>
-                        }
+                        label="25th-word passphrase"
+                        value={!wallet.passphraseEnabled
+                            ? 'Disabled'
+                            : wallet.passphraseStored
+                                ? 'Stored'
+                                : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                     />
-                ) : null}
-                <Row label="ID" value={<code className={pickerStyles.code}>{wallet.id}</code>} />
-            </dl>
-            {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        block
-                        onClick={onMigrateToBip39}
-                        icon={<Icon.MigrateIcon />}
-                    >
-                        Upgrade recovery phrase
-                    </Button>
-                </div>
-            ) : null}
-            {onRename ? (
-                <div style={{ marginTop: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        block
-                        onClick={onRename}
-                        icon={<Icon.PencilIcon />}
-                    >
-                        Rename wallet
-                    </Button>
-                </div>
-            ) : null}
-            {isDemo ? (
-                <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                    <Button
-                        type="button"
-                        variant="danger"
-                        block
-                        onClick={handleExitDemo}
-                        loading={exitBusy}
-                        disabled={exitBusy}
-                    >
-                        Exit demo &amp; wipe
-                    </Button>
-                    {exitError ? (
-                        <p
-                            role="alert"
-                            style={{
-                                marginTop: 'var(--xc-space-2)',
-                                fontSize: 'var(--xc-text-xs)',
-                                color: 'var(--xc-danger)',
-                            }}
-                        >
-                            {exitError}
-                        </p>
+                    <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
+                    <Row label="Created" value={createdLabel} />
+                    {isDemo ? (
+                        <Row
+                            label="Status"
+                            value={
+                                <span>
+                                    Demo wallet (throwaway)
+                                    {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
+                                </span>
+                            }
+                        />
                     ) : null}
-                </div>
-            ) : null}
+                    <Row label="ID" value={<code className={pickerStyles.code}>{wallet.id}</code>} />
+                </dl>
+                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
+                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            block
+                            onClick={onMigrateToBip39}
+                            icon={<Icon.MigrateIcon />}
+                        >
+                            Upgrade recovery phrase
+                        </Button>
+                    </div>
+                ) : null}
+                {onRename ? (
+                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            block
+                            onClick={onRename}
+                            icon={<Icon.PencilIcon />}
+                        >
+                            Rename wallet
+                        </Button>
+                    </div>
+                ) : null}
+                {isDemo ? (
+                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                        <Button
+                            type="button"
+                            variant="danger"
+                            block
+                            onClick={handleExitDemo}
+                            loading={exitBusy}
+                            disabled={exitBusy}
+                        >
+                            Exit demo &amp; wipe
+                        </Button>
+                        {exitError ? (
+                            <p
+                                role="alert"
+                                style={{
+                                    marginTop: 'var(--xc-space-2)',
+                                    fontSize: 'var(--xc-text-xs)',
+                                    color: 'var(--xc-danger)',
+                                }}
+                            >
+                                {exitError}
+                            </p>
+                        ) : null}
+                    </div>
+                ) : null}
+            </ListPage>
         </Screen>
     );
 }

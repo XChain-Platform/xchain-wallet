@@ -10,7 +10,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Screen, Button, Input, Icon, QrScanner, StatusMessage, InfoTip } from '@xchain-wallet/core/ui';
+import {
+    Screen,
+    Button,
+    FormPage,
+    Input,
+    Icon,
+    ListPage,
+    QrScanner,
+    StatusMessage,
+    InfoTip,
+} from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
@@ -450,8 +460,62 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         </div>
     ) : null;
 
+    const formStatus = error ? (
+        <StatusMessage
+            variant="error"
+            recovery={
+                // Anchored on the "no file yet" message
+                // itself. It used to fire on any error mentioning
+                // "backup file", which now includes the wrong-password
+                // copy - offering Browse to a user whose file is fine
+                // sends them to fix the wrong thing.
+                lane === 'backup' && error === NO_BACKUP_CONTENT_MESSAGE
+                    ? { label: 'Browse', onAction: backupDrop.openFilePicker }
+                    : undefined
+            }
+        >
+            {error}
+        </StatusMessage>
+    ) : null;
+
+    const formActions = lane === 'backup' ? (
+        <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            icon={<Icon.KeyIcon />}
+            disabled={
+                (backupPointer === null && backupContent.trim().length === 0) ||
+                backupPassword.length === 0 ||
+                backupWalletPassword.length === 0 ||
+                backupDevicePassword.length === 0
+            }
+        >
+            Restore
+        </Button>
+    ) : (
+        <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            icon={<Icon.KeyIcon />}
+            disabled={
+                mnemonic.trim().length === 0 ||
+                password.length === 0 ||
+                confirm.length === 0
+            }
+        >
+            Import
+        </Button>
+    );
+
     const form = (
-        <form onSubmit={lane === 'backup' ? handleBackupSubmit : handleSubmit} noValidate>
+        <FormPage
+            label="Import wallet"
+            onSubmit={lane === 'backup' ? handleBackupSubmit : handleSubmit}
+            status={formStatus}
+            actions={formActions}
+        >
             <header className={headClass}>
                 <h1 className={titleClass}>
                     {isFreeWallet
@@ -482,23 +546,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                 </p>
             </header>
             {laneSwitcher}
-            {error ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={
-                        // Anchored on the "no file yet" message
-                        // itself. It used to fire on any error mentioning
-                        // "backup file", which now includes the wrong-password
-                        // copy - offering Browse to a user whose file is fine
-                        // sends them to fix the wrong thing.
-                        lane === 'backup' && error === NO_BACKUP_CONTENT_MESSAGE
-                            ? { label: 'Browse', onAction: backupDrop.openFilePicker }
-                            : undefined
-                    }
-                >
-                    {error}
-                </StatusMessage>
-            ) : null}
             {lane === 'backup' ? (
                 <>
                     <div className={styles.mnemonicHeader}>
@@ -635,23 +682,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         />
                         <span>Overwrite if any record collides (advanced)</span>
                     </label>
-                    <div className={actionsClass}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={busy}
-                            size={isFull ? undefined : 'sm'}
-                            icon={<Icon.KeyIcon />}
-                            disabled={
-                                (backupPointer === null && backupContent.trim().length === 0) ||
-                                backupPassword.length === 0 ||
-                                backupWalletPassword.length === 0 ||
-                                backupDevicePassword.length === 0
-                            }
-                        >
-                            Restore
-                        </Button>
-                    </div>
                 </>
             ) : null}
             {lane === 'mnemonic' ? (
@@ -780,25 +810,9 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     ) : null}
                 </div>
             ) : null}
-            <div className={actionsClass}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={busy}
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.KeyIcon />}
-                    disabled={
-                        mnemonic.trim().length === 0 ||
-                        password.length === 0 ||
-                        confirm.length === 0
-                    }
-                >
-                    Import
-                </Button>
-            </div>
             </>
             ) : null}
-        </form>
+        </FormPage>
     );
 
     const screenHeader = (
@@ -831,14 +845,14 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         );
         return (
             <Screen variant={variant}>
-                {isFull ? <div className={styles.card}>{noticeBody}</div> : noticeBody}
+                <ListPage>{noticeBody}</ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant} header={screenHeader}>
-            {isFull ? <div className={styles.card}>{form}</div> : form}
+            {form}
         </Screen>
     );
 }

@@ -13,7 +13,9 @@ import {
     AddressText,
     Button,
     ChainBadge,
+    FormPage,
     Input,
+    ListPage,
     PageHeader,
     Screen,
     StatusMessage,
@@ -81,7 +83,6 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
     const listActionIndex = String(listRef.actionIndex);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
     const signerReady = useSignerReady(walletId);
@@ -245,9 +246,7 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
 
     const header = <PageHeader onBack={onBack} title="Share list" />;
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (lane.open) {
@@ -286,7 +285,7 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
 
     if (result) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="success">
                     {result.psbtHex && !result.txid ? 'Unsigned list share created.' : 'List share submitted.'}
                 </StatusMessage>
@@ -294,14 +293,33 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
                 <div className={styles.actions}>
                     <Button type="button" variant="primary" onClick={onDone}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     const missingOwner = owner && !ownerRecord;
     const formDisabled = sdkSupported !== true || !eligibility.ok;
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Share list"
+            onSubmit={handleReview}
+            status={(sdkSupported === false || formError) ? (
+                <>
+                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="danger"
+                    loading={lane.composing}
+                    disabled={formDisabled || !typedConfirmOk || !fromAddress || lane.composing}
+                >
+                    Review
+                </Button>
+            )}
+        >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -377,19 +395,6 @@ export function ListShareForm({ walletId, listRef, onBack, onDone = onBack }) {
                 disabled={formDisabled}
             />
 
-            {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="danger"
-                    block
-                    loading={lane.composing}
-                    disabled={formDisabled || !typedConfirmOk || !fromAddress || lane.composing}
-                >
-                    Review
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

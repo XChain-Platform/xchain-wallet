@@ -55,6 +55,8 @@ import {
     StatusMessage,
     QrScanner,
     PageHeader,
+    FormPage,
+    ListPage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -236,7 +238,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -896,7 +897,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         );
         return (
             <Screen variant={variant} header={header}>
-                {isFull ? <div className={styles.card}>{body}</div> : body}
+                <ListPage>{body}</ListPage>
             </Screen>
         );
     }
@@ -963,7 +964,33 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     ) : null;
 
     const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Sign transaction"
+            onSubmit={handleSubmit}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={busy}
+                    disabled={
+                        busy
+                        || !psbtHex
+                        || !decomposed
+                        || ownedInputCount === 0
+                        || !addressId
+                        // On the confirm-page path the password is typed there, so
+                        // it must not gate the button that opens it.
+                        || (useConfirmPage
+                            ? false
+                            : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
+                    }
+                >
+                    {isHwSource && selectedAddress
+                        ? `Sign on ${selectedAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                        : 'Sign transaction'}
+                </Button>
+            )}
+        >
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
                     chains={chainOptions}
@@ -1140,29 +1167,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     error={error || undefined}
                 />
             )}
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={
-                    busy
-                    || !psbtHex
-                    || !decomposed
-                    || ownedInputCount === 0
-                    || !addressId
-                    // On the confirm-page path the password is typed there, so
-                    // it must not gate the button that opens it.
-                    || (useConfirmPage
-                        ? false
-                        : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
-                }
-            >
-                {isHwSource && selectedAddress
-                    ? `Sign on ${selectedAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                    : 'Sign transaction'}
-            </Button>
-        </form>
+        </FormPage>
     );
 
     // §5.5 confirm page (PSBT variant), rendered in place of the form.
@@ -1195,7 +1200,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }
