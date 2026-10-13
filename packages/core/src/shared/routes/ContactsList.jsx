@@ -13,6 +13,7 @@ import { Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHe
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -750,7 +751,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
                     <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
-                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
+                    <TruncatedText title={active.name} className={picker.rowName}>{active.name}</TruncatedText>
                     {active.notes ? (
                         <>
                             <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
@@ -999,7 +1000,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 className={picker.row}
                                 onClick={() => { setActiveId(c.id); setMode('detail'); }}
                             >
-                                <span className={picker.rowName}>{c.name}</span>
+                                <TruncatedText className={picker.rowName}>{c.name}</TruncatedText>
                                 <span className={picker.rowChains}>
                                     {uniqueChains.map((entry) => (
                                         <ChainCoinIcon

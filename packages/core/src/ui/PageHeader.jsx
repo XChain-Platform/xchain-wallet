@@ -13,6 +13,37 @@ import { BackIcon } from './icons/index.jsx';
 import styles from './PageHeader.module.css';
 
 /**
+ * Single-line text that stays inside its layout lane and exposes the full
+ * value through the native tooltip.
+ *
+ * @param {object} props
+ * @param {import('react').ReactNode} props.children
+ * @param {string} [props.className]
+ * @param {string} [props.title]
+ */
+export function TruncatedText({ children, className, title }) {
+    const fullText = title ?? (typeof children === 'string' || typeof children === 'number'
+        ? String(children)
+        : undefined);
+    return (
+        <span
+            className={className}
+            title={fullText}
+            style={{
+                display: 'inline-block',
+                minWidth: 0,
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }}
+        >
+            {children}
+        </span>
+    );
+}
+
+/**
  * Shared secondary-toolbar header used by every routed screen.
  *
  * Encapsulates the 3-column grid layout, chevron alignment (lines up
@@ -75,7 +106,9 @@ export function PageHeader({
                 ) : null}
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
-                <h1 id={titleId} className={styles.title} title={typeof title === 'string' ? title : undefined}>{title}</h1>
+                <h1 id={titleId} className={styles.title}>
+                    {typeof title === 'string' ? <TruncatedText>{title}</TruncatedText> : title}
+                </h1>
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

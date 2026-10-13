@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { TruncatedText } from '../../ui/PageHeader.jsx';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
@@ -147,7 +148,10 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         <Screen variant={variant} header={header}>
             <ListPage>
                 <dl className={pickerStyles.detailList}>
-                    <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
+                    <Row
+                        label={t('walletDetails.name')}
+                        value={<TruncatedText>{wallet.name || 'Unnamed wallet'}</TruncatedText>}
+                    />
                     <Row label={t('walletDetails.type')} value={formatLabel} />
                     <Row label={t('walletDetails.origin')} value={originLabel} />
                     <Row
