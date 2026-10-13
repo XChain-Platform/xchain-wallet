@@ -48,7 +48,7 @@ import { SIGNER_BRIDGE_CHANNEL } from '../../../packages/desktop/main/signerBrid
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { sendMessage as rendererSendMessage } from '../../../packages/desktop/renderer/bridgeMessaging.js';
 import { createDeepLinkSlot, pickDeepLinkTarget } from '../../../packages/desktop/main/protocol.js';
-import { deepLinkRoute, watchDeepLinks, useDeepLinks } from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import { deepLinkRoute, watchDeepLinks, useDeepLinks, INVALID_DEEP_LINK_MESSAGE } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 // Path arithmetic goes through node:path, not `new URL(rel, import.meta.url)`:
@@ -569,11 +569,13 @@ describe('desktop main: the deep-link slot', () => {
 describe('desktop renderer: deep-link routing', () => {
     const reg = registryLib.defaultRegistry();
 
-    it('routes nothing for absent, malformed or unknown input', () => {
+    const invalid = { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
+
+    it('routes nothing for absent or unknown input, and a plain error for a malformed claimed link', () => {
         expect(deepLinkRoute(undefined, reg)).toBe(null);
         expect(deepLinkRoute('', reg)).toBe(null);
-        expect(deepLinkRoute('xchain:', reg)).toBe(null);
         expect(deepLinkRoute('https://example.com', reg)).toBe(null);
+        expect(deepLinkRoute('xchain:', reg)).toEqual(invalid);
     });
 
     it('routes a send link to a hardened Send prefill', () => {
@@ -596,7 +598,7 @@ describe('desktop renderer: deep-link routing', () => {
             contractRef: { chainId: 'bitcoin-mainnet', contractActionIndex: '12' },
             executePrefill: { method: 'foo', paramsText: '' },
         });
-        expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toBe(null);
+        expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toEqual(invalid);
     });
 });
 
