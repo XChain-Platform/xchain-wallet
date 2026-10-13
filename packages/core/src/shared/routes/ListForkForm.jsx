@@ -33,6 +33,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListItems, findListOwner } from '../../flows/listMembership.js';
 import { listLabel } from '../utils/listLabel.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -195,7 +196,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     setLoadError('No address on this chain yet. Use Receive to generate one first.');
                 }
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch(() => { if (!cancelled) setLoadError('Failed to load addresses.'); });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
@@ -301,6 +302,20 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     // New items to add: same paste parsing as ListCreateForm/AirdropForm
     // for addresses, or the ProjectRosterForm-style tick split for ticks.
     // Anything already on the list is dropped (it's a member either way).
+    const addressAdditions = useMemo(() => {
+        if (isTick) return null;
+        const parts = airdropLib.parsePaste(addText);
+        return airdropLib.classifyRecipients(parts, {
+            coin: descriptor?.coin || null,
+            network: descriptor?.networkKind || null,
+        });
+    }, [addText, isTick, descriptor?.coin, descriptor?.networkKind]);
+
+    const invalidTicks = useMemo(
+        () => (isTick ? classifyTickItems(addText).invalid : []),
+        [addText, isTick],
+    );
+
     const toAdd = useMemo(() => {
         const currentSet = new Set(currentItems);
         if (isTick) {
@@ -317,13 +332,8 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         // Validate additions against the chain this fork is published
         // to, not just against address shape, so a wrong-network paste cannot
         // ride into the new list and be dropped by the indexer afterwards.
-        const parts = airdropLib.parsePaste(addText);
-        const { valid } = airdropLib.classifyRecipients(parts, {
-            coin: descriptor?.coin || null,
-            network: descriptor?.networkKind || null,
-        });
-        return valid.filter((a) => !currentSet.has(a));
-    }, [addText, currentItems, isTick, descriptor?.coin, descriptor?.networkKind]);
+        return (addressAdditions?.valid || []).filter((a) => !currentSet.has(a));
+    }, [addText, currentItems, isTick, addressAdditions]);
 
     const toRemove = useMemo(
         () => currentItems.filter((i) => !keep.has(i)),
@@ -476,6 +486,16 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
+        if (invalidTicks.length > 0) {
+            setFormError(`These don't look like token names: ${invalidTicks.join(', ')}.`);
+            return;
+        }
+        if (addressAdditions?.invalid.length > 0) {
+            setFormError(
+                `These aren't valid ${descriptor?.displayName || chainId} addresses: ${addressAdditions.invalid.join(', ')}.`,
+            );
+            return;
+        }
         if (!needsAdd && !needsRemove && !memoOnly) {
             setFormError('Nothing changed: add or remove an item, or write a memo.');
             return;
@@ -609,7 +629,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review-1' ? 'Review add/remove'
+            title={stage === 'review-1' ? 'Review list edit'
                 : stage === 'wait-index' ? 'Waiting for fork to be indexed'
                     : stage === 'review-2' ? 'Review remove'
                         : stage === 'repoint' ? 'Edit published'
@@ -877,12 +897,19 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                             <dt className={styles.detailsLabel}>Members</dt>
                             <dd className={styles.detailsValue}>Unchanged ({currentItems.length})</dd>
                         </>
-                    ) : (
+                    ) : null}
+                    {needsAdd ? (
                         <>
-                            <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
-                            <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                            <dt className={styles.detailsLabel}>Adding</dt>
+                            <dd className={styles.detailsValue}>{toAdd.length} item{toAdd.length === 1 ? '' : 's'}</dd>
                         </>
-                    )}
+                    ) : null}
+                    {needsRemove ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Removing</dt>
+                            <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
+                        </>
+                    ) : null}
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -935,6 +962,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         <FormPage
             label="Edit list"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
             status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             actions={(
