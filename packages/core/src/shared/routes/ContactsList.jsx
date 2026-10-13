@@ -126,6 +126,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+    // An error answers the last Save; once the user edits the form it no
+    // longer describes it ("Name is required." stayed up under a typed name).
+    useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries]);
 
     // Add-address modal (launched from the detail view's + button).
     const [addAddrOpen, setAddAddrOpen] = useState(false);
