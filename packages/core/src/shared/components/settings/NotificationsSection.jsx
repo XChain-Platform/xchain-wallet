@@ -32,7 +32,7 @@
 // delivery seam to actually play a sound (ruling I-34b); it dispatches
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Input } from '../../../ui/Input.jsx';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
@@ -62,24 +62,48 @@ const PERMISSION_BUTTON = {
 };
 
 /**
- * Browser/OS notification-permission affordance. Renders nothing when the
- * Notification API is unavailable (extension popup) so the toggles still show.
+ * Browser/OS notification-permission affordance. The extension requests and
+ * removes its optional Chrome permission here, under a direct user gesture.
  */
 function PermissionRow() {
-    const supported = typeof Notification !== 'undefined';
-    const [permission, setPermission] = useState(supported ? Notification.permission : 'unsupported');
+    const chromePermissions = globalThis.chrome?.permissions;
+    const extensionSupported = typeof chromePermissions?.contains === 'function'
+        && typeof chromePermissions?.request === 'function'
+        && typeof chromePermissions?.remove === 'function';
+    const webSupported = typeof Notification !== 'undefined';
+    const [permission, setPermission] = useState(extensionSupported
+        ? 'checking'
+        : (webSupported ? Notification.permission : 'unsupported'));
     const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
     const [requesting, setRequesting] = useState(false);
 
-    if (!supported) return null;
+    useEffect(() => {
+        if (!extensionSupported) return undefined;
+        let active = true;
+        chromePermissions.contains({ permissions: ['notifications'] })
+            .then((granted) => {
+                if (active) setPermission(granted ? 'granted' : 'default');
+            })
+            .catch(() => {
+                if (active) setRequestError('Could not check notification permission. Try again.');
+            });
+        return () => { active = false; };
+    }, [chromePermissions, extensionSupported]);
+
+    if (!extensionSupported && !webSupported) return null;
 
     const request = async () => {
         if (requesting) return;
         setRequesting(true);
         setRequestError(null);
         try {
-            const result = await Notification.requestPermission();
-            setPermission(result);
+            if (extensionSupported) {
+                const granted = await chromePermissions.request({ permissions: ['notifications'] });
+                setPermission(granted ? 'granted' : 'default');
+            } else {
+                const result = await Notification.requestPermission();
+                setPermission(result);
+            }
         } catch {
             setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
         } finally {
@@ -87,16 +111,42 @@ function PermissionRow() {
         }
     };
 
-    let hint = 'Not enabled';
+    const revoke = async () => {
+        if (requesting || !extensionSupported) return;
+        setRequesting(true);
+        setRequestError(null);
+        try {
+            const removed = await chromePermissions.remove({ permissions: ['notifications'] });
+            if (removed) setPermission('default');
+            else setRequestError('Could not revoke notification permission. Try again.');
+        } catch {
+            setRequestError('Could not revoke notification permission. Try again.');
+        } finally {
+            setRequesting(false);
+        }
+    };
+
+    let hint = extensionSupported
+        ? 'Optional. Allows XChain Wallet to show the transaction, payment, market, and governance alerts you select. You can revoke access here at any time.'
+        : 'Not enabled';
     let action = null;
     if (permission === 'granted') {
-        hint = 'Allowed. Use the categories below to choose which notifications you receive.';
+        hint = extensionSupported
+            ? 'Allowed. XChain Wallet can show the alert categories you select below.'
+            : 'Allowed. Use the categories below to choose which notifications you receive.';
+        if (extensionSupported) {
+            action = (
+                <button type="button" onClick={revoke} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
+                    {requesting ? 'Revoking…' : 'Revoke permission'}
+                </button>
+            );
+        }
     } else if (permission === 'denied') {
         hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
-    } else {
+    } else if (permission !== 'checking') {
         action = (
             <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
-                {requesting ? 'Requesting…' : 'Request permission'}
+                {requesting ? 'Requesting…' : (extensionSupported ? 'Allow notifications' : 'Request permission')}
             </button>
         );
     }
