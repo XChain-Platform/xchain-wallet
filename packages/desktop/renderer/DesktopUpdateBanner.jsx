@@ -38,7 +38,17 @@ import { t } from '../../core/src/i18n/index.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+// A floating card over the current page, with side margins, rather than a
+// full-width bar that pushes the scroll area down.
 const WRAP = {
+    position: 'fixed',
+    top: 'var(--xc-space-3)',
+    left: 'var(--xc-space-3)',
+    right: 'var(--xc-space-3)',
+    zIndex: 1000,
+    maxWidth: '480px',
+    margin: '0 auto',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
     display: 'flex',
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',
