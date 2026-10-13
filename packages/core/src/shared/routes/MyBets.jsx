@@ -256,6 +256,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
             </>
         );
         return clickable ? (
+            // A raw button keeps the entire list card as one clickable row.
             <button
                 key={`${b.chainId}:${b.action_index}`}
                 type="button"

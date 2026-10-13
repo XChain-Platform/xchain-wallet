@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -1063,12 +1063,20 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
-                        {currentItems.map((item) => (
+                        {currentItems.map((item, index) => (
                             <li key={item} style={{ padding: '2px 0' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={keep.has(item)} onChange={() => toggleKeep(item)} />
-                                    <code>{item}</code>
-                                </label>
+                                <div className={styles.listMemberToggle}>
+                                    <Input
+                                        id={`fork-current-member-${index}`}
+                                        type="checkbox"
+                                        checked={keep.has(item)}
+                                        onChange={() => toggleKeep(item)}
+                                        className={styles.listMemberCheckbox}
+                                    />
+                                    <label htmlFor={`fork-current-member-${index}`}>
+                                        <code>{item}</code>
+                                    </label>
+                                </div>
                             </li>
                         ))}
                     </ul>
@@ -1077,18 +1085,16 @@ function ListForkFormScreen({ walletId, listRef, onBack, onDone, repointHandlers
                 <p className={styles.hint}>This list currently has no members.</p>
             )}
 
-            <label className={styles.pickerLabel} htmlFor="fork-add-items">
-                Add {isTick ? 'tokens' : 'addresses'} (one per line)
-            </label>
-            <textarea
+            <Textarea
                 id="fork-add-items"
-                className={styles.picker}
+                label={`Add ${isTick ? 'tokens' : 'addresses'} (one per line)`}
                 value={addText}
                 onChange={(e) => setAddText(e.target.value)}
                 rows={6}
                 spellCheck={false}
                 autoCapitalize={isTick ? 'characters' : 'off'}
                 autoCorrect="off"
+                aria-required="false"
             />
             <p className={styles.hint}>
                 {toAdd.length} to add · {toRemove.length} to remove

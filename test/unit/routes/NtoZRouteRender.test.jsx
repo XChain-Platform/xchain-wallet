@@ -171,7 +171,9 @@ describe('MyBets render', () => {
             await addresses.promise;
         });
 
-        expect(await screen.findByText('Market #7')).toBeInTheDocument();
+        const row = await screen.findByRole('button', { name: /Market #7/ });
+        fireEvent.click(row);
+        expect(props.onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 7);
         expect(screen.getByRole('heading', { name: 'Pending resolution' })).toBeInTheDocument();
         expect(screen.getByText('from bc1qbettor')).toBeInTheDocument();
     });

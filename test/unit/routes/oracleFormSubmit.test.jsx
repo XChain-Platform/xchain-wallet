@@ -157,9 +157,8 @@ async function preview(utils) {
 // Approve on the confirm page; a disabled Approve (the typed gate) is a no-op.
 async function clickSubmit(utils) {
     await domAct(async () => {
-        const btn = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => b.getAttribute('data-testid') === 'confirm-approve' && !b.disabled);
-        if (btn) fireEvent.click(btn);
+        const btn = utils.queryByRole('button', { name: 'Approve' });
+        if (btn && !btn.disabled) fireEvent.click(btn);
         await drainMicrotasks();
     });
 }
@@ -205,6 +204,16 @@ describe('OracleForm submit payload', () => {
         expect(calls.find((c) => c.method === 'oracleConsumers').args).toEqual({
             chainId: 'bitcoin-mainnet', address: HD_ADDRESS.address,
         });
+    });
+
+    it('offers a published price as an action and prefills its values', async () => {
+        const { utils } = await mountForm({ feeds: liveFeed('0.05') });
+
+        fireEvent.click(utils.getByRole('button', { name: 'PEPECASH in USD' }));
+
+        expect(utils.getByRole('textbox', { name: /^Token ticker/ }).value).toBe('PEPECASH');
+        expect(utils.getByRole('textbox', { name: /^Price of one/ }).value).toBe('0.05');
+        expect(utils.getByRole('textbox', { name: /^Usage fee/ }).value).toBe('0.01');
     });
 
     it('does not describe a failed feed read as an address with no published prices', async () => {

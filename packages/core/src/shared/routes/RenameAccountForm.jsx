@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
@@ -100,15 +100,17 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             backDisabled={busy}
             title={t('accountPicker.renameTitle')}
             trailing={(
-                <button
-                    type="button"
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={null}
                     onClick={() => handleSubmit()}
                     aria-label={t('history.contact.save')}
                     title={t('history.contact.save')}
                     disabled={saveDisabled}
                 >
                     <Icon.CheckIcon />
-                </button>
+                </Button>
             )}
         />
     );
