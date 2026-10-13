@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Blob as NodeBlob } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,16 +28,23 @@ function ruleBody(text, selector) {
 }
 
 function mediaBlock(text, query) {
-    const start = text.indexOf(`@media ${query}`);
-    if (start < 0) return '';
-    const open = text.indexOf('{', start);
-    let depth = 0;
-    for (let index = open; index < text.length; index += 1) {
-        if (text[index] === '{') depth += 1;
-        if (text[index] === '}') depth -= 1;
-        if (depth === 0) return text.slice(open + 1, index);
+    const blocks = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+        const start = text.indexOf(`@media ${query}`, cursor);
+        if (start < 0) break;
+        const open = text.indexOf('{', start);
+        let depth = 0;
+        for (let index = open; index < text.length; index += 1) {
+            if (text[index] === '{') depth += 1;
+            if (text[index] === '}') depth -= 1;
+            if (depth !== 0) continue;
+            blocks.push(text.slice(open + 1, index));
+            cursor = index + 1;
+            break;
+        }
     }
-    return '';
+    return blocks.join('\n');
 }
 
 function mountHistory(rows) {
@@ -93,7 +100,12 @@ describe('History export button', () => {
         await user.keyboard('{Enter}');
 
         const dialog = await screen.findByRole('dialog', { name: 'Export history' });
-        const controls = Array.from(dialog.querySelectorAll('input, button'));
+        const dialogQueries = within(dialog);
+        const controls = [
+            ...dialogQueries.getAllByRole('radio'),
+            ...dialogQueries.getAllByRole('checkbox'),
+            ...dialogQueries.getAllByRole('button'),
+        ];
         expect(controls).toHaveLength(17);
         await waitFor(() => expect(controls[0]).toHaveFocus());
         for (const control of controls.slice(1)) {
