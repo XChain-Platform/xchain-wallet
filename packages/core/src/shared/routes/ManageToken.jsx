@@ -37,7 +37,7 @@ import {
     isOpenOffer,
 } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -629,12 +629,14 @@ export function ManageToken({
                 <section className={styles.marketPanel} aria-label="Token stats">
                     <div className={styles.statsStrip}>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Supply</span>
+                            <span className={styles.statLabel}>
+                                {assetInfo ? `${locked ? 'Locked' : 'Unlocked'} supply` : 'Supply'}
+                            </span>
                             <span className={styles.statValue}>
-                                {totalSupply != null ? formatSupplyValue(totalSupply, divisibility) : '-'}
+                                {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
                             </span>
                             <span className={styles.statSub}>
-                                {maxSupply != null ? `of ${formatSupplyValue(maxSupply, divisibility)} cap` : 'no cap'}
+                                {maxSupply != null ? `of ${formatTokenQuantity(maxSupply, divisibility)} cap` : 'no cap'}
                             </span>
                         </div>
                         <div className={styles.stat}>
@@ -644,9 +646,7 @@ export function ManageToken({
                             </span>
                             {/* yourBalance comes from getWalletBalances
                                 in raw atomic units, so formatAmount is
-                                the correct formatter here. Supply
-                                values above use formatSupplyValue since
-                                the real explorer pre-formats them. */}
+                                the correct formatter here. */}
                             <span className={styles.statSub}>
                                 {yourSharePct != null ? `${yourSharePct.toFixed(1)}% of supply` : ' '}
                             </span>
@@ -1241,23 +1241,6 @@ export function normalizeGenesisRow(raw) {
         source: typeof raw.source === 'string' ? raw.source : null,
         actionIndex: raw.action_index != null ? String(raw.action_index) : (raw.actionIndex != null ? String(raw.actionIndex) : null),
     };
-}
-
-// Render a supply value tolerating two upstream shapes:
-//   1. Real xchain-explorer `/api/token/{TICK}` strips `decimals` and
-//      pre-formats supply via bcformat, so we get "1000.5" already.
-//   2. Indexer-style raw atomic units ("125000000000000" + divisibility)
-//      come through the dev mock + future explorer revisions.
-// String values containing '.' are treated as case (1) and re-grouped
-// with thousands separators only. Other strings get formatAmount.
-function formatSupplyValue(value, divisibility) {
-    const s = String(value || '');
-    if (s.includes('.')) {
-        const [whole, frac] = s.split('.');
-        const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-        return frac ? `${grouped}.${frac}` : grouped;
-    }
-    return formatAmount(s, divisibility || 0);
 }
 
 // Format a native-coin amount (BTC / LTC / DOGE) for the chart's change

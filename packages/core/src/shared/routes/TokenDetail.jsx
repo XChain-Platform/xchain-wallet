@@ -35,6 +35,7 @@ import {
     decimalFromBaseUnits,
     formatAtomicAmount,
     formatDecimalAmount,
+    formatTokenQuantity,
     formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
@@ -1096,7 +1097,14 @@ function DetailsPanel({
                     ) : null}
                     <tr className={styles.metaRow}>
                         <th scope="row">Total supply</th>
-                        <td>{formatTotalSupply(isNative, chainId, assetInfo)}</td>
+                        <td>
+                            {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
+                            {!isNative && assetInfo ? (
+                                <span className={styles.supplyState}>
+                                    {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
+                                </span>
+                            ) : null}
+                        </td>
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Current balance</th>
@@ -1701,15 +1709,16 @@ const NATIVE_SUPPLY_BY_COIN = {
     dogecoin: 'No cap (inflationary)',
 };
 
-function formatTotalSupply(isNative, chainId, assetInfo) {
+function formatTotalSupply(isNative, chainId, assetInfo, divisibility) {
     if (isNative) {
         const coin = chainId.split('-')[0];
         return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
     }
     if (assetInfo?.totalSupply == null) return 'N/A';
+    const total = formatTokenQuantity(assetInfo.totalSupply, divisibility);
     return assetInfo.maxSupply
-        ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
-        : String(assetInfo.totalSupply);
+        ? `${total} / ${formatTokenQuantity(assetInfo.maxSupply, divisibility)}`
+        : total;
 }
 
 // Token-gated content panel: renders the list of gated FILEs published

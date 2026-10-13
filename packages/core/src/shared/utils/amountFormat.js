@@ -145,6 +145,23 @@ export function formatDecimalAmount(value, locale, options = {}) {
     }
 }
 
+/** Format a token quantity already expressed in whole-token units. */
+export function formatTokenQuantity(value, divisibility = 0, locale) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    if (divisibility === null || divisibility === '') {
+        return formatDecimalAmount(trimAmountTail(raw), locale);
+    }
+    const precision = Number(divisibility);
+    if (!Number.isInteger(precision) || precision < 0 || precision > 100) {
+        return formatDecimalAmount(trimAmountTail(raw), locale);
+    }
+    const rounded = roundDecimalString(raw, precision);
+    if (rounded === null) return raw;
+    const trimmed = trimAmountTail(rounded);
+    return formatDecimalAmount(trimmed === '-0' ? '0' : trimmed, locale);
+}
+
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
 export function formatAtomicAmount(quantity, divisibility = 0, locale) {
     const raw = String(quantity ?? '0').trim();
