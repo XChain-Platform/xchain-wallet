@@ -56,7 +56,7 @@ const ADDRESS_BOX = {
     borderRadius: 'var(--xc-radius-sm)',
     padding: 'var(--xc-space-1) var(--xc-space-2)',
     overflow: 'auto',
-    wordBreak: 'break-all',
+    wordBreak: 'normal',
 };
 const PLACEHOLDER_BOX = {
     ...ADDRESS_BOX,
@@ -132,6 +132,7 @@ export function AdsSection() {
                     : '';
                 const donationAddress = descriptor?.adsDonationAddress || '';
                 const isPlaceholder = donationAddress === ADS_DONATION_ADDRESS_PLACEHOLDER;
+                const placeholderDescription = `A donation address for ${displayName} arrives in a future release; until then nothing is sent on this chain.`;
                 return (
                     <div key={chainId} style={CHAIN_BLOCK}>
                         <div style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
@@ -212,11 +213,11 @@ export function AdsSection() {
                         <div>
                             <div style={ROW_HINT}>Donation address</div>
                             {isPlaceholder ? (
-                                <div style={PLACEHOLDER_BOX}>
-                                    Not set yet. A donation address for {displayName} arrives in a future release; until then nothing is sent on this chain.
+                                <div style={PLACEHOLDER_BOX} aria-description={placeholderDescription}>
+                                    Not available yet.
                                 </div>
                             ) : (
-                                <div style={ADDRESS_BOX} aria-label={`${displayName} donation address`}>
+                                <div style={{ ...ADDRESS_BOX, wordBreak: 'break-all' }} aria-label={`${displayName} donation address`}>
                                     {donationAddress}
                                 </div>
                             )}

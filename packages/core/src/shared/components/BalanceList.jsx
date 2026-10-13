@@ -245,6 +245,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
         : null;
+    const artworkUrl = isNative ? chainIconUrl : tokenImageUrl;
+    const [failedArtworkUrl, setFailedArtworkUrl] = useState(null);
+    const showArtwork = artworkUrl && failedArtworkUrl !== artworkUrl;
     // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
@@ -333,36 +336,21 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                 tabIndex={roving ? getTabIndex(row) : undefined}
                 data-balance-option={roving ? pinKey : undefined}
                 leading={<span className={styles.iconWrap}>
-                    <span
-                        className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick) }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 1) || '?'}
-                    </span>
-                    {isNative && chainIconUrl ? (
+                    {!showArtwork ? (
+                        <span className={styles.iconLetter} aria-hidden="true">
+                            {row.tick.slice(0, 1) || '?'}
+                        </span>
+                    ) : null}
+                    {showArtwork ? (
                         <img
-                            src={chainIconUrl}
+                            src={artworkUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
                             loading="lazy"
                             decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                    ) : tokenImageUrl ? (
-                        <img
-                            src={tokenImageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.iconImg}
-                            loading="lazy"
-                            decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                            }}
+                            onError={() => setFailedArtworkUrl(artworkUrl)}
                         />
                     ) : null}
                     {!isNative && chainIconUrl ? (

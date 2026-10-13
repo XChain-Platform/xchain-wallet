@@ -23,8 +23,8 @@
     width: var(--xc-avatar-size-header);
     height: var(--xc-avatar-size-header);
     border-radius: var(--xc-avatar-shape);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
     font-size: var(--xc-avatar-initials-header);
     font-weight: 700;
     flex: 0 0 auto;

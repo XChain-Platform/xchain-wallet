@@ -123,7 +123,7 @@ describe('BalanceList ordering and visibility', () => {
         );
     });
 
-    it('keeps a decorative avatar under slow or broken token artwork', () => {
+    it('shows artwork without a backing monogram and restores the neutral fallback on error', () => {
         const imageUrl = 'https://issuer.example/slow.png';
         render(<BalanceList rows={[row('ART', { imageUrl })]} />);
 
@@ -131,10 +131,10 @@ describe('BalanceList ordering and visibility', () => {
         expect(image).toHaveAttribute('alt', '');
         expect(image).toHaveAttribute('aria-hidden', 'true');
         expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
-        expect(screen.getByText('A')).toBeInTheDocument();
+        expect(screen.queryByText('A')).toBeNull();
 
         fireEvent.error(image);
-        expect(image).toHaveStyle({ display: 'none' });
+        expect(document.querySelector(`img[src="${imageUrl}"]`)).toBeNull();
         expect(screen.getByText('A')).toBeInTheDocument();
     });
 

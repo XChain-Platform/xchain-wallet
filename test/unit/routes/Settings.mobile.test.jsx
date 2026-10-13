@@ -216,7 +216,9 @@ describe('Settings at a 320px viewport', () => {
     it('keeps placeholder prose and onboarding choices readable without forced word breaks', () => {
         settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
         const { container } = renderSettings('ads');
-        const placeholder = screen.getByText(/A donation address for Bitcoin arrives/);
+        // The visible placeholder is short; the full explanation stays in its accessible description.
+        const placeholder = screen.getByText('Not available yet.');
+        expect(placeholder).toHaveAttribute('aria-description', expect.stringMatching(/A donation address for Bitcoin arrives/));
 
         expect(placeholder.style.fontFamily).toBe('inherit');
         expect(placeholder.style.wordBreak).toBe('normal');
