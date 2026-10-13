@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { userEvent } from '../../helpers/userEvent.js';
+import {
+    registerLocale,
+    setLocale,
+} from '../../../packages/core/src/i18n/index.js';
 
 let settings;
 let update;
@@ -36,34 +41,53 @@ const { WalletModeSection } = await import(
     '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
 );
 
+beforeAll(() => {
+    registerLocale('de-DE', {});
+});
+
 beforeEach(() => {
     settings = createDefaultSettings();
     update = vi.fn(async () => settings);
 });
 
-afterEach(() => cleanup());
+afterEach(async () => {
+    cleanup();
+    await setLocale('en');
+});
 
 describe('settings form validation', () => {
-    it('opens and saves the custom currency field', () => {
+    it('searches supported currencies by code and name, shows symbols, and saves the choice', () => {
         render(<LanguageRegionSection />);
-        fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
+        const picker = screen.getByLabelText('Fiat currency');
 
-        const input = screen.getByLabelText('Custom currency code');
-        fireEvent.change(input, { target: { value: 'nzd' } });
-        fireEvent.blur(input);
+        fireEvent.focus(picker);
+        fireEvent.change(picker, { target: { value: 'yen' } });
+        expect(screen.getByRole('option', { name: /Japanese Yen \(JPY\).*¥/ })).toBeTruthy();
+        expect(screen.queryByRole('option', { name: /US Dollar/ })).toBeNull();
 
-        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'NZD' });
+        fireEvent.change(picker, { target: { value: 'EUR' } });
+        const euro = screen.getByRole('option', { name: /Euro \(EUR\).*€/ });
+        fireEvent.click(euro);
+
+        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'EUR' });
+
+        fireEvent.focus(picker);
+        fireEvent.change(picker, { target: { value: 'XYZ' } });
+        expect(within(screen.getByRole('listbox', { name: 'Supported fiat currencies' }))
+            .queryAllByRole('option')).toHaveLength(0);
+        expect(screen.getByText('No supported currencies match.')).toBeTruthy();
     });
 
-    it('rejects malformed custom currency codes with visible feedback', () => {
+    it('saves the single matching supported currency with Enter', async () => {
+        const user = userEvent.setup();
         render(<LanguageRegionSection />);
-        fireEvent.change(screen.getByLabelText('Fiat currency'), { target: { value: '__custom__' } });
-        const input = screen.getByLabelText('Custom currency code');
-        fireEvent.change(input, { target: { value: 'US' } });
-        fireEvent.blur(input);
+        const picker = screen.getByLabelText('Fiat currency');
 
-        expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/three-letter ISO currency code/)).toBeTruthy();
+        picker.focus();
+        fireEvent.change(picker, { target: { value: 'JPY' } });
+        await user.keyboard('{Enter}');
+
+        expect(update).toHaveBeenCalledWith({ fiatCurrency: 'JPY' });
     });
 
     it('does not turn an empty test-send threshold into zero', () => {
@@ -73,7 +97,11 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/whole number of sats/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain('test-send-threshold-hint');
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
@@ -86,6 +114,22 @@ describe('settings form validation', () => {
         expect(update).toHaveBeenCalledWith({
             grace: { testSendThresholdSats: '9007199254740993' },
         });
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+        render(<SafetySection />);
+        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
     });
 
     it('explains the exact test-send gate and always-on recipient warnings', () => {
@@ -127,7 +171,65 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alert').textContent).toMatch(/non-negative custom fee rate/);
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/non-negative decimal fee rate/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+    });
+
+    it('saves a comma-decimal custom fee rate as the same numeric setting', async () => {
+        await setLocale('de-DE');
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+
+        fireEvent.change(input, { target: { value: '2,75' } });
+        fireEvent.blur(input);
+
+        expect(update).toHaveBeenCalledWith({
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 2750,
+                    rbfByDefault: true,
+                },
+            },
+        });
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent fee rates', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': {
+                    strategy: 'custom',
+                    customSatsPerKb: 6000,
+                    rbfByDefault: true,
+                },
+            },
+        };
+        render(<FeesSection />);
+        const input = screen.getByLabelText('Bitcoin custom fee rate');
+        const initialValue = input.value;
+
+        expect(input.type).toBe('text');
+        expect(input.inputMode).toBe('decimal');
+        fireEvent.wheel(input, { deltaY: -100 });
+        expect(input.value).toBe(initialValue);
+
+        fireEvent.change(input, { target: { value: '1e3' } });
+        fireEvent.blur(input);
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert').textContent).toMatch(/non-negative decimal fee rate/);
     });
 
     it('allows shared settings rows to wrap on narrow screens', () => {
@@ -143,7 +245,7 @@ describe('settings form validation', () => {
         fireEvent.click(screen.getByRole('radio', { name: /Watcher/ }));
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alertdialog').textContent).toContain(
+        expect(screen.getByRole('dialog').textContent).toContain(
             'Transaction actions produce unsigned PSBTs',
         );
         expect(container.querySelector('input[type="password"]')).toBeNull();
@@ -159,7 +261,23 @@ describe('settings form validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.queryByRole('alertdialog')).toBeNull();
+        expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByRole('radio', { name: /Normal/ }).checked).toBe(true);
+    });
+
+    it('closes wallet-mode confirmation on Escape and returns focus to its radio', async () => {
+        const user = userEvent.setup();
+        render(<WalletModeSection />);
+        const signer = screen.getByRole('radio', { name: /Signer/ });
+        signer.focus();
+        fireEvent.click(signer);
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+
+        expect(update).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog')).toBeNull();
+        await waitFor(() => expect(document.activeElement).toBe(signer));
+        expect(screen.getByRole('radio', { name: /Normal/ })).toBeChecked();
     });
 });

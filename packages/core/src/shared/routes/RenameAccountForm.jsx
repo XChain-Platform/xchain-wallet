@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
+const NAME_MAX_LENGTH = 64;
+
 /**
  * RenameAccountForm: change an Account record's `name` field. No
  * password input, no signer needed; pure metadata update. Twin of
@@ -26,7 +28,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
  * @param {string} props.walletId
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
- * @param {() => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {(account: any) => void} props.onRenamed   refresh callers and return to the previous screen
  */
 export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
@@ -65,6 +67,10 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
             setError('Account name is required.');
             return;
         }
+        if (name.length > NAME_MAX_LENGTH) {
+            setError(`Account name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
         if (accounts.some((account) => account?.id !== accountId
             && account?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
             setError(`An account named "${trimmed}" already exists.`);
@@ -77,15 +83,15 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
         setError(null);
         setBusy(true);
         try {
-            await messaging.renameAccount({ accountId, name: trimmed });
-            onRenamed();
+            const result = await messaging.renameAccount({ accountId, name: trimmed });
+            onRenamed(result?.account || result);
         } catch (err) {
             setError(err?.message || 'Failed to rename account.');
             setBusy(false);
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0;
+    const saveDisabled = busy || name.trim().length === 0 || name.length > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
@@ -113,6 +119,7 @@ export function RenameAccountForm({ accountId, walletId, initialName = '', onBac
                 label="Account name"
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
+                maxLength={NAME_MAX_LENGTH}
                 autoComplete="off"
                 disabled={busy}
                 error={error || undefined}

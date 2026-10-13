@@ -194,14 +194,16 @@ describe('TxStatusTimeline: confirmed rows are untouched', () => {
     });
 
     it('a confirmed entry keeps its confirmation count and indexed stage', () => {
+        const blockIndex = 812345;
+        const watermark = 812347;
         render(<TxStatusTimeline
-            entry={{ txHash: TX, blockIndex: 812345, timestamp: NOW - 60000, action: 'SEND' }}
-            chainTip={812347}
-            indexerWatermark={812347}
+            entry={{ txHash: TX, blockIndex, timestamp: NOW - 60000, action: 'SEND' }}
+            chainTip={watermark}
+            indexerWatermark={watermark}
         />);
-        expect(screen.getByText('Confirmed at block 812,345')).toBeTruthy();
+        expect(screen.getByText(`Confirmed at block ${blockIndex.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText(/3 confirmations/)).toBeTruthy();
-        expect(screen.getByText(/the service has reached block 812,347/)).toBeTruthy();
+        expect(screen.getByText(`Fully processed · the service has reached block ${watermark.toLocaleString()}`)).toBeTruthy();
     });
 
     it('a confirmed entry that STILL carries stale pending metadata reads as confirmed', () => {

@@ -200,6 +200,26 @@ describe('NotificationService', () => {
         expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
     });
 
+    it('records our confirmed transaction without notifying when tx confirmations are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.txConfirmations = false;
+        const onTxConfirmed = vi.fn(async () => {});
+        const svc = makeService(deps, {
+            getPendingTxids: async () => new Set(['txOurs']),
+            onTxConfirmed,
+        });
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 22, source: 'addrBTC', tx_hash: 'txOurs' },
+        });
+        await flush();
+
+        expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
     it('fires order-fill on ORDER_MATCH, suppressed when orderFills is off', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);
@@ -215,6 +235,36 @@ describe('NotificationService', () => {
         await flush();
         expect(deps.notify).toHaveBeenCalledTimes(1);
         expect(deps.notify.mock.calls[0][0]).toMatchObject({ kind: 'order-fill' });
+    });
+
+    it('suppresses dispenser fills when dispenserFills is off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.dispenserFills = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'DISPENSE',
+            data: { action_index: 32 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    it('suppresses CoinPay-required prompts when incoming receipts are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.incomingReceipts = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'COINPAY_REQUIRED',
+            data: { action_index: 33 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
     });
 
     it('dedupes the same event within the 30s window', async () => {
@@ -301,5 +351,21 @@ describe('NotificationService', () => {
         await svc.refresh();
         expect(deps.sdks['bitcoin-mainnet'].onAddress).toHaveBeenCalledTimes(2);
         expect(deps.sdks['bitcoin-mainnet'].subCount('addrBTC2')).toBe(1);
+    });
+
+    it('tags subscription failures without logging addresses or error payloads', async () => {
+        const deps = makeDeps();
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        deps.sdks['bitcoin-mainnet'].onAddress.mockImplementation(() => {
+            throw new Error('password=hunter2 body={"address":"addrBTC","balance":42}');
+        });
+
+        const svc = makeService(deps, { logger });
+        await svc.start();
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.error.mock.calls[0][0]).toMatch(/^\[notify\] /);
+        expect(logger.error.mock.calls[0][1]).toBe('<Error>');
+        expect(JSON.stringify(logger.error.mock.calls)).not.toMatch(/addrBTC|hunter2|balance|body=/);
     });
 });

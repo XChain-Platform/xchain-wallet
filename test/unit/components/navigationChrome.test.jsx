@@ -13,6 +13,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { isNavItemActive, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(() => cleanup());
 
@@ -233,6 +234,46 @@ describe('navigation Tab order', () => {
             userEvent.tab();
             expect(screen.getByRole('button', { name: label })).toHaveFocus();
         }
+    });
+});
+
+describe('route scroll position', () => {
+    function Route({ routeKey }) {
+        return (
+            <ScrollRestoration routeKey={routeKey}>
+                <Screen><div>{routeKey}</div></Screen>
+            </ScrollRestoration>
+        );
+    }
+
+    it('restores a list after a detail route and starts unseen routes at the top', () => {
+        const view = render(<Route routeKey="history" />);
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 418;
+
+        view.rerender(<Route routeKey="action-detail" />);
+        expect(document.getElementById('xc-main').scrollTop).toBe(0);
+        document.getElementById('xc-main').scrollTop = 73;
+
+        view.rerender(<Route routeKey="history" />);
+        expect(document.getElementById('xc-main').scrollTop).toBe(418);
+    });
+
+    it('scrolls the active bottom tab to the top', () => {
+        const onSelect = vi.fn();
+        render(
+            <>
+                <main id="xc-main" />
+                <BottomTabBar currentView="history" onSelect={onSelect} />
+            </>,
+        );
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 255;
+
+        fireEvent.click(screen.getByRole('button', { name: 'History' }));
+
+        expect(main.scrollTop).toBe(0);
+        expect(onSelect).toHaveBeenCalledWith('history');
     });
 });
 

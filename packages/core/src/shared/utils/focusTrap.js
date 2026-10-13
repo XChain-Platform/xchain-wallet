@@ -21,6 +21,46 @@
 
 import { useEffect, useRef } from 'react';
 
+/** @type {object[]} */
+const activeTraps = [];
+let bodyScrollLocks = 0;
+let priorBodyOverflow = '';
+const inertLocks = new WeakMap();
+
+function lockBodyScroll() {
+    if (typeof document === 'undefined' || !document.body) return;
+    if (bodyScrollLocks === 0) {
+        priorBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+    }
+    bodyScrollLocks += 1;
+}
+
+function unlockBodyScroll() {
+    if (typeof document === 'undefined' || !document.body || bodyScrollLocks === 0) return;
+    bodyScrollLocks -= 1;
+    if (bodyScrollLocks === 0) document.body.style.overflow = priorBodyOverflow;
+}
+
+function lockInert(element) {
+    const lock = inertLocks.get(element);
+    if (lock) {
+        lock.count += 1;
+        return;
+    }
+    inertLocks.set(element, { count: 1, hadInert: element.hasAttribute('inert') });
+    element.setAttribute('inert', '');
+}
+
+function unlockInert(element) {
+    const lock = inertLocks.get(element);
+    if (!lock) return;
+    lock.count -= 1;
+    if (lock.count > 0) return;
+    if (!lock.hadInert) element.removeAttribute('inert');
+    inertLocks.delete(element);
+}
+
 const FOCUSABLE_SELECTOR = [
     'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
     'input:not([disabled]):not([type="hidden"])', 'select:not([disabled])',
@@ -74,9 +114,14 @@ function openerFor(container) {
  * for a widget that owns Tab itself (the command palette's category jump).
  *
  * @param {import('react').RefObject<HTMLElement>} containerRef
- * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement>, trap?: boolean }} opts
+ * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement>, restoreFocusRef?: import('react').RefObject<HTMLElement>, trap?: boolean }} opts
  */
-export function useFocusTrap(containerRef, { active, initialFocusRef, trap = true } = {}) {
+export function useFocusTrap(containerRef, {
+    active,
+    initialFocusRef,
+    restoreFocusRef,
+    trap = true,
+} = {}) {
     const previouslyFocused = useRef(null);
 
     useEffect(() => {
@@ -84,7 +129,11 @@ export function useFocusTrap(containerRef, { active, initialFocusRef, trap = tru
         const container = containerRef.current;
         if (!container) return undefined;
 
-        previouslyFocused.current = openerFor(container);
+        const layer = {};
+        activeTraps.push(layer);
+        lockBodyScroll();
+
+        previouslyFocused.current = restoreFocusRef?.current || openerFor(container);
 
         // Initial focus: the designated element (password / HW block) or the
         // first focusable descendant.
@@ -97,7 +146,7 @@ export function useFocusTrap(containerRef, { active, initialFocusRef, trap = tru
         }
 
         const onKeyDown = (e) => {
-            if (!trap || e.key !== 'Tab') return;
+            if (!trap || e.key !== 'Tab' || activeTraps[activeTraps.length - 1] !== layer) return;
             const focusables = focusableWithin(container);
             if (focusables.length === 0) { e.preventDefault(); return; }
             const first = focusables[0];
@@ -118,6 +167,9 @@ export function useFocusTrap(containerRef, { active, initialFocusRef, trap = tru
         container.addEventListener('keydown', onKeyDown);
         return () => {
             container.removeEventListener('keydown', onKeyDown);
+            const layerIndex = activeTraps.indexOf(layer);
+            if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
+            unlockBodyScroll();
             const prev = previouslyFocused.current;
             const now = document.activeElement;
             const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
@@ -125,7 +177,7 @@ export function useFocusTrap(containerRef, { active, initialFocusRef, trap = tru
                 try { prev.focus(); } catch { /* noop */ }
             }
         };
-    }, [active, containerRef, initialFocusRef, trap]);
+    }, [active, containerRef, initialFocusRef, restoreFocusRef, trap]);
 }
 
 /**
@@ -141,11 +193,15 @@ export function useInertBackground(modalRootRef, { active } = {}) {
         if (!active) return undefined;
         const root = modalRootRef.current;
         if (!root || !root.parentElement) return undefined;
-        const siblings = Array.from(root.parentElement.children).filter((el) => el !== root);
-        const prior = siblings.map((el) => el.hasAttribute('inert'));
-        siblings.forEach((el) => el.setAttribute('inert', ''));
-        return () => {
-            siblings.forEach((el, i) => { if (!prior[i]) el.removeAttribute('inert'); });
-        };
+        const siblings = Array.from(root.parentElement.children);
+        const rootIndex = siblings.indexOf(root);
+        const targets = siblings.filter((element, index) => {
+            if (element === root) return false;
+            const laterModal = index > rootIndex
+                && element.matches('[role="dialog"][aria-modal="true"]');
+            return !laterModal;
+        });
+        targets.forEach(lockInert);
+        return () => targets.forEach(unlockInert);
     }, [active, modalRootRef]);
 }

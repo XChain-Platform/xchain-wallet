@@ -88,13 +88,13 @@ describe('TokenWizard guided flow', () => {
             expect(screen.getAllByText(value).length).toBeGreaterThan(0);
         }
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
         expect(screen.getByLabelText('Display name (optional)').value).toBe('Useful Token');
         expect(screen.getByLabelText('Supply').value).toBe('1000');
         expect(screen.getByLabelText('Divisible (8 decimal places)').checked).toBe(true);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByText('Step 2 of 4: Network')).toBeTruthy();
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
         expect(screen.getByLabelText('Token name (ticker)').value).toBe('UTILITY');
@@ -174,8 +174,8 @@ describe('TokenWizard guided flow', () => {
             target: { value: 'not-an-address' },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         fireEvent.click(screen.getByText('Meme token'));
         await screen.findByLabelText('Fee paid by');
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));

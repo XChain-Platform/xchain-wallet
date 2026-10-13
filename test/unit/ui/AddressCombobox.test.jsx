@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AddressCombobox } from '../../../packages/core/src/ui/AddressCombobox.jsx';
 
 const suggestions = [
@@ -13,6 +13,10 @@ const suggestions = [
     { address: 'bc1qbob', label: 'Bob', source: 'contact' },
     { address: 'bc1qrecent', label: 'bc1qr...ecent', source: 'history' },
 ];
+
+afterEach(() => {
+    delete navigator.clipboard;
+});
 
 function ControlledCombobox(props) {
     const { value: initialValue = '', ...rest } = props;
@@ -79,6 +83,36 @@ describe('<AddressCombobox>', () => {
             clipboardData: { getData: () => ' bitcoin:bc1qfromuri?amount=1 ' },
         });
         expect(input).toHaveValue('bc1qfromuri');
+    });
+
+    it('trims clipboard button text and explains denied clipboard access', async () => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { readText: vi.fn().mockResolvedValue('  bc1qclipboard\n') },
+        });
+        const view = render(<ControlledCombobox />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qclipboard'));
+
+        navigator.clipboard.readText.mockResolvedValueOnce(' bitcoin:bc1qfromuri?amount=1 ');
+        view.rerender(
+            <ControlledCombobox
+                onPaste={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.value = 'bc1qfromuri';
+                    fireEvent.change(event.currentTarget);
+                }}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        await waitFor(() => expect(screen.getByLabelText('To')).toHaveValue('bc1qfromuri'));
+
+        navigator.clipboard.readText.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
+        fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Clipboard access was denied. Paste manually instead.',
+        );
     });
 
     it('clears the value and resets keyboard selection', () => {

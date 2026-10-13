@@ -7,8 +7,12 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { useFocusTrap, useInertBackground } from '../../../packages/core/src/shared/utils/focusTrap.js';
+import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    document.body.style.overflow = '';
+});
 
 function TrapHarness({ active }) {
     const containerRef = useRef(null);
@@ -32,6 +36,16 @@ function InertHarness({ active }) {
             <div data-testid="sibling">background</div>
             <div ref={rootRef} data-testid="modal-root">modal</div>
         </div>
+    );
+}
+
+function StackedInertHarness({ under = true, over = true }) {
+    return (
+        <>
+            <button data-testid="stack-background">background</button>
+            {under ? <NoticeModal key="under" title="Same title" onClose={() => {}} /> : null}
+            {over ? <NoticeModal key="over" title="Same title" onClose={() => {}} /> : null}
+        </>
     );
 }
 
@@ -81,6 +95,22 @@ describe('useInertBackground', () => {
         render(<InertHarness active={false} />);
         expect(screen.getByTestId('sibling').hasAttribute('inert')).toBe(false);
     });
+
+    it('keeps only the top dialog active and restores shared background state', () => {
+        const view = render(<StackedInertHarness />);
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+        const labelIds = dialogs.map((dialog) => dialog.getAttribute('aria-labelledby'));
+        expect(new Set(labelIds).size).toBe(2);
+        expect(dialogs[0]).toHaveAttribute('inert');
+        expect(dialogs[1]).not.toHaveAttribute('inert');
+
+        view.rerender(<StackedInertHarness under={false} />);
+        expect(screen.getByTestId('stack-background')).toHaveAttribute('inert');
+        expect(screen.getByRole('dialog')).not.toHaveAttribute('inert');
+
+        view.rerender(<StackedInertHarness under={false} over={false} />);
+        expect(screen.getByTestId('stack-background')).not.toHaveAttribute('inert');
+    });
 });
 
 // A dialog opened from a control hands focus back to that control on close,
@@ -98,6 +128,35 @@ function OpenerHarness({ autoFocusInside = false }) {
                     {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
                     <button data-testid="inside" autoFocus={autoFocusInside} onClick={() => setOpen(false)}>close</button>
                 </div>
+            ) : null}
+        </div>
+    );
+}
+
+function FocusLayer({ name, onClose, children }) {
+    const ref = useRef(null);
+    useFocusTrap(ref, { active: true });
+    return (
+        <div ref={ref} role="dialog" aria-label={name}>
+            {children}
+            <button data-testid={`close-${name}`} onClick={onClose}>close {name}</button>
+        </div>
+    );
+}
+
+function StackedFocusHarness() {
+    const [outerOpen, setOuterOpen] = useState(false);
+    const [innerOpen, setInnerOpen] = useState(false);
+    return (
+        <div>
+            <button data-testid="page-opener" onClick={() => setOuterOpen(true)}>open outer</button>
+            {outerOpen ? (
+                <FocusLayer name="outer" onClose={() => setOuterOpen(false)}>
+                    <button data-testid="inner-opener" onClick={() => setInnerOpen(true)}>open inner</button>
+                    {innerOpen ? (
+                        <FocusLayer name="inner" onClose={() => setInnerOpen(false)} />
+                    ) : null}
+                </FocusLayer>
             ) : null}
         </div>
     );
@@ -154,5 +213,33 @@ describe('useFocusTrap opener handling', () => {
         a.focus();
         const notPrevented = fireEvent.keyDown(a, { key: 'Tab' });
         expect(notPrevented).toBe(true);
+    });
+
+    it('keeps one scroll lock and restores focus through stacked dialogs', async () => {
+        document.body.style.overflow = 'auto';
+        const styleChanges = [];
+        const observer = new MutationObserver((records) => styleChanges.push(...records));
+        observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+        render(<StackedFocusHarness />);
+        const pageOpener = screen.getByTestId('page-opener');
+        pageOpener.focus();
+        fireEvent.click(pageOpener);
+        await flush();
+        expect(document.body.style.overflow).toBe('hidden');
+
+        const innerOpener = screen.getByTestId('inner-opener');
+        fireEvent.click(innerOpener);
+        await flush();
+        fireEvent.click(screen.getByTestId('close-inner'));
+        await flush();
+        expect(document.body.style.overflow).toBe('hidden');
+        expect(document.activeElement).toBe(innerOpener);
+
+        fireEvent.click(screen.getByTestId('close-outer'));
+        await flush();
+        expect(document.body.style.overflow).toBe('auto');
+        expect(document.activeElement).toBe(pageOpener);
+        expect(styleChanges).toHaveLength(2);
+        observer.disconnect();
     });
 });
