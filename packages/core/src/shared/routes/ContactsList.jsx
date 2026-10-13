@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -145,6 +145,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const actionsRef = useRef(null);
 
     const loadContacts = useCallback(async () => {
+        setLoadError(null);
         try {
             const rows = await messaging.listContacts();
             setContacts(Array.isArray(rows) ? rows : []);
@@ -504,16 +505,28 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setContacts(null);
+                        return loadContacts();
+                    },
+                }}
+            >
+                {loadError}
+            </StatusMessage>,
         );
     }
 
     if (contacts === null) {
-        return wrap(<p className={styles.hint}>Loading contacts…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading contacts">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
 
     if (mode === 'scan') {

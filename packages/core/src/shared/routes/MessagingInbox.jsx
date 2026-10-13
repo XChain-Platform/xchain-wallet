@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -65,6 +65,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
@@ -103,19 +104,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
-                if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate one before reading messages.');
-                }
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (stage === 'password') {
@@ -437,13 +436,32 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
 
     if (!addressesByChain) {
-        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
     if (sweepAddrs.length === 0) {
@@ -458,10 +476,26 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // effect above advances it to the inbox (or the password prompt) the
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(<ListPage><p className={styles.hint}>Opening inbox…</p></ListPage>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
-    if (stage === 'password' || stage === 'submitting') {
+    if (stage === 'submitting') {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
+    }
+
+    if (stage === 'password') {
         return wrap(
             <FormPage
                 label="Unlock messaging inbox"
