@@ -217,6 +217,7 @@ export function AddressList({
     const [advancedDerivationIndex, setAdvancedDerivationIndex] = useState('');
     const [advancedBusy, setAdvancedBusy] = useState(false);
     const [advancedError, setAdvancedError] = useState(/** @type {string | null} */ (null));
+    const advancedGenerateLockRef = useRef(false);
     const addMenuRef = useRef(null);
     useEffect(() => {
         if (!addMenuOpen) return undefined;
@@ -540,7 +541,7 @@ export function AddressList({
 
     async function handleAdvancedGenerate(event) {
         event.preventDefault();
-        if (advancedBusy) return;
+        if (advancedGenerateLockRef.current) return;
         const derivationIndex = Number(advancedDerivationIndex);
         if (!effectiveAdvancedChainId) {
             setAdvancedError('Pick a coin.');
@@ -559,6 +560,7 @@ export function AddressList({
             setAdvancedError('Address generation is not available in this shell.');
             return;
         }
+        advancedGenerateLockRef.current = true;
         setAdvancedBusy(true);
         setAdvancedError(null);
         try {
@@ -578,6 +580,7 @@ export function AddressList({
                 'Could not generate that address. Check the derivation index and try again.',
             ));
         } finally {
+            advancedGenerateLockRef.current = false;
             setAdvancedBusy(false);
         }
     }
@@ -587,7 +590,7 @@ export function AddressList({
         const multisigByAddress = new Map(
             multisigs
                 .filter((m) => typeof m.address === 'string')
-                .map((m) => [m.address.toLowerCase(), m]),
+                .map((m) => [`${bitcoinChainId}:${m.address.toLowerCase()}`, m]),
         );
         const networkMatch = (chainId) => (
             network === 'all' || chainId === network || coinFromChainId(chainId) === network
@@ -598,9 +601,11 @@ export function AddressList({
             if (!networkMatch(chainId)) continue;
             if (!Array.isArray(addrs)) continue;
             for (const a of addrs) {
-                const matched = multisigByAddress.get((a.address || '').toLowerCase()) || null;
+                const matched = multisigByAddress.get(
+                    `${chainId}:${(a.address || '').toLowerCase()}`,
+                ) || null;
                 out.push({
-                    key: `${chainId}:${a.address}`,
+                    key: `${chainId}:${a.id || a.address}`,
                     chainId,
                     address: a.address,
                     label: a.label || '',
@@ -614,7 +619,10 @@ export function AddressList({
         // them on-demand and doesn't necessarily persist them.
         if (bitcoinChainId && networkMatch(bitcoinChainId)) {
             for (const m of multisigs) {
-                if (!out.some((r) => r.address?.toLowerCase() === m.address.toLowerCase())) {
+                if (!out.some((r) => (
+                    r.chainId === bitcoinChainId
+                    && r.address?.toLowerCase() === m.address.toLowerCase()
+                ))) {
                     out.push({
                         key: `${bitcoinChainId}:${m.address}:synthetic`,
                         chainId: bitcoinChainId,
@@ -1065,11 +1073,16 @@ export function AddressList({
         });
         const saveLabel = async () => {
             if (!selected.record?.id || labelSaving) return;
+            const targetId = selected.record.id;
             setLabelSaving(true);
             try {
                 const next = labelDraft.trim();
-                await messaging.setAddressLabel(selected.record.id, next);
-                setSelected({ ...selected, label: next, record: { ...selected.record, label: next } });
+                await messaging.setAddressLabel(targetId, next);
+                setSelected((current) => (
+                    current?.record?.id === targetId
+                        ? { ...current, label: next, record: { ...current.record, label: next } }
+                        : current
+                ));
                 setReloadKey((k) => k + 1);
                 announce('Address label saved.');
             } catch (err) {
