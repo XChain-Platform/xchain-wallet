@@ -57,6 +57,7 @@ import { KeychainSessionBackend, sessionKeyPathFor } from './keychain.js';
 import { FileUnlockThrottleStore, unlockThrottlePathFor } from './unlockThrottle.js';
 import { FileAutoLockStore, autoLockStatePathFor } from './autoLockState.js';
 import {
+    attachRendererCspHeaders,
     isHttpUrl,
     hasNoIpcArguments,
     isValidDesktopIpcMessage,
@@ -832,6 +833,8 @@ if (!deepLinkCtx.gotLock) {
 }
 
 app.whenReady().then(async () => {
+    attachRendererCspHeaders(session.defaultSession.webRequest, APP_ROOT);
+
     windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
     rememberedWindowBounds = await windowBoundsStore.load();
     runtime = buildRuntime();
