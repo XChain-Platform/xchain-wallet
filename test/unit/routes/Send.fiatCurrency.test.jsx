@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => {
@@ -64,7 +64,9 @@ describe('Send fiat currency', () => {
 
         expect(await screen.findByRole('button', { name: /switch input to eur/i })).toBeInTheDocument();
         expect(screen.getByText('≈ €0.00 EUR')).toBeInTheDocument();
-        expect(await screen.findAllByText(/≈ €[0-9,.]+ EUR/)).toHaveLength(2);
+        // The fee preview lands after the amount preview once the fee
+        // estimate resolves, so wait for both rather than the first match.
+        await waitFor(() => expect(screen.getAllByText(/≈ €[0-9,.]+ EUR/)).toHaveLength(2));
         expect(document.body.textContent).not.toContain('$');
     });
 });
