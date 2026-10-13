@@ -185,6 +185,19 @@
     min-width: 0;
 }
 
+/* The final action stays fully visible because its amount can exceed the
+   single-line width of a 320px screen. */
+.footer > button {
+    block-size: auto;
+    white-space: normal;
+}
+
+.footer > button > span:last-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+}
+
 @media not all and (min-width: 400px) {
     .footer {
         flex-direction: column;

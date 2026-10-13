@@ -831,8 +831,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     amountTouchedRef.current = true;
                     setAmount(max);
                     if (amountInputMode === 'fiat') {
-                        const converted = max && fiatRate ? coinToFiat(max, fiatRate) : null;
-                        setFiatAmount(converted != null ? converted.toFixed(2) : '');
+                        const converted = max && fiatRate ? coinToFiatExact(max, fiatRate) : null;
+                        setFiatAmount(converted != null ? roundDecimalString(converted, 2) : '');
                     }
                     setFormError(null);
                 }}

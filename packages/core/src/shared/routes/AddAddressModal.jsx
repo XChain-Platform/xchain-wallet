@@ -61,8 +61,8 @@ const ADDRESS_TYPE_HINT = {
     },
     litecoin: {
         mainnet: { p2pkh: 'L...', 'p2sh-p2wpkh': 'M...', p2wpkh: 'ltc1...' },
-        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'tltc1...' },
-        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'rltc1...' },
+        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'tltc1...' },
+        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'rltc1...' },
     },
     dogecoin: {
         mainnet: { p2pkh: 'D...' },
