@@ -127,6 +127,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [scannerOpen, setScannerOpen] = useState(false);
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
+    const listRequestId = useRef(0);
+    const activeRequestId = useRef(0);
 
     // (error-recovery sweep remainder): each error surface offers a
     // one-click "Try again" against whatever action last failed. The
@@ -141,10 +143,13 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }, []);
 
     const refreshList = useCallback(async () => {
+        const requestId = ++listRequestId.current;
         try {
             const list = await messaging.listMultisigSigningSessions({ walletId });
+            if (requestId !== listRequestId.current) return;
             setSessions(Array.isArray(list) ? list : []);
         } catch (err) {
+            if (requestId !== listRequestId.current) return;
             console.error('Multisig sessions list failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Failed to load multisig sessions.'), refreshList);
             setSessions([]);
@@ -152,10 +157,13 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }, [walletId, messaging, fail]);
 
     const refreshActive = useCallback(async (id) => {
+        const requestId = ++activeRequestId.current;
         try {
             const session = await messaging.getMultisigSigningSession({ sessionId: id });
+            if (requestId !== activeRequestId.current) return;
             setActive(session);
         } catch (err) {
+            if (requestId !== activeRequestId.current) return;
             console.error('Multisig session load failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Failed to load session.'), () => refreshActive(id));
         }
@@ -163,10 +171,12 @@ export function MultisigSigningSession({ walletId, onBack }) {
 
     useEffect(() => {
         refreshList();
+        return () => { listRequestId.current += 1; };
     }, [refreshList]);
 
     useEffect(() => {
         if (activeId) refreshActive(activeId);
+        return () => { activeRequestId.current += 1; };
     }, [activeId, refreshActive]);
 
     async function handleAggregate() {

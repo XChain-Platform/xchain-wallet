@@ -26,7 +26,7 @@
 // give_remaining and reports `complete` or `filled` once the order is fully filled.
 // Cancel/edit are offered only while an order is open.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -201,6 +201,8 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     // PC-21: which order's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    const loadRequestId = useRef(0);
+    const autopayRequestId = useRef(0);
 
     useEffect(() => {
         const current = Math.floor(Date.now() / 1000);
@@ -218,12 +220,14 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     }, [items]);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestId.current;
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getOrdersForAddress !== 'function') {
             setItems([]); return;
         }
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
+            if (requestId !== loadRequestId.current) return;
             setByChain(chains);
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
@@ -235,6 +239,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([o, c]) => ({ p, orders: extractRows(o), cancels: extractRows(c) }))));
+            if (requestId !== loadRequestId.current) return;
 
             // The cancels feed also lists rejected ORDER_CANCEL attempts (a
             // cancel sent against a filled order is recorded as invalid), and
@@ -266,21 +271,25 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             const candidates = all.filter((it) => !cancelledKeys.has(it.key)
                 && String(it.row.status || 'valid') === 'valid');
             const fills = await readFillStates(messaging, candidates);
+            if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
         } catch (err) {
+            if (requestId !== loadRequestId.current) return;
             setLoadError(err?.message || 'Failed to load orders.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
 
     const loadAutopay = useCallback(async () => {
+        const requestId = ++autopayRequestId.current;
         if (typeof messaging?.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
                 await messaging.resolveAutopayIndexes({ walletId }).catch(() => {});
             }
             const records = await messaging.listAutopayOrders({ walletId });
+            if (requestId !== autopayRequestId.current) return;
             const map = new Map();
             for (const rec of records || []) {
                 if (rec?.orderActionIndex != null) {
@@ -291,7 +300,14 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         } catch { /* toggle is best-effort UI */ }
     }, [messaging, walletId]);
 
-    useEffect(() => { load(); loadAutopay(); }, [load, loadAutopay]);
+    useEffect(() => {
+        load();
+        loadAutopay();
+        return () => {
+            loadRequestId.current += 1;
+            autopayRequestId.current += 1;
+        };
+    }, [load, loadAutopay]);
 
     async function handleAutopayToggle(record) {
         if (typeof messaging?.setAutopayEnabled !== 'function') return;
