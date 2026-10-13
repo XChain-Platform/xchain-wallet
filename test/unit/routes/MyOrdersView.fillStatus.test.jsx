@@ -26,6 +26,7 @@ import { render, cleanup, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyOrdersView, deriveStatus, fillStateOf } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -79,12 +80,16 @@ function detail(actionIndex, status, giveRemaining) {
     };
 }
 
-function harness({ orders = [], cancels = [], details = {} } = {}) {
+function harness({ orders = [], cancels = [], details = {}, ordersError = null, cancelsError = null } = {}) {
     const calls = [];
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
-        getOrdersForAddress: () => Promise.resolve({ data: orders }),
-        getOrderCancelsForAddress: () => Promise.resolve({ data: cancels }),
+        getOrdersForAddress: () => ordersError
+            ? Promise.reject(ordersError)
+            : Promise.resolve({ data: orders }),
+        getOrderCancelsForAddress: () => cancelsError
+            ? Promise.reject(cancelsError)
+            : Promise.resolve({ data: cancels }),
         getOrderDetail: (args) => {
             calls.push({ method: 'getOrderDetail', args });
             const d = details[String(args.actionIndex)];
@@ -171,10 +176,29 @@ describe('MyOrdersView: cancel rows', () => {
 });
 
 describe('MyOrdersView: fills', () => {
+    it('shows a load error instead of a false empty state when the order feed fails', async () => {
+        const { messaging } = harness({ ordersError: new Error('Order explorer unavailable') });
+        const utils = await open(messaging);
+
+        expect(utils.getByText('Order explorer unavailable')).toBeTruthy();
+        expect(utils.queryByText('No orders yet')).toBeNull();
+    });
+
+    it('does not offer cancel when the cancellation status feed fails', async () => {
+        const { messaging } = harness({
+            orders: [orderRow(702)],
+            cancelsError: new Error('Cancel status unavailable'),
+        });
+        const utils = await open(messaging);
+
+        expect(utils.getByText('Cancel status unavailable')).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
     it('files a fully filled order under Closed as Filled with no Edit or Cancel', async () => {
         const { messaging } = harness({
             orders: [orderRow(665)],
-            details: { 665: detail(665, 'complete', '0') },
+            details: { 665: detail(665, 'filled', '0') },
         });
         const utils = await open(messaging);
 
@@ -238,7 +262,7 @@ describe('MyOrdersView: fills', () => {
         const reads = calls.filter((c) => c.method === 'getOrderDetail').map((c) => c.args.actionIndex);
         expect(reads.sort()).toEqual(['710', '711']);
         const row = rowFor(section(utils, 'Open orders'), 711);
-        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
+        expect(within(row).getByText(`Expires ${formatLocalDateTime(FUTURE)}`)).toBeTruthy();
     });
 
     it('falls back to the feeds when the detail read fails or lacks a state block', async () => {
@@ -253,6 +277,25 @@ describe('MyOrdersView: fills', () => {
         expect(within(rowFor(openList, 720)).getByText('Open')).toBeTruthy();
         expect(within(rowFor(openList, 721)).getByText('Open')).toBeTruthy();
     });
+
+    it('does not render a millisecond value as an expiration thousands of years away', async () => {
+        const { messaging } = harness({
+            orders: [orderRow(730)],
+            details: {
+                730: {
+                    state: {
+                        status: 'open',
+                        give_remaining: '500',
+                        expiration: String(Date.now()),
+                    },
+                },
+            },
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open orders'), 730);
+
+        expect(within(row).queryByText(/^Expires /)).toBeNull();
+    });
 });
 
 describe('deriveStatus with a fill state', () => {
@@ -260,18 +303,17 @@ describe('deriveStatus with a fill state', () => {
 
     it('maps the detail statuses onto the view statuses', () => {
         expect(deriveStatus({ ...base, fill: { status: 'complete', giveRemaining: '0' } }, new Set(), 0)).toBe('filled');
+        expect(deriveStatus({ ...base, fill: { status: 'filled', giveRemaining: '0' } }, new Set(), 0)).toBe('filled');
+        expect(deriveStatus({ ...base, fill: { status: 'cancelling', giveRemaining: '500' } }, new Set(), 0)).toBe('cancelling');
         expect(deriveStatus({ ...base, fill: { status: 'cancelled', giveRemaining: '0' } }, new Set(), 0)).toBe('cancelled');
+        expect(deriveStatus({ ...base, fill: { status: 'expiring', giveRemaining: '500' } }, new Set(), 0)).toBe('expiring');
         expect(deriveStatus({ ...base, fill: { status: 'expired', giveRemaining: '0' } }, new Set(), 0)).toBe('expired');
         expect(deriveStatus({ ...base, fill: { status: 'open', giveRemaining: '500' } }, new Set(), 0)).toBe('open');
         expect(deriveStatus({ ...base, fill: { status: 'open', giveRemaining: '0' } }, new Set(), 0)).toBe('filled');
     });
 
-    it('lets an in-flight cancel or expiry fall through to the feeds', () => {
-        // 'cancelling' arrives with a valid cancel row; 'expiring' with a past
-        // expiration. Neither is decided by the detail alone.
-        expect(deriveStatus({ ...base, fill: { status: 'cancelling', giveRemaining: '500' } }, new Set(), 0)).toBe('open');
+    it('lets an applied cancel outrank an in-flight lifecycle status', () => {
         expect(deriveStatus({ ...base, fill: { status: 'cancelling', giveRemaining: '500' } }, new Set([base.key]), 0)).toBe('cancelled');
-        expect(deriveStatus({ ...base, fill: { status: 'expiring', giveRemaining: '500' } }, new Set(), FUTURE + 1)).toBe('expired');
     });
 
     it('reads the state block off a detail and nothing else', () => {

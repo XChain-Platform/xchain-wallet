@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
+import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -185,7 +185,12 @@ export function ManageToken({
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
-        if (typeof messaging?.getHoldersForToken !== 'function') return undefined;
+        setHolders(null);
+        setHoldersError(null);
+        if (typeof messaging?.getHoldersForToken !== 'function') {
+            setHoldersError('Holders lookup is not available in this build.');
+            return undefined;
+        }
         let cancelled = false;
         messaging.getHoldersForToken({ chainId, tick })
             .then((resp) => { if (!cancelled) setHolders(extractHolderRows(resp)); })
@@ -593,6 +598,7 @@ export function ManageToken({
                                     <span className={styles.heroDot}>·</span>
                                     <span>Owned by</span>
                                     <span className={styles.heroOwner} title={owner}>{shortAddress(owner)}</span>
+                                    <CopyButton value={owner} ariaLabel="Copy owner address" />
                                 </>
                             ) : null}
                         </div>
@@ -702,7 +708,8 @@ export function ManageToken({
                         </>
                     ) : (
                         <EmptyState
-                            title={isDemo ? 'No market data yet for this token.' : 'No price history yet'}
+                            title={isDemo ? 'No market data yet' : 'No price history yet'}
+                            body="Indexed market activity builds this token's price history."
                             titleAs="p"
                         />
                     )}
@@ -817,6 +824,7 @@ export function ManageToken({
                             holders={holders}
                             error={holdersError}
                             onViewAll={onViewHolders}
+                            divisibility={divisibility}
                         />
                     ) : null}
                     {activeTab === 'activity' ? (
@@ -858,12 +866,17 @@ export function ManageToken({
                                 {genesisInfo.source ? (
                                     <>
                                         <dt>Issuer</dt>
-                                        <dd className={styles.genesisMono} title={genesisInfo.source}>{shortAddress(genesisInfo.source)}</dd>
+                                        <dd className={styles.copyableGenesis}>
+                                            <span className={styles.genesisMono} title={genesisInfo.source}>
+                                                {shortAddress(genesisInfo.source)}
+                                            </span>
+                                            <CopyButton value={genesisInfo.source} ariaLabel="Copy genesis issuer address" />
+                                        </dd>
                                     </>
                                 ) : null}
                             </dl>
                         ) : (
-                            <EmptyState title={`No genesis row indexed for ${tick} yet.`} titleAs="p" />
+                            <EmptyState title="No genesis record yet" body={`The indexed genesis record for ${tick} appears here.`} titleAs="p" />
                         )}
                         {subassetTicks.length > 0 ? (
                             <>
@@ -900,7 +913,8 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     if (listings.length === 0) {
         return (
             <EmptyState
-                title={`No open dispensers selling ${tick}.`}
+                title="No open dispensers"
+                body={`Open dispensers selling ${tick} appear here.`}
                 titleAs="p"
                 actionLabel={typeof onCreateDispenser === 'function' ? 'Create one' : undefined}
                 onAction={onCreateDispenser}
@@ -951,7 +965,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
             <Skeleton height={72} />
         </div>
     );
-    if (orders.length === 0) return <EmptyState title={`No open orders involving ${tick}.`} titleAs="p" />;
+    if (orders.length === 0) return <EmptyState title="No open orders" body={`Open orders involving ${tick} appear here.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {orders.slice(0, 50).map((o, i) => {
@@ -988,7 +1002,7 @@ function SwapsPanel({ swaps, error, tick }) {
             <Skeleton height={72} />
         </div>
     );
-    if (swaps.length === 0) return <EmptyState title={`No recent swaps involving ${tick}.`} titleAs="p" />;
+    if (swaps.length === 0) return <EmptyState title="No recent swaps" body={`Recent swaps involving ${tick} appear here.`} titleAs="p" />;
     return (
         <ul className={styles.list} role="list">
             {swaps.slice(0, 50).map((s, i) => {
@@ -1020,8 +1034,8 @@ function SwapsPanel({ swaps, error, tick }) {
     );
 }
 
-function HoldersPanel({ holders, error, onViewAll }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+function HoldersPanel({ holders, error, onViewAll, divisibility }) {
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (holders === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />
@@ -1030,7 +1044,7 @@ function HoldersPanel({ holders, error, onViewAll }) {
         </div>
     );
     if (holders.length === 0) return (
-        <EmptyState title="No holders yet. Mint or distribute supply to start populating this list." titleAs="p" />
+        <EmptyState title="No holders yet" body="Holders appear here after supply is minted or distributed." titleAs="p" />
     );
     return (
         <>
@@ -1038,11 +1052,21 @@ function HoldersPanel({ holders, error, onViewAll }) {
                 {holders.slice(0, 10).map((h, i) => (
                     <li key={`${h.address || h.holder || i}`}>
                         <div className={styles.row}>
-                            <span className={styles.rowMono}>
-                                {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                            <span className={styles.holderAddress}>
+                                <span className={styles.rowMono} title={h.address || h.holder || undefined}>
+                                    {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                                </span>
+                                {(h.address || h.holder) ? (
+                                    <CopyButton
+                                        value={h.address || h.holder}
+                                        ariaLabel={`Copy holder address ${i + 1}`}
+                                    />
+                                ) : null}
                             </span>
                             <span className={styles.rowSub}>
-                                {h.quantity != null ? formatWithThousands(h.quantity) : (h.amount != null ? formatWithThousands(h.amount) : '-')}
+                                {h.quantity != null
+                                    ? formatAmount(String(h.quantity), divisibility || 0)
+                                    : (h.amount != null ? formatWithThousands(h.amount) : '-')}
                             </span>
                         </div>
                     </li>
@@ -1067,7 +1091,7 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
         </div>
     );
     if (activity.length === 0) return (
-        <EmptyState title={`No activity yet for ${tick}.`} titleAs="p" />
+        <EmptyState title="No activity yet" body={`Indexed activity for ${tick} appears here.`} titleAs="p" />
     );
     return (
         <>

@@ -338,6 +338,13 @@ export function ContractStakeForm({
                 setFormError('Amount must be a positive decimal.');
                 return;
             }
+            if (tickAmtBalance != null && compareAmounts(actionParams.AMOUNT, tickAmtBalance) === 1) {
+                setFormError(
+                    `Amount exceeds the ${formatWithThousands(String(tickAmtBalance))} `
+                    + `${tick.trim().toUpperCase()} available.`,
+                );
+                return;
+            }
         }
         if (mode === 'unstake' && amount.trim() !== '') {
             const amt = amount.trim();
@@ -492,8 +499,11 @@ export function ContractStakeForm({
 
     const header = (
         <PageHeader
-            onBack={onBack}
-            backLabel="Back to contract"
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            backLabel={stage === 'review' ? 'Back to edit' : 'Back to contract'}
             title={`Stake on contract #${contractActionIndex}`}
         />
     );
@@ -573,11 +583,11 @@ export function ContractStakeForm({
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
+                        disabled={stage === 'submitting' || (
                             isWatcherMode
                                 ? false
                                 : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
+                        )}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -821,10 +831,11 @@ export function ContractStakeForm({
                     amount={amount}
                     tick={tick}
                     onAmountFieldChange={(rawValue) => {
-                    const stripped = String(rawValue).replace(/,/g, '');
-                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                    setAmount(stripped);
-                }}
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        setAmount(stripped);
+                        setFormError(null);
+                    }}
                     onMax={mode === 'stake'
                         ? (tickAmtBalance && compareAmounts(tickAmtBalance, '0') === 1
                             ? () => setAmount(tickAmtBalance)
@@ -851,9 +862,9 @@ export function ContractStakeForm({
                         ? '64-character hex-encoded Ed25519 public key identifying which contract-stake to begin cooldown for.'
                         : '64-character hex-encoded Ed25519 public key to associate with this stake. Re-staking with the same key tops up.'}
                 value={signingPubkey}
-                onChange={(e) => setSigningPubkey(e.target.value.trim())}
+                onChange={(e) => { setSigningPubkey(e.target.value.trim()); setFormError(null); }}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

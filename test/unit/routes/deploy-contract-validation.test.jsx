@@ -156,4 +156,44 @@ describe('DeployContractForm validation diagnostics', () => {
         expect(utils.getByText(/The parser stopped at: Unexpected token \(3:9\)/)).toBeTruthy();
         expect(utils.getByText(/Line 3.*Column 9/)).toBeTruthy();
     });
+
+    it('rejects multiple constructor arguments when staking makes the wire field scalar', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
+        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: 'first|second' } });
+        fireEvent.change(utils.getByLabelText('Cooldown blocks (optional)'), { target: { value: '10' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'A stake-enabled contract accepts one constructor argument.',
+        );
+    });
+
+    it('rejects exponent notation for the integer gas limit', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '1e5' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent('Gas limit must be a positive whole number.');
+    });
 });

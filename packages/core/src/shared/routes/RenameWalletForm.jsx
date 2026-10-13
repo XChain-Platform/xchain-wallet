@@ -45,12 +45,15 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
 
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        // Ignore a second submit while the first rename is still in flight.
         if (busy) return;
         const trimmed = name.trim();
+        // Require a visible wallet name after surrounding whitespace is removed.
         if (trimmed.length === 0) {
             setError('Wallet name is required.');
             return;
         }
+        // Refuse submission when this shell cannot persist the new name.
         if (typeof messaging.renameWallet !== 'function') {
             setError('messaging.renameWallet is not available in this shell.');
             return;
@@ -80,6 +83,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                     aria-label="Save"
                     title="Save"
                     disabled={saveDisabled}
+                    aria-busy={busy ? 'true' : undefined}
                 >
                     <Icon.CheckIcon />
                 </button>
@@ -95,6 +99,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 autoComplete="off"
+                disabled={busy}
                 error={error || undefined}
             />
         </FormPage>

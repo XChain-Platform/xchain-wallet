@@ -171,7 +171,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                         width: '100%',
                         maxWidth: normalizedSize,
                         aspectRatio: '1 / 1',
-                        background: '#F1F5F9',
+                        background: 'var(--xc-bg-muted)',
                         borderRadius: 4,
                     }}
                 />

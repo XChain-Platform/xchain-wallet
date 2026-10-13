@@ -25,6 +25,10 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import {
+    configureFiatRateSource,
+    _resetPriceLookupForTests,
+} from '../../../packages/core/src/flows/priceLookup.js';
 
 // One HD address on Bitcoin mainnet so the wizard auto-picks a fee-payer
 // and the native-coin toggle resolves a coin ticker (BTC).
@@ -43,14 +47,42 @@ const ADDRESSES = {
 let issueToken;
 let composeForConfirm;
 
+const NOW = Date.parse('2026-10-13T12:00:00Z');
+const FRESH_TS = Math.floor(NOW / 1000) - 60;
+
+function configurePrices() {
+    configureFiatRateSource({
+        now: () => NOW,
+        explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        fetch: vi.fn(async (url) => {
+            if (url.includes('api.coingecko.com')) {
+                return { ok: true, json: async () => ({ bitcoin: { eur: 50000 } }) };
+            }
+            if (url.includes('/api/market/XCHAIN/BTC')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        data: [{
+                            tick1: 'XCHAIN', tick2: 'BTC', tick1_price: '0.000008',
+                            tick2_price: '125000', last_updated: FRESH_TS,
+                        }],
+                    }),
+                };
+            }
+            return { ok: true, json: async () => ({ data: [] }) };
+        }),
+    });
+}
+
 function mountWizard() {
     issueToken = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
+        chainId: 'bitcoin-mainnet', networkFeeSats: 1000, xchainFee: '0.5',
     });
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', fiatCurrency: 'EUR' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
@@ -65,7 +97,7 @@ function mountWizard() {
     );
 }
 
-// Drive template -> chain -> details (meme: name + supply) -> confirm.
+// Drive template -> chain -> details (meme: name + supply) -> review -> confirm.
 // `nativeFee` flips the toggle on the details stage when true.
 async function driveToConfirm({ nativeFee }) {
     fireEvent.click(await screen.findByText('Meme token'));
@@ -77,17 +109,45 @@ async function driveToConfirm({ nativeFee }) {
         target: { value: '1000' },
     });
     if (nativeFee) fireEvent.click(screen.getByRole('switch'));
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
     // The confirm page opens once compose + pre-flight resolve.
     await screen.findByTestId('confirm-modal');
 }
 
 beforeEach(() => {
+    _resetPriceLookupForTests();
+    configurePrices();
     issueToken = undefined;
 });
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    _resetPriceLookupForTests();
+});
 
 describe('TokenWizard native-coin fee toggle', () => {
+    it('shows network and protocol costs in the selected fiat currency before approval', async () => {
+        mountWizard();
+
+        fireEvent.click(await screen.findByText('Meme token'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+            target: { value: 'MEMECOIN' },
+        });
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+
+        const reviewFee = screen.getByText('Network fee').nextElementSibling;
+        await waitFor(() => expect(reviewFee).toHaveTextContent(/BTC.*€.*EUR/));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
+        await screen.findByTestId('confirm-modal');
+        await waitFor(() => {
+            expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*€0\.50 EUR/);
+            expect(screen.getByTestId('confirm-protocol-fee')).toHaveTextContent(/0\.5 XCHAIN.*€0\.20 EUR/);
+        });
+    });
+
     it('threads payFeeInNativeCoin: true into the issueToken submit when toggled on', async () => {
         mountWizard();
         await driveToConfirm({ nativeFee: true });

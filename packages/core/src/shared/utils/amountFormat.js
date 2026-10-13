@@ -13,6 +13,8 @@
 // can use the same formatter when re-positioning the caret after a
 // reformat.
 
+import { getFormatLocale } from '../../i18n/index.js';
+
 // "12345.678" → "12,345.678". Preserves whatever fractional precision
 // the caller passed; the amount input uses this on both render and
 // onChange so commas appear live as the user types.
@@ -48,6 +50,41 @@ export function trimAmountTail(value) {
     const s = String(value);
     if (!/^-?\d+\.\d+$/.test(s)) return s;
     return s.replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Group a plain decimal string for display without converting it to a float. */
+export function formatDecimalAmount(value, locale, options = {}) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+    if (!match) return raw;
+    const fractionDigits = match[3]?.length || 0;
+    const minimumFractionDigits = options.minimumFractionDigits ?? fractionDigits;
+    const maximumFractionDigits = options.maximumFractionDigits ?? fractionDigits;
+    try {
+        return new Intl.NumberFormat(getFormatLocale(locale), {
+            useGrouping: true,
+            minimumFractionDigits,
+            maximumFractionDigits,
+        }).format(raw);
+    } catch {
+        const sign = match[1];
+        const grouped = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return `${sign}${grouped}${match[3] === undefined ? '' : `.${match[3]}`}`;
+    }
+}
+
+/** Render an atomic integer at its divisibility using exact string arithmetic. */
+export function formatAtomicAmount(quantity, divisibility = 0, locale) {
+    const raw = String(quantity ?? '0').trim();
+    const scale = Number(divisibility);
+    if (!/^-?\d+$/.test(raw) || !Number.isInteger(scale) || scale < 0) return raw;
+    const negative = raw.startsWith('-');
+    const digits = negative ? raw.slice(1) : raw;
+    if (scale === 0) return formatDecimalAmount(raw, locale);
+    const padded = digits.padStart(scale + 1, '0');
+    const decimal = `${negative ? '-' : ''}${padded.slice(0, -scale)}.${padded.slice(-scale)}`;
+    return formatDecimalAmount(decimal, locale);
 }
 
 // Add decimal amount strings without going through a float. Token amounts
@@ -192,6 +229,35 @@ export function decimalFromBaseUnits(value, decimals = 8) {
     } catch {
         return null;
     }
+}
+
+/**
+ * Explain when a token amount carries more decimal places than the token supports.
+ * Syntax and positivity stay with the calling form so this helper can be added
+ * without changing the action parameters that form signs.
+ */
+export function tokenAmountPrecisionError(value, {
+    divisibility = null,
+    tick = '',
+    noun = 'Amount',
+} = {}) {
+    if (divisibility === null || divisibility === undefined) return null;
+    const places = Number(divisibility);
+    if (!Number.isInteger(places) || places < 0) return null;
+    const raw = String(value ?? '').trim();
+    const match = /^(?:\d+)(?:\.(\d*))?$|^\.(\d+)$/.exec(raw);
+    if (!match) return null;
+    const suppliedPlaces = (match[1] ?? match[2] ?? '').length;
+    if (places === 0 && raw.includes('.')) {
+        const tickText = String(tick || '').trim();
+        const unit = tickText ? tickText.toUpperCase() : 'this token';
+        return `${noun} must be a whole number because ${unit} is indivisible.`;
+    }
+    if (suppliedPlaces <= places) return null;
+
+    const tickText = String(tick || '').trim();
+    const unit = tickText ? tickText.toUpperCase() : 'this token';
+    return `${noun} can have at most ${places} decimal place${places === 1 ? '' : 's'} for ${unit}.`;
 }
 
 /** Round a decimal half up while retaining the requested trailing places. */

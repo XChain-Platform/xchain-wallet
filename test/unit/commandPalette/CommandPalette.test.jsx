@@ -53,6 +53,16 @@ function PaletteRouteHarness() {
     );
 }
 
+function RecentHarness({ commands }) {
+    const [open, setOpen] = useState(true);
+    return (
+        <>
+            <button type="button" onClick={() => setOpen(true)}>Open command palette</button>
+            <CommandPalette open={open} onClose={() => setOpen(false)} commands={commands} />
+        </>
+    );
+}
+
 describe('CommandPalette', () => {
     it('renders nothing when closed', () => {
         const { container } = render(
@@ -158,6 +168,21 @@ describe('CommandPalette', () => {
         // Start on Home (Navigate). Tab -> first row of the next category (Settings).
         fireEvent.keyDown(getInput(), { key: 'Tab' });
         expect(screen.getByRole('option', { name: /Settings/ })).toHaveAttribute('aria-selected', 'true');
+        fireEvent.keyDown(getInput(), { key: 'Tab', shiftKey: true });
+        expect(screen.getByRole('option', { name: /Home/ })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('shows recently run catalogue commands first on the next open', () => {
+        const commands = makeCommands();
+        render(<RecentHarness commands={commands} />);
+
+        fireEvent.click(screen.getByRole('option', { name: /Send/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open command palette' }));
+
+        expect(screen.getByText('Recent')).toBeTruthy();
+        const options = screen.getAllByRole('option');
+        expect(options[0]).toHaveTextContent('Send');
+        expect(options.filter((option) => option.textContent.includes('Send'))).toHaveLength(1);
     });
 
     it('prepends parseQuery (§33.3) results above the fuzzy matches and pre-selects them', () => {

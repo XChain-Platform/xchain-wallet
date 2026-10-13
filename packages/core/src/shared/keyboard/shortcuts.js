@@ -161,8 +161,8 @@ export function parseBinding(binding) {
 }
 
 /**
- * Human-readable rendering of a binding for the help modal. `mac` picks ⌘/⌥
- * glyphs vs "Ctrl".
+ * Human-readable rendering of a binding for the help modal. `mac` selects
+ * the platform modifier name.
  * @param {string} binding
  * @param {boolean} [mac]
  * @returns {string}
@@ -170,13 +170,13 @@ export function parseBinding(binding) {
 export function formatBinding(binding, mac = false) {
     const parsed = parseBinding(binding);
     if (parsed.kind === 'combo') {
-        const mod = mac ? '⌘' : 'Ctrl';
+        const mod = mac ? 'Cmd' : 'Ctrl';
         // Single chars render uppercase ('K'); named keys ('enter') render
         // capitalized ('Enter') so Ctrl+Enter doesn't shout.
         const key = parsed.key.length === 1
             ? (parsed.key === ',' ? ',' : parsed.key.toUpperCase())
             : parsed.key[0].toUpperCase() + parsed.key.slice(1);
-        return mac ? `${mod}${key}` : `${mod}+${key}`;
+        return `${mod}+${key}`;
     }
     if (parsed.kind === 'leader') return `${parsed.lead.toUpperCase()} then ${parsed.key.toUpperCase()}`;
     return parsed.key; // single key like '?'

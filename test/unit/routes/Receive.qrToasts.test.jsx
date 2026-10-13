@@ -30,7 +30,7 @@ vi.mock('qrcode', () => ({
     default: { toDataURL: qrToDataURL },
 }));
 
-const { Receive } = await import('../../../packages/core/src/shared/routes/Receive.jsx');
+const { Receive, qrPixelSizeFor } = await import('../../../packages/core/src/shared/routes/Receive.jsx');
 
 const REGTEST_SETTINGS = {
     schemaVersion: 1,
@@ -95,6 +95,47 @@ afterEach(() => {
 });
 
 describe('Receive QR copy and share toasts', () => {
+    it('renders a four-module quiet zone at the measured device-pixel width', async () => {
+        const originalResizeObserver = globalThis.ResizeObserver;
+        const originalDevicePixelRatio = window.devicePixelRatio;
+        Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.5 });
+        globalThis.ResizeObserver = class ResizeObserver {
+            constructor(callback) { this.callback = callback; }
+            observe(target) {
+                this.callback([{ target, contentRect: { width: 320 } }]);
+            }
+            disconnect() {}
+        };
+
+        try {
+            renderReceive();
+
+            await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({
+                    margin: 4,
+                    width: 800,
+                    color: { dark: '#0F172A', light: '#FFFFFF' },
+                }),
+            ));
+            const address = await screen.findByRole('textbox', { name: ADDRESS.label });
+            expect(address.readOnly).toBe(true);
+            expect(address.style.userSelect).toBe('text');
+        } finally {
+            globalThis.ResizeObserver = originalResizeObserver;
+            Object.defineProperty(window, 'devicePixelRatio', {
+                configurable: true,
+                value: originalDevicePixelRatio,
+            });
+        }
+    });
+
+    it('rounds fractional device pixels up and falls back before layout', () => {
+        expect(qrPixelSizeFor(319.5, 2)).toBe(639);
+        expect(qrPixelSizeFor(320, 3)).toBe(960);
+        expect(qrPixelSizeFor(0, 3)).toBe(512);
+    });
+
     it('copies the same BIP21 payment request that the QR encodes', async () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', {
@@ -103,6 +144,10 @@ describe('Receive QR copy and share toasts', () => {
         });
         renderReceive();
 
+        expect(await screen.findByRole('textbox', {
+            name: 'Copy payment request for receive address',
+        })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy payment request' })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
         fireEvent.change(amount, { target: { value: '0.00000001' } });
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
@@ -113,13 +158,14 @@ describe('Receive QR copy and share toasts', () => {
         )[0];
 
         expect(paymentRequest).toMatch(
-            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001$/,
+            /^bitcoin:bcrt1qexample\?chain=bitcoin-regtest&feePriority=normal&amount=0\.00000001&label=Daily%20deposits$/,
         );
         fireEvent.click(screen.getByDisplayValue(ADDRESS.address));
 
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(paymentRequest));
         expect(showToast).toHaveBeenCalledWith({
             message: 'Payment request copied to clipboard.',
+            variant: 'default',
         });
     });
 
@@ -130,11 +176,15 @@ describe('Receive QR copy and share toasts', () => {
         });
         renderReceive();
 
-        await clickWhenEnabled(/Copy QR/);
+        await clickWhenEnabled('Copy QR code');
 
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);
         expect(messages).toEqual(['Copy failed: clipboard unavailable']);
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Copy failed: clipboard unavailable',
+            variant: 'error',
+        });
         expect(messages.join(' ')).not.toContain('Document is not focused');
         expect(consoleError.mock.calls.some(([, err]) => err?.message === BROWSER_TEXT)).toBe(true);
     });
@@ -155,6 +205,10 @@ describe('Receive QR copy and share toasts', () => {
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);
         expect(messages).toEqual(['Share failed: share unavailable']);
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Share failed: share unavailable',
+            variant: 'error',
+        });
         expect(messages.join(' ')).not.toContain('Permission denied');
     });
 

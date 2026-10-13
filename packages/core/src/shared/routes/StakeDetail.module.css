@@ -5,7 +5,7 @@
 
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: var(--xc-space-2);
     /* Pull up against .detailsList's space-4 bottom margin so the grid
        sits tight under the stats card. */
@@ -49,7 +49,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -163,15 +163,14 @@
 
 .eventAmount {
     font-weight: 600;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .eventMeta {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
 }
 
@@ -192,8 +191,9 @@
 /* Slash events read as warnings. */
 .slashAmount {
     font-weight: 600;
-    white-space: nowrap;
-    color: var(--xc-danger);
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--xc-danger-fg);
 }
 
 /* Status pill in the hero, tinted per state (mirrors the list chips). */

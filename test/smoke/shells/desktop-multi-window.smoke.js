@@ -26,6 +26,8 @@
 //   5. `app.activate` (macOS dock click) opens a window when none exist,
 //      matching the §24.6 single/multi-window contract, and both windowless
 //      reopen paths run the idle auto-lock check before the renderer exists.
+//   6. Successful session and wallet-selection changes notify sibling
+//      renderers, and normal window bounds survive close and reopen.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -35,9 +37,13 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const mainPath = join(wsRoot, 'packages', 'desktop', 'main', 'index.js');
+const preloadPath = join(wsRoot, 'packages', 'desktop', 'preload.cjs');
+const rendererPath = join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx');
 assert.ok(existsSync(mainPath), 'packages/desktop/main/index.js exists');
 
 const src = readFileSync(mainPath, 'utf8');
+const preload = readFileSync(preloadPath, 'utf8');
+const renderer = readFileSync(rendererPath, 'utf8');
 
 // --- 1. windows Set replaces singleton ----------------------------------
 
@@ -79,8 +85,8 @@ assert.ok(/function forwardDeepLink\(event\)\s*\{[\s\S]*?pickDeepLinkTarget\(liv
     'forwardDeepLink targets the focused window that is not detached (pickDeepLinkTarget)');
 assert.ok(/if \(opts\.initialView \|\| opts\.initialContext\) detachedWindows\.add\(win\)/.test(src),
     'createWindow marks a window opened on a pinned view as detached');
-assert.ok(/function broadcastToWindows\(channel,\s*payload\)/.test(src),
-    'broadcastToWindows() helper iterates every live window');
+assert.ok(/function broadcastToWindows\(channel,\s*payload,\s*excludedContents = null\)/.test(src),
+    'broadcastToWindows() helper iterates live sibling windows with optional sender exclusion');
 // The handler retains the event before broadcasting it (row 148), so
 // what this pins is that every live window still gets it - not that the
 // broadcast is the first statement in the body. `[^}]` keeps that loose
@@ -108,6 +114,24 @@ assert.ok(/app\.on\('window-all-closed',[\s\S]*?startWindowlessIdleLock\(\);/.te
 assert.ok(/function createWindow\([^)]*\)\s*\{\s*\/\/[^\n]*\n\s*stopWindowlessIdleLock\(\);/.test(src),
     'a live window stops the windowless idle check');
 
+// --- 6. shared state + remembered bounds -------------------------------
+
+assert.ok(/stateChangeForMessage\(message,\s*response\)/.test(src)
+    && /broadcastToWindows\('xchain:state-changed',\s*change,\s*event\.sender\)/.test(src),
+    'successful state-changing messages notify every sibling window');
+assert.ok(/onStateChange\(listener\)[\s\S]*?ipcRenderer\.on\(STATE_CHANGE_CHANNEL,\s*wrapped\)/.test(preload),
+    'the preload exposes a narrow state-change subscription');
+assert.ok(/bridge\.onStateChange\(\(change\)[\s\S]*?change\?\.kind === 'session'[\s\S]*?refresh\(\)/.test(renderer),
+    'a sibling session change refreshes the renderer state machine');
+assert.ok(/messaging\.setActiveWallet\(id\)/.test(renderer)
+    && /change\?\.kind !== 'active-wallet'[\s\S]*?setActiveWalletId\(walletId\)/.test(renderer),
+    'wallet selection announces through main and applies in sibling renderers');
+assert.ok(/new FileWindowBoundsStore\(windowBoundsPathFor\(app\.getPath\('userData'\)\)\)/.test(src)
+    && /win\.getNormalBounds\(\)/.test(src)
+    && /cascadeWindowBounds\(rememberedWindowBounds,\s*displays\)/.test(src)
+    && /restoreWindowBounds\(rememberedWindowBounds,\s*displays\)/.test(src),
+    'normal window bounds persist, restore, and cascade against the current displays');
+
 console.log(
-    'OK: desktop-multi-window smoke (§24.6 / G057 windows Set replaces singleton mainWindow; createWindow factory + register-on-add / unregister-on-closed; File > New Window menu (Cmd/Ctrl+N) calls createWindow; deep-link forwarder + updater event multiplex over live windows; activate-hook reopens when none remain)',
+    'OK: desktop-multi-window smoke (§24.6 / G057 window creation, routing, sibling state sync, macOS reopen, and remembered bounds)',
 );
