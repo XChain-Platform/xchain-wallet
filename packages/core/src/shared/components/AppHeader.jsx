@@ -25,7 +25,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
@@ -146,16 +146,14 @@ export function AppHeader({
                 ) : null}
                 {onCommandPalette ? (
                     <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
-                        <button
-                            type="button"
-                            className={styles.menuBtn}
+                        <Button
+                            variant="secondary"
+                            icon={<Icon.SearchIcon />}
                             onClick={onCommandPalette}
                             aria-label="Open command palette"
                             aria-keyshortcuts="Meta+K Control+K"
                             title="Search (Cmd/Ctrl+K)"
-                        >
-                            <Icon.SearchIcon />
-                        </button>
+                        />
                     </span>
                 ) : null}
                 <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
@@ -166,31 +164,27 @@ export function AppHeader({
                     />
                 </span>
                 {onLock ? (
-                    <button
-                        type="button"
-                        className={styles.menuBtn}
+                    <Button
+                        variant="secondary"
+                        icon={<Icon.LockIcon />}
                         onClick={onLock}
                         disabled={locking}
                         aria-label="Lock wallet"
                         title="Lock wallet"
-                    >
-                        <Icon.LockIcon />
-                    </button>
+                    />
                 ) : null}
                 <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
                     <PlatformSwitcher current={platformCurrent} />
                 </span>
                 {onMenuOpen ? (
-                    <button
-                        type="button"
-                        className={styles.menuBtn}
+                    <Button
+                        variant="secondary"
+                        icon={<Icon.MenuIcon />}
                         onClick={onMenuOpen}
                         aria-label="Open menu"
                         aria-haspopup="dialog"
                         title="Open menu"
-                    >
-                        <Icon.MenuIcon />
-                    </button>
+                    />
                 ) : null}
             </div>
         </div>
@@ -211,9 +205,10 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
+    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -224,7 +219,7 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            focusTrigger();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -247,20 +242,20 @@ function ScanMenu({ onScan, onManageAddresses, onViewAddress }) {
 
     return (
         <div ref={wrapRef} className={styles.scanWrap}>
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.menuBtn}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="menu"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Scan and addresses"
-                title="Scan and addresses"
-            >
-                <Icon.ScanIcon />
-            </button>
+            <span ref={triggerRef} className={styles.scanTrigger}>
+                <Button
+                    variant="secondary"
+                    icon={<Icon.ScanIcon />}
+                    onClick={() => setOpen((v) => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={open ? 'true' : 'false'}
+                    aria-label="Scan and addresses"
+                    title="Scan and addresses"
+                />
+            </span>
             {open ? (
                 <div ref={clamp.ref} style={clamp.style} className={styles.scanMenu} role="menu" aria-label="Scan and addresses">
+                    {/* Menu rows stay native buttons to preserve menuitem and full-row semantics. */}
                     {items.map(({ id, label, Icon: ItemIcon, handler }) => (
                         <button
                             key={id}

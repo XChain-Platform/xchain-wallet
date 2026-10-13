@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
 import { ROUTE_NAV_GROUPS } from '../routeRegistry.js';
@@ -152,20 +152,21 @@ export function LeftNav({
         >
             <div className={styles.brand}>XChain Wallet</div>
             {onCommandPalette ? (
-                <button
-                    type="button"
-                    className={`${styles.item} ${styles.search}`}
-                    onClick={onCommandPalette}
-                    aria-label="Open command palette"
-                    aria-keyshortcuts="Meta+K Control+K"
-                    title="Search (Cmd/Ctrl+K)"
-                >
-                    <span className={styles.icon} aria-hidden="true">
-                        <Icon.SearchIcon />
-                    </span>
-                    <span className={styles.label}>Search</span>
-                </button>
+                <div className={styles.search}>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<Icon.SearchIcon />}
+                        onClick={onCommandPalette}
+                        aria-label="Open command palette"
+                        aria-keyshortcuts="Meta+K Control+K"
+                        title="Search (Cmd/Ctrl+K)"
+                    >
+                        <span className={styles.label}>Search</span>
+                    </Button>
+                </div>
             ) : null}
+            {/* Destination rows stay native buttons to preserve full-row navigation semantics. */}
             {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
@@ -249,17 +250,17 @@ export function LeftNav({
                     </button>
                 ) : null}
                 {onLock ? (
-                    <button
-                        type="button"
-                        className={styles.item}
-                        title="Lock"
-                        onClick={onLock}
-                    >
-                        <span className={styles.icon} aria-hidden="true">
-                            <Icon.LockIcon />
-                        </span>
-                        <span className={styles.label}>Lock</span>
-                    </button>
+                    <div className={styles.action}>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<Icon.LockIcon />}
+                            title="Lock"
+                            onClick={onLock}
+                        >
+                            <span className={styles.label}>Lock</span>
+                        </Button>
+                    </div>
                 ) : null}
             </div>
         </nav>

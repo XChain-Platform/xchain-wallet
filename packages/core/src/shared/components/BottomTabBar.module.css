@@ -152,28 +152,8 @@
 .sheetClose {
     position: absolute;
     inset-inline-end: var(--xc-space-2);
-    top: 0;
-    width: var(--xc-tap-min);
-    height: var(--xc-tap-min);
+    top: 2px;
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    appearance: none;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-.sheetClose:hover {
-    background: var(--xc-surface);
-    color: var(--xc-text);
-}
-
-.sheetClose:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
 }
 
 .sheetBody {

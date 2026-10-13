@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import {
@@ -82,7 +82,8 @@ export function HeaderSettingsButton({
     const triggerRef = useRef(null);
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
+    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
+    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
@@ -96,7 +97,7 @@ export function HeaderSettingsButton({
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            focusTrigger();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -160,19 +161,23 @@ export function HeaderSettingsButton({
                     <span className={styles.networkBadgeText}>{activeNetworkLabel(currentNetwork)}</span>
                 </span>
             ) : null}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={`${styles.btn} ${anyNonDefault ? styles.btnActive : ''}`}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Settings"
-                title="Settings"
-            >
-                <Icon.GearIcon />
-                {anyNonDefault ? <span className={styles.dot} aria-hidden="true" /> : null}
-            </button>
+            <span ref={triggerRef} className={styles.trigger}>
+                <Button
+                    variant="secondary"
+                    icon={(
+                        <>
+                            <Icon.GearIcon />
+                            {anyNonDefault ? <span className={styles.dot} /> : null}
+                        </>
+                    )}
+                    onClick={() => setOpen((v) => !v)}
+                    aria-haspopup="dialog"
+                    aria-expanded={open ? 'true' : 'false'}
+                    aria-label="Settings"
+                    title="Settings"
+                    data-active={anyNonDefault ? 'true' : undefined}
+                />
+            </span>
             {open ? (
                 <div
                     ref={popoverPlacement.ref}
@@ -183,6 +188,7 @@ export function HeaderSettingsButton({
                     aria-labelledby="xc-wallet-settings-title"
                 >
                     <div id="xc-wallet-settings-title" className={styles.sectionLabel}>Wallet settings</div>
+                    {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
                             <button

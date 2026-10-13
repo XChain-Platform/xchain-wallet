@@ -69,31 +69,11 @@
     }
 }
 
-.btn {
-    appearance: none;
-    background: transparent;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    width: 38px;
-    height: 38px;
+.trigger {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    position: relative;
 }
 
-.btn:hover {
-    background: var(--xc-bg-muted);
-}
-
-.btn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.btnActive {
+.trigger > button[data-active='true'] {
     color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
     background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
