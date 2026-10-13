@@ -41,6 +41,7 @@ import { WatchOnlyBadge } from '@xchain-wallet/core/shared/components/WatchOnlyB
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
@@ -144,6 +145,7 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
@@ -2539,6 +2541,9 @@ function AppInner() {
                     />
                 );
             }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
+            }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
                     {/* `demoBannerInHeader`: this shell mounts DemoBanner in
@@ -2689,6 +2694,7 @@ function AppInner() {
             // pending-COINPAY scan.
             const unlockedTree = (
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     nav={
                         <LeftNavWithObligations
                             currentView={unlockedView}
@@ -2730,14 +2736,16 @@ function AppInner() {
                         </>
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

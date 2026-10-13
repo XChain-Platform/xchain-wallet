@@ -41,7 +41,9 @@ import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.
 
 const chainRegistry = {
     byCoin: () => [],
-    get: () => null,
+    get: (chainId) => (chainId === 'bitcoin-mainnet'
+        ? { id: chainId, coin: 'bitcoin', displayName: 'Bitcoin', networkKind: 'mainnet' }
+        : null),
     all: () => [],
 };
 
@@ -85,6 +87,25 @@ describe('HomeTabs empty states', () => {
         expect(screen.queryByText('No coins yet')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Generate an address' }));
         expect(onAddAddress).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a pending-only native balance instead of the first-funding card', () => {
+        mount('real-wallet', {
+            balances: {
+                'bitcoin-mainnet': [{
+                    address: 'bc1qpending',
+                    balances: {
+                        native: {
+                            tick: 'BTC', quantity: '0', pendingQuantity: '25000000', divisibility: 8,
+                        },
+                        tokens: [],
+                    },
+                }],
+            },
+        });
+
+        expect(screen.queryByText('Fund your wallet')).toBeNull();
+        expect(screen.getByTestId('balance-pending')).toHaveTextContent('0.25000000 pending');
     });
 
     it('shows only the empty card on an empty NFTs tab', () => {

@@ -45,7 +45,7 @@ for (const field of ['chainId', 'fromAddressId', 'action', 'paramsJson', 'status
 }
 
 // Spec warning + acknowledgment gate before starting the sign loop.
-assert.ok(/not atomic/i.test(src),
+assert.ok(/No rollback:/i.test(src),
     'ParallelComposer surfaces the no-rollback warning');
 assert.ok(/acknowledgedNoRollback/.test(src),
     'ParallelComposer requires explicit ack before signing');

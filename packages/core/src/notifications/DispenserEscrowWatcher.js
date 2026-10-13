@@ -48,14 +48,13 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
 } from '../shared/utils/amountFormat.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** Warn at or below this many remaining dispenses. */
 const DEFAULT_LOW_DISPENSES = 3;
 const SEEN_CAP_PER_CHAIN = 500;
 const MAX_DETAIL_READS_PER_TICK = 25;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 export class DispenserEscrowWatcher {
     /**
@@ -95,7 +94,7 @@ export class DispenserEscrowWatcher {
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._lowDispenses = Number.isFinite(lowDispenses) && lowDispenses >= 0
             ? lowDispenses : DEFAULT_LOW_DISPENSES;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'dispenser');
 
         this._timer = null;
         this._ticking = false;

@@ -83,6 +83,7 @@ describe('History export shortcut (§34.2)', () => {
         fireEvent.keyDown(document.body, { key: 'e' });
 
         expect(await screen.findByRole('dialog', { name: 'Export history' })).toBeInTheDocument();
+        expect(screen.getByText('Fiat currency (EUR)')).toBeInTheDocument();
     });
 
     it('leaves the export dialog closed on e when there is no history', async () => {

@@ -18,6 +18,8 @@ describe('NativeFeeToggle', () => {
     it('renders a plain-language label naming the coin when coinTicker is set', () => {
         render(<NativeFeeToggle checked={false} onChange={() => {}} coinTicker="BTC" />);
         expect(screen.getByText('Pay protocol fee in BTC instead of XCHAIN')).toBeTruthy();
+        expect(screen.getByText(/On sends the protocol fee's BTC equivalent as an on-chain output;/))
+            .toHaveTextContent('off deducts the fee from your XCHAIN balance.');
         // The forfeiture hint is surfaced inline.
         expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
     });
@@ -31,11 +33,19 @@ describe('NativeFeeToggle', () => {
 
     it('reflects the checked state and reports toggles via onChange', () => {
         const onChange = vi.fn();
-        render(<NativeFeeToggle checked={false} onChange={onChange} coinTicker="DOGE" />);
+        const { rerender } = render(
+            <NativeFeeToggle checked={false} onChange={onChange} coinTicker="DOGE" />,
+        );
         const sw = screen.getByRole('switch');
         expect(sw.checked).toBe(false);
+        expect(sw).toHaveAttribute('aria-checked', 'false');
+        expect(sw).toHaveAccessibleDescription(
+            /On sends the protocol fee's DOGE equivalent.*off deducts the fee from your XCHAIN balance/,
+        );
         fireEvent.click(sw);
         expect(onChange).toHaveBeenCalledWith(true);
+        rerender(<NativeFeeToggle checked onChange={onChange} coinTicker="DOGE" />);
+        expect(sw).toHaveAttribute('aria-checked', 'true');
     });
 
     // On a chain with no XCHAIN fee lane there is nothing to choose
