@@ -167,7 +167,7 @@
 }
 
 .lockBtn .rowIcon {
-    color: #FFFFFF;
+    color: var(--xc-on-danger);
 }
 
 .lockBtn:hover:not(:disabled) {
