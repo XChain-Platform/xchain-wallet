@@ -180,13 +180,13 @@ export function annotateEncoderFeeRequirement(err, quote) {
 
 function encoderServiceMessage(code, err) {
     if (code === 'ENCODER_TIMEOUT') {
-        return 'The transaction service did not answer in time. Nothing was signed or sent, so nothing was '
-            + 'spent. Try again in a moment.';
+        return 'The transaction service did not answer in time, but nothing was signed or sent, and nothing was spent. '
+            + 'Try again in a moment.';
     }
 
     if (code === 'ENCODER_NETWORK') {
-        return 'The wallet could not reach the transaction service. Nothing was signed or sent, so nothing '
-            + 'was spent. Check your connection and try again.';
+        return 'The wallet could not reach the transaction service, but nothing was signed or sent, and nothing was spent. '
+            + 'Check your connection and try again.';
     }
 
     if (code === 'ENCODER_HTTP_429') {
@@ -204,10 +204,10 @@ function encoderServiceMessage(code, err) {
         // refused, which retrying will not fix. 429 left this branch above.
         const retryable = status.startsWith('5');
         return retryable
-            ? `The transaction service is temporarily unavailable (error ${status}). Nothing was signed or `
-              + 'sent, so nothing was spent. Try again in a moment.'
-            : `The transaction service refused this request (error ${status}). Nothing was signed or sent, `
-              + 'so nothing was spent. If it keeps happening, please report it.';
+            ? `The transaction service is temporarily unavailable (error ${status}), but nothing was signed `
+              + 'or sent, and nothing was spent. Try again in a moment.'
+            : `The transaction service refused this request (error ${status}), but nothing was signed or sent, `
+              + 'and nothing was spent. If it keeps happening, please report it.';
     }
 
     if (code === 'ENCODER_RPC_ERROR') {
@@ -246,16 +246,15 @@ export function encoderErrorMessage(err, { coinTicker, requiredNative } = {}) {
 
     if (code === 'NO_UTXOS') {
         const need = needed
-            ? `It needs about ${needed} ${coin} to cover the protocol fee, plus a little more for the network fee.`
-            : `It needs ${coin} to cover the protocol fee and the network fee.`;
-        return `This address has no ${coin} to spend. ${need} Add ${coin} to this address and try again.`;
+            ? `about ${needed} ${coin} for the protocol fee, plus a little more for the network fee`
+            : `${coin} for the protocol fee and the network fee`;
+        return `This address needs ${need}; add ${coin} to this address and try again.`;
     }
 
     if (code === 'UTXO_TRACKER_STALE') {
-        return 'The service that tracks your spendable balance is still catching up with the chain, so the '
-            + 'wallet will not build a transaction from what it can currently see. This is a delay on our '
-            + 'side, not a problem with your wallet or your address. Nothing was signed or sent. Wait a '
-            + 'moment and try again.';
+        return 'The service that tracks your spendable balance is still catching up; this delay is on our '
+            + 'side, not a problem with your wallet or your address; nothing was signed or sent, and nothing was spent. '
+            + 'Wait a moment and try again.';
     }
 
     if (WALLET_BUG_CODES.has(code)) {

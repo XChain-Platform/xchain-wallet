@@ -153,6 +153,7 @@
     font-variant-numeric: tabular-nums;
     overflow: hidden;
     text-overflow: ellipsis;
+    overflow-wrap: anywhere;
 }
 
 .statSub {

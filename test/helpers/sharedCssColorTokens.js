@@ -1,14 +1,19 @@
 // Copyright (c) 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
+
+import { cachedSourceFiles } from './sourceScan.js';
 
 const COLOR_PATTERN = /#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi;
+const COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
+const TOKEN_DECLARATION_PATTERN = /--xc-[\w-]+\s*:\s*(#[0-9a-f]{3,8}\b|rgba?\([^;]+\))\s*;/gi;
+const SHORT_HEX_PATTERN = /^#([0-9a-f]{3,4})$/;
+const FUNCTIONAL_COLOR_PATTERN = /^(rgba?)\(([^)]+)\)$/;
 const EXEMPTION = 'raw-color-ok:';
 
 function stripComments(source) {
-    return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
+    return source.replace(COMMENT_PATTERN, (comment) => comment.replace(/[^\n]/g, ' '));
 }
 
 function maskVarFunctions(source) {
@@ -32,9 +37,9 @@ function maskVarFunctions(source) {
 
 export function normalizeColor(value) {
     const compact = value.toLowerCase().replace(/\s+/g, '');
-    const shortHex = compact.match(/^#([0-9a-f]{3,4})$/);
+    const shortHex = compact.match(SHORT_HEX_PATTERN);
     if (shortHex) return `#${[...shortHex[1]].map((digit) => digit.repeat(2)).join('')}`;
-    const functional = compact.match(/^(rgba?)\(([^)]+)\)$/);
+    const functional = compact.match(FUNCTIONAL_COLOR_PATTERN);
     if (!functional) return compact;
     const channels = functional[2].split(',').map((channel) => {
         const numeric = Number(channel);
@@ -45,25 +50,16 @@ export function normalizeColor(value) {
 
 export function readSharedCssSources(root) {
     const base = join(root, 'packages', 'core', 'src', 'shared');
-    const files = [];
-    const walk = (directory) => {
-        for (const entry of readdirSync(directory, { withFileTypes: true })) {
-            const path = join(directory, entry.name);
-            if (entry.isDirectory()) walk(path);
-            else if (entry.name.endsWith('.module.css')) {
-                files.push({ path: relative(root, path), source: readFileSync(path, 'utf8') });
-            }
-        }
-    };
-    walk(base);
-    return files;
+    return cachedSourceFiles(base, '**/*.module.css').map((file) => ({
+        path: join('packages', 'core', 'src', 'shared', file.relativePath),
+        source: file.source,
+    }));
 }
 
 export function findRawTokenColorViolations(tokenSource, files) {
     const tokenColors = new Set();
     const tokensWithoutComments = stripComments(tokenSource);
-    const declaration = /--xc-[\w-]+\s*:\s*(#[0-9a-f]{3,8}\b|rgba?\([^;]+\))\s*;/gi;
-    for (const match of tokensWithoutComments.matchAll(declaration)) {
+    for (const match of tokensWithoutComments.matchAll(TOKEN_DECLARATION_PATTERN)) {
         tokenColors.add(normalizeColor(match[1]));
     }
 

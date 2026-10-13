@@ -79,15 +79,15 @@ describe('TokenDetail holder paging', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
         expect(await screen.findByText('Holders (25 of 49)')).toBeTruthy();
-        const list = document.querySelector('ol');
-        expect(list.querySelectorAll('li')).toHaveLength(25);
+        const list = screen.getByRole('table', { name: 'Holder balances' });
+        expect(list.querySelectorAll('tbody tr')).toHaveLength(25);
         expect(within(list).getByText('1')).toBeTruthy();
 
         const scroller = document.querySelector('main');
         scroller.scrollTop = 137;
         fireEvent.click(screen.getByRole('button', { name: 'Load more holders' }));
 
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(49));
+        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(49));
         expect(screen.getByText('Holders (49)')).toBeTruthy();
         expect(getHoldersForToken).toHaveBeenLastCalledWith({
             chainId: CHAIN,

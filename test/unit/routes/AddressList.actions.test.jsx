@@ -213,6 +213,40 @@ describe('Address detail actions', () => {
         expect(screen.getByRole('button', { name: `View address ${DOGE_ADDRESS}` })).toBeInTheDocument();
     });
 
+    it('bounds thousands of addresses and keeps the list scroller anchored while expanding', async () => {
+        const records = Array.from({ length: 5_000 }, (_, index) => ({
+            id: `addr-${index}`,
+            address: `bcrt1qfixture${String(index).padStart(5, '0')}xxxxxxxxxxxxxxxxxxxx`,
+            label: `Fixture ${index}`,
+            source: 'hd',
+            role: 'receive',
+            accountId: ACCOUNT.id,
+        }));
+        mount(messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: records }),
+        }));
+
+        const list = await screen.findByRole('list', { name: 'Addresses' });
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(100));
+        expect(screen.getByText('100 of 5,000 addresses shown')).toBeInTheDocument();
+
+        const scroller = document.querySelector('main');
+        scroller.scrollTop = 173;
+        const showMore = screen.getByRole('button', { name: 'Show more addresses' });
+        showMore.focus();
+        expect(document.activeElement).toBe(showMore);
+        fireEvent.click(showMore);
+
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(200));
+        expect(scroller.scrollTop).toBe(173);
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search addresses' }), {
+            target: { value: 'Fixture 4999' },
+        });
+        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(1));
+        expect(screen.queryByRole('button', { name: 'Show more addresses' })).toBeNull();
+    });
+
     it('labels every address row with its chain and non-mainnet kind', async () => {
         mount(messagingWith({
             getAddressesByChain: vi.fn().mockResolvedValue({

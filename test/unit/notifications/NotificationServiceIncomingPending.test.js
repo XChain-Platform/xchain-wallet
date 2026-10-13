@@ -102,9 +102,9 @@ describe('NotificationService: incoming-pending', () => {
         const n = h.notify.mock.calls[0][0];
         expect(n.kind).toBe('incoming-pending');
         expect(n.data).toMatchObject({ address: OURS, type: 'MEMPOOL_ACTION', txHash: TX.toLowerCase() });
-        expect(`${n.title} ${n.body}`).toMatch(/5 XCHAIN/);
+        expect(n.title).toBe('5 XCHAIN pending');
+        expect(n.body).toBe('Payment to your Bitcoin address is waiting for confirmation.');
         expect(`${n.title} ${n.body}`).not.toMatch(/addrStranger/);
-        expect(`${n.title} ${n.body}`).toMatch(/pending/i);
     });
 
     it('does not raise it for our OWN send, even when our address is among the destinations', async () => {
@@ -286,8 +286,12 @@ describe('NotificationService: confirmed-side recipients read destinations[]', (
         h.sdk.emit(OURS, confirmedFrame());
         await flush();
         expect(h.notify).toHaveBeenCalledTimes(1);
-        expect(h.notify.mock.calls[0][0]).toMatchObject({ kind: 'incoming-receipt', data: { txHash: TX.toLowerCase() } });
-        expect(`${h.notify.mock.calls[0][0].title} ${h.notify.mock.calls[0][0].body}`).toMatch(/5 XCHAIN/);
+        expect(h.notify.mock.calls[0][0]).toMatchObject({
+            kind: 'incoming-receipt',
+            title: '5 XCHAIN received',
+            body: 'Payment arrived at your Bitcoin address.',
+            data: { txHash: TX.toLowerCase() },
+        });
     });
 
     it('still honours the retired singular field from an older explorer', async () => {

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
     AUTO_LOCK_GUARD_CHANGED_EVENT,
     isAutoLockHeld,
@@ -51,6 +51,7 @@ import {
  * @param {number} [opts.tickMs]   default 30 seconds
  * @param {boolean} [opts.enabled] default true
  * @param {() => void} [opts.onDeferred] called when an elapsed deadline waits for a guarded operation
+ * @returns {() => boolean} checks the deadline immediately and reports whether locking started
  */
 export function useAutoLock(
     onLock,
@@ -64,6 +65,7 @@ export function useAutoLock(
     const lastActivity = useRef(Date.now());
     const onLockRef = useRef(onLock);
     const onDeferredRef = useRef(onDeferred);
+    const checkNowRef = useRef(() => false);
     onLockRef.current = onLock;
     onDeferredRef.current = onDeferred;
 
@@ -72,7 +74,10 @@ export function useAutoLock(
     }, [enabled]);
 
     useEffect(() => {
-        if (!enabled) return undefined;
+        if (!enabled) {
+            checkNowRef.current = () => false;
+            return undefined;
+        }
         let deferred = false;
         const bump = () => {
             lastActivity.current = Date.now();
@@ -90,13 +95,13 @@ export function useAutoLock(
             handle = window.setTimeout(tick, Math.min(tickMs, remaining));
         }
         function tick() {
-            if (cancelled) return;
+            if (cancelled) return false;
             if (Date.now() - lastActivity.current >= idleMs) {
                 if (isAutoLockHeld()) {
                     if (!deferred) onDeferredRef.current?.();
                     deferred = true;
                     schedule();
-                    return;
+                    return false;
                 }
                 try { onLockRef.current?.(); } catch (_err) { /* ignore */ }
                 // Re-arm instead of stopping. `onLock` is async and can
@@ -106,15 +111,24 @@ export function useAutoLock(
                 // flips to `locked` and passes `enabled: false`.
                 lastActivity.current = Date.now();
                 deferred = false;
+                schedule();
+                return true;
             }
             schedule();
+            return false;
         }
         const checkNow = () => {
             clearTimeout(handle);
-            tick();
+            return tick();
         };
+        checkNowRef.current = checkNow;
         const onVisibilityChange = () => {
-            if (document.visibilityState === 'visible') checkNow();
+            const cap = /** @type {any} */ (globalThis).Capacitor;
+            const nativeAppOwnsResume = Boolean(
+                cap?.Plugins?.App?.addListener
+                && (typeof cap.isNativePlatform !== 'function' || cap.isNativePlatform()),
+            );
+            if (document.visibilityState === 'visible' && !nativeAppOwnsResume) checkNow();
         };
         const onGuardChange = () => {
             if (!isAutoLockHeld()) checkNow();
@@ -124,10 +138,13 @@ export function useAutoLock(
         schedule();
         return () => {
             cancelled = true;
+            checkNowRef.current = () => false;
             clearTimeout(handle);
             document.removeEventListener('visibilitychange', onVisibilityChange);
             window.removeEventListener(AUTO_LOCK_GUARD_CHANGED_EVENT, onGuardChange);
             for (const ev of events) window.removeEventListener(ev, bump);
         };
     }, [enabled, idleMs, tickMs]);
+
+    return useCallback(() => checkNowRef.current(), []);
 }

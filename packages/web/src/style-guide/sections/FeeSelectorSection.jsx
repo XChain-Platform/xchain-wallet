@@ -54,7 +54,7 @@ export function FeeSelectorSection() {
             kicker="Low / Normal / Fast slider (optionally with Custom) over a native range input, styled with accent-color. Used anywhere the user expresses a fee preference: Send (typing the rate), Receive (encoding a preference into the QR), Settings defaults, etc."
         >
             <Guidance
-                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>. A header row carries the label (left) and the active tier's ETA (right); the readout below the track shows the fee amount + coin ticker + fiat (left) and the rate / Custom input (right). Both readout figures are click-to-edit when <code>allowCustom</code>: clicking the rate opens the Custom rate input seeded with the active tier's rate, and clicking the fee amount opens an exact-fee input (the typed fee is converted to the equivalent rate internally, so <code>onChange</code> still emits <code>{'{ mode: \'custom\', customRate }'}</code>). Either edit snaps the slider to the Custom stop. Tick labels are positioned under each slider nub. Renders a placeholder ("Fee estimate unavailable for this chain.") when no <code>tiers</code> are passed.</>}
+                what={<>A 3- or 4-stop slider over <code>&lt;input type="range"&gt;</code>. A header row carries the label (left) and the active tier's ETA (right); the readout below the track shows the fee amount + coin ticker + fiat (left) and the rate / Custom input (right). Both readout figures support direct editing when <code>allowCustom</code>: selecting the rate opens the Custom rate input seeded with the active tier's rate, and selecting the fee amount opens an exact-fee input (the typed fee is converted to the equivalent rate internally, so <code>onChange</code> still emits <code>{'{ mode: \'custom\', customRate }'}</code>). Either edit snaps the slider to the Custom stop. Tick labels are positioned under each slider nub. Renders a placeholder ("Fee estimate unavailable for this chain.") when no <code>tiers</code> are passed.</>}
                 when={<>Any form that submits a transaction or encodes a fee preference. Always use this (never build a one-off fee picker). Pulling tiers from <code>estimateNativeSendFeeTiers</code> (sync seed) + <code>fetchNativeSendFeeTiers</code> (live SDK upgrade) gives the consistent BTC/LTC/DOGE handling.</>}
                 whenNot={<>Settings panels that store the user's default fee strategy use a simpler radio group (Low/Normal/Fast/Custom) rather than this slider. The slider implies "this transaction" intent; settings imply "future transactions".</>}
                 variants={<>
@@ -93,7 +93,7 @@ useEffect(() => {
 />`}
             </Markup>
 
-            <LiveExample label="Send variant: Low / Normal / Fast / Custom. Click the fee amount or the rate to edit it directly; either edit jumps the slider to Custom.">
+            <LiveExample label="Send variant: Low / Normal / Fast / Custom. Select the fee amount or the rate to edit it directly; either edit jumps the slider to Custom.">
                 <FeeSelector
                     tiers={SAMPLE_TIERS}
                     value={sendPick}
