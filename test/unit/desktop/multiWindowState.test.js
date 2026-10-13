@@ -11,7 +11,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -73,6 +73,43 @@ describe('desktop window bounds memory', () => {
         await Promise.all([store.save(first), store.save(latest)]);
 
         await expect(store.load()).resolves.toEqual(latest);
+    });
+
+    it('writes a synchronous save before returning', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-window-bounds-'));
+        tempDirs.push(dir);
+        const path = windowBoundsPathFor(join(dir, 'fresh-profile'));
+        const store = new FileWindowBoundsStore(path);
+        const bounds = { x: 40, y: 30, width: 960, height: 720 };
+
+        store.saveSync(bounds);
+
+        expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(bounds);
+        await expect(store.load()).resolves.toEqual(bounds);
+    });
+
+    it('does not let an older async save overwrite a later synchronous one', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-window-bounds-'));
+        tempDirs.push(dir);
+        const store = new FileWindowBoundsStore(windowBoundsPathFor(dir));
+        const older = { x: 10, y: 20, width: 800, height: 650 };
+        const latest = { x: 50, y: 60, width: 1000, height: 800 };
+
+        const pending = store.save(older);
+        store.saveSync(latest);
+        await pending;
+
+        await expect(store.load()).resolves.toEqual(latest);
+    });
+
+    it('ignores malformed bounds on a synchronous save', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-window-bounds-'));
+        tempDirs.push(dir);
+        const store = new FileWindowBoundsStore(windowBoundsPathFor(dir));
+
+        store.saveSync({ width: 10, height: 10 });
+
+        await expect(store.load()).resolves.toBeNull();
     });
 
     it('drops an off-screen position while preserving the remembered size', () => {

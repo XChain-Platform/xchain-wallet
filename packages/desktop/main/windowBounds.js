@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const DEFAULT_WINDOW_BOUNDS = Object.freeze({ width: 1024, height: 768 });
@@ -157,7 +157,13 @@ export class FileWindowBoundsStore {
         }
         this._filePath = filePath;
         this._tmpPath = `${filePath}.tmp`;
+        // The synchronous save writes its own temp file so it never shares
+        // one with an async save that is still writing.
+        this._syncTmpPath = `${filePath}.sync.tmp`;
         this._saveInFlight = Promise.resolve();
+        // Bumped by every synchronous save; an async save queued before it
+        // holds older bounds and must not rename over the newer file.
+        this._generation = 0;
     }
 
     async load() {
@@ -172,14 +178,33 @@ export class FileWindowBoundsStore {
     async save(bounds) {
         const normalized = normalizeWindowBounds(bounds);
         if (!normalized) return;
+        const generation = this._generation;
         this._saveInFlight = this._saveInFlight
             .catch(() => {})
             .then(async () => {
+                if (generation !== this._generation) return;
                 await fs.mkdir(dirname(this._filePath), { recursive: true });
                 await fs.writeFile(this._tmpPath, JSON.stringify(normalized), { mode: 0o600 });
+                if (generation !== this._generation) return;
                 await fs.rename(this._tmpPath, this._filePath);
             });
         return this._saveInFlight;
+    }
+
+    /**
+     * Write the bounds before returning. Used on window close and app quit,
+     * where the process can exit before an async write lands; the file is a
+     * few dozen bytes, so blocking for it is cheap.
+     *
+     * @param {unknown} bounds
+     */
+    saveSync(bounds) {
+        const normalized = normalizeWindowBounds(bounds);
+        if (!normalized) return;
+        this._generation += 1;
+        mkdirSync(dirname(this._filePath), { recursive: true });
+        writeFileSync(this._syncTmpPath, JSON.stringify(normalized), { mode: 0o600 });
+        renameSync(this._syncTmpPath, this._filePath);
     }
 }
 
