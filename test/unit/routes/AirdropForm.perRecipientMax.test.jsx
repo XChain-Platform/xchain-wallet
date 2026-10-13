@@ -125,8 +125,7 @@ const submitButton = () => screen.getByRole('button', { name: /^Review recipient
 async function pasteRecipients(list = RECIPIENTS) {
     await flushTimers();
     amountField();
-    const box = document.querySelector('textarea');
-    if (!box) throw new Error('no recipients textarea');
+    const box = screen.getByRole('textbox', { name: 'Recipients' });
     fireEvent.change(box, { target: { value: list.join('\n') } });
 }
 
@@ -224,10 +223,9 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
     it('divides by the previewed holder count for a token-holder list', async () => {
         mountAirdrop({ holderCount: 4 });
         await flushTimers();
-        const mode = screen.getByLabelText(/^Airdrop to/);
+        const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
         fireEvent.change(mode, { target: { value: 'holders' } });
-        const ticks = document.querySelector('textarea');
-        if (!ticks) throw new Error('no token-list textarea');
+        const ticks = screen.getByRole('textbox', { name: 'Tokens (one per line)' });
         fireEvent.change(ticks, { target: { value: 'S19MINT' } });
         await maxReady();
         fireEvent.click(maxButton());

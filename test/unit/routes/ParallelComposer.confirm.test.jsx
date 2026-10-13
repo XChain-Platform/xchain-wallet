@@ -6,7 +6,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { readFileSync } from 'node:fs';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
@@ -28,11 +27,6 @@ const COMPOSED = {
     expectedOutputs: { addressed: [], encoding: 'OP_RETURN' },
     tamperVerified: true,
 };
-const FORM_STYLES = readFileSync(
-    'packages/core/src/shared/routes/ParallelComposer.module.css',
-    'utf8',
-);
-
 afterEach(() => cleanup());
 
 function mount({ walletMode = 'full', messagingOverrides = {}, initialRows } = {}) {
@@ -74,7 +68,7 @@ describe('ParallelComposer confirmation', () => {
 
         const fromPicker = await screen.findByRole('combobox', { name: 'From address' });
         expect(fromPicker.className).toBeTruthy();
-        expect(FORM_STYLES).toMatch(/\.rowEditor select,[^{]*\{[^}]*width:\s*100%;[^}]*max-width:\s*100%/s);
+        expect(screen.getByRole('textbox', { name: 'Params (JSON object)' }).className).toBeTruthy();
         expect(screen.getByLabelText('Row 1 status: Pending')).toHaveTextContent('Pending');
     });
 

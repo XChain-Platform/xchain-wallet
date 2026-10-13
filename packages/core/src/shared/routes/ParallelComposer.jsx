@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -497,6 +497,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     </p>
                 </div>
                 <label className={`${styles.checkRow} ${parallelStyles.acknowledgement}`}>
+                    {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
                     <input
                         type="checkbox"
                         checked={acknowledgedNoRollback}
@@ -567,70 +568,58 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
                 <StatusPill status={row.status} labelPrefix={`Row ${index + 1} status`} />
             </div>
 
-            <label className={styles.pickerLabel}>
-                <span>Chain</span>
-                <select
-                    className={styles.picker}
-                    value={row.chainId || ''}
-                    onChange={(e) => {
-                        const cid = e.target.value;
-                        const newAddrs = (addressesByChain[cid] || []);
-                        onChange({
-                            chainId: cid,
-                            fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
-                        });
-                    }}
-                >
-                    {chainIds.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        return (
-                            <option key={cid} value={cid}>
-                                {d ? d.displayName : cid}
-                            </option>
-                        );
-                    })}
-                </select>
-            </label>
+            <Select
+                label="Chain"
+                value={row.chainId || ''}
+                onChange={(e) => {
+                    const cid = e.target.value;
+                    const newAddrs = (addressesByChain[cid] || []);
+                    onChange({
+                        chainId: cid,
+                        fromAddressId: pickDefaultAddressId(newAddrs, activeByChain?.[cid]),
+                    });
+                }}
+            >
+                {chainIds.map((cid) => {
+                    const d = chainRegistry.get(cid);
+                    return (
+                        <option key={cid} value={cid}>
+                            {d ? d.displayName : cid}
+                        </option>
+                    );
+                })}
+            </Select>
 
-            <label className={styles.pickerLabel}>
-                <span>From address</span>
-                <select
-                    className={styles.picker}
-                    value={row.fromAddressId || ''}
-                    onChange={(e) => onChange({ fromAddressId: e.target.value })}
-                >
-                    {addrs.map((a) => (
-                        <option key={a.id} value={a.id}>{a.address}</option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="From address"
+                value={row.fromAddressId || ''}
+                onChange={(e) => onChange({ fromAddressId: e.target.value })}
+            >
+                {addrs.map((a) => (
+                    <option key={a.id} value={a.id}>{a.address}</option>
+                ))}
+            </Select>
 
-            <label className={styles.pickerLabel}>
-                <span>Action</span>
-                <select
-                    className={styles.picker}
-                    value={row.action || ''}
-                    onChange={(e) => onChange({ action: e.target.value })}
-                >
-                    <option value="">Select action</option>
-                    {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
-                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
-                        <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="Action"
+                value={row.action || ''}
+                onChange={(e) => onChange({ action: e.target.value })}
+            >
+                <option value="">Select action</option>
+                {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
+                {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
+                    <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
+                ))}
+            </Select>
 
-            <label className={styles.pickerLabel} style={{ alignItems: 'stretch' }}>
-                <span>Params (JSON object)</span>
-                <textarea
-                    className={styles.picker}
-                    rows={4}
-                    value={row.paramsJson}
-                    onChange={(e) => onChange({ paramsJson: e.target.value })}
-                    placeholder='{"VERSION":"0", ...}'
-                    spellCheck={false}
-                />
-            </label>
+            <Textarea
+                label="Params (JSON object)"
+                rows={4}
+                value={row.paramsJson}
+                onChange={(e) => onChange({ paramsJson: e.target.value })}
+                placeholder='{"VERSION":"0", ...}'
+                spellCheck={false}
+            />
 
             <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
                 <Button

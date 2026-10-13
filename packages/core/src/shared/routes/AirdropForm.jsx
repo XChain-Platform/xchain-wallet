@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -748,9 +748,8 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         reader.readAsText(file);
     }, []);
 
-    // Cluster P FOLLOWUP 2: drag-and-drop a CSV / TXT recipient list
-    // onto the textarea. Additive; the click-to-pick lane via the
-    // `<input type="file">` below stays the primary affordance.
+    // Recipient CSV and TXT files can be dropped onto the textarea while
+    // the file Input remains the primary affordance.
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
         readAs: 'text',
@@ -1790,14 +1789,12 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             {sourceMode === 'paste' ? (
                 <>
-                    <label
-                        className={styles.pickerLabel}
+                    <div
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
-                        Recipients
-                        <textarea
-                            className={styles.picker}
+                        <Textarea
+                            label="Recipients"
                             value={pasteText}
                             onChange={(e) => setPasteText(e.target.value)}
                             placeholder={recipientsDrop.isDragOver
@@ -1809,9 +1806,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             autoCorrect="off"
                             autoComplete="off"
                         />
-                    </label>
+                    </div>
                     <div className={styles.fromLine}>
-                        <input
+                        <Input
                             ref={fileInputRef}
                             type="file"
                             accept=".csv,.txt,text/csv,text/plain"
@@ -1883,10 +1880,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
             {sourceMode === 'holders' ? (
                 <>
-                    <label className={styles.pickerLabel} htmlFor="airdrop-holder-ticks">Tokens (one per line)</label>
-                    <textarea
+                    <Textarea
                         id="airdrop-holder-ticks"
-                        className={styles.picker}
+                        label="Tokens (one per line)"
                         value={ticksText}
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -477,15 +477,17 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             title="Messaging"
             titleIcon={<Icon.MessageIcon />}
             trailing={onCompose ? (
-                <button
+                <Button
                     type="button"
-                    className={local.addBtn}
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => onCompose()}
                     aria-label="New conversation"
                     title="New conversation"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             ) : undefined}
         />
     );
@@ -726,7 +728,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         <ListPage
             toolbar={(
                 <>
-                    <input
+                    <Input
                         type="search"
                         enterKeyHint="search"
                         autoCapitalize="off"
@@ -744,12 +746,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             )}
         >
             {handshakeRequesters.length > 0 ? (
-                <div className={local.requestCard} role="region" aria-label="Encrypted-session requests">
-                    <p className={local.requestIntro}>
-                        🔑 {handshakeRequesters.length} encrypted-session request
-                        {handshakeRequesters.length === 1 ? '' : 's'}. Share your key so they can send
-                        you encrypted (ECDH) messages, or just start a message.
-                    </p>
+                <section aria-label="Encrypted-session requests" className={local.requestSection}>
+                    <SectionHeader
+                        title="Encrypted-session requests"
+                        description={`🔑 ${handshakeRequesters.length} encrypted-session request${handshakeRequesters.length === 1 ? '' : 's'}. Share your key so they can send you encrypted (ECDH) messages, or just start a message.`}
+                    />
                     <ul className={local.requestList}>
                         {handshakeRequesters.map((r) => {
                             const record = recordByAddress[r.ownerAddress];
@@ -774,7 +775,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                             );
                         })}
                     </ul>
-                </div>
+                </section>
             ) : null}
 
             {conversations.length === 0 ? (
@@ -787,18 +788,20 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             ) : visibleConversations.length === 0 ? (
                 <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
-                <div className={local.convCard}>
-                    <ul className={local.convList} aria-label="Conversations">
-                        {visibleConversations.map((c) => {
-                            const isUnread = Boolean(unreadByCp[c.counterparty]);
-                            return (
-                                <li key={c.counterparty}>
-                                    <button
-                                        type="button"
-                                        className={local.convItem}
-                                        onClick={() => openConversation(c)}
-                                    >
-                                        <div className={local.convTop}>
+                <ul className={local.convList} aria-label="Conversations">
+                    {visibleConversations.map((c) => {
+                        const isUnread = Boolean(unreadByCp[c.counterparty]);
+                        return (
+                            <li key={c.counterparty}>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    block
+                                    icon={null}
+                                    className={local.convItem}
+                                    onClick={() => openConversation(c)}
+                                >
+                                        <span className={local.convTop}>
                                             <span className={local.convNameWrap}>
                                                 {isUnread ? (
                                                     <span
@@ -827,19 +830,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             <span className={local.convTime}>
                                                 {c.lastTimestamp ? <RelativeTime timestamp={c.lastTimestamp} /> : ''}
                                             </span>
-                                        </div>
-                                        <div className={isUnread
+                                        </span>
+                                        <span className={isUnread
                                             ? `${local.convPreview} ${local.convPreviewUnread}`
                                             : local.convPreview}
                                         >
                                             {previewFor(c.lastText)}
-                                        </div>
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </div>
+                                        </span>
+                                </Button>
+                            </li>
+                        );
+                    })}
+                </ul>
             )}
         </ListPage>,
     );
@@ -905,7 +907,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
     }
     return (
         <form className={local.composer} onSubmit={handleSubmit}>
-            <input
+            <Input
                 type="text"
                 enterKeyHint="go"
                 className={local.composerInput}
@@ -915,9 +917,9 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                 autoComplete="off"
                 aria-label="Message"
             />
-            <button type="submit" className={local.composerSend} aria-label="Send message">
+            <Button type="submit" variant="primary" size="sm" icon={null} aria-label="Send message">
                 <Icon.SendIcon />
-            </button>
+            </Button>
         </form>
     );
 }

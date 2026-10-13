@@ -36,7 +36,7 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -558,6 +558,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     return wrap(
         <FormPage
             label="Batch composer"
+            sectioned
             intro={(
                 <>
                 Queue up to 250 actions to run together in one transaction from one address. You can issue one new
@@ -570,10 +571,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             status={constraintError ? <StatusMessage variant="error" className={styles.error}>{constraintError}</StatusMessage> : null}
             actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
         >
-            <label className={styles.pickerLabel}>
-                <span>Chain</span>
-                <select
-                    className={styles.picker}
+            <FormSection title="Batch settings">
+                <Select
+                    label="Chain"
                     value={chainId || ''}
                     onChange={(e) => {
                         const cid = e.target.value;
@@ -585,71 +585,51 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         const d = chainRegistry.get(cid);
                         return <option key={cid} value={cid}>{d ? d.displayName : cid}</option>;
                     })}
-                </select>
-            </label>
-            <label className={styles.pickerLabel}>
-                <span>From address</span>
-                <select
-                    className={styles.picker}
+                </Select>
+                <Select
+                    label="From address"
                     value={fromAddressId || ''}
                     onChange={(e) => setFromAddressId(e.target.value)}
                 >
                     {(addressesByChain[chainId] || []).map((a) => (
                         <option key={a.id} value={a.id}>{a.address}</option>
                     ))}
-                </select>
-            </label>
+                </Select>
+            </FormSection>
 
-            <ul style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-3) 0 0' }}>
-                {rows.map((row, i) => (
-                    <li key={row.id} style={{ marginBottom: 'var(--xc-space-3)' }}>
-                        <fieldset style={{
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-md)',
-                            padding: 'var(--xc-space-3)',
-                            margin: 0,
-                            background: 'var(--xc-bg-muted)',
-                        }}>
-                            <legend style={{ fontWeight: 600, padding: '0 var(--xc-space-2)' }}>Step {i + 1}</legend>
-                            <label className={styles.pickerLabel}>
-                                <span>Action</span>
-                                <select
-                                    className={styles.picker}
-                                    value={row.action || ''}
-                                    onChange={(e) => updateRow(i, { action: e.target.value })}
-                                >
-                                    <option value="">Select action</option>
-                                    {/* One SDK list serves every chain; drop what the picked chain refuses at every version. */}
-                                    {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, chainId, a)).map((a) => (
-                                        <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                                    ))}
-                                </select>
-                            </label>
-                            <label className={styles.pickerLabel} style={{ alignItems: 'stretch' }}>
-                                <span>Params (JSON object)</span>
-                                <textarea
-                                    className={styles.picker}
-                                    rows={4}
-                                    value={row.paramsJson}
-                                    onChange={(e) => updateRow(i, { paramsJson: e.target.value })}
-                                    placeholder='{"VERSION":"0", ...}'
-                                    spellCheck={false}
-                                />
-                            </label>
-                            {rowErrors[i] ? (
-                                <StatusMessage variant="error" className={styles.error}>
-                                    {rowErrors[i]}
-                                </StatusMessage>
-                            ) : null}
-                            <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
-                                <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>
-                                    Remove
-                                </Button>
-                            </div>
-                        </fieldset>
-                    </li>
-                ))}
-            </ul>
+            {rows.map((row, i) => (
+                <FormSection key={row.id} title={`Step ${i + 1}`} headingLevel="h3">
+                    <Select
+                        label="Action"
+                        value={row.action || ''}
+                        onChange={(e) => updateRow(i, { action: e.target.value })}
+                    >
+                        <option value="">Select action</option>
+                        {/* One SDK list serves every chain; drop what the picked chain refuses at every version. */}
+                        {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, chainId, a)).map((a) => (
+                            <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
+                        ))}
+                    </Select>
+                    <Textarea
+                        label="Params (JSON object)"
+                        rows={4}
+                        value={row.paramsJson}
+                        onChange={(e) => updateRow(i, { paramsJson: e.target.value })}
+                        placeholder='{"VERSION":"0", ...}'
+                        spellCheck={false}
+                    />
+                    {rowErrors[i] ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {rowErrors[i]}
+                        </StatusMessage>
+                    ) : null}
+                    <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
+                        <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>
+                            Remove
+                        </Button>
+                    </div>
+                </FormSection>
+            ))}
             <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
                 <Button
                     type="button"
