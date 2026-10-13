@@ -28,11 +28,35 @@ describe('<Button>', () => {
         expect(onClick).toHaveBeenCalledOnce();
     });
 
-    it('loading implies disabled and aria-busy', () => {
-        render(<Button loading>Signing</Button>);
+    it('loading disables re-submit while preserving the accessible label and layout content', () => {
+        render(<Button loading icon={<SendIcon />}>Signing</Button>);
         const btn = screen.getByRole('button');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
         expect(btn).toBeDisabled();
         expect(btn).toHaveAttribute('aria-busy', 'true');
+        expect(btn).toHaveAccessibleName('Signing');
+        expect(btn.querySelector(`.${styles.spinner}`)).toHaveAttribute('aria-hidden', 'true');
+        expect(btn.querySelector(`.${styles.icon}`)).toBeInTheDocument();
+        expect(btn.querySelector(`.${styles.label}`)).toHaveTextContent('Signing');
+        // Button overlays the kit Spinner through .busySpinner so the shared .spinner stays an inline loader.
+        expect(css).toMatch(/\.busySpinner\s*\{[^}]*position:\s*absolute[^}]*top:\s*50%[^}]*left:\s*50%/s);
+        expect(css).toMatch(/\.loading \.icon,\s*\.loading \.label\s*\{[^}]*opacity:\s*0/s);
+    });
+
+    it('keeps audited route action labels stable while their kit buttons are busy', () => {
+        const readSource = (path) => readFileSync(`packages/core/src/shared/${path}`, 'utf8');
+        const order = readSource('components/PlaceOrderPanel.jsx');
+        const dispenser = readSource('routes/DispenserForm.jsx');
+        const vote = readSource('routes/CreatePollForm.jsx');
+        const create = readSource('routes/CreateWallet.jsx');
+        const imported = readSource('routes/ImportWallet.jsx');
+
+        expect(order).toMatch(/loading=\{accountLoading \|\| actionConfirm\.composing\}[\s\S]*?\{singleEncode \? `Place \$\{side\} order` : 'Review'\}/);
+        expect(dispenser).toMatch(/loading=\{derivingGetAddress \|\| actionConfirm\.composing\}[\s\S]*?>\s*Create\s*<\/Button>/);
+        expect(vote).not.toMatch(/actionConfirm\.composing \? 'Preparing review/);
+        expect(create).toMatch(/<Button loading icon=\{<Icon\.CheckIcon \/>\}>Create wallet<\/Button>/);
+        expect(imported).not.toMatch(/\{busy \? t\('importWallet\.(?:importing|restoring)'\)/);
     });
 
     it('explicit disabled works independently of loading', () => {

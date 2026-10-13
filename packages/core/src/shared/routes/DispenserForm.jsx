@@ -1491,10 +1491,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
+                    loading={derivingGetAddress || actionConfirm.composing}
                     disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
                 >
-                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
+                    Create
                 </Button>
             )}
         >

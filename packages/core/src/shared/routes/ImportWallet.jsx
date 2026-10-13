@@ -821,7 +821,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.restoring') : t('send.draft.restore')}
+            {t('send.draft.restore')}
         </Button>
     ) : lane === 'wif' ? (
         <Button
@@ -832,7 +832,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.importing') : t('importWallet.import')}
+            {t('importWallet.import')}
         </Button>
     ) : (
         <Button
@@ -843,7 +843,7 @@ export function ImportWallet({
             disabled={Boolean(formDisabledReason)}
             aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
         >
-            {busy ? t('importWallet.importing') : t('importWallet.import')}
+            {t('importWallet.import')}
         </Button>
     );
 

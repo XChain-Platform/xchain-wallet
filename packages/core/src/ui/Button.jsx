@@ -91,8 +91,9 @@ export function Button({
             aria-busy={loading ? 'true' : 'false'}
             {...rest}
         >
-            {loading ? <Spinner size={size} /> : null}
-            {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
+            {/* Busy keeps the icon and label in layout (hidden) so the button never resizes; the spinner overlays the centre. */}
+            {loading ? <Spinner size={size} className={styles.busySpinner} /> : null}
+            {resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
             <span className={styles.label}>{children}</span>
         </button>
     );
