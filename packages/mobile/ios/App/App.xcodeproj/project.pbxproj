@@ -25,10 +25,26 @@
 		XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000004 /* VaultBiometricSidecar.swift */; };
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
 		XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000006 /* XChainLinksPlugin.swift */; };
+		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
+		XC1040B00000000000000002 /* argon2.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000002 /* argon2.c */; };
+		XC1040B00000000000000003 /* core.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000003 /* core.c */; };
+		XC1040B00000000000000004 /* encoding.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000004 /* encoding.c */; };
+		XC1040B00000000000000005 /* ref.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000005 /* ref.c */; };
+		XC1040B00000000000000006 /* thread.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000006 /* thread.c */; };
+		XC1040B00000000000000007 /* blake2b.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000007 /* blake2b.c */; };
+		XC1040B00000000000000008 /* VaultArgon2idTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000008 /* VaultArgon2idTests.swift */; };
+		XC1040B00000000000000009 /* argon2id-vectors.json in Resources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000009 /* argon2id-vectors.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		E00927FAC49399373EE380EE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
+		};
+		XC1040C00000000000000008 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
 			proxyType = 1;
@@ -63,6 +79,16 @@
 		XC1000A00000000000000005 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Version.xcconfig; path = Version.xcconfig; sourceTree = SOURCE_ROOT; };
 		XC1014A00000000000000001 /* XChainClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = clipboard/XChainClipboardPlugin.swift; sourceTree = "<group>"; };
 		XC1000A00000000000000006 /* XChainLinksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = links/XChainLinksPlugin.swift; sourceTree = "<group>"; };
+		XC1040A00000000000000001 /* VaultArgon2id.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultArgon2id.swift; sourceTree = "<group>"; };
+		XC1040A00000000000000002 /* argon2.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/argon2.c; sourceTree = "<group>"; };
+		XC1040A00000000000000003 /* core.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/core.c; sourceTree = "<group>"; };
+		XC1040A00000000000000004 /* encoding.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/encoding.c; sourceTree = "<group>"; };
+		XC1040A00000000000000005 /* ref.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/ref.c; sourceTree = "<group>"; };
+		XC1040A00000000000000006 /* thread.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/thread.c; sourceTree = "<group>"; };
+		XC1040A00000000000000007 /* blake2b.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/blake2/blake2b.c; sourceTree = "<group>"; };
+		XC1040A00000000000000008 /* VaultArgon2idTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultArgon2idTests.swift; sourceTree = "<group>"; };
+		XC1040A00000000000000009 /* argon2id-vectors.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "argon2id-vectors.json"; path = "../../../../test/fixtures/crypto/argon2id-vectors.json"; sourceTree = SOURCE_ROOT; };
+		XC1040A0000000000000000A /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +105,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		XC1040C00000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +134,8 @@
 				504EC3051FED79650016851F /* Products */,
 				3B79B49080FCF00FAED80D45 /* Frameworks */,
 				B9CD89D839E4B4C1CAD8777B /* AppUITests */,
+				XC1040C00000000000000002 /* AppTests */,
+				XC1040C00000000000000001 /* argon2 */,
 			);
 			sourceTree = "<group>";
 		};
@@ -109,6 +144,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				2F6FCB9B35B7BBDD900034D5 /* AppUITests.xctest */,
+				XC1040A0000000000000000A /* AppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -124,6 +160,7 @@
 				XC1000A00000000000000002 /* XChainVaultPlugin.swift */,
 				XC1000A00000000000000003 /* VaultStore.swift */,
 				XC1000A00000000000000004 /* VaultBiometricSidecar.swift */,
+				XC1040A00000000000000001 /* VaultArgon2id.swift */,
 				XC1014A00000000000000001 /* XChainClipboardPlugin.swift */,
 				XC1000A00000000000000006 /* XChainLinksPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -155,6 +192,29 @@
 			name = AppUITests;
 			path = AppUITests;
 			sourceTree = SOURCE_ROOT;
+		};
+		XC1040C00000000000000001 /* argon2 */ = {
+			isa = PBXGroup;
+			children = (
+				XC1040A00000000000000002 /* argon2.c */,
+				XC1040A00000000000000003 /* core.c */,
+				XC1040A00000000000000004 /* encoding.c */,
+				XC1040A00000000000000005 /* ref.c */,
+				XC1040A00000000000000006 /* thread.c */,
+				XC1040A00000000000000007 /* blake2b.c */,
+			);
+			name = argon2;
+			path = Vendor/argon2;
+			sourceTree = "<group>";
+		};
+		XC1040C00000000000000002 /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				XC1040A00000000000000008 /* VaultArgon2idTests.swift */,
+				XC1040A00000000000000009 /* argon2id-vectors.json */,
+			);
+			path = AppTests;
+			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
@@ -197,6 +257,24 @@
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		XC1040C00000000000000003 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = XC1040C00000000000000009 /* Build configuration list for PBXNativeTarget "AppTests" */;
+			buildPhases = (
+				XC1040C00000000000000004 /* Sources */,
+				XC1040C00000000000000005 /* Frameworks */,
+				XC1040C00000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				XC1040C00000000000000007 /* PBXTargetDependency */,
+			);
+			name = AppTests;
+			productName = AppTests;
+			productReference = XC1040A0000000000000000A /* AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -210,6 +288,9 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+					};
+					XC1040C00000000000000003 = {
+						TestTargetID = 504EC3031FED79650016851F;
 					};
 				};
 			};
@@ -231,6 +312,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				0F153D4201C1B32BD3E54CE2 /* AppUITests */,
+				XC1040C00000000000000003 /* AppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -256,6 +338,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		XC1040C00000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				XC1040B00000000000000009 /* argon2id-vectors.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -269,6 +359,13 @@
 				XC1000B00000000000000002 /* XChainVaultPlugin.swift in Sources */,
 				XC1000B00000000000000003 /* VaultStore.swift in Sources */,
 				XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */,
+				XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */,
+				XC1040B00000000000000002 /* argon2.c in Sources */,
+				XC1040B00000000000000003 /* core.c in Sources */,
+				XC1040B00000000000000004 /* encoding.c in Sources */,
+				XC1040B00000000000000005 /* ref.c in Sources */,
+				XC1040B00000000000000006 /* thread.c in Sources */,
+				XC1040B00000000000000007 /* blake2b.c in Sources */,
 				XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */,
 				XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
@@ -283,6 +380,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		XC1040C00000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				XC1040B00000000000000008 /* VaultArgon2idTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -291,6 +396,12 @@
 			name = App;
 			target = 504EC3031FED79650016851F /* App */;
 			targetProxy = E00927FAC49399373EE380EE /* PBXContainerItemProxy */;
+		};
+		XC1040C00000000000000007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = App;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = XC1040C00000000000000008 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -447,6 +558,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/argon2/include";
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -457,6 +569,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/argon2";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -469,6 +582,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Vendor/argon2/include";
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -478,6 +592,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/argon2";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -498,6 +613,39 @@
 				TEST_TARGET_NAME = App;
 			};
 			name = Debug;
+		};
+		XC1040C0000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/argon2";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/App";
+			};
+			name = Debug;
+		};
+		XC1040C0000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.xchain.wallet.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/argon2";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/App";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -525,6 +673,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		XC1040C00000000000000009 /* Build configuration list for PBXNativeTarget "AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XC1040C0000000000000000A /* Debug */,
+				XC1040C0000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

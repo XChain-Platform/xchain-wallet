@@ -20,8 +20,9 @@
 //
 // SSC-1 applies to this file specifically: it is the whole native surface the
 // WebView can reach, so it stays the only registered plugin, and every method
-// on it either moves an opaque ciphertext or asks the Secure Enclave a
-// question. Nothing here takes a file path, a URL, or a class name from JS.
+// on it either moves an opaque ciphertext, asks the Secure Enclave a
+// question, or derives a key (argon2id) from inputs the JS already holds.
+// Nothing here takes a file path, a URL, or a class name from JS.
 
 import Capacitor
 import Foundation
@@ -44,13 +45,17 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "biometricStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricEnroll", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricUnlock", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "biometricClear", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "biometricClear", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "argon2id", returnType: CAPPluginReturnPromise)
     ]
 
     private var vaultStore: VaultStore?
     private var metaStore: VaultStore?
     private var guardStore: VaultStore?
     private let sidecar = VaultBiometricSidecar()
+
+    /// Serial, so two derivations never hold their working memory at once.
+    private let kdfQueue = DispatchQueue(label: "io.xchain.wallet.ios.argon2id", qos: .userInitiated)
 
     /// Store construction can fail (no Application Support directory), and a
     /// plugin that trapped there would take the app down on launch. It fails
@@ -182,7 +187,71 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["status": "OK"])
     }
 
+    // MARK: - Key derivation
+
+    /// Argon2id off the main thread, so the WebView stays responsive. Every
+    /// refusal is a reject, and the JS side answers a reject with its own KDF.
+    @objc func argon2id(_ call: CAPPluginCall) {
+        // The password is a string; an empty one is still a string.
+        guard let password = call.getString("password") else {
+            call.reject("password is required")
+            return
+        }
+        // The salt arrives as standard base64.
+        guard let saltText = call.getString("salt"), let salt = Data(base64Encoded: saltText) else {
+            call.reject("salt must be base64")
+            return
+        }
+        // Each cost parameter is a whole number.
+        guard let iterations = integerArg(call, "iterations"),
+              let memoryKib = integerArg(call, "memoryKib"),
+              let parallelism = integerArg(call, "parallelism"),
+              let length = integerArg(call, "length") else {
+            call.reject("iterations, memoryKib, parallelism and length must be integers")
+            return
+        }
+        let params: Argon2idParams
+        do {
+            params = try Argon2idParams.checked(
+                iterations: iterations, memoryKib: memoryKib, parallelism: parallelism, length: length
+            )
+        } catch {
+            call.reject((error as? Argon2idFailure)?.message ?? "argon2id: invalid parameters")
+            return
+        }
+        // The salt is at least 8 bytes, checked here so a short one never queues.
+        guard salt.count >= Argon2idParams.minSaltBytes else {
+            call.reject(Argon2idFailure.invalid("salt must be at least 8 bytes").message)
+            return
+        }
+
+        kdfQueue.async {
+            var passwordBytes = Array(password.utf8)
+            defer { VaultArgon2id.wipe(&passwordBytes) }
+            do {
+                var key = try VaultArgon2id.derive(password: passwordBytes, salt: Array(salt), params: params)
+                var keyData = Data(key)
+                VaultArgon2id.wipe(&key)
+                let encoded = keyData.base64EncodedString()
+                VaultArgon2id.wipe(&keyData)
+                call.resolve(["key": encoded])
+            } catch {
+                call.reject((error as? Argon2idFailure)?.message ?? "argon2id failed")
+            }
+        }
+    }
+
     // MARK: - Helpers
+
+    /// A whole-number argument, or nil. JSON booleans and fractions are not
+    /// integers here, though NSNumber converts both without complaint.
+    private func integerArg(_ call: CAPPluginCall, _ name: String) -> Int? {
+        guard let number = call.getValue(name) as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value.isFinite, value == value.rounded(), abs(value) <= 9_007_199_254_740_991 else { return nil }
+        return Int(value)
+    }
 
     private func respondRead(_ call: CAPPluginCall, _ result: VaultReadResult) {
         switch result {

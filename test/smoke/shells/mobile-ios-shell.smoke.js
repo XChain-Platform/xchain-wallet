@@ -91,11 +91,12 @@ function plistValue(text, key) {
 // own id. It is allow-listed BY NAME rather than by loosening the check to a
 // prefix: `io.xchain.wallet.ios.anything` would then pass, and the whole point
 // of this assertion is that exactly one shipping id exists and it never moves.
-// A UI test bundle is never uploaded, so it cannot collide with D1.
-const UITEST_BUNDLE_ID = 'io.xchain.wallet.ios.uitests';
+// A UI test bundle is never uploaded, so it cannot collide with D1. The same
+// holds for the AppTests unit-test bundle (native Argon2id golden vectors).
+const TEST_BUNDLE_IDS = new Set(['io.xchain.wallet.ios.uitests', 'io.xchain.wallet.ios.tests']);
 const bundleIds = [...pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
     .map((m) => m[1].trim())
-    .filter((id) => id !== UITEST_BUNDLE_ID);
+    .filter((id) => !TEST_BUNDLE_IDS.has(id));
 assert.ok(bundleIds.length >= 2, 'expected a bundle id in both the Debug and Release configurations');
 for (const id of bundleIds) {
     assert.equal(id, 'io.xchain.wallet.ios', 'D1: immutable after the first App Store upload');
