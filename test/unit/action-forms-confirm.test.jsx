@@ -185,7 +185,7 @@ async function drainMicrotasks(rounds = 12) {
  * @param {(utils: any) => void} [spec.fill]
  * @param {Array<(utils: any) => void>} [spec.steps]   extra interactions, each flushed on its own (picker screens need a render between clicks)
  */
-async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false }) {
+async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null }) {
     const { messagingOverrides, ...formProps } = props;
     // The same drive, sourced from a paired device instead of an HD
     // key. Auto-select only picks `source === 'hd'`, so the hardware address
@@ -229,6 +229,12 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
         fireEvent.click(button);
         await drainMicrotasks();
     });
+    if (afterClick) {
+        await domAct(async () => {
+            afterClick(utils);
+            await drainMicrotasks();
+        });
+    }
 
     // #40, asserted here rather than per form ON PURPOSE: every test in this
     // file drives a different form through this one helper, so the From row is
@@ -663,7 +669,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenWizard,
             props: {},
-            actionLabel: 'Issue token',
+            actionLabel: 'Review token',
+            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })),
             steps: [
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Custom/ })),
                 (utils) => fireEvent.click(utils.getByRole('button', { name: 'Next' })),
@@ -678,6 +685,62 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             params: { TICK: 'JDOG' },
             submitMethod: 'issueToken',
         });
+    });
+
+    it('TokenWizard builds an unsigned ISSUE in watcher mode without asking for a password', async () => {
+        const build = vi.fn(async (args) => ({
+            psbtHex: '70736274ff00',
+            encoding: 'op_return',
+            chainId: args.chainId,
+            fromAddress: args.from.address,
+        }));
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: build,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <TokenWizard walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /Custom/ }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Next' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            setValue(utils, 'Token name (ticker)', 'JDOG');
+            setValue(utils, 'Supply', '1000');
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Review token' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
+            await drainMicrotasks();
+        });
+
+        expect(build).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            actionData: expect.objectContaining({
+                action: 'ISSUE',
+                params: expect.objectContaining({ TICK: 'JDOG' }),
+            }),
+        }));
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
     it('AirdropForm confirms leg 1 (LIST) and signs the prebuilt PSBT', async () => {
@@ -855,15 +918,22 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: LinkForm,
-            props: {},
-            actionLabel: 'Link',
-            fill: (utils) => {
-                // Both side panels carry the same field label, so they are
-                // addressed positionally: chain A first, chain B second.
-                const [a, b] = utils.getAllByLabelText('Action to reference');
-                fireEvent.change(a, { target: { value: '11' } });
-                fireEvent.change(b, { target: { value: '22' } });
+            props: {
+                messagingOverrides: {
+                    getActionByIndex: () => Promise.resolve({ action: 'SEND', tick: 'JDOG', amount: '1' }),
+                },
             },
+            actionLabel: 'Link',
+            steps: [
+                (utils) => {
+                    // Both side panels carry the same field label, so they are
+                    // addressed positionally: chain A first, chain B second.
+                    const [a, b] = utils.getAllByLabelText('Action to reference');
+                    fireEvent.change(a, { target: { value: '11' } });
+                    fireEvent.change(b, { target: { value: '22' } });
+                },
+                () => vi.advanceTimersByTime(350),
+            ],
         });
         // The binding is the whole point: the pair the user read has to be
         // the pair inside the bytes that get signed.

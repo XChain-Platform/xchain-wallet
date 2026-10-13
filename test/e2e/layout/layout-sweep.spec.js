@@ -11,13 +11,17 @@
 // Layout sweep in the browser venues: one run per project in
 // playwright.layout.config.js (Chromium at Android phone sizes, WebKit at
 // iPhone and iPad sizes). Results land in tmp/layout-sweep/<project>/.
+// LAYOUT_SCHEME=dark (see the config) runs the same walk in the dark palette,
+// adds the contrast and light-surface measurements, and writes to
+// tmp/dark-sweep/<project>/ instead.
 
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from '../fixtures/wallet.js';
 import { createSweep } from './sweep.js';
 
-const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', 'layout-sweep');
+const DARK = process.env.LAYOUT_SCHEME === 'dark';
+const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'tmp', DARK ? 'dark-sweep' : 'layout-sweep');
 
 test('layout sweep', async ({ page }, testInfo) => {
     test.setTimeout(45 * 60 * 1000);
@@ -26,6 +30,7 @@ test('layout sweep', async ({ page }, testInfo) => {
         venue,
         outDir: join(OUT_ROOT, venue),
         rootFontSize: testInfo.project.metadata?.rootFontSize,
+        contrast: DARK,
     });
     await sweep.onboarding();
     await sweep.unlocked();

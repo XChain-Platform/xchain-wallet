@@ -61,10 +61,12 @@ export function useSignerStatus({ getStatus, chainId }) {
             const d = res && typeof res === 'object' && typeof res.detail === 'string'
                 ? res.detail
                 : null;
+            statusRef.current = s;
             setStatus(s);
             setDetail(d);
         } catch (err) {
             if (!aliveRef.current) return;
+            statusRef.current = 'disconnected';
             setStatus('disconnected');
             setDetail(err && err.message ? String(err.message) : null);
         }
@@ -79,9 +81,6 @@ export function useSignerStatus({ getStatus, chainId }) {
             setDetail(null);
             return () => { aliveRef.current = false; };
         }
-        // Fire once immediately so the caller doesn't flash through
-        // 'idle' before the first poll resolves.
-        doPoll();
         const scheduleNext = () => {
             if (!aliveRef.current) return;
             const interval = statusRef.current === 'available'
@@ -93,7 +92,13 @@ export function useSignerStatus({ getStatus, chainId }) {
                 scheduleNext();
             }, interval);
         };
-        scheduleNext();
+        // Resolve the immediate status before choosing the next cadence.
+        // Available signers move directly to steady polling.
+        const start = async () => {
+            await doPoll();
+            scheduleNext();
+        };
+        start();
         return () => {
             aliveRef.current = false;
             if (timerRef.current) {

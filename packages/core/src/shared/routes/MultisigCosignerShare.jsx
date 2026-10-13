@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { CopyButton, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { xpubForNetwork } from '../utils/multisigXpub.js';
 import styles from './IssueTokenForm.module.css';
 
 /**
@@ -25,12 +26,21 @@ import styles from './IssueTokenForm.module.css';
  * @param {object} props
  * @param {string} props.walletId
  * @param {Array<{ id: string, address: string, label?: string }>} props.addresses   this wallet's addresses on the multisig network
+ * @param {'mainnet' | 'testnet' | 'regtest'} [props.networkKind]
  */
-export function MultisigCosignerShare({ walletId, addresses }) {
+export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
     const { messaging } = useMessaging();
     const [addressId, setAddressId] = useState('');
     const [info, setInfo] = useState(/** @type {any} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        if (addressId && !addresses.some((address) => address.id === addressId)) {
+            setAddressId('');
+            setInfo(null);
+            setError(null);
+        }
+    }, [addressId, addresses]);
 
     useEffect(() => {
         setInfo(null);
@@ -77,7 +87,7 @@ export function MultisigCosignerShare({ walletId, addresses }) {
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {info ? (
                 <dl className={styles.detailsList}>
-                    <ShareRow label="xpub" value={info.xpub} hint={info.accountPath ? `Account ${info.accountPath}` : null} />
+                    <ShareRow label="xpub" value={xpubForNetwork(info.xpub, networkKind)} hint={info.accountPath ? `Account ${info.accountPath}` : null} />
                     <ShareRow label="Public key" value={info.pubkey} />
                     <ShareRow label="Master fingerprint" value={info.fingerprint} />
                     <ShareRow label="Derivation path" value={info.derivationPath} />
@@ -107,5 +117,6 @@ function ShareRow({ label, value, hint = null }) {
 const monoStyle = {
     display: 'block',
     fontFamily: 'var(--xc-font-mono)',
-    wordBreak: 'break-all',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
 };

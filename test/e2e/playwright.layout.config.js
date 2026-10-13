@@ -15,6 +15,8 @@
 //     ... --project=iphone-17-pro          one venue only
 //     LAYOUT_VENUES=android-lg-k51-large-text ...   Android 1.3 font scale
 //     LAYOUT_PORT=5342 ...                  own dev server, when another tree holds 5173
+//     LAYOUT_SCHEME=dark ...                dark palette (OS colour scheme), with the
+//                                           contrast checks; default runs stay light
 //
 // Sizes are the CSS viewports of real devices. The Android ones are what the
 // app's WebView gets, measured on an LG K51 (720 px at density 1.75, below a
@@ -26,6 +28,9 @@ import { defineConfig, devices } from '@playwright/test';
 // whichever tree's server already answers there.
 const PORT = Number(process.env.LAYOUT_PORT) || 5173;
 const BASE_URL = `http://localhost:${PORT}`;
+// Opt-in dark venue: the OS asks for dark, so the app's own media query
+// picks the dark palette exactly as it does on a phone in dark mode.
+const COLOR_SCHEME = process.env.LAYOUT_SCHEME === 'dark' ? 'dark' : undefined;
 
 const phone = (browserName, width, height, deviceScaleFactor) => ({
     browserName,
@@ -72,6 +77,7 @@ export default defineConfig({
         trace: 'off',
         video: 'off',
         screenshot: 'off',
+        ...(COLOR_SCHEME ? { colorScheme: COLOR_SCHEME } : {}),
     },
     projects,
     webServer: {

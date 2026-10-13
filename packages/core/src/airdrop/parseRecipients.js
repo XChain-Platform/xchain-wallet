@@ -76,15 +76,17 @@ export function parseCsv(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
     const lines = text.split(/\r?\n/);
     const out = [];
-    let skipHeader = false;
-    if (lines.length > 0) {
-        const firstCol = stripWrappingQuotes(firstCell(lines[0]).trim()).toLowerCase();
-        if (firstCol === 'address') skipHeader = true;
-    }
-    for (let i = skipHeader ? 1 : 0; i < lines.length; i += 1) {
+    // Find the header after any BOM and leading blank lines exported by spreadsheets.
+    const firstContent = lines.findIndex((line) => line.trim().length > 0);
+    if (firstContent === -1) return [];
+    const firstCol = stripWrappingQuotes(
+        firstCell(lines[firstContent]).trim().replace(/^\uFEFF/, ''),
+    ).toLowerCase();
+    const start = firstContent + (firstCol === 'address' ? 1 : 0);
+    for (let i = start; i < lines.length; i += 1) {
         const line = lines[i];
         if (line === undefined) continue;
-        const first = stripWrappingQuotes(firstCell(line).trim());
+        const first = stripWrappingQuotes(firstCell(line).trim().replace(/^\uFEFF/, ''));
         if (first.length > 0) out.push(first);
     }
     return out;
@@ -174,20 +176,26 @@ export function classifyRecipients(candidates, chain) {
     const seen = new Set();
     let duplicates = 0;
     for (const raw of candidates) {
-        if (seen.has(raw)) {
+        const candidate = String(raw ?? '').trim();
+        if (!candidate) continue;
+        // Bech32 is case-insensitive when the whole address uses one case.
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1)/i.test(candidate)
+            && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
+        const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
+        if (seen.has(duplicateKey)) {
             duplicates += 1;
             continue;
         }
-        seen.add(raw);
-        if (isRecipientForChain(raw, chain)) {
-            valid.push(raw);
+        seen.add(duplicateKey);
+        if (isRecipientForChain(candidate, chain)) {
+            valid.push(candidate);
             continue;
         }
-        invalid.push(raw);
+        invalid.push(candidate);
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isPlausibleAddress(raw)) wrongNetwork.push(raw);
+        if (params && isPlausibleAddress(candidate)) wrongNetwork.push(candidate);
     }
     return { valid, invalid, duplicates, wrongNetwork };
 }
