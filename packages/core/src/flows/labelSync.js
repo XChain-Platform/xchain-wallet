@@ -636,7 +636,7 @@ export function labelSyncSearchChainIds(chainRegistry, activeChainIds = []) {
 /**
  * @typedef {Object} RestoreLabelSyncResult
  * @property {boolean} restored               a payload authenticated and was applied
- * @property {'wif-only' | 'no-chains' | null} skipped   why no search ran, when none did
+ * @property {'wif-only' | 'created' | 'no-chains' | null} skipped   why no search ran, when none did
  * @property {string | null} chainId          chain the applied payload came from
  * @property {string | null} updatedAt        the applied payload's own timestamp
  * @property {string[]} searchedChainIds      chains the search actually reached
@@ -677,7 +677,11 @@ const EMPTY_APPLY = {
  * unreachable. Explorer and network errors are collected per chain in
  * `errors` and never thrown; a chain whose SDK is missing or lacks the FILE
  * reads is skipped silently. Only invalid arguments throw. A wif-only wallet
- * has no seed to derive the commitment key from and is reported as skipped.
+ * has no seed to derive the commitment key from and is reported as skipped,
+ * and so is a wallet whose phrase this wallet generated (origin 'created'):
+ * nothing can have been published from a phrase that did not exist before,
+ * and searching anyway held wallet creation on the per-chain explorer
+ * timeout (about 14 s on an iPhone, 2026-10-12).
  *
  * @param {RestoreLabelSyncOpts} opts
  * @returns {Promise<RestoreLabelSyncResult>}
@@ -711,7 +715,7 @@ export async function restoreLabelSyncAfterImport({
 
     const base = {
         restored: false,
-        skipped: /** @type {'wif-only' | 'no-chains' | null} */ (null),
+        skipped: /** @type {'wif-only' | 'created' | 'no-chains' | null} */ (null),
         chainId: /** @type {string | null} */ (null),
         updatedAt: /** @type {string | null} */ (null),
         searchedChainIds: /** @type {string[]} */ ([]),
@@ -723,6 +727,9 @@ export async function restoreLabelSyncAfterImport({
     if (!wallet) throw new WalletNotFoundError(walletId);
     if ((wallet.format ?? 'bip39') === 'wif-only') {
         return { ...base, skipped: 'wif-only' };
+    }
+    if (wallet.origin === 'created') {
+        return { ...base, skipped: 'created' };
     }
     const uniqueChainIds = [...new Set(chainIds.filter((id) => typeof id === 'string' && id.length > 0))];
     if (uniqueChainIds.length === 0) {
