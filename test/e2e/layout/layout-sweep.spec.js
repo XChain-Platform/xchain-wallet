@@ -22,7 +22,11 @@ const OUT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..
 test('layout sweep', async ({ page }, testInfo) => {
     test.setTimeout(45 * 60 * 1000);
     const venue = testInfo.project.name;
-    const sweep = createSweep(page, { venue, outDir: join(OUT_ROOT, venue) });
+    const sweep = createSweep(page, {
+        venue,
+        outDir: join(OUT_ROOT, venue),
+        rootFontSize: testInfo.project.metadata?.rootFontSize,
+    });
     await sweep.onboarding();
     await sweep.unlocked();
 });

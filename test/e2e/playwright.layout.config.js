@@ -13,6 +13,7 @@
 //
 //     pnpm --dir test/e2e exec playwright test --config playwright.layout.config.js
 //     ... --project=iphone-17-pro          one venue only
+//     LAYOUT_VENUES=android-lg-k51-large-text ...   Android 1.3 font scale
 //     LAYOUT_PORT=5342 ...                  own dev server, when another tree holds 5173
 //
 // Sizes are the CSS viewports of real devices. The Android ones are what the
@@ -34,6 +35,30 @@ const phone = (browserName, width, height, deviceScaleFactor) => ({
     hasTouch: true,
 });
 
+const VENUES = [
+    { name: 'android-lg-k51', use: phone('chromium', 411, 814, 1.75) },
+    {
+        name: 'android-lg-k51-large-text',
+        metadata: { rootFontSize: '130%' },
+        use: phone('chromium', 411, 814, 1.75),
+    },
+    { name: 'android-small-360', use: phone('chromium', 360, 640, 2) },
+    { name: 'iphone-17-pro', use: { ...devices['iPhone 15 Pro'], viewport: { width: 402, height: 874 } } },
+    { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
+    { name: 'ipad-11', use: { ...devices['iPad Pro 11'] } },
+];
+const DEFAULT_VENUES = VENUES.filter((venue) => venue.name !== 'android-lg-k51-large-text');
+
+export function selectVenues(value) {
+    if (!value) return DEFAULT_VENUES;
+    const wanted = value.split(',').map((venue) => venue.trim()).filter(Boolean);
+    const selected = wanted.includes('all') ? VENUES : VENUES.filter((venue) => wanted.includes(venue.name));
+    if (selected.length === 0) throw new Error(`LAYOUT_VENUES names no known venue: ${wanted.join(', ')}`);
+    return selected;
+}
+
+const projects = selectVenues(process.env.LAYOUT_VENUES);
+
 export default defineConfig({
     testDir: './layout',
     testMatch: /layout-sweep\.spec\.js$/,
@@ -48,13 +73,7 @@ export default defineConfig({
         video: 'off',
         screenshot: 'off',
     },
-    projects: [
-        { name: 'android-lg-k51', use: phone('chromium', 411, 814, 1.75) },
-        { name: 'android-small-360', use: phone('chromium', 360, 640, 2) },
-        { name: 'iphone-17-pro', use: { ...devices['iPhone 15 Pro'], viewport: { width: 402, height: 874 } } },
-        { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
-        { name: 'ipad-11', use: { ...devices['iPad Pro 11'] } },
-    ],
+    projects,
     webServer: {
         command: `pnpm -C ../../packages/web dev --port ${PORT} --strictPort`,
         url: BASE_URL,
