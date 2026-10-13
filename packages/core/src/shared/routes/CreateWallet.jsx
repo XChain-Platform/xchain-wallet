@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -64,6 +64,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
+    const [quizErrorPosition, setQuizErrorPosition] = useState(/** @type {number | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [name, setName] = useState('Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -95,6 +97,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
                 `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -134,20 +137,24 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handleSubmitVerify(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (!mnemonic) return;
         const words = mnemonic.trim().split(/\s+/);
         for (const p of quizPositions) {
             const expected = (words[p - 1] || '').trim().toLowerCase();
             const got = (quizAnswers[p] || '').trim().toLowerCase();
             if (got.length === 0) {
+                setQuizErrorPosition(p);
                 setQuizError('Fill in every word.');
                 return;
             }
             if (got !== expected) {
+                setQuizErrorPosition(p);
                 setQuizError(`Word #${p} doesn't match. Double-check your written copy.`);
                 return;
             }
         }
+        setQuizErrorPosition(null);
         setQuizError(null);
         handlePersist();
     }
@@ -255,16 +262,17 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             <FormPage
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
-                status={(
-                    <>
-                        {quizError ? (
-                            <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
-                        ) : null}
-                        {persistError ? (
-                            <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                        ) : null}
-                    </>
-                )}
+                status={<FormErrorSummary
+                    errors={[
+                        ...(quizError ? [{
+                            id: quizErrorPosition ? `create-quiz-word-${quizErrorPosition}` : undefined,
+                            label: quizErrorPosition ? `Word ${quizErrorPosition}` : undefined,
+                            message: quizError,
+                        }] : []),
+                        ...(persistError ? [{ message: persistError }] : []),
+                    ]}
+                    focusKey={validationAttempt}
+                />}
                 actions={(
                     <>
                         <Button
@@ -300,11 +308,15 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     {quizPositions.map((p) => (
                         <li key={p} className={styles.quizRow}>
                             <Input
+                                id={`create-quiz-word-${p}`}
                                 label={`Word ${p}`}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
                                     setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
-                                    if (quizError) setQuizError(null);
+                                    if (quizError) {
+                                        setQuizError(null);
+                                        setQuizErrorPosition(null);
+                                    }
                                 }}
                                 autoComplete="off"
                                 autoCapitalize="off"
@@ -395,11 +407,21 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         : confirm.length === 0
             ? 'Confirm your password to continue.'
             : null;
+    let passwordErrorTarget;
+    if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
+    else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
+    else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
+    const passwordErrors = passwordError
+        ? [{ ...passwordErrorTarget, message: passwordError }]
+        : [];
     const formBody = (
         <FormPage
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
-            status={passwordStepDisabledReason ? (
+            status={passwordError ? (
+                <FormErrorSummary errors={passwordErrors} focusKey={validationAttempt} />
+            ) : passwordStepDisabledReason ? (
                 <StatusMessage id="create-wallet-disabled-reason">
                     {passwordStepDisabledReason}
                 </StatusMessage>
@@ -441,6 +463,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="off"
             />
             <Input
+                id="create-password"
                 ref={passwordRef}
                 type="password"
                 label="Password"
@@ -453,6 +476,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="new-password"
             />
             <Input
+                id="create-confirm"
                 type="password"
                 label={isFull ? 'Confirm password' : 'Confirm'}
                 value={confirm}
@@ -461,7 +485,6 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     if (passwordError) setPasswordError(null);
                 }}
                 autoComplete="new-password"
-                error={passwordError || undefined}
             />
             <fieldset className={styles.wordCountRow}>
                 <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
@@ -517,6 +540,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             matter.
                         </p>
                         <Input
+                            id="create-bip39-passphrase"
                             type="password"
                             label="BIP39 passphrase"
                             hint="Required when enabled. Capitalization and spaces matter."
@@ -528,6 +552,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             autoComplete="off"
                         />
                         <Input
+                            id="create-bip39-confirm"
                             type="password"
                             label="Confirm passphrase"
                             value={bip39PassphraseConfirm}

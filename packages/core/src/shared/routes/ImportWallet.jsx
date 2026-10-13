@@ -20,6 +20,7 @@ import {
     QrScanner,
     StatusMessage,
     InfoTip,
+    FormErrorSummary,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -195,6 +196,7 @@ export function ImportWallet({
     const [showPassphrase, setShowPassphrase] = useState(false);
     const [bip39Passphrase, setBip39Passphrase] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [busy, setBusy] = useState(false);
     // §36.1: an import ends on the same ADS notice a created wallet does,
     // and only its Continue hands control back to App.
@@ -278,6 +280,7 @@ export function ImportWallet({
 
     async function handleBackupSubmit(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (busy) return;
         const usingPointer = backupPointer !== null;
         if (!usingPointer && backupContent.trim().length === 0) {
@@ -436,6 +439,7 @@ export function ImportWallet({
 
     async function handleSubmit(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (busy) return;
         const trimmed = normalizePhraseEntry(mnemonic);
         if (trimmed.length === 0) {
@@ -586,9 +590,32 @@ export function ImportWallet({
                 : confirm.length === 0
                     ? 'Confirm your password to continue.'
                     : null;
+    const lowerError = String(error || '').toLowerCase();
+    let importErrorTarget;
+    if (lane === 'backup') {
+        if (error === NO_BACKUP_CONTENT_MESSAGE) {
+            importErrorTarget = { id: 'xc-backup-content', label: 'Backup file contents' };
+        } else if (lowerError.includes(RESTORE_PASSWORD_LABELS.file.toLowerCase())) {
+            importErrorTarget = { id: 'import-backup-file-password', label: RESTORE_PASSWORD_LABELS.file };
+        } else if (lowerError.includes(RESTORE_PASSWORD_LABELS.wallet.toLowerCase())) {
+            importErrorTarget = { id: 'import-backup-wallet-password', label: RESTORE_PASSWORD_LABELS.wallet };
+        } else if (lowerError.includes(restoreDeviceLabel(mode).toLowerCase())) {
+            importErrorTarget = { id: 'import-backup-device-password', label: restoreDeviceLabel(mode) };
+        }
+    } else if (/recovery phrase|expected .*word|mnemonic/i.test(error || '')) {
+        importErrorTarget = { id: 'xc-mnemonic', label: 'Recovery phrase' };
+    } else if (/at least .* characters/i.test(error || '')) {
+        importErrorTarget = { id: 'import-password', label: 'Password' };
+    } else if (/Passwords do not match/i.test(error || '')) {
+        importErrorTarget = { id: 'import-confirm', label: 'Confirm password' };
+    } else if (/BIP39 passphrase/i.test(error || '')) {
+        importErrorTarget = { id: 'import-bip39-passphrase', label: 'BIP39 passphrase' };
+    }
+    const importErrors = error ? [{ ...importErrorTarget, message: error }] : [];
     const formStatus = error ? (
-        <StatusMessage
-            variant="error"
+        <FormErrorSummary
+            errors={importErrors}
+            focusKey={validationAttempt}
             recovery={
                 // Anchored on the "no file yet" message
                 // itself. It used to fire on any error mentioning
@@ -599,9 +626,7 @@ export function ImportWallet({
                     ? { label: 'Browse', onAction: backupDrop.openFilePicker }
                     : undefined
             }
-        >
-            {error}
-        </StatusMessage>
+        />
     ) : formDisabledReason ? (
         <StatusMessage id="import-wallet-disabled-reason">
             {formDisabledReason}
@@ -765,6 +790,7 @@ export function ImportWallet({
                         {RESTORE_PASSWORD_INTRO}
                     </p>
                     <Input
+                        id="import-backup-file-password"
                         type="password"
                         label={RESTORE_PASSWORD_LABELS.file}
                         hint={RESTORE_PASSWORD_HINTS.file}
@@ -777,6 +803,7 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Input
+                        id="import-backup-wallet-password"
                         type="password"
                         label={RESTORE_PASSWORD_LABELS.wallet}
                         hint={RESTORE_PASSWORD_HINTS.wallet}
@@ -789,6 +816,7 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <Input
+                        id="import-backup-device-password"
                         type="password"
                         label={restoreDeviceLabel(mode)}
                         hint={restoreDeviceHint(mode)}
@@ -919,6 +947,7 @@ export function ImportWallet({
                 disabled={busy}
             />
             <Input
+                id="import-password"
                 type="password"
                 label="Password"
                 hint={
@@ -935,6 +964,7 @@ export function ImportWallet({
                 disabled={busy}
             />
             <Input
+                id="import-confirm"
                 type="password"
                 label={isFull ? 'Confirm password' : 'Confirm'}
                 value={confirm}
@@ -965,6 +995,7 @@ export function ImportWallet({
                     </label>
                     {showPassphrase ? (
                         <Input
+                            id="import-bip39-passphrase"
                             type="password"
                             label="BIP39 passphrase"
                             hint="Required to derive the same addresses as the original wallet."

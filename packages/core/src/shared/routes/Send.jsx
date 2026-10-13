@@ -24,6 +24,7 @@ import {
     Icon,
     InfoTip,
     StatusMessage,
+    FormErrorSummary,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -1760,7 +1761,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             return;
         }
         if (!toAddress.trim()) {
-            setFormError('Destination address is required.');
+            const message = 'Destination address is required.';
+            setFormError(message);
             return;
         }
         const addressError = destinationAddressError(toAddress, descriptor);
@@ -2824,23 +2826,59 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         </StatusMessage>
     ) : null;
     const hasTokenSelected = !!chainId && !!tick.trim();
+    const sendFormErrors = [];
+    if (formError) {
+        let id;
+        let label;
+        if (toError || /destination address/i.test(formError)) {
+            id = 'send-destination';
+            label = t('send.fields.to');
+        } else if (/token ticker/i.test(formError)) {
+            id = 'send-token';
+            label = t('send.fields.token');
+        } else if (/amount|dust/i.test(formError)) {
+            id = 'send-amount';
+            label = t('send.fields.amount');
+        } else if (/memo/i.test(formError)) {
+            id = 'send-memo';
+            label = t('send.memo');
+        }
+        sendFormErrors.push({ id, label, message: formError });
+    }
+    for (let i = 0; i < extraLegs.length; i += 1) {
+        const leg = extraLegs[i];
+        const errors = recipientErrors[leg.id];
+        if (errors?.to) {
+            sendFormErrors.push({
+                id: `send-recipient-${leg.id}-to`,
+                label: t('send.recipient.addressLabel', { number: i + 2 }),
+                message: errors.to,
+            });
+        }
+        if (errors?.amount) {
+            sendFormErrors.push({
+                id: `send-recipient-${leg.id}-amount`,
+                label: t('send.recipient.amountLabel', { number: i + 2 }),
+                message: errors.amount,
+            });
+        }
+    }
     return wrap(
         <FormPage
             id="send-form"
             label={t('send.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={formError ? (
-                <StatusMessage
-                    variant="error"
+            status={sendFormErrors.length > 0 ? (
+                <FormErrorSummary
+                    errors={sendFormErrors}
+                    focusKey={validationAttempt}
                     recovery={
-                        /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                        /amount/i.test(formError || '') && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                             ? { label: t('send.useMax'), onAction: onMax }
                             : undefined
                     }
-                >
-                    {formError}
-                </StatusMessage>
+                />
             ) : null}
             actions={(
                 <Button
@@ -2904,6 +2942,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             )}
             <AddressCombobox
                 size="lg"
+                id="send-destination"
                 icon="contacts"
                 label={matchedContact
                     ? <>{t('send.fields.to')} <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
@@ -2949,6 +2988,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 />
             ) : (
                 <Input
+                    id="send-token"
                     label={t('send.fields.token')}
                     hint={t('send.token.hint')}
                     value={tick}
@@ -2959,6 +2999,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             )}
             <AmountField
                 size="lg"
+                id="send-amount"
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}
@@ -3018,6 +3059,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 fields with no way to tell which recipient is
                                 being edited. */}
                             <AddressCombobox
+                                id={`send-recipient-${leg.id}-to`}
                                 label={t('send.fields.to')}
                                 aria-label={t('send.recipient.addressLabel', { number: i + 2 })}
                                 value={leg.to}
@@ -3042,6 +3084,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 />
                             ) : null}
                             <Input
+                                id={`send-recipient-${leg.id}-amount`}
                                 label={t('send.fields.amount')}
                                 aria-label={t('send.recipient.amountLabel', { number: i + 2 })}
                                 inputMode="decimal"
@@ -3206,6 +3249,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {isNativeSend ? null : (
                     <>
                         <Input
+                            id="send-memo"
                             label={t('send.memo')}
                             value={memo}
                             onChange={(e) => setMemo(e.target.value)}
