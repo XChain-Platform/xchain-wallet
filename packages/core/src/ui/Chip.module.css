@@ -1,0 +1,51 @@
+.chip {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--xc-control-h-sm);
+    padding: 0 var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-pill);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.staticChip {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.toggle {
+    appearance: none;
+    background: var(--xc-bg);
+    color: var(--xc-text);
+    cursor: pointer;
+    transition: background var(--xc-transition), border-color var(--xc-transition);
+}
+
+.toggle:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-border-strong);
+}
+
+.pressed,
+.pressed:hover:not(:disabled) {
+    background: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
+}
+
+.toggle:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.toggle:disabled {
+    cursor: not-allowed;
+    opacity: var(--xc-disabled-opacity);
+}

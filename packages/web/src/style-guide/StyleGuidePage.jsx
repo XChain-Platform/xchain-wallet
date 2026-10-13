@@ -53,6 +53,7 @@ import { ListPageSection } from './sections/ListPageSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
 import { ButtonsSection } from './sections/ButtonsSection.jsx';
+import { ChipSection } from './sections/ChipSection.jsx';
 import { DialogsSection } from './sections/DialogsSection.jsx';
 import {
     AddressComboboxSection,
@@ -88,6 +89,7 @@ export const SECTIONS = [
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
     { id: 'buttons',               label: 'Buttons',                Component: ButtonsSection, primitives: ['Button'] },
+    { id: 'chip',                  label: 'Chip',                   Component: ChipSection, primitives: ['Chip'] },
     { id: 'dialogs',               label: 'Dialogs and notices',    Component: DialogsSection },
     { id: 'app-header',            label: 'App header',             Component: AppHeaderSection },
     { id: 'page-header',           label: 'Page header',            Component: PageHeaderSection, primitives: ['PageHeader'] },
