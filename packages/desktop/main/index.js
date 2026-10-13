@@ -74,9 +74,10 @@ import { attachUpdater } from './updater.js';
 import { applyTorRouting } from './torRouting.js';
 import { stateChangeForMessage } from './multiWindowState.js';
 import {
-    DEFAULT_WINDOW_BOUNDS,
     FileWindowBoundsStore,
+    MIN_WINDOW_BOUNDS,
     cascadeWindowBounds,
+    firstLaunchWindowBounds,
     normalizeWindowBounds,
     restoreWindowBounds,
     windowBoundsPathFor,
@@ -417,12 +418,13 @@ function createWindow(opts = {}) {
     const savedBounds = liveWindows().length > 0
         ? cascadeWindowBounds(rememberedWindowBounds, displays)
         : restoreWindowBounds(rememberedWindowBounds, displays);
+    const initialBounds = savedBounds
+        ?? firstLaunchWindowBounds(screen.getPrimaryDisplay().workArea);
     const win = new BrowserWindow({
         title: DESKTOP_WINDOW_TITLE,
-        ...DEFAULT_WINDOW_BOUNDS,
-        ...savedBounds,
-        minWidth: 360,
-        minHeight: 600,
+        ...initialBounds,
+        minWidth: MIN_WINDOW_BOUNDS.width,
+        minHeight: MIN_WINDOW_BOUNDS.height,
         webPreferences: {
             preload: join(here, '..', 'preload.cjs'),
             contextIsolation: true,
