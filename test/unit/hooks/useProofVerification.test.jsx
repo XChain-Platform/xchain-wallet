@@ -16,14 +16,23 @@
 // while a token arriving still does.
 
 import { describe, it, expect, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { useProofVerification } from '../../../packages/core/src/shared/hooks/useProofVerification.js';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import {
+    useActionProofVerification,
+    useProofVerification,
+} from '../../../packages/core/src/shared/hooks/useProofVerification.js';
 
 function mountHook(messaging, initialProps) {
     return renderHook(
         ({ balances, enabled }) => useProofVerification({ messaging, balances, enabled }),
         { initialProps },
     );
+}
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+    return { promise, resolve };
 }
 
 describe('useProofVerification re-fire signature', () => {
@@ -87,5 +96,71 @@ describe('useProofVerification re-fire signature', () => {
         await new Promise((resolve) => { setTimeout(resolve, 0); });
         expect(result.current).toEqual({});
         expect(verifyBalance).not.toHaveBeenCalled();
+    });
+});
+
+describe('useActionProofVerification', () => {
+    const first = { key: 'first', chainId: 'bitcoin-regtest', actionIndex: 1 };
+    const second = { key: 'second', chainId: 'bitcoin-regtest', actionIndex: 2 };
+    const third = { key: 'third', chainId: 'litecoin-regtest', actionIndex: 3 };
+
+    it('ignores item reordering and verifies again when the key set changes', async () => {
+        const verifyAction = vi.fn(async () => ({
+            status: 'verified',
+            reason: null,
+            trust: 'pinned',
+        }));
+        const messaging = { verifyAction };
+        const { result, rerender } = renderHook(
+            ({ items }) => useActionProofVerification({ messaging, items, enabled: true }),
+            { initialProps: { items: [first, second] } },
+        );
+
+        await waitFor(() => expect(result.current.first?.status).toBe('verified'));
+        await waitFor(() => expect(result.current.second?.status).toBe('verified'));
+        expect(verifyAction).toHaveBeenCalledTimes(2);
+
+        rerender({ items: [second, first] });
+        await new Promise((resolve) => { setTimeout(resolve, 0); });
+        expect(verifyAction).toHaveBeenCalledTimes(2);
+
+        rerender({ items: [first, third] });
+        await waitFor(() => expect(result.current.third?.status).toBe('verified'));
+        expect(verifyAction).toHaveBeenCalledTimes(4);
+        expect(verifyAction).toHaveBeenCalledWith({
+            chainId: 'litecoin-regtest',
+            actionIndex: 3,
+        });
+    });
+
+    it('stops workers before queued items start after unmount', async () => {
+        const pending = [];
+        const verifyAction = vi.fn(() => {
+            const request = deferred();
+            pending.push(request);
+            return request.promise;
+        });
+        const items = Array.from({ length: 7 }, (_, index) => ({
+            key: `action-${index}`,
+            chainId: 'bitcoin-regtest',
+            actionIndex: index,
+        }));
+        const messaging = { verifyAction };
+        const { unmount } = renderHook(() => useActionProofVerification({
+            messaging,
+            items,
+            enabled: true,
+        }));
+
+        await waitFor(() => expect(verifyAction).toHaveBeenCalledTimes(6));
+        unmount();
+        await act(async () => {
+            for (const request of pending) {
+                request.resolve({ status: 'verified', reason: null, trust: 'explorer' });
+            }
+            await Promise.all(pending.map((request) => request.promise));
+        });
+
+        expect(verifyAction).toHaveBeenCalledTimes(6);
     });
 });
