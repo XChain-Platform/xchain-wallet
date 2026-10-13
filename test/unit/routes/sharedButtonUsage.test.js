@@ -163,7 +163,6 @@ describe('shared route button usage', () => {
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
         const expectedInputs = { ControllerBindForm: 1, ListCreateForm: 1, MultisigCreate: 1 };
-        const expectedButtons = { MarketActivity: 1 };
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
@@ -177,7 +176,7 @@ describe('shared route button usage', () => {
 
             expect(nativeInputs, routeName).toHaveLength(expectedInputs[routeName] || 0);
             expect(inputRationales, routeName).toHaveLength(nativeInputs.length);
-            expect(nativeButtons, routeName).toHaveLength(expectedButtons[routeName] || 0);
+            expect(nativeButtons, routeName).toHaveLength(0);
             expect(rowRationales, routeName).toHaveLength(nativeButtons.length);
         }
     });
@@ -191,6 +190,24 @@ describe('shared route button usage', () => {
         expect(source).toMatch(/import\s+\{[^}]*\bListRow\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
         expect(source).toMatch(/<ListRow\b/);
         expect(source).not.toMatch(/<button\b/);
+    });
+
+    it('uses kit controls for settings switches and wallet mode choices', () => {
+        const primitives = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/_settingsPrimitives.jsx',
+        ), 'utf8');
+        const walletMode = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/components/settings/WalletModeSection.jsx',
+        ), 'utf8');
+
+        expect(primitives).toMatch(/import\s+\{\s*Switch\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(primitives).toMatch(/<Switch\b/);
+        expect(primitives).not.toMatch(/<input\b/);
+        expect(walletMode).toMatch(/import\s+\{\s*RadioGroup\s*\}\s+from\s+'@xchain-wallet\/core\/ui'/);
+        expect(walletMode).toMatch(/<RadioGroup\b/);
+        expect(walletMode).not.toMatch(/<input\b/);
     });
 });
 
@@ -242,8 +259,8 @@ describe('trade form style guide primitives', () => {
         expect(placeOrder).toMatch(/<FormPage\b/);
         expect(placeOrder).toMatch(/<EmptyState\b/);
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
-        expect(placeOrder.match(/<button\b/g)).toHaveLength(2);
-        expect(placeOrder.match(/Native buttons retain segmented-toggle pressed behavior/g)).toHaveLength(2);
+        expect(placeOrder).toMatch(/<SegmentedControl\b/);
+        expect(placeOrder).not.toMatch(/<button\b/);
     });
 
     it('uses style-guide controls throughout wallet setup routes', () => {
@@ -278,8 +295,7 @@ describe('trade form style guide primitives', () => {
 
         expect(markets).toMatch(/<Input\b/);
         expect(markets).toMatch(/<Button\b/);
-        expect(markets.match(/<button\b/g)).toHaveLength(1);
-        expect(markets).toMatch(/<button[\s\S]*?role="tab"/);
+        expect(markets).not.toMatch(/<button\b/);
 
         for (const component of ['AddressField', 'Input', 'Select', 'Textarea', 'Button', 'EmptyState', 'SectionHeader']) {
             expect(contacts).toContain(`<${component}`);
@@ -288,9 +304,10 @@ describe('trade form style guide primitives', () => {
 
         expect(preferences).toMatch(/<FormSection\b/);
         expect(preferences).toMatch(/<FeeSelector\b/);
+        expect(preferences.match(/<RadioGroup\b/g)).toHaveLength(2);
         expect(preferences).not.toMatch(/<(?:button|select|textarea)\b/);
-        expect(preferences.match(/<input\b/g)).toHaveLength(5);
-        expect(preferences.match(/type="(?:radio|checkbox)"/g)).toHaveLength(5);
+        expect(preferences.match(/<input\b/g)).toHaveLength(1);
+        expect(preferences.match(/type="checkbox"/g)).toHaveLength(1);
 
         expect(tokens).toMatch(/<Input\b/);
         expect(tokens).toMatch(/<Button\b/);

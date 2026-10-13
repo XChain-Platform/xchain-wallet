@@ -67,8 +67,14 @@ for (const mode of ['full', 'watcher', 'signer']) {
         `MODE_OPTIONS lists ${mode}`,
     );
 }
-assert.match(sectionSrc, /<fieldset/, 'wraps options in a <fieldset>');
-assert.match(sectionSrc, /type="radio"/, 'renders radio inputs');
+assert.match(
+    sectionSrc,
+    /import \{ RadioGroup \} from '@xchain-wallet\/core\/ui';/,
+    'imports the kit RadioGroup',
+);
+assert.match(sectionSrc, /<RadioGroup/, 'renders wallet modes with RadioGroup');
+assert.match(sectionSrc, /name="walletMode"/, 'keeps the walletMode radio name');
+assert.doesNotMatch(sectionSrc, /<input\b/, 'does not render route-local radio inputs');
 assert.match(
     sectionSrc,
     /update\(\{\s*walletMode:\s*pending\s*\}\)/,
@@ -77,11 +83,7 @@ assert.match(
 assert.match(sectionSrc, /import \{ ConfirmModal \}/, 'imports the shared keyboard-safe confirmation modal');
 assert.match(sectionSrc, /<ConfirmModal/, 'mode changes require confirmation');
 assert.match(sectionSrc, /Confirm mode change/, 'confirmation has an explicit action');
-assert.match(
-    sectionSrc,
-    /aria-describedby=\{`walletMode-\$\{opt\.value\}-hint`\}/,
-    'each radio is aria-described by its hint id',
-);
+assert.match(sectionSrc, /description:\s*opt\.hint/, 'each radio keeps its linked hint');
 
 // ─── 3. Settings.jsx wiring ----------------------------------------
 
