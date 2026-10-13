@@ -1135,7 +1135,7 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         }));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
-        expect(screen.getByText(TXID)).toBeInTheDocument();
+        expect(screen.getByText('a1b2c3…deeff0')).toBeInTheDocument();
         if (kind === 'ledger') {
             expect(hardware.device.createPaymentTransaction).toHaveBeenCalledOnce();
         } else {
@@ -1150,9 +1150,11 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
         await approveHardwareSend(messaging);
 
         await waitFor(() => expect(messaging.sendAssetHw).toHaveBeenCalledOnce());
-        expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.getByLabelText(/^To$/)).toHaveValue(TO);
-        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
+        expect(await screen.findByRole('status')).toHaveTextContent(
+            'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.',
+        );
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).toBeEnabled());
         expect(screen.queryByText(/Couldn't send/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
     });
@@ -1172,9 +1174,9 @@ describe.each(['ledger', 'trezor'])('%s hardware signing flow', (kind) => {
         });
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Your hardware wallet disconnected before signing finished. Reconnect it and try again. Nothing was sent.',
+            'Your hardware wallet disconnected before signing finished. Reconnect and unlock it, then select Approve again.',
         );
-        expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Broadcast pending' })).not.toBeInTheDocument();
     });
 });
