@@ -47,7 +47,10 @@ import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
+import {
+    SIGNED_NOT_BROADCAST_TITLE,
+    submitFailureMessage,
+} from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -499,12 +502,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Inline error on the To field, e.g. a wrong-chain destination address.
     const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
-    // Raw backend/SDK/RPC error string kept for a collapsible "technical
-    // details" disclosure so debuggability is preserved without leading
-    // the review dialog with jargon.
-    const [submitErrorDetail, setSubmitErrorDetail] = useState(/** @type {string | null} */ (null));
-    // Recognized cause from humanizeError; recovery affordances key off
-    // this instead of re-parsing the displayed message text.
+    // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -593,8 +591,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     settings: loadedSettings,
                 }));
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || "Couldn't load addresses. Try again.");
+            .catch(() => {
+                if (!cancelled) {
+                    setLoadError("Couldn't load addresses. Check your connection and try again.");
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, prefill?.chainId]);
@@ -1344,11 +1344,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 setPreviewBalances({ loading: false, error: null, sdkShape });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: err?.message || 'balance fetch failed',
+                    error: 'Balances could not be loaded. Check your connection and try again.',
                     sdkShape: null,
                 });
             });
@@ -1513,7 +1513,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
         } catch (err) {
             const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
-            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Could not recover unlock keys. Try again.'));
+            setGatedScanError(bad
+                ? 'Incorrect password.'
+                : 'Could not recover unlock keys. Check your connection and try again.');
         } finally {
             setGatedScanBusy(false);
         }
@@ -2173,7 +2175,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             ...(createUndoSendRequest(settings) || {}),
         };
         setSubmitError(null);
-        setSubmitErrorDetail(null);
         setSubmitErrorCause(null);
         try {
             const res = await confirmAction.confirm({
@@ -2277,8 +2278,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            const h = humanizeError(err, 'send');
-            setFormError(h.message);
+            setFormError(submitFailureMessage(err, { verb: 'send' }));
             haptic.error();
         }
     }, [
@@ -2301,7 +2301,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         setStage('submitting');
         setSubmitError(null);
-        setSubmitErrorDetail(null);
         setSubmitErrorCause(null);
         try {
             const base = {
@@ -2360,7 +2359,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 // form with a dismissible "Transaction cancelled." toast.
                 // Form values stay intact so the user can edit and retry.
                 setSubmitError(null);
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
                 setPassword('');
                 setStage('form');
@@ -2369,16 +2367,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
             if (isBadPassword) {
                 setSubmitError('Incorrect password.');
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
             } else {
-                // #2505: lead with plain-language copy; keep the raw
-                // backend/SDK/RPC message for logs + a collapsible detail.
                 console.error('Send failed:', err); // eslint-disable-line no-console
-                const h = humanizeError(err, 'send');
-                setSubmitError(h.message);
-                setSubmitErrorDetail(rawMsg && rawMsg !== h.message ? rawMsg : null);
-                setSubmitErrorCause(h.cause);
+                const message = submitFailureMessage(err, { verb: 'send' });
+                setSubmitError(message);
+                setSubmitErrorCause(humanizeError(err, 'send').cause);
             }
             setStage('review');
             haptic.error();
@@ -2641,8 +2635,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         : [...current, saved]);
                 }
                 setContactSaveStage('saved');
-            } catch (err) {
-                setContactSaveError(err?.message || 'Could not save this contact. Try again.');
+            } catch {
+                setContactSaveError('Could not save this contact. Check your connection and try again.');
                 setContactSaveStage('editing');
             }
         };
@@ -2823,7 +2817,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 status={submitError ? (
                     <StatusMessage
                         variant="error"
-                        details={submitErrorDetail || undefined}
                         recovery={
                             submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                                 ? { label: t('send.useMax'), onAction: () => { setStage('form'); onMax(); } }
@@ -3001,7 +2994,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
-                            if (submitError) { setSubmitError(null); setSubmitErrorDetail(null); setSubmitErrorCause(null); }
+                            if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
                         }}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}

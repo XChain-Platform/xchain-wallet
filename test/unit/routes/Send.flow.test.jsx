@@ -17,6 +17,7 @@ import {
     Send,
     getUnusualSendWarnings,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -65,6 +66,7 @@ function mount({
     history = [],
     networkFeeSats = 1234,
     encoding,
+    messagingOverrides = {},
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -120,6 +122,7 @@ function mount({
             fromAddress: FROM,
             chainId: CHAIN_ID,
         }),
+        ...messagingOverrides,
     };
     // Send's supporting lookups are not part of this flow contract. Empty
     // host responses keep the test focused on the compose and submit messages.
@@ -213,6 +216,58 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('does not show SDK text when loading send or receive addresses fails', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDKHubError: request failed with status code 503\n    at load.js:4:2'),
+            { name: 'SDKHubError', code: 'HUB_UNAVAILABLE' },
+        );
+        mount({
+            messagingOverrides: {
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+            },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+
+        cleanup();
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+                getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+            }}>
+                <Receive walletId={WALLET_ID} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load wallet addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+    });
+
+    it('replaces an SDK send failure and its raw details with actionable copy', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDK wallet exploded\n    at signer.js:9:3'),
+            { name: 'SDKWalletError', code: 'SDK_WALLET_FAILED' },
+        );
+        const messaging = mount({ sendResult: sdkFailure });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'The wallet could not prepare or sign this request. Check the wallet details and try again.',
+        );
+        expect(alert).not.toHaveTextContent('SDK wallet exploded');
+        expect(alert).not.toHaveTextContent('signer.js');
+        expect(screen.queryByText(/technical details/i)).toBeNull();
+    });
+
     it('keeps field labels ahead of their values in DOM reading order', async () => {
         mount();
 

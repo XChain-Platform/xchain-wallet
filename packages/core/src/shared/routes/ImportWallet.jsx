@@ -278,7 +278,13 @@ export function ImportWallet({
         accept: ['.xchain-wallet', 'application/json', '.json', 'text/plain', '.txt'],
         readAs: 'text',
         disabled: busy,
-        onError: setError,
+        onError: (message) => {
+            const validation = typeof message === 'string'
+                && /^(?:File is too large|File type not accepted)/.test(message);
+            setError(validation
+                ? `${message} Choose a supported backup file and try again.`
+                : 'Could not read the backup file. Choose another file and try again.');
+        },
         onFile: ({ file, content }) => {
             setBackupPointer(null);
             setBackupScanning(false);
@@ -439,11 +445,14 @@ export function ImportWallet({
                     if (typeof text === 'string' && text.length > 0) {
                         handleQrFrame(text);
                     } else {
-                        setError('No QR code found in the dropped image.');
+                        setError('No QR code found in the dropped image.'
+                            + ' Choose another image or use Scan QR.');
                     }
                 })
-                .catch((err) => {
-                    setError(userFacingMessage(err, 'Could not decode QR from the dropped image.'));
+                .catch(() => {
+                    setError(
+                        'Could not read a QR code from that image. Choose another image or use Scan QR.',
+                    );
                 });
             return;
         }
@@ -469,7 +478,7 @@ export function ImportWallet({
             if (error) setError(null);
         };
         reader.onerror = () => {
-            setError('Could not read the dropped file.');
+            setError('Could not read that file. Choose another file and try again.');
         };
         reader.readAsText(file);
     }
@@ -541,7 +550,10 @@ export function ImportWallet({
                 showRestoredLabels(result?.labelSync);
             }
         } catch (err) {
-            setError(userFacingMessage(err, 'Could not import the wallet.'));
+            setError(userFacingMessage(
+                err,
+                'Could not import the wallet. Check the recovery phrase and try again.',
+            ));
             setBusy(false);
         }
     }
