@@ -168,7 +168,10 @@
             const handle = pending.get(data.id);
             if (!handle) return;
             pending.delete(data.id);
-            if (data.ok === true) {
+            if (
+                data.ok === true
+                && Object.prototype.hasOwnProperty.call(data, 'result')
+            ) {
                 handle.resolve(data.result);
             } else if (data.ok === false && isBridgeError(data.error)) {
                 const err = new Error(data.error?.message ?? 'bridge error');

@@ -43,11 +43,11 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 // window`, so a posted message is dropped before any of this is exercised.
 // A real page-world postMessage arrives with source === window, which is
 // what this builds.
-async function relay(message, origin = window.location.origin) {
+async function relay(message, origin = window.location.origin, source = window) {
     responses.length = 0;
     window.dispatchEvent(new MessageEvent('message', {
         data: message,
-        source: window,
+        source,
         origin,
     }));
     await settle();
@@ -133,6 +133,19 @@ describe('content-script relay always answers the page', () => {
         expect(replies).toEqual([]);
     });
 
+    it('drops a request whose MessageEvent source is not the current window', async () => {
+        const sendMessage = vi.fn();
+        sendMessageImpl = sendMessage;
+        const replies = await relay({
+            source: 'xchain-inject',
+            id: 'req-wrong-source',
+            type: 'bridge.getAccounts',
+            request: {},
+        }, window.location.origin, null);
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(replies).toEqual([]);
+    });
+
     it('refuses malformed requests and unknown bridge names without relaying them', async () => {
         const sendMessage = vi.fn();
         sendMessageImpl = sendMessage;
@@ -169,8 +182,11 @@ describe('content-script relay always answers the page', () => {
         expect(relayed.request.origin).toBe(window.location.origin);
     });
 
-    it('turns malformed background replies into one internal-error envelope', async () => {
-        sendMessageImpl = (_message, callback) => { callback({ result: 'missing ok' }); };
+    it.each([
+        { result: 'missing ok' },
+        { ok: true },
+    ])('turns malformed background reply %# into one internal-error envelope', async (response) => {
+        sendMessageImpl = (_message, callback) => { callback(response); };
         const replies = await relay({
             source: 'xchain-inject',
             id: 'req-bad-reply',
