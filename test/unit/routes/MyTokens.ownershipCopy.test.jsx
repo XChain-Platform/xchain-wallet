@@ -19,7 +19,7 @@
 // case the old wording got backwards, so the list test uses one.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, waitFor, cleanup } from '@testing-library/react';
+import { render, waitFor, cleanup, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
@@ -74,7 +74,7 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
     });
 
     it('a token that arrived by TRANSFER is not labelled as issued', async () => {
-        const container = mountMyTokens({
+        mountMyTokens({
             tokens: [{
                 tick: 'S18PROBE',
                 description: 'transferred in from another wallet',
@@ -86,10 +86,10 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
             }],
         });
 
-        await waitFor(() => {
-            expect(container.textContent).toContain('S18PROBE');
-        });
-        expect(container.textContent).not.toMatch(/issued/i);
+        const row = await screen.findByRole('button', { name: 'Open S18PROBE token details' });
+        expect(row).toHaveAttribute('type', 'button');
+        expect(row).toHaveTextContent('transferred in from another wallet');
+        expect(row).not.toHaveTextContent(/issued/i);
     });
 
     it('reports an ownership lookup failure instead of claiming the wallet is empty', async () => {

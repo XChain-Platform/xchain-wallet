@@ -10,7 +10,7 @@
 
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { EmptyState, MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
+import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
@@ -302,7 +302,6 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
     const roving = typeof getTabIndex === 'function';
-    const ContentTag = clickable ? 'button' : 'div';
     const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
     const escrowLabel = row.escrowed ? escrowLine(row) : null;
     const fiatLabel = row.unavailable === 'partial'
@@ -327,15 +326,13 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
             role="listitem"
             data-balance-key={pinKey}
         >
-            <ContentTag
+            <ListRow
                 className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
-                type={clickable ? 'button' : undefined}
                 onClick={handleClick}
                 aria-label={clickable ? rowAccessibleLabel : undefined}
                 tabIndex={roving ? getTabIndex(row) : undefined}
                 data-balance-option={roving ? pinKey : undefined}
-            >
-                <div className={styles.iconWrap}>
+                leading={<span className={styles.iconWrap}>
                     <span
                         className={styles.iconLetter}
                         style={{ background: tickerColor(row.tick) }}
@@ -379,9 +376,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             decoding="async"
                         />
                     ) : null}
-                </div>
-                <div className={styles.body}>
-                    <div className={styles.title}>
+                </span>}
+                title={(
+                    <span className={styles.title}>
                         <span className={styles.name} title={row.displayName}>{row.displayName}</span>
                         {multisig ? (
                             <MultisigBadge
@@ -394,11 +391,11 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                         {!isNative && verify ? (
                             <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                         ) : null}
-                    </div>
-                    <div className={styles.subtitle} title={subtitle}>{subtitle}</div>
-                </div>
-                <div className={styles.amounts}>
-                    <div className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
+                    </span>
+                )}
+                subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                trailing={<span className={styles.amounts}>
+                    <span className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
                         {/* Q-1 residual: an unread balance is not a zero, and a
                             fiat figure derived from one is not a value. When
                             nothing answered, say so instead of printing 0; when
@@ -415,9 +412,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                                         {hasPending ? <span className={styles.subtitle}> confirmed</span> : null}
                                     </FitAmount>
                                 )}
-                    </div>
+                    </span>
                     {hasPending ? (
-                        <div
+                        <span
                             className={styles.fiat}
                             data-testid="balance-pending"
                             aria-label={balancesHidden ? 'Pending balance hidden' : pendingSpeech}
@@ -425,14 +422,14 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             {balancesHidden
                                 ? '••• pending'
                                 : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
-                        </div>
+                        </span>
                     ) : null}
                     {row.escrowed ? (
-                        <div className={styles.fiat} data-testid="balance-escrowed">
+                        <span className={styles.fiat} data-testid="balance-escrowed">
                             {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
-                        </div>
+                        </span>
                     ) : null}
-                    <div
+                    <span
                         className={styles.fiat}
                         aria-label={balancesHidden
                             ? 'Fiat value hidden'
@@ -447,9 +444,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                                 : row.unavailable === 'partial'
                                     ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
                                     : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
-                    </div>
-                </div>
-            </ContentTag>
+                    </span>
+                </span>}
+            />
             {showPin ? (
                 <button
                     type="button"

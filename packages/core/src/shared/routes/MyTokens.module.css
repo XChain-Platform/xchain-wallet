@@ -40,8 +40,7 @@
     outline-offset: 2px;
 }
 
-.issueButton > span,
-.row > span {
+.issueButton > span {
     display: contents;
 }
 
@@ -134,29 +133,12 @@
 }
 
 .row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-    padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    text-align: start;
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
 }
 
 .row:hover {
-    background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
-}
-
-.row:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
 }
 
 .rowChain {
@@ -164,14 +146,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.rowText {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    min-width: 0;
-    flex: 1 1 auto;
 }
 
 .rowTick {
@@ -203,11 +177,4 @@
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-}
-
-.rowChevron {
-    flex: 0 0 auto;
-    color: var(--xc-text-muted);
-    display: inline-flex;
-    align-items: center;
 }
