@@ -22,6 +22,9 @@ import { App } from './App.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
 import { installShellErrorCapture } from './errorCapture.js';
+import { isToolbarPopupView } from './launchState.js';
+
+document.documentElement.classList.toggle('xchain-toolbar-popup', isToolbarPopupView());
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
