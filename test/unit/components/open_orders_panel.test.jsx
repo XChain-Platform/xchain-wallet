@@ -215,6 +215,25 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         expect(screen.getByText('CoinPay auto-pay on')).toBeInTheDocument();
     });
 
+    it('exposes immediate auto-pay changes as a switch', async () => {
+        const setAutopayEnabled = vi.fn().mockResolvedValue(undefined);
+        mountPanel([orderRow()], {
+            listAutopayOrders: vi.fn().mockResolvedValue([{
+                id: 'consent-17', orderActionIndex: 17, autopay: true,
+            }]),
+            setAutopayEnabled,
+        });
+
+        const toggle = await screen.findByRole('switch', { name: 'CoinPay auto-pay on' });
+        expect(toggle).toBeChecked();
+        fireEvent.click(toggle);
+
+        await waitFor(() => expect(setAutopayEnabled).toHaveBeenCalledWith({
+            id: 'consent-17',
+            enabled: false,
+        }));
+    });
+
     it('gives duplicate order responses distinct React keys', async () => {
         const secondOwner = { ...OWNER, id: 'address-2', address: 'bc1qsecondowner' };
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});

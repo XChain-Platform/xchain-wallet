@@ -19,7 +19,7 @@
 // preview surface can reuse it (§5.5).
 
 import styles from './PreflightPanel.module.css';
-import { Spinner } from '@xchain-wallet/core/ui';
+import { Checkbox, Spinner } from '@xchain-wallet/core/ui';
 // Zero-dependency helper, deliberately not the useConfirmAction module: the
 // override identity must be ONE definition shared with the Approve gate, and
 // this component is rendered by the extension approval root, so it pulls in
@@ -349,15 +349,13 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                         <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
                             <span className={styles.findingMsg}>{consensusRefusalMessage(f) || f.message}</span>
                             {f.overridable && !isHardPreflightFinding(f) ? (
-                                <label className={styles.ack}>
-                                    <input
-                                        type="checkbox"
-                                        checked={acknowledged.has(preflightFindingKey(f))}
-                                        onChange={() => onAcknowledge(preflightFindingKey(f))}
-                                        data-testid={`ack-${preflightFindingKey(f)}`}
-                                    />
-                                    Sign anyway
-                                </label>
+                                <Checkbox
+                                    className={styles.ack}
+                                    label="Sign anyway"
+                                    checked={acknowledged.has(preflightFindingKey(f))}
+                                    onChange={() => onAcknowledge(preflightFindingKey(f))}
+                                    data-testid={`ack-${preflightFindingKey(f)}`}
+                                />
                             ) : null}
                         </li>
                     ))}

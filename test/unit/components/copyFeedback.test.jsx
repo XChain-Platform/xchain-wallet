@@ -75,6 +75,15 @@ describe('clipboard control feedback', () => {
             .toMatch(/input/);
         expect(screen.getByRole('button', { name: 'Copy unsigned transaction hex' }).className)
             .toMatch(/btn/);
+        expect(screen.getByRole('radiogroup', { name: 'Animated QR format' }))
+            .toBeInTheDocument();
+        const xcw = screen.getByRole('radio', { name: 'XCW (this wallet)' });
+        const bbqr = screen.getByRole('radio', {
+            name: 'BBQr (Sparrow / Coldcard / SeedSigner)',
+        });
+        expect(xcw).toBeChecked();
+        fireEvent.click(bbqr);
+        expect(bbqr).toBeChecked();
     });
 
     it('ignores a copy result after the transaction payload changes', async () => {

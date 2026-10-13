@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    Checkbox,
     EmptyState,
     FormPage,
     Input,
@@ -858,20 +859,14 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     </p>
                     {autopayEligible ? (
                         <>
-                            <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                                <input
-                                    type="checkbox"
+                            <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                                <Checkbox
+                                    label="Enable CoinPay auto-pay"
+                                    description="We monitor for matches on your orders and send payment for them automatically."
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
-                                    style={{ marginTop: 2 }}
                                 />
-                                <span>
-                                    <strong>Enable CoinPay auto-pay</strong>
-                                    <br />
-                                    We monitor for matches on your orders and send payment for them automatically.
-                                </span>
-                            </label>
+                            </div>
                             {(() => {
                                 // The GIVE side is the coin, so this order's own
                                 // exposure is its GIVE amount: price×size when
@@ -899,16 +894,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                 return null;
                             })()}
                             {ackRequired ? (
-                                <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-start', marginTop: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                                    <input
-                                        type="checkbox"
+                                <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                                    <Checkbox
+                                        label="I understand the wallet must stay open for auto-pay to work."
                                         checked={keepOpenAck}
                                         onChange={(e) => setKeepOpenAck(e.target.checked)}
-                                        style={{ marginTop: 2 }}
                                     />
-                                    <span>I understand the wallet must stay open for auto-pay to work.</span>
-                                </label>
+                                </div>
                             ) : null}
                         </>
                     ) : (

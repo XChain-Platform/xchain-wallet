@@ -62,7 +62,7 @@ describe.each(CHAINS)('dev mock preflight for %s on %s', (ticker, network) => {
         );
         const { rerender } = render(view(acknowledged));
         expect(screen.getByText('Sign anyway')).toBeTruthy();
-        fireEvent.click(screen.getByTestId('ack-BALANCE_INSUFFICIENT'));
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Sign anyway' }));
         rerender(view(acknowledged));
         expect(canApproveWithReport(report, acknowledged)).toBe(true);
     });

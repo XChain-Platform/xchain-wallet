@@ -175,7 +175,6 @@ describe('shared route button usage', () => {
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
         const expectedInputs = { MultisigCreate: 1 };
-        const expectedButtons = { MarketActivity: 1 };
 
         for (const routeName of Object.keys(styleGuideRoutes)) {
             const source = readFileSync(
@@ -189,7 +188,7 @@ describe('shared route button usage', () => {
 
             expect(nativeInputs, routeName).toHaveLength(expectedInputs[routeName] || 0);
             expect(inputRationales, routeName).toHaveLength(nativeInputs.length);
-            expect(nativeButtons, routeName).toHaveLength(expectedButtons[routeName] || 0);
+            expect(nativeButtons, routeName).toHaveLength(0);
             expect(rowRationales, routeName).toHaveLength(nativeButtons.length);
         }
     });
@@ -224,14 +223,13 @@ describe('shared route button usage', () => {
 });
 
 describe('trade form style guide primitives', () => {
-    const targets = [
+    const nativeControlTargets = [
         'packages/core/src/shared/routes/CreateOrderForm.jsx',
         'packages/core/src/shared/routes/DispenserForm.jsx',
         'packages/core/src/shared/routes/SwapForm.jsx',
-        'packages/core/src/shared/components/PlaceOrderPanel.jsx',
     ];
 
-    it.each(targets)('%s uses kit fields and documents native control exceptions', (file) => {
+    it.each(nativeControlTargets)('%s uses kit fields and documents native control exceptions', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
         const rawInputs = source.match(/<input\b[^>]*>/g) || [];
 
@@ -243,6 +241,28 @@ describe('trade form style guide primitives', () => {
             expect(source.slice(Math.max(0, offset - 180), offset)).toMatch(
                 /Native (?:checkboxes|radios) preserve [^\n]+ because the kit has no (?:checkbox|radio) primitive\./,
             );
+        }
+    });
+
+    it('uses kit choice controls throughout the shared order panels', () => {
+        const componentControls = {
+            DerivationPathCrossCheck: ['Checkbox'],
+            OpenOrdersPanel: ['Switch'],
+            PlaceOrderPanel: ['Checkbox'],
+            PreflightPanel: ['Checkbox'],
+            WatcherResultPanel: ['RadioGroup'],
+        };
+
+        for (const [componentName, controls] of Object.entries(componentControls)) {
+            const source = readFileSync(resolve(
+                process.cwd(),
+                `packages/core/src/shared/components/${componentName}.jsx`,
+            ), 'utf8');
+
+            for (const control of controls) {
+                expect(source, componentName).toMatch(new RegExp(`<${control}\\b`));
+            }
+            expect(source, componentName).not.toMatch(/<input\b/);
         }
     });
 
@@ -271,8 +291,9 @@ describe('trade form style guide primitives', () => {
         expect(placeOrder).toMatch(/<FormPage\b/);
         expect(placeOrder).toMatch(/<EmptyState\b/);
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
-        expect(placeOrder.match(/<button\b/g)).toHaveLength(2);
-        expect(placeOrder.match(/Native buttons retain segmented-toggle pressed behavior/g)).toHaveLength(2);
+        expect(placeOrder.match(/<Checkbox\b/g)).toHaveLength(2);
+        expect(placeOrder).toMatch(/<SegmentedControl\b/);
+        expect(placeOrder).not.toMatch(/<button\b/);
     });
 
     it('uses style-guide controls throughout wallet setup routes', () => {
@@ -317,9 +338,10 @@ describe('trade form style guide primitives', () => {
 
         expect(preferences).toMatch(/<FormSection\b/);
         expect(preferences).toMatch(/<FeeSelector\b/);
+        expect(preferences.match(/<RadioGroup\b/g)).toHaveLength(2);
         expect(preferences).not.toMatch(/<(?:button|select|textarea)\b/);
-        expect(preferences.match(/<input\b/g)).toHaveLength(5);
-        expect(preferences.match(/type="(?:radio|checkbox)"/g)).toHaveLength(5);
+        expect(preferences.match(/<input\b/g)).toHaveLength(1);
+        expect(preferences.match(/type="checkbox"/g)).toHaveLength(1);
 
         expect(tokens).toMatch(/<Input\b/);
         expect(tokens).toMatch(/<Button\b/);
