@@ -74,6 +74,42 @@ export function formatDecimalAmount(value, locale, options = {}) {
     }
 }
 
+const MIN_DISPLAY_AMOUNT = '0.00000001';
+
+/**
+ * Format a user-facing amount with one policy across summary surfaces.
+ * Significant digits stay exact, insignificant trailing zeros are removed,
+ * and non-zero magnitudes below one base unit remain visible as a threshold.
+ */
+export function formatDisplayAmount(value, locale) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+    if (!match) return raw;
+
+    const sign = match[1];
+    const fraction = (match[3] || '').replace(/0+$/, '');
+    const unsigned = `${match[2]}${fraction ? `.${fraction}` : ''}`;
+    const nonZero = /[1-9]/.test(`${match[2]}${fraction}`);
+    if (nonZero && compareDecimalStrings(unsigned, MIN_DISPLAY_AMOUNT) === -1) {
+        if (sign === '-') return `> -${formatDecimalAmount(MIN_DISPLAY_AMOUNT, locale)}`;
+        return `< ${sign}${formatDecimalAmount(MIN_DISPLAY_AMOUNT, locale)}`;
+    }
+
+    const formatted = formatDecimalAmount(unsigned, locale);
+    return nonZero ? `${sign}${formatted}` : formatted;
+}
+
+/** Add a History direction sign without changing the stored amount. */
+export function formatHistoryAmount(value, direction, locale) {
+    const raw = String(value ?? '').trim();
+    const formatted = formatDisplayAmount(raw, locale);
+    if (!formatted || /^[+-]/.test(raw) || !/[1-9]/.test(raw)) return formatted;
+    if (direction === 'in') return `+${formatted}`;
+    if (direction === 'out') return `-${formatted}`;
+    return formatted;
+}
+
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
 export function formatAtomicAmount(quantity, divisibility = 0, locale) {
     const raw = String(quantity ?? '0').trim();

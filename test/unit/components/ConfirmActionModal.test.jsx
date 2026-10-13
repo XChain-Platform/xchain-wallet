@@ -68,6 +68,28 @@ describe('ConfirmActionModal', () => {
         expect(container.textContent).not.toContain('Destination');
     });
 
+    it.each([
+        ['trailing zeros', '1.25000000', '1.25'],
+        ['tiny non-zero amount', '0.000000001', '< 0.00000001'],
+        ['exact extended precision', '0.000000010000000001', '0.000000010000000001'],
+    ])('uses the shared display policy for %s', (_label, value, expected) => {
+        render(<ConfirmActionModal {...base({
+            decoded: {
+                ...DECODED,
+                summary: `Send ${value} JDOG to bc1qxyz`,
+                details: DECODED.details.map((detail) => (
+                    detail.label === 'Amount' ? { ...detail, value } : detail
+                )),
+            },
+        })} />);
+        const amount = screen.getByText('Amount').closest('div').querySelector('dd');
+        expect(amount.textContent).toBe(expected);
+        expect(screen.getByTestId('action-intent').querySelector('p').textContent)
+            .toBe(`Send ${expected} JDOG to bc1qxyz`);
+        expect(screen.getByTestId('confirm-approve').textContent)
+            .toBe(`Approve Send ${expected} JDOG to bc1qxyz`);
+    });
+
     it('shows an exact total for a native payment without adding unlike units', () => {
         const confirmAction = {
             phase: 'ready',
