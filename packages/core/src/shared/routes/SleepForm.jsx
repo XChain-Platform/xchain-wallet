@@ -357,7 +357,10 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     const titleNoun = isTick ? (resumeMode === 'resume' ? 'Resume token' : 'Pause token') : 'Lock address';
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? `Review ${titleNoun.toLowerCase()}` : titleNoun}
         />
     );
@@ -428,8 +431,8 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                             isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
                         )}
                     >
-                        {isWatcherMode ? 'Create unsigned transaction'
-                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                        {isWatcherMode ? `Create unsigned transaction: ${titleNoun.toLowerCase()}`
+                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${titleNoun.toLowerCase()}`
                                 : (descriptor ? `${titleNoun} on ${descriptor.displayName}` : titleNoun)}
                     </Button>
                 )}

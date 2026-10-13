@@ -27,6 +27,7 @@ import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
+import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -180,6 +181,17 @@ export function ActionConfirmScreen({
     // survives verbatim, and a decode carrying no outcome row (every action
     // that is not a bet or a resolve) comes back untouched.
     const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
+    const amountDetail = decoded?.details?.find((detail) => detail?.label === 'Amount');
+    const tokenDetail = decoded?.details?.find((detail) => detail?.label === 'Token');
+    const nativePaymentTotal = composed?.bareNativePayment
+        && Number.isFinite(exactSats)
+        && amountDetail?.value
+        && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
+        ? trimAmountTail(sumDecimalStrings([
+            amountDetail.value,
+            satsToCoinDecimal(exactSats),
+        ]))
+        : null;
 
     // #40: the spender, taken from the confirm hook rather than from a new
     // prop on all ~38 calling forms. Every form already passes `from` into
@@ -226,6 +238,7 @@ export function ActionConfirmScreen({
             sourceName={sourceName}
             chainLabel={chainLabel}
             feeText={exactFeeText || feeText}
+            totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             credentialsReady={credsComplete}

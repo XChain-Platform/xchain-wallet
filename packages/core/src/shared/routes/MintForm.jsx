@@ -465,7 +465,10 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review mint'
                     : `Mint`}
@@ -543,10 +546,10 @@ export function MintForm({ walletId, onBack, initialChainId, initialTick, initia
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Create unsigned transaction: mint'
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: mint`
+                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: mint`}
                     </Button>
                 )}
             >

@@ -303,7 +303,10 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? `Review ${verb.toLowerCase()}` : verb}
         />
     );
@@ -361,7 +364,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                         loading={stage === 'submitting'}
                         disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : verb}
+                        {isWatcherMode ? `Create unsigned transaction: ${verb.toLowerCase()}` : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${verb.toLowerCase()}` : verb}
                     </Button>
                 )}
             >

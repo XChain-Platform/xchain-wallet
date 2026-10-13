@@ -391,7 +391,10 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     }
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review destroy'
                     : `Destroy`}
@@ -478,10 +481,10 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Create unsigned transaction: destroy'
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: destroy`
+                                : (descriptor ? `Sign on ${descriptor.displayName}: destroy` : 'Destroy')}
                     </Button>
                 )}
             >

@@ -478,7 +478,10 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review poll' : 'Create poll'}
         />
     );
@@ -530,7 +533,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 actions={(
                     <Button type="submit" variant="primary" loading={stage === 'submitting'}
                         disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Create poll'}
+                        {isWatcherMode ? 'Create unsigned transaction: poll' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: create poll` : 'Create poll'}
                     </Button>
                 )}
             >

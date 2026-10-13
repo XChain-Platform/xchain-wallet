@@ -1904,8 +1904,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
 
     const header = (
         <PageHeader
-            onBack={onBack}
-            backLabel="Back to home"
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            backLabel={stage === 'review' ? 'Back to edit' : 'Back to home'}
             title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
             titleIcon={<Icon.SendIcon />}
         />
@@ -2189,6 +2192,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const softwareSignLabel = descriptor?.displayName
+            ? `Sign on ${descriptor.displayName}`
+            : 'Sign';
         return wrap(
             <FormPage
                 id="send-review-form"
@@ -2210,12 +2216,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? 'Create unsigned transaction: send'
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : descriptor?.displayName
-                                    ? `Sign on ${descriptor.displayName}`
-                                    : 'Sign'}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: send`
+                                : `${softwareSignLabel}: send`}
                     </Button>
                 )}
             >

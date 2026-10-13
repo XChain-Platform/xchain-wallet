@@ -540,7 +540,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${action || 'action'}`
                     : 'Advanced action'}
@@ -621,10 +624,10 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction'
+                            ? `Create unsigned transaction: ${action || 'action'}`
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${action || 'action'}`
+                                : `Sign${descriptor ? ` on ${descriptor.displayName}` : ''}: ${action || 'action'}`}
                     </Button>
                 )}
             >
