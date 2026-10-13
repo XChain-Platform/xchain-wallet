@@ -31,7 +31,7 @@ export async function listAlertsForWallet({ vault, walletId }) {
 
 /**
  * Add a price alert. Idempotent by (walletId, chainId, direction,
- * targetFiat): an existing match is returned as-is when armed, or re-armed
+ * targetFiat, fiatCurrency): an existing match is returned as-is when armed, or re-armed
  * (status → 'armed', triggeredAt → null) when it had already fired, so
  * re-adding the same alert "resets" it rather than stacking duplicates.
  *
@@ -62,15 +62,13 @@ export async function saveAlert({ vault, id, walletId, chainId, direction, targe
             status: 'armed',
             triggeredAt: null,
         };
-        const duplicate = (existing || []).find((alert) => (
-            alert.id !== id && priceAlertKey(alert) === priceAlertKey(edited)
-        ));
+        const duplicate = (existing || []).find((alert) => alert.id !== id && alertsMatch(alert, edited));
         if (duplicate) throw new Error('A matching price alert already exists');
         await vault.priceAlerts.put(edited);
         return edited;
     }
     const record = buildAlert({ walletId, chainId, direction, targetFiat, fiatCurrency });
-    const match = (existing || []).find((e) => priceAlertKey(e) === priceAlertKey(record));
+    const match = (existing || []).find((e) => alertsMatch(e, record));
     if (match) {
         if (match.status === 'triggered') {
             const rearmed = { ...match, status: 'armed', triggeredAt: null };
@@ -81,6 +79,11 @@ export async function saveAlert({ vault, id, walletId, chainId, direction, targe
     }
     await vault.priceAlerts.put(record);
     return record;
+}
+
+function alertsMatch(left, right) {
+    return priceAlertKey(left) === priceAlertKey(right)
+        && String(left.fiatCurrency || 'usd').toLowerCase() === String(right.fiatCurrency || 'usd').toLowerCase();
 }
 
 /**

@@ -60,6 +60,14 @@ describe('flows/priceAlerts', () => {
         expect(await vault.priceAlerts.count()).toBe(3);
     });
 
+    it('does not collide across fiat currencies with the same numeric target', async () => {
+        const usd = await saveAlert({ vault, ...ALERT });
+        const eur = await saveAlert({ vault, ...ALERT, fiatCurrency: 'eur' });
+
+        expect(eur.id).not.toBe(usd.id);
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
     it('re-arms a triggered alert when the same alert is re-saved', async () => {
         const a = await saveAlert({ vault, ...ALERT });
         await markAlertTriggered({ vault, id: a.id });

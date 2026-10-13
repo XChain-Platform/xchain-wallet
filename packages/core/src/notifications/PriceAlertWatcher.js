@@ -78,7 +78,7 @@ export class PriceAlertWatcher {
         this._log = taggedLogger(logger, 'price-alert');
 
         this._timer = null;
-        /** @type {Set<string>} alert ids fired this session (guards re-fire before markTriggered persists) */
+        /** @type {Set<string>} alert ids with delivery or persistence in progress */
         this._fired = new Set();
         this._ticking = false;
     }
@@ -220,6 +220,8 @@ export class PriceAlertWatcher {
         }
         try {
             await this._markTriggered(alert.id);
+            // Persistence prevents repeat delivery while allowing an edit or re-arm with the same id to fire.
+            this._fired.delete(alert.id);
         } catch (e) {
             this._log.warn('PriceAlertWatcher: markTriggered failed', e);
         }
