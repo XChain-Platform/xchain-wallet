@@ -16,6 +16,7 @@
 
 import {
     calibrateKdfParamsAsync,
+    copyMasterKey,
     deriveMasterKeyAsync,
     encryptWalletSeed,
     encryptWalletPassphrase,
@@ -40,6 +41,7 @@ import { unlockWalletRecord } from './unlockWallet.js';
  * @property {string} accountName
  * @property {string} [initialAddressLabel]         default '<TICKER> Address #1' per chain (e.g. 'BTC Address #1'); an explicit value is used as-is for every chain
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
+ * @property {Uint8Array} [masterKey]                    key the caller already derived from `password` under `kdfParams` (the vault key at onboarding); requires `kdfParams`. Copied on receipt, never zeroed here: the caller zeroes its own
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -61,17 +63,26 @@ export async function persistHdWallet({
     accountName,
     initialAddressLabel,
     kdfParams,
+    masterKey: suppliedMasterKey,
     vault,
     chainRegistry,
     sdkRegistry,
     activeChainIds,
     activeNetwork,
 }) {
+    // A supplied key belongs to the params it was derived with; calibrating
+    // fresh ones beside it would seal a seed no password opens.
+    if (suppliedMasterKey !== undefined && kdfParams === undefined) {
+        throw new Error('persistHdWallet: a supplied masterKey needs the kdfParams it was derived with');
+    }
     // 1. Pick KDF params; shells/tests override to skip calibration.
     const effectiveKdfParams = kdfParams ?? await calibrateKdfParamsAsync();
-    // Derive once and hand the same key to the encrypt (step 2) and the
-    // unlock (step 5); each copies it, and this flow zeroes its own.
-    const masterKey = await deriveMasterKeyAsync(password, effectiveKdfParams);
+    // Derive once (or copy the caller's key for these same params) and hand
+    // it to the encrypt (step 2) and the unlock (step 5); each copies it, and
+    // this flow zeroes its own.
+    const masterKey = suppliedMasterKey === undefined
+        ? await deriveMasterKeyAsync(password, effectiveKdfParams)
+        : copyMasterKey(suppliedMasterKey);
     let walletRecord;
     let account;
     let signer;

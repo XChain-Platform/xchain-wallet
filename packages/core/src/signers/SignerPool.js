@@ -37,6 +37,7 @@
 
 import { PassphraseMismatchError, unlockWalletRecord } from '../flows/unlockWallet.js';
 import { encryptWalletPassphrase } from '../crypto/walletBlob.js';
+import { kdfParamsEqual } from '../crypto/kdf.js';
 
 /**
  * @typedef {Object} PopulateSummary
@@ -110,9 +111,20 @@ export class SignerPool {
      *   have none stored yet, and checked against each one's stored addresses
      * @param {import('../registry/index.js').ChainRegistry} opts.chainRegistry
      * @param {import('../sdk/SDKRegistry.js').SDKRegistry} opts.sdkRegistry
+     * @param {Uint8Array} [opts.masterKey]   a key the caller already derived from THIS `password`
+     *   under `masterKeyKdfParams` (the vault key, at unlock). Handed to every wallet whose own
+     *   kdfParams equal those, so that wallet skips its Argon2id round; any other wallet derives
+     *   as usual. Never copied, kept or zeroed here: each signer copies it, the caller zeroes it
+     * @param {import('../crypto/kdf.js').KdfParams} [opts.masterKeyKdfParams]  the params `masterKey`
+     *   was derived with; required with it
      * @returns {Promise<PopulateSummary>}
      */
-    async populate({ vault, password, bip39Passphrase = '', chainRegistry, sdkRegistry }) {
+    async populate({
+        vault, password, bip39Passphrase = '', chainRegistry, sdkRegistry, masterKey, masterKeyKdfParams,
+    }) {
+        if (masterKey !== undefined && masterKeyKdfParams === undefined) {
+            throw new Error('SignerPool.populate: a supplied masterKey needs the kdfParams it was derived with');
+        }
         /** @type {PopulateSummary} */
         const summary = {
             pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
@@ -141,6 +153,11 @@ export class SignerPool {
                 signer = await unlockWalletRecord({
                     wallet: w,
                     password,
+                    // Same password and identical params derive the same key,
+                    // so the caller's one serves; anything else derives its own.
+                    masterKey: masterKey !== undefined && kdfParamsEqual(w.kdfParams, masterKeyKdfParams)
+                        ? masterKey
+                        : undefined,
                     bip39Passphrase,
                     chainRegistry,
                     sdkRegistry,
