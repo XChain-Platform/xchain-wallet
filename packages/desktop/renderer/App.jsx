@@ -30,9 +30,9 @@
 // handlers onto `session.defaultSession`. Without them, Electron
 // returns an empty device list under `contextIsolation: true`.
 
-import { Fragment, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { Skeleton } from '@xchain-wallet/core/ui';
+import { Fragment, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
+import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
@@ -145,7 +145,6 @@ import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBal
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
-import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
@@ -2739,16 +2738,13 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <ScrollRestoration routeKey={unlockedView}>
-                        <RouteErrorBoundary
-                            resetKey={`${unlockedView}:${palette.navigationKey}`}
-                            onHome={() => setUnlockedView('home')}
-                        >
-                            <Suspense fallback={<Skeleton.List rows={5} />}>
-                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                            </Suspense>
-                        </RouteErrorBoundary>
-                    </ScrollRestoration>
+                    <ShellRouteOutlet
+                        routeKey={unlockedView}
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                    >
+                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                    </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

@@ -24,9 +24,9 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton } from '@xchain-wallet/core/ui';
+import { Fragment, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
+import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -85,7 +85,6 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
-import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -2745,16 +2744,13 @@ function AppInner({ canOpenInTab }) {
                     ) : null}
                 >
                     <WatchOnlyBadge visible={isWatcherMode} />
-                    <ScrollRestoration routeKey={unlockedView}>
-                        <RouteErrorBoundary
-                            resetKey={`${unlockedView}:${palette.navigationKey}`}
-                            onHome={() => setUnlockedView('home')}
-                        >
-                            <Suspense fallback={<Skeleton.List rows={5} />}>
-                                <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
-                            </Suspense>
-                        </RouteErrorBoundary>
-                    </ScrollRestoration>
+                    <ShellRouteOutlet
+                        routeKey={unlockedView}
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                    >
+                        <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
+                    </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

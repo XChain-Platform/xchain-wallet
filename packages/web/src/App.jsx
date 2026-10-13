@@ -30,7 +30,6 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui/Skeleton.jsx';
-import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
@@ -51,6 +50,7 @@ import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain
 import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
+import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
@@ -2944,16 +2944,14 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <ScrollRestoration routeKey={unlockedView}>
-                        <RouteErrorBoundary
-                            resetKey={`${unlockedView}:${palette.navigationKey}`}
-                            onHome={() => setUnlockedView('home')}
-                        >
-                            <Suspense fallback={<Skeleton.List rows={5} />}>
-                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                            </Suspense>
-                        </RouteErrorBoundary>
-                    </ScrollRestoration>
+                    <ShellRouteOutlet
+                        routeKey={unlockedView}
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                        fallback={<Skeleton.List rows={5} />}
+                    >
+                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                    </ShellRouteOutlet>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
