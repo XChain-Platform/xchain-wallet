@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 
@@ -57,6 +57,8 @@ export function DerivationPathCrossCheck({
         : signerKind === 'ledger' ? 'Ledger' : 'your device';
 
     const [confirmed, setConfirmed] = useState(false);
+    const onConfirmedChangeRef = useRef(onConfirmedChange);
+    onConfirmedChangeRef.current = onConfirmedChange;
 
     // Reset the checkbox whenever the path or address changes. The user
     // must re-confirm if the values they were verifying have rotated under
@@ -64,8 +66,8 @@ export function DerivationPathCrossCheck({
     // change.
     useEffect(() => {
         setConfirmed(false);
-        onConfirmedChange?.(false);
-    }, [path, address, onConfirmedChange]);
+        onConfirmedChangeRef.current?.(false);
+    }, [path, address]);
 
     function handleToggle(event) {
         const next = event.target.checked;
