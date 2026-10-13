@@ -15,13 +15,20 @@
 // a stored passphrase renders nothing extra.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import {
+    __resetScreenGuardForTests,
+    installScreenGuard,
+} from '../../../packages/core/src/shared/utils/screenGuard.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __resetScreenGuardForTests();
+});
 
 const activeWallet = { id: 'w1', name: 'Cold' };
 
@@ -43,6 +50,84 @@ async function revealSeed() {
 }
 
 describe('BackupSection reveal: stored 25th-word passphrase', () => {
+    it('blocks selection and copy while protecting the screen until the phrase leaves the DOM', async () => {
+        const guard = vi.fn();
+        installScreenGuard(guard);
+        const revealMnemonicRequest = vi.fn(async () => ({
+            mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+            format: 'bip39',
+            passphraseEnabled: true,
+            bip39Passphrase: 'my 25th word',
+        }));
+        mount(revealMnemonicRequest);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
+        expect(guard).toHaveBeenLastCalledWith(true);
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        await waitFor(() => expect(screen.getByText('Your recovery phrase')).toBeTruthy());
+
+        const sheet = document.querySelector('[data-xc-recovery-sheet]');
+        const words = screen.getByText(/abandon abandon/).closest('button');
+        expect(fireEvent.copy(words)).toBe(false);
+        expect(words.style.userSelect).toBe('none');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(sheet).not.toBeInTheDocument();
+        expect(document.body.textContent).not.toContain('abandon abandon');
+        expect(document.body.textContent).not.toContain('my 25th word');
+        expect(guard).toHaveBeenLastCalledWith(false);
+    });
+
+    it('removes the old phrase immediately when the active wallet changes', async () => {
+        const revealMnemonicRequest = vi.fn(async () => ({
+            mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+            format: 'bip39',
+            passphraseEnabled: false,
+            bip39Passphrase: null,
+        }));
+        const view = mount(revealMnemonicRequest);
+        await revealSeed();
+
+        view.rerender(
+            <MessagingProvider shell="popup" messaging={{ revealMnemonicRequest }}>
+                <BackupSection activeWallet={{ id: 'w2', name: 'Hot' }} />
+            </MessagingProvider>,
+        );
+
+        expect(document.body.textContent).not.toContain('abandon abandon');
+        expect(screen.getByRole('button', { name: 'Show…' })).toBeTruthy();
+    });
+
+    it('discards an in-flight reveal when the active wallet changes', async () => {
+        let settleReveal;
+        const revealResponse = new Promise((resolve) => { settleReveal = resolve; });
+        const revealMnemonicRequest = vi.fn(() => revealResponse);
+        const view = mount(revealMnemonicRequest);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: 'pw' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal' }));
+        view.rerender(
+            <MessagingProvider shell="popup" messaging={{ revealMnemonicRequest }}>
+                <BackupSection activeWallet={{ id: 'w2', name: 'Hot' }} />
+            </MessagingProvider>,
+        );
+
+        await act(async () => {
+            settleReveal({
+                mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+                format: 'bip39',
+                passphraseEnabled: false,
+                bip39Passphrase: null,
+            });
+            await revealResponse;
+        });
+
+        expect(document.body.textContent).not.toContain('abandon abandon');
+        expect(screen.getByRole('button', { name: 'Show…' })).toBeTruthy();
+    });
+
     it('shows the passphrase under the words, with no copy control anywhere in the reveal block', async () => {
         const revealMnemonicRequest = vi.fn(async () => ({
             mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
