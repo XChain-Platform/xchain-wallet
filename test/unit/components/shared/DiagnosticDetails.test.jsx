@@ -160,6 +160,29 @@ describe('diagnostic text safety', () => {
     });
 });
 
+describe('DiagnosticDetails keepAddresses', () => {
+    const ADDRESS = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
+    const WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
+
+    it('redacts addresses by default', () => {
+        const { container } = render(<DiagnosticDetails summary="Skipped" items={[{ subject: ADDRESS, message: 'x' }]} />);
+        expect(container.textContent).not.toContain(ADDRESS);
+    });
+
+    it('shows typed recipients but still removes private keys', () => {
+        const { container } = render(
+            <DiagnosticDetails
+                summary="Skipped"
+                keepAddresses
+                items={[{ subject: ADDRESS, message: 'x' }, { subject: WIF, message: 'y' }]}
+            />,
+        );
+        expect(container.textContent).toContain(ADDRESS);
+        expect(container.textContent).not.toContain(WIF);
+        expect(container.textContent).toContain('[REDACTED]');
+    });
+});
+
 describe('LogConsole safety and controls', () => {
     it('renders only the newest 200 redacted entries', () => {
         mocks.entries = Array.from({ length: 205 }, (_, index) => ({

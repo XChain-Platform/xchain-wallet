@@ -44,6 +44,7 @@ const ACTIVE = {
     [DOGE]: { id: 'addr-doge', address: DOGE_FROM },
     [LTC]: { id: 'addr-ltc', address: LTC_FROM },
 };
+const NO_SAVED_FEE = Object.freeze({ strategy: null, customSatsPerKb: null, rbfByDefault: null });
 const NATIVE_TICK = { [BTC]: 'BTC', [DOGE]: 'DOGE', [LTC]: 'LTC' };
 
 function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}) {
@@ -187,7 +188,9 @@ describe('Send resets asset-specific draft fields', () => {
     it('clears cross-chain fields and never restores an old custom fee', async () => {
         mount({
             prefill: { chainId: BTC, tick: 'BTC', address: BTC_FROM, amount: '0.25' },
-            settings: { fees: {} },
+            // Seeded fee records with no saved custom rate: an explicitly empty
+            // record would mean no chain is configured at all.
+            settings: { fees: { [BTC]: NO_SAVED_FEE, [DOGE]: NO_SAVED_FEE } },
         });
         await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });

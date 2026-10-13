@@ -124,6 +124,9 @@ describe('Send route undo-send countdown toast', () => {
         settings.grace.undoSendEnabled = true;
         settings.grace.undoSendSeconds = 10;
         settings.grace.testSendThresholdSats = '100000000000';
+        // A seeded wallet has a fee record for each active chain; an empty
+        // record would show the no-networks screen instead of the form.
+        settings.fees = { [CHAIN]: { strategy: null, customSatsPerKb: null, rbfByDefault: null } };
         let rejectSend;
         const base = {
             getAddressesByChain: vi.fn().mockResolvedValue({

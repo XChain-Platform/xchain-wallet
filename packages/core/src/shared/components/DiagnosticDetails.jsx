@@ -15,20 +15,24 @@ const MAX_VISIBLE_ITEMS = 200;
  * @param {string} props.summary
  * @param {Array<string | { subject?: string, message: string, location?: string }>} props.items
  * @param {string} [props.className]
+ * @param {boolean} [props.keepAddresses] Show public addresses as typed, for
+ *   a list of recipients the user entered on this screen; secrets are still
+ *   redacted.
  */
-export function DiagnosticDetails({ summary, items, className }) {
+export function DiagnosticDetails({ summary, items, className, keepAddresses = false }) {
     if (!Array.isArray(items) || items.length === 0) return null;
     const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
-    const safeSummary = redactDiagnosticText(summary);
+    const show = (value) => redactDiagnosticText(value, { keepAddresses });
+    const safeSummary = show(summary);
     return (
         <details className={className}>
             <summary>{safeSummary}</summary>
             <ul>
                 {visibleItems.map((item, index) => {
                     const finding = typeof item === 'string' ? { message: item } : item;
-                    const subject = redactDiagnosticText(finding?.subject);
-                    const message = redactDiagnosticText(finding?.message);
-                    const location = redactDiagnosticText(finding?.location);
+                    const subject = show(finding?.subject);
+                    const message = show(finding?.message);
+                    const location = show(finding?.location);
                     return (
                         <li key={`${subject || location || message}-${index}`}>
                             {subject ? <><strong>{subject}</strong>: </> : null}

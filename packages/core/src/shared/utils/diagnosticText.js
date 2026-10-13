@@ -52,8 +52,12 @@ function redactBip39Phrases(value) {
  * Remove wallet-identifying and secret values before diagnostic text reaches
  * the DOM or clipboard.
  *
+ * `keepAddresses` leaves public addresses readable for a list of recipients
+ * the user typed into the current screen; keys, phrases and labeled secrets
+ * are still removed.
+ *
  * @param {unknown} value
- * @param {{ limit?: number }} [opts]
+ * @param {{ limit?: number, keepAddresses?: boolean }} [opts]
  * @returns {string}
  */
 export function redactDiagnosticText(value, opts = {}) {
@@ -61,15 +65,18 @@ export function redactDiagnosticText(value, opts = {}) {
         ? opts.limit
         : DIAGNOSTIC_TEXT_LIMIT;
     const input = String(value ?? '').slice(0, limit + 512);
-    const redacted = redactBip39Phrases(input
+    const secretsRemoved = input
         .replace(PHRASE_VALUE_RE, `$1${REDACTED_DIAGNOSTIC_VALUE}`)
         .replace(LABELED_VALUE_RE, redactLabeledValue)
         .replace(EXTENDED_PRIVATE_KEY_RE, REDACTED_DIAGNOSTIC_VALUE)
         .replace(WIF_RE, REDACTED_DIAGNOSTIC_VALUE)
-        .replace(PRIVATE_KEY_RE, REDACTED_DIAGNOSTIC_VALUE)
-        .replace(BECH32_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE)
-        .replace(EVM_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE)
-        .replace(BASE58_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE));
+        .replace(PRIVATE_KEY_RE, REDACTED_DIAGNOSTIC_VALUE);
+    const redacted = redactBip39Phrases(opts.keepAddresses
+        ? secretsRemoved
+        : secretsRemoved
+            .replace(BECH32_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE)
+            .replace(EVM_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE)
+            .replace(BASE58_ADDRESS_RE, REDACTED_DIAGNOSTIC_VALUE));
 
     return redacted.length > limit
         ? `${redacted.slice(0, limit)} [truncated]`

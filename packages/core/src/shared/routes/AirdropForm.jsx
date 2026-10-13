@@ -1876,6 +1876,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
                                     message: `Does not belong to ${descriptor?.displayName || chainId}.`,
