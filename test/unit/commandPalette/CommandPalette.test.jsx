@@ -153,6 +153,16 @@ describe('CommandPalette', () => {
         for (const c of commands) expect(c.run).not.toHaveBeenCalled();
     });
 
+    it('Escape still closes once focus has left the search input', () => {
+        // A click on the panel's heading, padding or Esc hint moves focus to
+        // the page; Escape used to be heard on the input only.
+        const onClose = vi.fn();
+        render(<CommandPalette open onClose={onClose} commands={makeCommands()} />);
+        getInput().blur();
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
     it('Tab jumps the selection to the next category (§33.4)', () => {
         render(<CommandPalette open onClose={() => {}} commands={makeCommands()} />);
         // Start on Home (Navigate). Tab -> first row of the next category (Settings).

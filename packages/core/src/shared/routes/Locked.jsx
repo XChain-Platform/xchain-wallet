@@ -167,7 +167,12 @@ export function Locked({ onUnlocked }) {
             return undefined;
         }
         isBiometricSupported().then((ok) => {
-            if (!cancelled) setBiometricAvailable(Boolean(ok));
+            // The native support probe also refreshes its enrollment cache.
+            // Re-read it after the asynchronous boundary so an out-of-band
+            // fingerprint change cannot leave a stale unlock button visible.
+            if (!cancelled) {
+                setBiometricAvailable(Boolean(ok) && isBiometricRegistered());
+            }
         });
         return () => { cancelled = true; };
     }, []);
@@ -315,7 +320,18 @@ export function Locked({ onUnlocked }) {
                 setBusy(false);
                 return;
             }
-            // Other biometric failures (missing credential, PRF failure) are
+            if (err?.name === 'BiometricNotRegisteredError') {
+                setBiometricAvailable(false);
+                setError(
+                    'Biometric unlock needs to be set up again. Unlock with your password,'
+                    + ' then re-enrol it in Settings.',
+                );
+                haptic.error();
+                setBusy(false);
+                inputRef.current?.focus();
+                return;
+            }
+            // Other biometric failures (such as a PRF failure) are
             // surfaced raw: they are not bad-password guesses and must NOT
             // increment the lockout counter.
             setError(err?.message || 'Biometric unlock failed.');

@@ -223,14 +223,7 @@ async function webauthnIsSupported() {
 
 /** @returns {boolean} */
 function webauthnIsRegistered() {
-    const store = getStorage();
-    if (!store) return false;
-    try {
-        const raw = store.getItem(STORAGE_KEY);
-        return Boolean(raw);
-    } catch (_err) {
-        return false;
-    }
+    return readRecord() !== null;
 }
 
 /** Discard the stored credential reference + ciphertext. */
@@ -512,9 +505,9 @@ function readRecord() {
         const parsed = JSON.parse(raw);
         if (
             !parsed
-            || typeof parsed.credentialId !== 'string'
-            || typeof parsed.prfSalt !== 'string'
-            || typeof parsed.ciphertext !== 'string'
+            || typeof parsed.credentialId !== 'string' || parsed.credentialId.length === 0
+            || typeof parsed.prfSalt !== 'string' || parsed.prfSalt.length === 0
+            || typeof parsed.ciphertext !== 'string' || parsed.ciphertext.length === 0
         ) {
             return null;
         }

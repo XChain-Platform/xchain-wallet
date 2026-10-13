@@ -13,6 +13,7 @@
 // `packages/extension/src/popup/messaging.js`; keeps shared route
 // layouts (once extracted) swap-compatible across shells.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import {
     sendMessage,
     getSessionStatus,
@@ -675,7 +676,7 @@ export function activateChainRequest(opts) {
 
 /** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**

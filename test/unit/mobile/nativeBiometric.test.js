@@ -93,6 +93,18 @@ describe('provider seam', () => {
         expect(await isBiometricSupported()).toBe(true);
         expect(plugin.biometricStatus).toHaveBeenCalled();
     });
+
+    it('refreshes enrollment while probing current availability', async () => {
+        const plugin = fakeVault();
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+        expect(isBiometricRegistered()).toBe(true);
+
+        plugin.state.wrap = null;
+        expect(await isBiometricSupported()).toBe(true);
+        expect(isBiometricRegistered()).toBe(false);
+    });
 });
 
 describe('probes never throw', () => {

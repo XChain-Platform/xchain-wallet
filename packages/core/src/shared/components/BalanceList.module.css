@@ -10,7 +10,7 @@
 .row {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-1);
     padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
     width: 100%;
@@ -19,13 +19,26 @@
     font: inherit;
 }
 
+.rowContent {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 48px;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+}
+
 .row:first-of-type {
     border-top: none;
 }
 
-/* Clickable variant - applied when an `onSelectToken` handler is wired
- * through, which turns the row tag into a <button> for the §27.6 token
- * detail page (G071). */
+/* The primary content becomes the details button while pin and hide remain
+ * separate native controls in the same row. */
 .rowClickable {
     background: transparent;
     border-inline-start: none;
@@ -97,6 +110,10 @@
     align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.title > :not(.name) {
+    flex-shrink: 0;
 }
 
 .name {
@@ -176,6 +193,9 @@
     user-select: none;
     border-radius: var(--xc-radius-sm);
     line-height: 1;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .pinBtn:hover {
@@ -205,6 +225,9 @@
     user-select: none;
     border-radius: var(--xc-radius-sm);
     line-height: 1;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
 .hideBtn:hover {

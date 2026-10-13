@@ -66,7 +66,7 @@ describe('betting history empty states', () => {
             betFeeds: () => Promise.reject(new Error('explorer unavailable')),
         }));
         const shown = utils.container.textContent || '';
-        expect(shown).toMatch(/could not load markets for any of your addresses/i);
+        expect(shown).toMatch(/could not load your markets/i);
         expect(shown).not.toMatch(/have not created any betting markets/i);
     });
 });

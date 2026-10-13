@@ -15,6 +15,13 @@
     line-height: 1.4;
 }
 
+.stepIndicator {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text-muted);
+    margin: 0 0 var(--xc-space-2);
+}
+
 .vendorGrid {
     list-style: none;
     padding: 0;

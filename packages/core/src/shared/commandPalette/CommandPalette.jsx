@@ -89,6 +89,17 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         return () => cancelAnimationFrame(id);
     }, [open]);
 
+    // Escape closes the palette wherever focus sits, as ShortcutHelp does. It
+    // was handled on the search input alone, so a click on the panel's
+    // heading, padding or Esc hint moved focus to the page and Escape stopped
+    // closing it.
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [open, onClose]);
+
     // Keep the selection in range as the result set shrinks under typing.
     useEffect(() => {
         setActiveIndex((i) => (results.length === 0 ? 0 : Math.min(i, results.length - 1)));
@@ -157,10 +168,6 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
             case 'Tab':
                 e.preventDefault();
                 jumpCategory(e.shiftKey ? -1 : 1);
-                break;
-            case 'Escape':
-                e.preventDefault();
-                onClose();
                 break;
             default:
                 break;

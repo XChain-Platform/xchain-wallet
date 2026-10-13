@@ -115,7 +115,7 @@ describe('primary actions explain missing list, publisher, and migration input',
             legacyWalletId: 'legacy-wallet', onBack() {},
         });
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        const action = screen.getByRole('button', { name: 'Create BIP39 wallet' });
+        const action = screen.getByRole('button', { name: 'Generate recovery phrase' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

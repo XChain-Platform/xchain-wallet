@@ -143,7 +143,7 @@ describe('BetFeedDetail in watcher mode', () => {
 describe('OracleConsole in watcher mode', () => {
     function cardFor(utils, index) {
         return Array.from(utils.container.querySelectorAll('div'))
-            .filter((d) => /card/i.test(String(d.className)) && /^#\d+/.test(d.textContent || ''))
+            .filter((d) => /card/i.test(String(d.className)) && /^Market number: #\d+/.test(d.textContent || ''))
             .find((d) => new RegExp(`#${index}`).test(d.textContent));
     }
 

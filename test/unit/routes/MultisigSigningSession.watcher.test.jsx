@@ -46,7 +46,7 @@ describe('MultisigSigningSession in watcher mode', () => {
             await drain();
         });
 
-        expect(utils.getByRole('button', { name: /Export transaction QR/i })).toBeTruthy();
+        expect(utils.getByRole('button', { name: /Export signing request/i })).toBeTruthy();
         expect(utils.queryByRole('button', { name: /Sign with my key/i })).toBeNull();
         expect(utils.queryByLabelText(/Wallet password/i)).toBeNull();
         expect(utils.container.textContent).toContain('Watcher mode exports signing data');

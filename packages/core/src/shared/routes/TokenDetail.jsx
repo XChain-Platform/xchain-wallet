@@ -235,12 +235,11 @@ export function TokenDetail({
                 </span>
             )}
             titleIcon={headerIconUrl ? (
-                <img
+                <AssetArtwork
                     src={headerIconUrl}
-                    alt=""
-                    aria-hidden="true"
                     className={styles.headerIcon}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    fallbackClassName={styles.headerIconFallback}
+                    fallbackText={tick}
                 />
             ) : null}
         />
@@ -355,12 +354,11 @@ export function TokenDetail({
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
                     {headerIconUrl ? (
                         <div className={styles.balanceHeroIconWrap}>
-                            <img
+                            <AssetArtwork
                                 src={headerIconUrl}
-                                alt=""
-                                aria-hidden="true"
                                 className={styles.balanceHeroIcon}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                fallbackClassName={styles.balanceHeroIconFallback}
+                                fallbackText={tick}
                             />
                             {!isNative && chainId ? (
                                 <img
@@ -1404,7 +1402,17 @@ function PgpsigBlock({ pgpsig }) {
 }
 
 function ImageHero({ img }) {
-    const anchor = (
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const failed = failedImageUrl === img.url;
+    const media = failed ? (
+        <div
+            className={styles.heroImageFallback}
+            role="img"
+            aria-label={`${img.name || 'Token media'} unavailable`}
+        >
+            Image unavailable
+        </div>
+    ) : (
         <a
             href={img.url}
             target="_blank"
@@ -1416,12 +1424,7 @@ function ImageHero({ img }) {
                 src={img.url}
                 alt={img.name || ''}
                 className={styles.heroImage}
-                onError={(e) => {
-                    const card = e.currentTarget.closest(`.${styles.galleryMediaCard}`);
-                    const a = e.currentTarget.closest('a');
-                    if (card) card.style.display = 'none';
-                    else if (a) a.style.display = 'none';
-                }}
+                onError={() => setFailedImageUrl(img.url)}
             />
         </a>
     );
@@ -1429,11 +1432,31 @@ function ImageHero({ img }) {
         return (
             <div className={styles.galleryMediaCard}>
                 <div className={styles.galleryMediaCaption}>{img.name}</div>
-                {anchor}
+                {media}
             </div>
         );
     }
-    return anchor;
+    return media;
+}
+
+function AssetArtwork({ src, className, fallbackClassName, fallbackText }) {
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    if (failedImageUrl === src) {
+        return (
+            <span className={fallbackClassName} aria-hidden="true">
+                {String(fallbackText || '?').slice(0, 2)}
+            </span>
+        );
+    }
+    return (
+        <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className={className}
+            onError={() => setFailedImageUrl(src)}
+        />
+    );
 }
 
 

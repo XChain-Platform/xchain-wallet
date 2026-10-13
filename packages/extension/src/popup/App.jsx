@@ -70,6 +70,7 @@ import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/Comman
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -158,6 +159,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -200,8 +202,9 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
     .then((module) => module.pairLedgerSigner(...args));
 
 export function App() {
+    const shell = shellForExtensionView();
     return (
-        <MessagingProvider shell="popup" messaging={messaging}>
+        <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
                 <AppInner />
@@ -321,7 +324,7 @@ function AppInner() {
     // {chainId, actionIndex, type, items} handed from ListDetail's
     // "Fork & edit" button into ListForkForm.
     const [listRef, setListRef] = useState(
-        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, actionIndex: string, origin?: 'shared', directoryChainId?: string } | null} */ (null),
     );
     const [listForkRef, setListForkRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, type: string, items: string[] } | null} */ (null),
@@ -438,14 +441,9 @@ function AppInner() {
         }),
     );
 
-    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
-    // handler routes immediately, but `refresh()` (fired by Locked's
-    // onUnlocked) resets the view to 'home', which stomped the route
-    // whenever the popup opened locked. Re-applied once the session
-    // reports unlocked, then cleared.
-    const pendingUriView = useRef(
-        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
-    );
+    // The route guard remains armed until the wallet becomes active because
+    // per-wallet last-view restoration runs after the unlock refresh.
+    const launchRouteState = useRef(createLaunchRouteState());
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -454,10 +452,8 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
-                if (next?.state === 'unlocked' && pendingUriView.current) {
-                    setUnlockedView(pendingUriView.current);
-                    pendingUriView.current = null;
-                }
+                const launchView = launchRouteState.current.takeForSession(next);
+                if (launchView) setUnlockedView(launchView);
             })
             .catch((err) =>
                 setStatus({
@@ -507,10 +503,10 @@ function AppInner() {
                     memo: intent.memo,
                 });
                 setUnlockedView('send');
-                pendingUriView.current = 'send';
+                launchRouteState.current.remember('send');
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
-                pendingUriView.current = 'receive';
+                launchRouteState.current.remember('receive');
             } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
                 // Explorer Write-tab deep link: land on the EXECUTE form
                 // prefilled. Unroutable without a contract index and a
@@ -521,7 +517,7 @@ function AppInner() {
                     paramsText: intent.executeParams || '',
                 });
                 setUnlockedView('contract-execute');
-                pendingUriView.current = 'contract-execute';
+                launchRouteState.current.remember('contract-execute');
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; defensive
@@ -648,7 +644,11 @@ function AppInner() {
         walletId: activeWalletId,
         currentView: unlockedView,
         onResume: setUnlockedView,
+        skip: launchRouteState.current.shouldSkipLastViewResume(),
     });
+    useEffect(() => {
+        if (activeWalletId) launchRouteState.current.walletActivated();
+    }, [activeWalletId]);
 
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked; contacts feed its fuzzy search and
@@ -676,7 +676,9 @@ function AppInner() {
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
-        messaging.getWalletBalances(activeWalletId, activeAccountId)
+        // The balances Home shows, so a coin opened from here matches
+        // Home's figure (a demo wallet's are synthesized, not read).
+        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
             .then((balances) => {
                 if (cancelled) return;
                 setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
@@ -702,7 +704,7 @@ function AppInner() {
 
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
-    // popup locks via messaging.lockWallet (Home owns the visible Lock button).
+    // popup locks via messaging.lockWallet, the same call as Home's lock button.
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
@@ -1142,11 +1144,11 @@ function AppInner() {
                     <ListDetail
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
-                        onBack={() => setUnlockedView('lists')}
+                        onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
-                        onShare={(ref) => { setListRef(ref); setUnlockedView('list-share'); }}
-                        onTransfer={(ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
-                        onRename={(ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
+                        onShare={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-share'); }}
+                        onTransfer={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
+                        onRename={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
                     />
                 );
             }
@@ -1218,8 +1220,17 @@ function AppInner() {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
                         mode="browse"
+                        onOpenList={(chainId, actionIndex) => {
+                            setListRef({
+                                chainId,
+                                actionIndex,
+                                origin: 'shared',
+                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                            });
+                            setUnlockedView('list-detail');
+                        }}
                         onBack={() => setUnlockedView('lists')}
                     />
                 );
@@ -2599,6 +2610,9 @@ function AppInner() {
                         // reach Settings from the nav rail, and a second entry
                         // in the hero would be duplicate chrome.
                         onOpenSettings={() => openSettingsSection(null)}
+                        // No header here either, so Home shows the lock
+                        // button that web and desktop keep in their header.
+                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
                     />
                 </>
             );

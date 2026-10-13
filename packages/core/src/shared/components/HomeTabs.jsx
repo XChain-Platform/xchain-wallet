@@ -70,7 +70,7 @@ import styles from './HomeTabs.module.css';
  * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const [active, setActive] = useState('coins');
     // Inline filter row (search + network dropdown) is collapsed by
     // default and revealed by the filter button in the hero. State lives
@@ -94,7 +94,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     const { settings, loading: settingsLoading } = useSettings();
     const nativeCoins = useMemo(() => {
         if (settingsLoading || isDemoWallet(walletId)) return [];
-        return builtRows.filter((r) => r.kind === 'native').map((r) => coinFromChainId(r.chainId));
+        return builtRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
     }, [builtRows, settingsLoading, walletId]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
@@ -105,7 +105,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     const allRows = useMemo(() => priceNativeRows(builtRows, nativeRates), [builtRows, nativeRates]);
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
-        return allRows.filter((r) => coinFromChainId(r.chainId) === networkFilter);
+        return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
     }, [allRows, networkFilter]);
 
     const coins = useMemo(
@@ -127,7 +127,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         const out = [];
         for (const o of ownedTokens) {
             if (held.has(`${o.chainId}:${o.tick}`)) continue;
-            if (networkFilter !== 'all' && coinFromChainId(o.chainId) !== networkFilter) continue;
+            const coin = chainRegistry.get(o.chainId)?.coin || coinFromChainId(o.chainId);
+            if (networkFilter !== 'all' && coin !== networkFilter) continue;
             if (tokenQueryTrim && !o.tick.toLowerCase().includes(tokenQueryTrim)) continue;
             const row = buildPlatformTokenRow(o.chainId, o.tick, null, chainRegistry);
             if (!row) continue;
@@ -181,6 +182,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
                 onCommandPalette={onCommandPalette}
                 onOpenSettings={onOpenSettings}
+                onLockWallet={onLockWallet}
             />
 
             <PortfolioChart
