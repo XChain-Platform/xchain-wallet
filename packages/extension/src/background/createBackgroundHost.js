@@ -940,6 +940,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -948,6 +949,7 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
+        surfaceStateEvents,
         // Called after a settings.update whose patch touches
         // `privacy`, so a shell that routes requests itself can re-apply
         // before the next one. Desktop uses it for Tor routing; the web
@@ -985,6 +987,15 @@ export function createBackgroundHost(deps) {
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
     const sendHold = injectedSendHold ?? createSendHoldRegistry();
+
+    async function publishSurfaceState(kind, payload) {
+        if (typeof surfaceStateEvents?.publish !== 'function') return;
+        try {
+            await surfaceStateEvents.publish(kind, payload);
+        } catch {
+            // Surface notification is best-effort after the vault mutation commits.
+        }
+    }
 
     async function sendWithHold(req, flowDeps) {
         const opts = { ...req, ...flowDeps };
@@ -1223,7 +1234,11 @@ export function createBackgroundHost(deps) {
 
     // The wallet UI names the wallet the user just selected, so connected
     // sites can get accountsChanged with that wallet's granted accounts.
-    host.register('wallet.setActive', (req, { vault }) => announceWalletSwitch(req, vault, bridgeEvents));
+    host.register('wallet.setActive', async (req, { vault }) => {
+        const result = await announceWalletSwitch(req, vault, bridgeEvents);
+        await publishSurfaceState('wallet', { walletId: req.walletId });
+        return result;
+    });
 
     // Add a wallet to an already-open vault; the Add Wallet create and import
     // screens both land here. `wallet.create` / `wallet.import` are not
@@ -1507,6 +1522,7 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
@@ -1546,6 +1562,9 @@ export function createBackgroundHost(deps) {
                 // not routing the way the UI now claims.
                 console.error('[xchain] privacy settings apply failed:', err);
             }
+        }
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await publishSurfaceState('network', { settings: result });
         }
         return result;
     });
