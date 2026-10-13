@@ -138,7 +138,7 @@ describe('contextual route state', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('List not found.')).toBeInTheDocument();
+        expect(await screen.findByText('List not found')).toBeInTheDocument();
         expect(screen.queryByText('Loading…')).toBeNull();
     });
 

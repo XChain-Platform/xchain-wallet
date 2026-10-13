@@ -227,7 +227,7 @@ export function ContractDetail({
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <EmptyState title="Contract not found." />
+                    <EmptyState title="Contract not found" body="It may have been removed or not indexed yet." />
                 </ListPage>
             </Screen>
         );

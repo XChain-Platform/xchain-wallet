@@ -306,7 +306,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         const mode = await screen.findByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Select MiXeD! on Litecoin' }));
+        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });

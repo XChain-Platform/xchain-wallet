@@ -146,8 +146,12 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App no longer passes hasBtcAddress into a nav rail`);
 }
 
-assert.ok(!/LeftNav/.test(popupApp),
-    'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
+assert.ok(!/<LeftNav[\s>\/]/.test(popupApp),
+    'Extension popup intentionally does NOT mount LeftNav directly (always compact per §24.1)');
+assert.ok(/<FullLayoutWithNav[\s\S]*?bottomBar=\{\(\s*<BottomTabBar/.test(popupApp),
+    'Extension popup navigates through FullLayoutWithNav with a BottomTabBar only');
+assert.ok(/<BottomTabBar[\s\S]*?hasVmAddress=\{hasVmAddress\}/.test(popupApp),
+    'Extension popup BottomTabBar takes the registry VM gate');
 
 console.log(
     'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasVmAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',

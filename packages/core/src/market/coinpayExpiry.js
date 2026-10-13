@@ -13,7 +13,7 @@
 // A coinpay obligation's `expiration` is a UNIX timestamp in seconds,
 // not a block height: the indexer sets it to `BLOCK_TIME +
 // COINPAY_EXPIRATION` (order_match.js), default a 2-hour window. The
-// review + picker screens previously labelled it "Expires at block N",
+// review + picker screens must never label it "Expires at block N",
 // which is not just cosmetically wrong: the protocol warns that a
 // COINPAY confirming after expiry loses the buyer's native coin with no
 // settlement, so a user who reads a far-future "block" number can

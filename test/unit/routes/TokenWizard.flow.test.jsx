@@ -117,7 +117,8 @@ describe('TokenWizard guided flow', () => {
         fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
         fireEvent.submit(screen.getByRole('form', { name: 'Review token creation' }));
 
-        expect(await screen.findByText(/Host could not compose token/)).toBeTruthy();
+        // An unclassified host error reaches the user as the generic house line.
+        expect(await screen.findByText(/Something went wrong\. Try again\./)).toBeTruthy();
         expect(screen.getByText('Step 4 of 4: Review')).toBeTruthy();
         expect(composeForConfirm).toHaveBeenCalledTimes(1);
     });

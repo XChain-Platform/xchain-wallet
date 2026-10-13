@@ -128,10 +128,10 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
     it('keeps a symbol ticker spelling selected from the token picker', async () => {
         mount({ initialType: '1', tokenTick: 'MiXeD!' });
         const textarea = await screen.findByLabelText('Tokens (one per line)');
-        expect(textarea).toHaveAttribute('autocapitalize', 'none');
+        expect(textarea).toHaveAttribute('autocapitalize', 'off');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByLabelText('Open MiXeD! details'));
+        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue('MiXeD!');
     });

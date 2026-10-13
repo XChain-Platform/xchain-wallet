@@ -51,7 +51,12 @@ describe('History usability', () => {
         ));
 
         expect(screen.getByText(expected)).toBeInTheDocument();
-        expect(screen.queryByText(/ UTC$/)).toBeNull();
+        // On a host whose local zone is UTC the local rendering legitimately
+        // ends in UTC, so the absence check only means something elsewhere.
+        const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (localZone !== 'UTC' && localZone !== 'Etc/UTC') {
+            expect(screen.queryByText(/ UTC$/)).toBeNull();
+        }
     });
 
     it('opens the selected row', () => {

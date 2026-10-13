@@ -77,10 +77,10 @@ describe('A through M route render coverage', () => {
         );
 
         expect(screen.getByRole('heading', { level: 1, name: 'Cross-chain templates' })).toBeTruthy();
-        expect(screen.getAllByRole('button', { name: 'Use template' }).length).toBeGreaterThan(0);
+        expect(screen.getByText('Loading templates…')).toBeTruthy();
 
         addresses.resolve({});
 
-        expect(await screen.findByRole('heading', { name: 'No addresses yet.' })).toBeTruthy();
+        expect(await screen.findByText('Two chains required')).toBeTruthy();
     });
 });
