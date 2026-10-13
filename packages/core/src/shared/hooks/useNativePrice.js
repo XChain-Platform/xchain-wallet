@@ -58,6 +58,7 @@ export function useNativePrice(chainId, opts = {}) {
     useEffect(() => {
         if (!chainId) {
             setEntry(null);
+            setLoading(false);
             setDisabled(false);
             setError(null);
             return undefined;
@@ -65,11 +66,15 @@ export function useNativePrice(chainId, opts = {}) {
         if (typeof messaging?.getNativePricesRequest !== 'function') {
             // Host doesn't expose the route; treat as disabled so the
             // UI hides the strip rather than spinning forever.
+            setEntry(null);
+            setLoading(false);
             setDisabled(true);
+            setError(null);
             return undefined;
         }
         let cancelled = false;
         setLoading(true);
+        setDisabled(false);
         setError(null);
         messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline, fiatCurrency })
             .then((result) => {

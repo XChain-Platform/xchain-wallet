@@ -98,6 +98,7 @@ export function useSignerStatus({ getStatus, chainId }) {
     const [status, setStatus] = useState(/** @type {SignerStatus} */ ('idle'));
     const [detail, setDetail] = useState(/** @type {string | null} */ (null));
     const aliveRef = useRef(true);
+    const requestRef = useRef(0);
     const timerRef = useRef(/** @type {any} */ (null));
     // Mirror the latest status into a ref so the long-lived polling
     // loop below reads the *current* value when picking its cadence.
@@ -109,12 +110,15 @@ export function useSignerStatus({ getStatus, chainId }) {
 
     const doPoll = useCallback(async (force = false) => {
         if (!getStatus || !aliveRef.current) return;
+        const request = requestRef.current + 1;
+        requestRef.current = request;
+        const isCurrent = () => aliveRef.current && requestRef.current === request;
         try {
             const interval = statusRef.current === 'available'
                 ? STEADY_INTERVAL_MS
                 : FAST_INTERVAL_MS;
             const res = await sharedStatusRead(getStatus, chainId, interval, force);
-            if (!aliveRef.current) return;
+            if (!isCurrent()) return;
             const s = typeof res === 'string' ? res : (res && res.status) || 'error';
             const d = res && typeof res === 'object' && typeof res.detail === 'string'
                 ? res.detail
@@ -123,7 +127,7 @@ export function useSignerStatus({ getStatus, chainId }) {
             setStatus(s);
             setDetail(d);
         } catch (err) {
-            if (!aliveRef.current) return;
+            if (!isCurrent()) return;
             const cancelled = isDeviceCancellation(err);
             statusRef.current = cancelled ? 'cancelled' : 'disconnected';
             setStatus(cancelled ? 'cancelled' : 'disconnected');
@@ -134,19 +138,24 @@ export function useSignerStatus({ getStatus, chainId }) {
     const refresh = useCallback(() => { doPoll(true); }, [doPoll]);
 
     useEffect(() => {
+        let cancelled = false;
         aliveRef.current = true;
         if (!getStatus) {
             setStatus('idle');
             setDetail(null);
-            return () => { aliveRef.current = false; };
+            return () => {
+                cancelled = true;
+                aliveRef.current = false;
+                requestRef.current += 1;
+            };
         }
         const scheduleNext = () => {
-            if (!aliveRef.current) return;
+            if (cancelled || !aliveRef.current) return;
             const interval = statusRef.current === 'available'
                 ? STEADY_INTERVAL_MS
                 : FAST_INTERVAL_MS;
             timerRef.current = setTimeout(async () => {
-                if (!aliveRef.current) return;
+                if (cancelled || !aliveRef.current) return;
                 if (!isDocumentHidden()) await doPoll();
                 scheduleNext();
             }, interval);
@@ -163,7 +172,9 @@ export function useSignerStatus({ getStatus, chainId }) {
             document.addEventListener('visibilitychange', onVisible);
         }
         return () => {
+            cancelled = true;
             aliveRef.current = false;
+            requestRef.current += 1;
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
