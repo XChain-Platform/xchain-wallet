@@ -138,6 +138,30 @@ describe('request provenance across the shared confirmation adapters', () => {
             utils.unmount();
         }
     });
+
+    it('foregrounds the end of a long hostname before showing the complete origin', () => {
+        const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
+        const utils = render(
+            <MessageConfirmScreen
+                confirmAction={confirmState()}
+                requestOrigin={longOrigin}
+                message="Approve this message"
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={() => {}}
+            />,
+        );
+
+        const identity = utils.getByTestId('confirm-request-origin');
+        const ending = utils.getByTestId('request-origin-host-ending');
+        const full = utils.getByTestId('request-origin-full');
+        expect(ending.textContent).toBe('security.attacker.test');
+        expect(full.textContent).toBe(longOrigin);
+        expect(identity.textContent.indexOf(ending.textContent))
+            .toBeLessThan(identity.textContent.indexOf(full.textContent));
+        utils.unmount();
+    });
 });
 
 describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', () => {
@@ -504,7 +528,8 @@ describe('§5.5 ConfirmActionModal: PSBT variant', () => {
             password=""
             onPasswordChange={() => {}}
         />);
-        expect(utils.getByText('Sign transaction')).toBeTruthy();
+        expect(utils.getByTestId('confirm-modal').getAttribute('aria-label'))
+            .toBe('Confirm Sign transaction');
     });
 
     it('foregrounds the supplied PSBT panel and still shows the report', () => {
