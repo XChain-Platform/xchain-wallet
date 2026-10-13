@@ -405,11 +405,9 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await new WebMetaBackend().load()).toBeNull();
     });
 
-    it('names the key when the stored JSON is corrupt, instead of throwing a bare SyntaxError', async () => {
+    it('falls back to absent metadata when the stored JSON is corrupt', async () => {
         globalThis.localStorage.setItem(DEFAULT_META_KEY, '{not json');
-        await expect(new WebMetaBackend().load()).rejects.toThrow(
-            new RegExp(`invalid JSON at key "${DEFAULT_META_KEY}"`),
-        );
+        await expect(new WebMetaBackend().load()).resolves.toBeNull();
     });
 
     it('clears the metadata', async () => {
@@ -419,14 +417,14 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await meta.load()).toBeNull();
     });
 
-    it('explains itself when there is no localStorage (private-mode / SSR)', () => {
+    it('falls back to absent metadata when there is no localStorage', async () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
         Object.defineProperty(globalThis, 'localStorage', {
             value: undefined,
             configurable: true,
         });
         try {
-            expect(() => new WebMetaBackend()).toThrow(/localStorage is not available/);
+            await expect(new WebMetaBackend().load()).resolves.toBeNull();
         } finally {
             if (original) Object.defineProperty(globalThis, 'localStorage', original);
             else delete globalThis.localStorage;

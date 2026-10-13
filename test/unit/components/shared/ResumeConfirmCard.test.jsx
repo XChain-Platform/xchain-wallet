@@ -57,7 +57,14 @@ describe('ResumeConfirmCard: empty offer', () => {
 });
 
 describe('ResumeConfirmCard: one session', () => {
-    beforeEach(() => offer([{ id: 's1', label: 'Send 1 BTC' }]));
+    const stored = {
+        id: 's1',
+        label: 'Send 1 BTC',
+        composed: { actionString: 'SEND|0|BTC|1|bc1qcomposed' },
+        request: { actionString: 'SEND|0|BTC|9|bc1qrequest' },
+    };
+
+    beforeEach(() => offer([stored]));
 
     it('renders the group, card and resume copy', () => {
         mount();
@@ -66,6 +73,13 @@ describe('ResumeConfirmCard: one session', () => {
         const resume = screen.getByTestId('resume-confirm-s1');
         expect(resume.textContent).toContain('Finish Send 1 BTC');
         expect(resume.textContent).toContain('Not sent yet. Approve to sign and send it.');
+    });
+
+    it('shows the exact composed action rather than request data', () => {
+        mount();
+        const action = screen.getByTestId('resume-confirm-action-s1');
+        expect(action).toHaveTextContent('Action to submit: SEND|0|BTC|1|bc1qcomposed');
+        expect(action).not.toHaveTextContent('bc1qrequest');
     });
 
     it('labels the discard button with the session', () => {

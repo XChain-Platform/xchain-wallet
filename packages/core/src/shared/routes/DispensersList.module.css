@@ -118,6 +118,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
+    /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
     box-shadow: 0 0 0 1.5px var(--xc-surface);
     object-fit: cover;
@@ -157,7 +158,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 2px var(--xc-space-2);
     border-radius: 999px;
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);

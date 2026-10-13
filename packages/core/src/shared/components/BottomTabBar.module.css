@@ -15,12 +15,12 @@
     inset-inline-start: 0;
     inset-inline-end: 0;
     bottom: 0;
-    height: 56px;
+    min-height: 3.5rem;
     display: flex;
     flex-direction: row;
     background: var(--xc-surface-raised);
     border-top: 1px solid var(--xc-border);
-    z-index: 50;
+    z-index: var(--xc-z-sticky);
     /* Respect iOS safe-area insets so the bar floats above the home indicator. */
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
@@ -35,6 +35,7 @@
 
 .tab {
     flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -47,6 +48,7 @@
     font-size: var(--xc-text-xs);
     cursor: pointer;
     padding: var(--xc-space-1) var(--xc-space-2);
+    overflow: hidden;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
@@ -66,8 +68,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 1.375rem;
+    height: 1.375rem;
+    flex: 0 0 auto;
     position: relative;
 }
 
@@ -84,7 +87,12 @@
 }
 
 .tabLabel {
+    display: block;
+    max-width: 100%;
     line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
@@ -93,8 +101,10 @@
 .scrim {
     position: fixed;
     inset: 0;
+    /* safe-area-backdrop: this layer only paints and catches outside taps;
+       the adjacent sheet owns the content insets. */
     background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
-    z-index: 60;
+    z-index: var(--xc-z-overlay);
 }
 
 .sheet {
@@ -107,10 +117,13 @@
     border-top: 1px solid var(--xc-border);
     border-start-start-radius: var(--xc-radius-lg, 12px);
     border-start-end-radius: var(--xc-radius-lg, 12px);
-    z-index: 70;
+    z-index: var(--xc-z-modal);
     max-height: 70vh;
     overflow-y: auto;
-    padding: var(--xc-space-2) 0 env(safe-area-inset-bottom, var(--xc-space-3));
+    padding: var(--xc-space-2)
+        env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, var(--xc-space-3))
+        env(safe-area-inset-left, 0px);
     box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
@@ -163,8 +176,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 1.25rem;
+    height: 1.25rem;
     flex: 0 0 auto;
 }
 
@@ -172,6 +185,7 @@
 .sheetLabel {
     flex: 1 1 auto;
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* Unread count pill on a sheet row (e.g. Messaging). */

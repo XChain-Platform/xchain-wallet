@@ -122,6 +122,7 @@ function makeWatcher(over = {}) {
     const { registry } = over.sdkRegistryPair ?? makeSdkRegistry();
     const ledger = { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
     const notify = vi.fn(async () => {});
+    const settings = over.settings ?? { notifications: { incomingReceipts: true } };
     const signer = over.signer === undefined ? { id: 'signer-1' } : over.signer;
     const coinpayAction = over.coinpayAction ?? vi.fn(async ({ onProgress }) => {
         onProgress?.('broadcast');
@@ -132,6 +133,7 @@ function makeWatcher(over = {}) {
         sdkRegistry: over.sdkRegistry ?? registry,
         chainRegistry,
         getSigner: vi.fn(() => signer),
+        getSettings: vi.fn(async () => settings),
         reservationLedger: ledger,
         notify,
         shellKind: over.shellKind ?? 'web',
@@ -139,7 +141,7 @@ function makeWatcher(over = {}) {
         now: () => over.now ?? NOW,
         coinpayAction,
     });
-    return { watcher, vault, ledger, notify, coinpayAction };
+    return { watcher, vault, ledger, notify, coinpayAction, settings };
 }
 
 describe('happy path', () => {
@@ -317,6 +319,20 @@ describe('signing fallbacks', () => {
         expect(coinpayAction).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({ reason: 'source-missing' }),
+        }));
+    });
+
+    it('gates CoinPay status notifications on incoming receipts and honors a live toggle change', async () => {
+        const settings = { notifications: { incomingReceipts: false } };
+        const { watcher, notify } = makeWatcher({ signer: null, settings });
+
+        await watcher.pollOnce();
+        expect(notify).not.toHaveBeenCalled();
+
+        settings.notifications.incomingReceipts = true;
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'coinpay-autopay-manual',
         }));
     });
 });

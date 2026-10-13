@@ -47,18 +47,6 @@
     gap: var(--xc-space-3);
 }
 
-.requestOrigin {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
-}
-
-.requestOriginLabel,
 .messageLabel {
     margin: 0;
     color: var(--xc-text-muted);
@@ -66,14 +54,6 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-}
-
-.requestOriginValue {
-    color: var(--xc-text);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
 }
 
 .fee {

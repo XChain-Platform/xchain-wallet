@@ -30,6 +30,19 @@ describe('useCommandPalette closes on navigation', () => {
         expect(result.current.open).toBe(true);
     });
 
+    it('does not toggle while the user types in an input', () => {
+        const { result } = renderHook(() => useCommandPalette());
+        const input = document.createElement('input');
+        document.body.append(input);
+
+        act(() => input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'k', ctrlKey: true, bubbles: true, cancelable: true,
+        })));
+
+        expect(result.current.open).toBe(false);
+        input.remove();
+    });
+
     it('closes when the shown view changes', () => {
         const { result, rerender } = renderHook(({ view }) => useCommandPalette({ currentView: view }), {
             initialProps: { view: 'settings' },

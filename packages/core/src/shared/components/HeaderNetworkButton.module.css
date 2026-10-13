@@ -12,7 +12,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 8px 10px;
+    padding: var(--xc-space-2) 10px;
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg);
@@ -67,13 +67,13 @@
 /* Options popover anchored beneath the trigger. */
 .networkOptions {
     list-style: none;
-    margin: 4px 0 0;
-    padding: 4px 0;
+    margin: var(--xc-space-1) 0 0;
+    padding: var(--xc-space-1) 0;
     position: absolute;
     top: 100%;
     inset-inline-start: 0;
     inset-inline-end: 0;
-    z-index: 10;
+    z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
@@ -90,7 +90,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 8px 10px;
+    padding: var(--xc-space-2) 10px;
     color: var(--xc-text);
     text-align: start;
     font-family: inherit;

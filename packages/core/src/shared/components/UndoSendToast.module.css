@@ -1,8 +1,18 @@
-/* Countdown toast card for a held send. Same card look as the toast
- * host: raised surface, subtle slide-in, instantaneous under reduced
- * motion. The parent decides where it sits on screen.
+/* Countdown toast card for a held send. It stays above compact navigation
+ * and the device safe area so its cancel action remains reachable.
  */
 .toast {
+    position: fixed;
+    inset-inline: var(--xc-space-4);
+    max-width: 28rem;
+    margin-inline: auto;
+    bottom: calc(
+        var(--xc-space-4)
+        + var(--xc-bottom-bar-h, 0px)
+        + env(safe-area-inset-bottom, 0px)
+    );
+    z-index: 9999;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -15,6 +25,14 @@
     font-size: var(--xc-text-sm);
     box-shadow: var(--xc-shadow-toast);
     animation: undo-toast-in 160ms ease-out;
+}
+
+:global(html[data-xc-keyboard='open']) .toast {
+    bottom: calc(
+        100vh - var(--xc-viewport-h, 100vh)
+        - env(safe-area-inset-top, 0px)
+        + var(--xc-space-4)
+    );
 }
 
 @media (prefers-reduced-motion: reduce) {

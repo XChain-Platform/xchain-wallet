@@ -45,8 +45,25 @@ describe('TickMemberName', () => {
     it('renders a bare item as written without a lookup', () => {
         const m = fakeMessaging(() => Promise.resolve(null));
         const { container } = mount('FOO', m);
-        expect(container.querySelector('code').textContent).toBe('FOO');
+        const code = container.querySelector('code');
+        expect(code.textContent).toBe('FOO');
+        expect(code).toHaveAttribute('aria-label', 'FOO');
+        expect(code).toHaveAttribute('title', 'FOO');
         expect(m.calls).toEqual([]);
+    });
+
+    it('visually truncates a long ticker while preserving its complete name', () => {
+        const item = 'A-VERY-LONG-TICKER-NAME-THAT-MUST-NOT-GROW-THE-ROW';
+        const m = fakeMessaging(() => Promise.resolve(null));
+        const { container } = mount(item, m);
+        const code = container.querySelector('code');
+
+        expect(code).toHaveAttribute('aria-label', item);
+        expect(code).toHaveAttribute('title', item);
+        expect(code.style.maxWidth).toBe('100%');
+        expect(code.style.overflow).toBe('hidden');
+        expect(code.style.textOverflow).toBe('ellipsis');
+        expect(code.style.whiteSpace).toBe('nowrap');
     });
 
     it('renders a future-root item as written', () => {
@@ -107,7 +124,10 @@ describe('TickMemberName', () => {
     it('keeps a coin-qualified non-id rest as written beside the coin label', () => {
         const m = fakeMessaging(() => Promise.resolve(null));
         const { container } = mount('LTC:FOO', m);
-        expect(container.querySelector('code').textContent).toContain('FOO');
+        const code = container.querySelector('code');
+        expect(code.textContent).toContain('FOO');
+        expect(code).toHaveAttribute('aria-label', 'LTC FOO');
+        expect(code).toHaveAttribute('title', 'LTC FOO');
         expect(screen.getByTestId('tick-member-coin').textContent).toBe('LTC');
         expect(m.calls).toEqual([]);
     });
