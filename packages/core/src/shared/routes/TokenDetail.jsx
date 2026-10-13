@@ -114,6 +114,16 @@ export function TokenDetail({
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
     const assetInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemo });
+    const [tokenMissing, setTokenMissing] = useState(false);
+    useEffect(() => {
+        setTokenMissing(false);
+        if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getTokenInfo({ chainId, tick })
+            .then((info) => { if (!cancelled) setTokenMissing(info == null); })
+            .catch(() => { /* A read failure is not proof that the token is gone. */ });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick, isNative, isDemo]);
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -413,6 +423,14 @@ export function TokenDetail({
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
+
+    if (tokenMissing) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage><EmptyState title="Token not found" /></ListPage>
+            </Screen>
+        );
+    }
 
     return (
         <Screen variant={variant} header={header}>

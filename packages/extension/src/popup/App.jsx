@@ -649,12 +649,21 @@ function AppInner() {
     const { isSignerMode, isWatcherMode } = useWalletMode();
 
     // §24 / G055: resume the user's last view on unlock (persisted
-    // per-wallet in localStorage). Restricted to context-free views;
-    // anything that needs a prefilled state object falls through to
-    // Home. See `lastViewMemory.RESUMABLE_VIEWS` for the set.
+    // per-wallet in localStorage). Deep views carry their validated route
+    // params so reload, Back, and Forward can prime the selected item first.
     useLastView({
         walletId: activeWalletId,
         currentView: unlockedView,
+        currentParams: unlockedView === 'token-detail' ? tokenDetailRef
+            : unlockedView === 'list-detail' ? listRef
+                : unlockedView === 'dispenser-detail' ? dispenserRef
+                    : unlockedView === 'market' ? activeMarket : null,
+        onResumeParams: (view, params) => {
+            if (view === 'token-detail' && params) setTokenDetailRef(params);
+            if (view === 'list-detail' && params) setListRef(params);
+            if (view === 'dispenser-detail' && params) setDispenserRef(params);
+            if (view === 'market' && params) setActiveMarket(params);
+        },
         onResume: setUnlockedView,
         skip: launchRouteState.current.shouldSkipLastViewResume(),
     });

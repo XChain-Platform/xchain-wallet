@@ -46,7 +46,7 @@ export function PageHeader({
     titleIcon = null,
     trailing = null,
 }) {
-    useBackHandler(onBack, backDisabled);
+    useBackHandler(onBack, backDisabled, 'route');
     return (
         <div className={styles.header}>
             {onBack ? (
