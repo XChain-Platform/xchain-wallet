@@ -56,6 +56,24 @@ function mount(messaging, props = {}) {
 afterEach(() => cleanup());
 
 describe('Address detail actions', () => {
+    it('shows address fiat balances in the selected currency', async () => {
+        mount(messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest', fiatCurrency: 'EUR' }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ADDRESS,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '50000000', divisibility: 8, fiatRate: 80000 },
+                        tokens: [],
+                    },
+                }],
+            }),
+        }));
+
+        expect(await screen.findByText('€40,000.00 EUR')).toBeInTheDocument();
+        expect(screen.queryByText('$40,000.00 USD')).toBeNull();
+    });
+
     it('reports clipboard failure and does not switch the button to Copied', async () => {
         Object.defineProperty(document, 'execCommand', {
             configurable: true,

@@ -1622,7 +1622,14 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         && isPending
         && typeof globalThis.xchainWalletWindow?.openDetached === 'function';
 
-    const detailRows = basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden);
+    const detailRows = basicDetailRows(
+        entry,
+        chainTip,
+        nativeAmount,
+        nativeFiatValue,
+        balancesHidden,
+        fiatCurrency,
+    );
     const explorerButtons = explorerLinksFor(entry);
 
     const fullRows = fullDetailRows(entry, balancesHidden);
@@ -2229,7 +2236,7 @@ function capitalize(s) {
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
  * are skipped so the table only shows what's actually populated.
  */
-function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden) {
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency) {
     if (!entry) return [];
     const rows = [];
 
@@ -2249,7 +2256,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
                 {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
-                        {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue)})
+                        {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
                     </span>
                 ) : null}
             </span>

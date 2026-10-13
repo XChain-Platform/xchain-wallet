@@ -32,6 +32,7 @@ import {
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { formatFiat } from '../components/BalanceList.jsx';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -368,20 +369,21 @@ export function ComposeMessage({
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
-    // to the time estimate. Tiny sub-cent fees collapse to "< $0.01".
+    // to the time estimate. Tiny values use the selected currency's sub-cent form.
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const { settings } = useSettings();
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
     const fiatRate = useFiatRate({
         chainCoin: chainRegistry.get(chainId)?.coin,
-        fiatCurrency: 'USD',
+        fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const v = coinToFiat(coinAmount, fiatRate);
         if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return v < 0.01 ? '< $0.01' : `$${v.toFixed(2)}`;
-    }, [fiatRate]);
+        return formatFiat(v, fiatRate?.fiatCurrency || fiatCurrency);
+    }, [fiatRate, fiatCurrency]);
 
     // Catch random text before review. A message can be delivered on any chain
     // regardless of the recipient's chain, so the address is validated only as a
