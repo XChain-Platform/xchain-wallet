@@ -18,6 +18,8 @@ function focusableElements() {
         && !element.hidden
         && !element.closest('[inert]')
         && element.getAttribute('aria-hidden') !== 'true'
+        && getComputedStyle(element).display !== 'none'
+        && getComputedStyle(element).visibility !== 'hidden'
         && Number(element.getAttribute('tabindex') ?? 0) >= 0
     ));
 }
@@ -37,17 +39,20 @@ function pressKey(key, init = {}) {
         return;
     }
 
-    if (key.length === 1 && target instanceof HTMLInputElement) {
+    if (key.length === 1 && target instanceof HTMLInputElement
+        && !['checkbox', 'radio'].includes(target.type)) {
         fireEvent.input(target, { target: { value: `${target.value}${key}` } });
         return;
     }
 
-    if (key !== 'Enter') return;
+    if (key !== 'Enter' && key !== ' ') return;
 
-    if (target instanceof HTMLButtonElement) {
+    if (target instanceof HTMLButtonElement
+        || (target instanceof HTMLInputElement && ['checkbox', 'radio'].includes(target.type))) {
         target.click();
         return;
     }
+    if (key === ' ') return;
     if (target instanceof HTMLTextAreaElement) return;
     const form = target.closest?.('form');
     if (form) form.requestSubmit();
@@ -86,7 +91,7 @@ function moveFocus(backward = false) {
 }
 
 /**
- * Minimal keyboard driver for tests that need browser-like focus, key, and form defaults.
+ * Minimal keyboard driver for tests that need browser-like focus, key, Space, and form defaults.
  */
 export const userEvent = {
     setup() {
@@ -95,6 +100,7 @@ export const userEvent = {
                 for (const token of sequence.match(/\{[^}]+\}|./g) || []) {
                     if (token === '{Enter}') pressKey('Enter');
                     else if (token === '{Escape}') pressKey('Escape');
+                    else if (token === '{Space}') pressKey(' ');
                     else if (token === '{Tab}') moveFocus(false);
                     else if (token.startsWith('{')) pressKey(token.slice(1, -1));
                     else pressKey(token);
