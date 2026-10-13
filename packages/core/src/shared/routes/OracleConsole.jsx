@@ -105,7 +105,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             const results = await Promise.all(pairs.map((p) => messaging
                 .betFeeds({ chainId: p.chainId, query: p.address, type: 'source', opts: { limit: 100 } })
                 .then((r) => ({ p, feeds: extractRows(r) }))
-                .catch(() => ({ p, feeds: [] }))));
+                .catch(() => ({ p, feeds: [], failed: true }))));
             const seen = new Set();
             const all = [];
             for (const r of results) {
@@ -120,6 +120,12 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             // unresolved is the one thing an oracle must not miss.
             const rank = (f) => (f.feed_status === 'closed' ? 0 : f.feed_status === 'open' ? 1 : 2);
             all.sort((a, b) => (rank(a) - rank(b)) || (Number(b.action_index || 0) - Number(a.action_index || 0)));
+            const failures = results.filter((r) => r.failed).length;
+            if (failures > 0) {
+                setError(failures === results.length
+                    ? 'Could not load markets for any of your addresses.'
+                    : `Could not load markets for ${failures} of your addresses. The list may be incomplete.`);
+            }
             setRows(all);
         } catch (err) {
             setError(err?.message || 'Failed to load your markets.');
@@ -257,7 +263,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         );
     }
 
-    if (error) {
+    if (error && (!rows || rows.length === 0)) {
         return wrap(
             <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
@@ -278,6 +284,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
 
     return wrap(
         <ListPage>
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">

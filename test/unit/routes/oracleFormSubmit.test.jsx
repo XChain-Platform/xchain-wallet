@@ -24,8 +24,10 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { ORACLE_ACTIVATION_DELAY_S } from '../../../packages/core/src/flows/oracleQueries.js';
+import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 
 beforeEach(() => {
+    clearDemoWalletId();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -73,7 +75,7 @@ function liveFeed(value = '0.05') {
     }];
 }
 
-function recordingMessaging({ feeds = [], consumers = { supported: true, dispensers: [] } } = {}) {
+function recordingMessaging({ feeds = [], feedsError = null, consumers = { supported: true, dispensers: [] } } = {}) {
     const calls = [];
     const record = (method) => (args) => {
         calls.push({ method, args });
@@ -84,7 +86,10 @@ function recordingMessaging({ feeds = [], consumers = { supported: true, dispens
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        oracleFeeds: (args) => { calls.push({ method: 'oracleFeeds', args }); return Promise.resolve(feeds); },
+        oracleFeeds: (args) => {
+            calls.push({ method: 'oracleFeeds', args });
+            return feedsError ? Promise.reject(feedsError) : Promise.resolve(feeds);
+        },
         oracleConsumers: (args) => { calls.push({ method: 'oracleConsumers', args }); return Promise.resolve(consumers); },
         // The confirm lane: compose host-side, pre-flight, then sign those bytes.
         composeForConfirm: (args) => {
@@ -200,6 +205,21 @@ describe('OracleForm submit payload', () => {
         expect(calls.find((c) => c.method === 'oracleConsumers').args).toEqual({
             chainId: 'bitcoin-mainnet', address: HD_ADDRESS.address,
         });
+    });
+
+    it('does not describe a failed feed read as an address with no published prices', async () => {
+        const { utils } = await mountForm({ feedsError: new Error('explorer unavailable') });
+        const shown = utils.container.textContent || '';
+        expect(shown).toMatch(/couldn't load your published prices/i);
+        expect(shown).not.toMatch(/has not published any prices yet/i);
+    });
+
+    it('shows a settled empty state for a demo wallet instead of loading forever', async () => {
+        markDemoWallet('w');
+        const { utils, calls } = await mountForm();
+        const shown = utils.container.textContent || '';
+        expect(shown).toMatch(/has not published any prices yet/i);
+        expect(calls.some((c) => c.method === 'oracleFeeds')).toBe(false);
     });
 });
 
