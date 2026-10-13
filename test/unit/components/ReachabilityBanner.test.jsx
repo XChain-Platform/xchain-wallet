@@ -15,12 +15,20 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 
 const useReachability = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ useReachability }));
 
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+
+const bannerCss = readFileSync(
+    'packages/core/src/shared/components/ReachabilityBanner.module.css',
+    'utf8',
+);
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
 
 const chain = (over = {}) => ({
     chainId: 'litecoin-testnet',
@@ -34,13 +42,18 @@ function mount(state = {}) {
     return render(<ReachabilityBanner />);
 }
 
-afterEach(() => { cleanup(); useReachability.mockReset(); });
+afterEach(() => {
+    cleanup();
+    useReachability.mockReset();
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+    if (originalInnerHeight) Object.defineProperty(window, 'innerHeight', originalInnerHeight);
+});
 
 describe('ReachabilityBanner delayed-data copy', () => {
     it('uses plain state wording and exposes one atomic polite announcement', () => {
         mount();
         const status = screen.getByRole('status');
-        expect(status).toHaveTextContent('Some wallet information is unavailable');
+        expect(status).toHaveTextContent('Network issues');
         expect(status).not.toHaveTextContent('degraded mode');
         expect(status).toHaveAttribute('aria-live', 'polite');
         expect(status).toHaveAttribute('aria-atomic', 'true');
@@ -62,7 +75,43 @@ describe('ReachabilityBanner delayed-data copy', () => {
         });
         view.rerender(<ReachabilityBanner />);
         expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
-        expect(screen.getByRole('status')).toHaveTextContent('Wallet is offline');
+        expect(screen.getByRole('status')).toHaveTextContent('Wallet offline');
+    });
+
+    it('keeps a 360 by 800 phone banner compact and reveals complete details on request', () => {
+        Object.defineProperties(window, {
+            innerWidth: { configurable: true, value: 360 },
+            innerHeight: { configurable: true, value: 800 },
+        });
+        mount({
+            perChain: [chain({
+                services: { encoder: 'unreachable', hub: 'unreachable', explorer: 'unreachable' },
+            })],
+        });
+
+        const toggle = screen.getByRole('button', { name: 'Details' });
+        const details = document.getElementById(toggle.getAttribute('aria-controls'));
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(details).not.toBeVisible();
+        expect(screen.getByText('Network issues')).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+
+        fireEvent.click(toggle);
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(details).toBeVisible();
+        expect(details).toHaveTextContent(
+            "On Litecoin testnet, you can't send or create transactions, fee prices are unavailable and balances and history may be out of date.",
+        );
+        expect(bannerCss).not.toMatch(/overflow(?:-y)?:\s*(?:auto|scroll)/);
+        expect(bannerCss).toMatch(/\.title\s*\{[^}]*white-space:\s*nowrap/s);
+        const phoneRule = /@media \(max-width:\s*(\d+)px\)\s*\{[\s\S]*?\.banner\s*\{([^}]*)\}/.exec(bannerCss);
+        expect(phoneRule).not.toBeNull();
+        expect(Number(phoneRule[1])).toBeGreaterThanOrEqual(window.innerWidth);
+        const cap = /max-height:\s*min\(([\d.]+)vh,\s*([\d.]+)rem\)/.exec(phoneRule[2]);
+        expect(cap).not.toBeNull();
+        expect(Math.min(window.innerHeight * Number(cap[1]) / 100, Number(cap[2]) * 16))
+            .toBeLessThanOrEqual(100);
     });
 
     it('names the last confirmed block and its age for a stale explorer', () => {
