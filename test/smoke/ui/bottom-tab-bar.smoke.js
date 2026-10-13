@@ -22,8 +22,8 @@
 //      footer items (Switch wallet / Settings / Lock); Contracts is
 //      gated on hasVmAddress (DEPLOY sits in COMMON_ACTIONS, so the
 //      row is not BTC-exclusive).
-//   4. CSS module declares a 56px fixed bar that respects the iOS
-//      safe-area inset.
+//   4. CSS module declares a 56px absolutely positioned bar that respects
+//      the iOS safe-area inset.
 //   5. FullLayoutWithNav grew a `bottomBar` slot; web + desktop
 //      App.jsx pass a `<BottomTabBar>` to that slot. The main pane
 //      reserves bottom-padding below 600px so the bar doesn't cover
@@ -90,11 +90,11 @@ assert.ok(/e\.key === 'Escape'[\s\S]*?setSheetOpen\(false\)/.test(barSrc),
 assert.ok(/if \(sheetOpen\) setSheetOpen\(false\)/.test(barSrc),
     'Sheet closes when the user navigates (currentView changes)');
 
-// --- 4. CSS: fixed 56px bar + safe-area inset ---------------------------
+// --- 4. CSS: absolute 56px bar + safe-area inset ------------------------
 
 const cssSrc = readFileSync(cssPath, 'utf8');
-assert.ok(/\.bar\s*\{[\s\S]*?position:\s*fixed/.test(cssSrc),
-    '.bar is fixed-positioned at the bottom of the viewport');
+assert.ok(/\.bar\s*\{[\s\S]*?position:\s*absolute/.test(cssSrc),
+    '.bar is positioned at the bottom of the measured shell');
 assert.ok(/\.bar\s*\{[\s\S]*?height:\s*56px/.test(cssSrc),
     '.bar reserves a 56px row');
 assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
@@ -124,7 +124,7 @@ assert.ok(/\{bar \? <div className=\{styles\.bottomBarSlot\}>\{bar\}<\/div>/.tes
 const navCssPath = join(core, 'src', 'shared', 'components', 'LeftNav.module.css');
 const navCssSrc = readFileSync(navCssPath, 'utf8');
 assert.ok(/\.bottomBarSlot\b[\s\S]*?display:\s*contents/.test(navCssSrc),
-    'bottomBar slot uses display:contents so the fixed bar stays at viewport');
+    'bottomBar slot uses display:contents so the absolute bar stays anchored to the layout');
 // Visibility is JS-gated (FullLayoutWithNav withholds the bottomBar above the
 // compact tier); CSS uses display:contents so the fixed bar sits at the
 // viewport level when the slot IS rendered. No viewport media query.
@@ -163,5 +163,5 @@ assert.ok(!/BottomTabBar/.test(popupApp),
     'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
 
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px absolute bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
 );
