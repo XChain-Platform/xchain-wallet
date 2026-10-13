@@ -88,6 +88,7 @@ import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { MintForm } from '../../packages/core/src/shared/routes/MintForm.jsx';
 import { DestroyForm } from '../../packages/core/src/shared/routes/DestroyForm.jsx';
+import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
 import {
     formatSmokeSummary,
     isSmokeSkipOutput,
@@ -116,13 +117,26 @@ describe('smoke runner outcome accounting', () => {
     });
 });
 
+// jsdom has no canvas, and lightweight-charts reads jsdom's default computed
+// color (`canvastext`), which it cannot parse. MarketChart catches that and
+// logs it, which the unit console guard rightly treats as a failure. The chart
+// library is not what this probe covers, so it gets the same inert stub the
+// MarketChart unit tests use and the route code around it still runs.
+vi.mock('lightweight-charts', () => ({
+    createChart: () => ({
+        addLineSeries: () => ({ setData() {}, applyOptions() {} }),
+        timeScale: () => ({ fitContent() {} }),
+        applyOptions() {},
+        remove() {},
+    }),
+}));
+
 // `domAct` (Testing Library's `act`, bound to the installed React) flushes
 // React effects/state in Layer 2.
 
-// Run every test under fake timers. Some routes (e.g. MarketChart) schedule
-// a setTimeout / rAF on mount: chart init, animations: that fires AFTER
-// our microtask-only flush and throws in jsdom (`Cannot parse color:
-// canvastext`, canvas not implemented, …) as an UNHANDLED exception. Vitest
+// Run every test under fake timers. Some routes schedule a setTimeout / rAF
+// on mount (animations, pollers) that would fire AFTER our microtask-only
+// flush and throw in jsdom as an UNHANDLED exception. Vitest
 // flags those as "might cause false positive tests", a flakiness vector for
 // a kept guard. Fake timers capture those callbacks so they never execute;
 // the global afterEach's `vi.useRealTimers()` (test/setup.js) discards them.
@@ -167,10 +181,21 @@ const pendingMessaging = new Proxy(
 // resolved value in an effect dep array doesn't churn into a re-fetch
 // loop. Wrong-shape *method* calls still throw `is not a function`, which
 // Layer 2 tolerates as mock-shape noise (see EFFECT_BUG_RE).
+// Settings are the exception: every settings consumer reads a validated
+// record (`notifications`, `privacy`, ...), and the background never hands
+// out anything else, so `[]` there would only probe a shape that cannot
+// occur. The default record, shared for the same stable-identity reason,
+// lets those routes render their real controls instead of throwing.
 const EMPTY = Object.freeze([]);
+const DEFAULT_SETTINGS = createDefaultSettings();
+const SETTINGS_METHODS = new Set(['getSettings', 'updateSettings']);
 const resolvingMessaging = new Proxy(
     {},
-    { get: () => () => Promise.resolve(EMPTY) },
+    {
+        get: (_target, method) => () => Promise.resolve(
+            SETTINGS_METHODS.has(method) ? DEFAULT_SETTINGS : EMPTY,
+        ),
+    },
 );
 
 // Permissive superset of the props the shared routes read. Individual
@@ -195,6 +220,19 @@ const props = {
     address: 'bc1qexampleexampleexampleexampleexampleex',
     contractId: '1',
     dispenserId: '1',
+    // Required collection and record props. Without them a route throws on
+    // its first line and the probe never reaches the code it exists to test.
+    entries: [],
+    addresses: [],
+    listRef: { chainId: 'bitcoin-mainnet', actionIndex: '1', type: '1', items: [] },
+};
+
+// Routes whose prop of a shared name has a different shape. `address` is a
+// string almost everywhere, but ViewPrivateKey takes the address record.
+const ROUTE_PROPS = {
+    'ViewPrivateKey.jsx': {
+        address: { id: 'addr-1', address: props.address },
+    },
 };
 
 // Layer 1 (initial render): the crash sits on a module-level import or
@@ -223,11 +261,11 @@ async function resolveComponent(importer, file) {
     );
 }
 
-function tree(Component, messaging) {
+function tree(Component, messaging, file) {
     return React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
-        React.createElement(Component, props),
+        React.createElement(Component, { ...props, ...ROUTE_PROPS[file] }),
     );
 }
 
@@ -324,7 +362,7 @@ describe('Layer 1: every shared route renders without a code-bug crash', () => {
             let err = null;
             let sizingOffenders = [];
             try {
-                const { container } = render(tree(Component, pendingMessaging));
+                const { container } = render(tree(Component, pendingMessaging, file));
                 sizingOffenders = unsafeSizingAttributes(container);
             } catch (e) {
                 err = e;
@@ -347,7 +385,7 @@ describe('Layer 2: every shared route survives an effects flush', () => {
             let err = null;
             let sizingOffenders = [];
             try {
-                const { container } = render(tree(Component, resolvingMessaging));
+                const { container } = render(tree(Component, resolvingMessaging, file));
                 await domAct(() => drainMicrotasks());
                 sizingOffenders = unsafeSizingAttributes(container);
             } catch (e) {
@@ -371,7 +409,7 @@ describe('Layer 3: every shared route survives basic interaction', () => {
             const sizingOffenders = new Set();
             try {
                 const { container } = render(
-                    tree(Component, resolvingMessaging),
+                    tree(Component, resolvingMessaging, file),
                 );
                 await domAct(() => drainMicrotasks());
                 unsafeSizingAttributes(container).forEach((hit) => sizingOffenders.add(hit));
