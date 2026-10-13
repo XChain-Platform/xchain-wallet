@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function canApplyNativeIntent(sessionState, appSuspended) {
     return sessionState === 'unlocked' && !appSuspended;
@@ -27,10 +27,22 @@ function appPlugin() {
  * @param {() => boolean} opts.checkAutoLock
  * @param {() => void} opts.onBackground
  * @param {() => void} opts.onUnlockedResume
+ * @param {string} [opts.sessionState]
+ * @returns {boolean} whether private app content must stay covered
  */
-export function useNativeAppLifecycle({ checkAutoLock, onBackground, onUnlockedResume }) {
+export function useNativeAppLifecycle({
+    checkAutoLock,
+    onBackground,
+    onUnlockedResume,
+    sessionState = 'unlocked',
+}) {
     const callbacksRef = useRef({ checkAutoLock, onBackground, onUnlockedResume });
     callbacksRef.current = { checkAutoLock, onBackground, onUnlockedResume };
+    const [suspended, setSuspended] = useState(false);
+
+    useEffect(() => {
+        if (sessionState !== 'unlocked') setSuspended(false);
+    }, [sessionState]);
 
     useEffect(() => {
         const plugin = appPlugin();
@@ -43,13 +55,17 @@ export function useNativeAppLifecycle({ checkAutoLock, onBackground, onUnlockedR
             if (!isActive) {
                 if (inactive) return;
                 inactive = true;
+                setSuspended(true);
                 callbacksRef.current.onBackground?.();
                 return;
             }
             if (!inactive) return;
             inactive = false;
             const locking = callbacksRef.current.checkAutoLock?.() === true;
-            if (!locking) callbacksRef.current.onUnlockedResume?.();
+            if (!locking) {
+                callbacksRef.current.onUnlockedResume?.();
+                setSuspended(false);
+            }
         };
 
         let handle;
@@ -66,4 +82,6 @@ export function useNativeAppLifecycle({ checkAutoLock, onBackground, onUnlockedR
                 .catch(() => { /* already removed */ });
         };
     }, []);
+
+    return suspended;
 }

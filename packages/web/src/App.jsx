@@ -970,8 +970,9 @@ function AppInner() {
         activeWalletId,
         onLocked: refresh,
     });
-    useNativeAppLifecycle({
+    const nativeSuspended = useNativeAppLifecycle({
         checkAutoLock: autoLock.checkNow,
+        sessionState: status.state,
         onBackground: () => {
             nativeSuspendedRef.current = true;
             setGlobalScannerOpen(false);
@@ -993,6 +994,8 @@ function AppInner() {
             setNativeResumeKey((key) => key + 1);
         },
     });
+
+    if (nativeSuspended && status.state === 'unlocked') return <Loading />;
 
     switch (status.state) {
         case 'loading':

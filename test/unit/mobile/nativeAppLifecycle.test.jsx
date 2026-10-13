@@ -34,17 +34,18 @@ function makeMessaging(autolockMinutes) {
     };
 }
 
-function LifecycleHarness({ onBackground = () => {}, onResume = () => {} }) {
+function LifecycleHarness({ onBackground = () => {}, onResume = () => {}, sessionState = 'unlocked' }) {
     const policy = useAutoLockPolicy({
-        sessionState: 'unlocked',
+        sessionState,
         activeWalletId: WALLET.id,
     });
-    useNativeAppLifecycle({
+    const suspended = useNativeAppLifecycle({
         checkAutoLock: policy.checkNow,
         onBackground,
         onUnlockedResume: onResume,
+        sessionState,
     });
-    return null;
+    return <div data-testid="private-screen">{suspended ? 'covered' : 'balances'}</div>;
 }
 
 function provider(messaging, child) {
@@ -84,25 +85,27 @@ describe('Capacitor app resume', () => {
         vi.useFakeTimers();
         const messaging = makeMessaging(1);
         const onResume = vi.fn();
-        render(provider(
+        const view = render(provider(
             messaging,
             <LifecycleHarness onResume={onResume} />,
         ));
         await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
         act(() => appStateChange({ isActive: false }));
+        expect(view.getByTestId('private-screen')).toHaveTextContent('covered');
         vi.setSystemTime(Date.now() + 2 * MINUTE);
         act(() => appStateChange({ isActive: true }));
 
         expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
         expect(onResume).not.toHaveBeenCalled();
+        expect(view.getByTestId('private-screen')).toHaveTextContent('covered');
     });
 
     it('honours Never and emits one refresh for one background cycle', async () => {
         const messaging = makeMessaging(0);
         const onBackground = vi.fn();
         const onResume = vi.fn();
-        render(provider(
+        const view = render(provider(
             messaging,
             <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
         ));
@@ -118,6 +121,22 @@ describe('Capacitor app resume', () => {
         expect(messaging.lockWallet).not.toHaveBeenCalled();
         expect(onBackground).toHaveBeenCalledTimes(1);
         expect(onResume).toHaveBeenCalledTimes(1);
+        expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
+    });
+
+    it('removes the cover after an elapsed resume reaches the locked state', async () => {
+        vi.useFakeTimers();
+        const messaging = makeMessaging(1);
+        const view = render(provider(messaging, <LifecycleHarness />));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        act(() => appStateChange({ isActive: false }));
+        vi.setSystemTime(Date.now() + 2 * MINUTE);
+        act(() => appStateChange({ isActive: true }));
+        expect(view.getByTestId('private-screen')).toHaveTextContent('covered');
+
+        view.rerender(provider(messaging, <LifecycleHarness sessionState="locked" />));
+        expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
     });
 
     it('closes scanner and overlay state without navigating, and queues suspended links', async () => {

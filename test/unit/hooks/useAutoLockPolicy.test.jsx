@@ -24,7 +24,10 @@ import {
 import { useAutoLock } from '../../../packages/core/src/shared/hooks/useAutoLock.js';
 import { holdAutoLock } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
 import { shouldAutoLock } from '../../../packages/extension/src/background/autoLockState.js';
-import { createLockBackstop } from '../../../packages/extension/src/background/walletLock.js';
+import {
+    createKeepaliveTick,
+    createLockBackstop,
+} from '../../../packages/extension/src/background/walletLock.js';
 import {
     AUTOLOCK_MINUTES_DEFAULT, AUTOLOCK_MINUTES_MAX, AUTOLOCK_NEVER,
 } from '../../../packages/core/src/schemas/settings.js';
@@ -244,6 +247,29 @@ describe('useAutoLockPolicy', () => {
         expect(onLock).toHaveBeenCalledTimes(1);
     });
 
+    it('locks the desktop shell from wall-clock time before its balance view returns', async () => {
+        let checkNow = () => false;
+        function DesktopShell() {
+            const [sessionState, setSessionState] = useState('unlocked');
+            const policy = useAutoLockPolicy({
+                sessionState,
+                activeWalletId: 'w1',
+                onLocked: () => setSessionState('locked'),
+            });
+            checkNow = policy.checkNow;
+            return <div data-testid="desktop-view">{sessionState === 'locked' ? 'locked' : 'balances'}</div>;
+        }
+        const messaging = makeMessaging({ autolockMinutes: 1 });
+        const view = renderShell(<DesktopShell />, { messaging, shell: 'desktop' });
+        await settle();
+
+        vi.setSystemTime(Date.now() + 2 * MINUTE);
+        await act(async () => { checkNow(); await Promise.resolve(); });
+
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
+        expect(view.getByTestId('desktop-view')).toHaveTextContent('locked');
+    });
+
     it('defers an elapsed lock through signing, explains it, then locks immediately', async () => {
         const onLock = vi.fn();
         const onDeferred = vi.fn();
@@ -333,6 +359,32 @@ describe('useAutoLockPolicy', () => {
 });
 
 describe('extension auto-lock backstop', () => {
+    it('uses wall-clock time after worker sleep and locks before refreshing balances', async () => {
+        let now = 1;
+        const order = [];
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend: {}, signingSecretBackend: {} }),
+            tearDownHost: vi.fn(),
+            isUnlocked: () => true,
+            readAutoLockState: async () => ({ armed: true, idleMs: MINUTE, lastActivity: 1 }),
+            clearAutoLockState: vi.fn(async () => {}),
+            shouldAutoLock,
+            now: () => now,
+            lock: vi.fn(async () => { order.push('lock'); }),
+        });
+        const tick = createKeepaliveTick({
+            ensureHost: async () => { order.push('host'); },
+            maybeAutoLock: backstop.maybeAutoLock,
+            refresh: () => { order.push('balances'); },
+        });
+
+        now += 2 * MINUTE;
+        await expect(tick()).resolves.toBe('locked');
+        await Promise.resolve();
+
+        expect(order).toEqual(['host', 'lock']);
+    });
+
     it('does not tear down an active UI request and locks on the next check', async () => {
         let requestActive = true;
         const lock = vi.fn(async () => ({ locked: true }));
