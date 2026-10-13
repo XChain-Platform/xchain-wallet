@@ -15,6 +15,7 @@ import {
     BalanceList,
     buildBalanceRows,
     buildPlatformTokenRow,
+    detectSpamCandidates,
     sortByChainThenAsset,
     coinFromChainId,
     tickerColor,
@@ -113,10 +114,16 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         refreshKey: balancesFetchedAt,
     });
+    const spamKeys = useMemo(
+        () => new Set(detectSpamCandidates(builtRows)),
+        [builtRows],
+    );
     const tokenRequests = useMemo(() => {
         if (settingsLoading || isDemoWallet(walletId)) return [];
         return builtRows
-            .filter((r) => r.kind !== 'native' && typeof r.fiatRate !== 'number')
+            .filter((r) => r.kind !== 'native'
+                && typeof r.fiatRate !== 'number'
+                && !spamKeys.has(`${r.chainId}:${r.tick}`))
             .map((r) => {
                 const descriptor = chainRegistry.get(r.chainId);
                 return {
@@ -125,7 +132,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [builtRows, chainRegistry, settingsLoading, walletId]);
+    }, [builtRows, chainRegistry, settingsLoading, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency: settings?.fiatCurrency || 'USD',
@@ -140,6 +147,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => (r.coin || coinFromChainId(r.chainId)) === networkFilter);
     }, [allRows, networkFilter]);
+    const portfolioRows = useMemo(
+        () => hiddenKeys
+            ? filteredRows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
+            : filteredRows,
+        [filteredRows, hiddenKeys],
+    );
 
     const coins = useMemo(
         () => sortByChainThenAsset(filteredRows.filter((r) => r.kind === 'native')),
@@ -204,12 +217,11 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
 
     return (
         <div className={styles.wrap}>
-            {/* Hero rolls up coins + tokens + NFTs (everything that
-                lives in `filteredRows`). DeFi + Activity contribute
+            {/* Hero rolls up visible coins + tokens + NFTs. DeFi + Activity contribute
                 their own dollar amounts via separate flows once they
                 wire up; for now they're not in the sum. */}
             <TotalBalanceHero
-                rows={filteredRows}
+                rows={portfolioRows}
                 walletId={walletId}
                 networkFilter={networkFilter}
                 lastSyncedAt={balancesFetchedAt}
@@ -221,7 +233,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             />
 
             <PortfolioChart
-                rows={filteredRows}
+                rows={portfolioRows}
                 walletId={walletId}
             />
 
