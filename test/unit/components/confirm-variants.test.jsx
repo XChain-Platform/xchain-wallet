@@ -138,6 +138,30 @@ describe('request provenance across the shared confirmation adapters', () => {
             utils.unmount();
         }
     });
+
+    it('foregrounds the end of a long hostname before showing the complete origin', () => {
+        const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
+        const utils = render(
+            <MessageConfirmScreen
+                confirmAction={confirmState()}
+                requestOrigin={longOrigin}
+                message="Approve this message"
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={() => {}}
+            />,
+        );
+
+        const identity = utils.getByTestId('confirm-request-origin');
+        const ending = utils.getByTestId('request-origin-host-ending');
+        const full = utils.getByTestId('request-origin-full');
+        expect(ending.textContent).toBe('security.attacker.test');
+        expect(full.textContent).toBe(longOrigin);
+        expect(identity.textContent.indexOf(ending.textContent))
+            .toBeLessThan(identity.textContent.indexOf(full.textContent));
+        utils.unmount();
+    });
 });
 
 describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', () => {
@@ -417,6 +441,21 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
             ...screenProps({ networkFeeSats: 100000000, chainId: 'dogecoin-mainnet' }),
         }));
         expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 1 DOGE');
+    });
+
+    it('discloses when sub-dust change is included in the exact fee', () => {
+        const utils = render(React.createElement(ActionConfirmScreen, {
+            ...screenProps({
+                networkFeeSats: 1000,
+                dustChangeLimitSats: 546,
+                chainId: 'bitcoin-mainnet',
+            }),
+        }));
+        expect(utils.getByTestId('confirm-fee').textContent).toContain('Network fee: 0.00001 BTC');
+        expect(utils.getByTestId('confirm-dust-change').textContent).toBe(
+            'No change output was created. Any remainder below 0.00000546 BTC '
+            + 'is included in the network fee shown above.',
+        );
     });
 });
 
