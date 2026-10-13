@@ -87,6 +87,7 @@ const SCAN_KEYS = [
     'scan.classifyPaste',
     'scan.error.pasteEmpty',
     'scan.error.unknownXchainIntent',
+    'scan.error.paymentRequest',
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
@@ -159,7 +160,9 @@ const shells = [
 
 for (const shell of shells) {
     const src = readFileSync(join(wsRoot, ...shell.path), 'utf8');
-    assert.ok(/ScanRoute.*from '@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
+    assert.ok(
+        /ScanRoute.*from '@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src)
+        || /const ScanRoute = lazyRoute\(\(\) => import\('@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'\), 'ScanRoute'\)/.test(src),
         `${shell.name} App.jsx imports ScanRoute`);
     assert.ok(/unlockedView === 'scan' && activeWalletId/.test(src),
         `${shell.name} App.jsx ships a 'scan' top-level view guarded on activeWalletId`);
