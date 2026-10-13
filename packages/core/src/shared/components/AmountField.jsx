@@ -20,7 +20,7 @@ import { Input, Icon } from '@xchain-wallet/core/ui';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import {
     formatWithThousands,
-    normalizeLocalizedDecimal,
+    normalizeAmountFieldInput,
 } from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
@@ -85,9 +85,14 @@ export function AmountField({
     const handleChange = (event) => {
         const rawValue = String(event.target.value);
         const cursorPos = event.target.selectionStart;
-        const normalized = normalizeLocalizedDecimal(rawValue);
+        const normalized = normalizeAmountFieldInput(rawValue, {
+            unit: activeUnit,
+            fiatCurrency: isFiat ? fiatCcy : null,
+        });
         const normalizedCursor = typeof cursorPos === 'number'
-            ? rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
+            ? cursorPos === rawValue.length
+                ? normalized?.length ?? null
+                : rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
             : null;
 
         if (normalized === null) {
