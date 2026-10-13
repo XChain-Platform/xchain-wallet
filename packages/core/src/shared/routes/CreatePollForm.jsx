@@ -9,7 +9,23 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import {
+    AddressField,
+    AddressText,
+    Button,
+    ChainBadge,
+    FeeSelector,
+    FormPage,
+    FormSection,
+    Input,
+    ListPage,
+    NetworkField,
+    PageHeader,
+    Screen,
+    Select,
+    StatusMessage,
+    Textarea,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -441,7 +457,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     Poll created. Holders of {tick} can vote once the network records the action;
                     it closes at block {endBlock}.
@@ -453,13 +469,25 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onCreated || onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review poll"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError
+                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Create poll'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>Create a {tick} governance poll closing at block {endBlock}.</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -526,14 +554,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Create poll'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -590,7 +611,23 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create poll"
+            onSubmit={handleReview}
+            sectioned
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
+                </Button>
+            )}
+        >
+            <FormSection title="Poll details">
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
@@ -612,6 +649,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
             <Textarea label="Question (optional)" hint="What the poll is asking holders to decide."
                 value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} />
+
+            </FormSection>
+            <FormSection title="Options and rules">
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <span className={styles.fromLabel}>Options</span>
@@ -730,19 +770,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+            </FormSection>
+        </FormPage>,
     );
 }
