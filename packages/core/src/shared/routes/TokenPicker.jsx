@@ -31,7 +31,6 @@ import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
-const LOCAL_QUERY_DEBOUNCE_MS = 200;
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -117,16 +116,25 @@ export function TokenPicker({
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
 
-    const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [balanceReload, setBalanceReload] = useState(0);
+    const [balanceLoad, setBalanceLoad] = useState({
+        walletId: null,
+        accountId: null,
+        isReceive: null,
+        reload: null,
+        balances: null,
+        addressesByChain: null,
+        error: null,
+    });
+    const balanceLoadMatches = balanceLoad.walletId === walletId
+        && balanceLoad.accountId === accountId
+        && balanceLoad.isReceive === isReceive
+        && balanceLoad.reload === balanceReload;
+    const balances = balanceLoadMatches ? balanceLoad.balances : null;
+    const addressesByChain = balanceLoadMatches ? balanceLoad.addressesByChain : null;
+    const loadError = balanceLoadMatches ? balanceLoad.error : null;
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -135,7 +143,6 @@ export function TokenPicker({
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
     const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
-    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState(tokenQuery);
 
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
@@ -154,11 +161,6 @@ export function TokenPicker({
             && window.matchMedia('(pointer: coarse)').matches;
         if (!coarse) searchRef.current?.focus();
     }, []);
-
-    useEffect(() => {
-        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), LOCAL_QUERY_DEBOUNCE_MS);
-        return () => clearTimeout(handle);
-    }, [tokenQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -182,9 +184,16 @@ export function TokenPicker({
     useEffect(() => {
         if (!walletId) return undefined;
         let cancelled = false;
-        setBalances(null);
-        setAddressesByChain(null);
-        setLoadError(null);
+        const pendingLoad = {
+            walletId,
+            accountId,
+            isReceive,
+            reload: balanceReload,
+            balances: null,
+            addressesByChain: null,
+            error: null,
+        };
+        setBalanceLoad(pendingLoad);
         (async () => {
             try {
                 // Receive needs addresses-by-chain too: it surfaces every
@@ -193,26 +202,37 @@ export function TokenPicker({
                 const canByChain = typeof messaging.getAddressesByChain === 'function';
                 const isDemo = flowsLib.isDemoWallet(walletId);
                 let b;
+                let byChain = null;
                 if (isDemo && canByChain) {
                     // Demo balances are synthesized from the address map for
                     // both purposes; only Receive keeps the map around.
-                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = await messaging.getAddressesByChain(walletId, accountId);
                     b = flowsLib.synthesizeDemoBalances(byChain);
                 } else {
                     const byChainPromise = (isReceive && canByChain)
                         ? messaging.getAddressesByChain(walletId, accountId)
                         : Promise.resolve(null);
-                    const [byChain, walletBalances] = await Promise.all([
+                    const [nextByChain, walletBalances] = await Promise.all([
                         byChainPromise,
                         messaging.getWalletBalances(walletId, accountId),
                     ]);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = nextByChain;
                     b = walletBalances;
                 }
-                if (!cancelled) setBalances(b);
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        balances: b,
+                        addressesByChain: isReceive ? byChain : null,
+                    });
+                }
             } catch (err) {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        error: err?.message || 'Failed to load balances.',
+                    });
+                }
             }
         })();
         return () => { cancelled = true; };
@@ -247,7 +267,7 @@ export function TokenPicker({
         return ordered;
     }, [allRows]);
 
-    const tokenQueryTrim = debouncedTokenQuery.trim().toLowerCase();
+    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
         let next = isReceive
             ? allRows
@@ -319,7 +339,7 @@ export function TokenPicker({
     }, [allRows]);
 
     useEffect(() => {
-        const query = debouncedTokenQuery.trim().toUpperCase();
+        const query = tokenQuery.trim().toUpperCase();
         if (!isReceive
             || !query
             || query.length < PLATFORM_QUERY_MIN_CHARS
@@ -376,7 +396,7 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, debouncedTokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
 
     const resetFilters = () => {
         setTokenQuery('');
@@ -448,7 +468,6 @@ export function TokenPicker({
         else result.focus();
     };
     const clearSearch = () => {
-        setDebouncedTokenQuery('');
         setTokenQuery('');
         searchRef.current?.focus();
     };
@@ -558,7 +577,6 @@ export function TokenPicker({
                             key={opt.id}
                             type="button"
                             role="tab"
-                            tabIndex={active ? 0 : -1}
                             aria-selected={active}
                             tabIndex={active ? 0 : -1}
                             className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}

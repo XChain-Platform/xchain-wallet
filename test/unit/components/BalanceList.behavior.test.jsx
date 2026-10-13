@@ -164,6 +164,31 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
     });
 
+    it('keeps identical tickers keyed and selectable by chain', () => {
+        const onSelectToken = vi.fn();
+        render(
+            <BalanceList
+                rows={[
+                    row('XCHAIN', { chainDisplayName: 'Bitcoin' }),
+                    row('XCHAIN', {
+                        chainId: 'litecoin-mainnet',
+                        coin: 'litecoin',
+                        chainDisplayName: 'Litecoin',
+                    }),
+                ]}
+                onSelectToken={onSelectToken}
+            />,
+        );
+
+        expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
+            .toEqual(['bitcoin-mainnet:XCHAIN', 'litecoin-mainnet:XCHAIN']);
+        fireEvent.click(screen.getAllByRole('button', { name: /^Open XCHAIN token details,/ })[1]);
+        expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'litecoin-mainnet',
+            tick: 'XCHAIN',
+        }));
+    });
+
     it('keeps testnet and regtest labels beside their displayed amounts', () => {
         render(
             <BalanceList rows={[
