@@ -506,6 +506,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
+    const [searchContacts, setSearchContacts] = useState(/** @type {any[]} */ ([]));
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
     // Default to the last 30 days so a fresh History view surfaces
@@ -543,6 +544,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    useEffect(() => {
+        if (typeof messaging.listContacts !== 'function') return undefined;
+        let cancelled = false;
+        messaging.listContacts()
+            .then((rows) => {
+                if (!cancelled) setSearchContacts(Array.isArray(rows) ? rows : []);
+            })
+            .catch(() => {
+                if (!cancelled) setSearchContacts([]);
+            });
+        return () => { cancelled = true; };
+    }, [messaging]);
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
@@ -1002,6 +1016,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
+    const contactNamesByAddress = useMemo(() => {
+        const names = new Map();
+        for (const contact of searchContacts) {
+            const name = String(contact?.name || '').trim();
+            if (!name) continue;
+            for (const contactEntry of contact?.entries || []) {
+                const address = String(contactEntry?.address || '').trim().toLowerCase();
+                if (address) names.set(address, name);
+            }
+        }
+        return names;
+    }, [searchContacts]);
+
     // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation counts on confirmed rows.
     // The polled indexer watermark advances even when this wallet has no new
     // activity. Loaded rows remain a fallback and cover a watermark that lags
@@ -1071,11 +1098,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // pick includes everything that happened that day.
             dateToMs: localDayEndMs(dateTo),
             walletAddresses: walletAddressSet,
+            contactNamesByAddress,
         });
     }, [
         entries, enabledChains, crossChainOnly, multisigOnly, multisigAddress,
         searchQuery, actionTypeFilter, statusFilter, dateFrom, dateTo,
-        walletAddressSet,
+        walletAddressSet, contactNamesByAddress,
     ]);
 
     // §7/§8: SPV action verification. Verify only visible, confirmed
@@ -1557,20 +1585,37 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     return wrap(
         <ListPage toolbar={(
             <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
-                <input
-                    ref={searchInputRef}
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className={styles.searchInput}
-                    placeholder={t('history.filters.searchPlaceholder')}
-                    aria-label={t('history.filters.searchLabel')}
-                    value={searchQuery}
-                    onChange={(ev) => setSearchQuery(ev.target.value)}
-                    autoComplete="off"
-                />
+                <div className={styles.searchRow}>
+                    <input
+                        ref={searchInputRef}
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className={styles.searchInput}
+                        placeholder={t('history.filters.searchPlaceholder')}
+                        aria-label={t('history.filters.searchLabel')}
+                        value={searchQuery}
+                        onChange={(ev) => setSearchQuery(ev.target.value)}
+                        autoComplete="off"
+                    />
+                    {searchQuery ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
+                            aria-label={t('history.filters.clearSearch')}
+                            onClick={() => {
+                                setSearchQuery('');
+                                searchInputRef.current?.focus();
+                            }}
+                        >
+                            {t('common.clear')}
+                        </Button>
+                    ) : null}
+                </div>
 
                 <div className={styles.dateRow}>
                     <Input
@@ -1728,7 +1773,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
-                        title={t('history.empty.noMatchesTitle')}
+                        title={searchQuery.trim()
+                            ? t('history.empty.noSearchResultsTitle', { query: searchQuery.trim() })
+                            : t('history.empty.noMatchesTitle')}
                         body={t('history.empty.noMatchesBody')}
                         actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}

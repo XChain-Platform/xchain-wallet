@@ -56,22 +56,22 @@ function secondsAt(dayOffset, hour = 12) {
     return Math.floor(date.getTime() / 1000);
 }
 
-function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp, tick, source, amount }) {
+function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp, tick, source, destination, amount, txHash }) {
     return {
         action,
         action_index: String(actionIndex),
         block_index: blockIndex,
         timestamp,
-        tx_hash: `deadbeef${actionIndex}`,
+        tx_hash: txHash || `deadbeef${actionIndex}`,
         status: 'valid',
-        details: { tick, source, amount, memo: tick === 'ALPHA' ? 'alpha payment' : '' },
+        details: { tick, source, destination, amount, memo: tick === 'ALPHA' ? 'alpha payment' : '' },
     };
 }
 
 function mountHistory(rowsByChain, addressesByChain = {
     [LTC]: [{ address: LTC_ADDRESS }],
     [DOGE]: [{ address: DOGE_ADDRESS }],
-}) {
+}, contacts = []) {
     let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
@@ -81,7 +81,7 @@ function mountHistory(rowsByChain, addressesByChain = {
         getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
-        listContacts: vi.fn().mockResolvedValue([]),
+        listContacts: vi.fn().mockResolvedValue(contacts),
         getSettings: vi.fn(() => Promise.resolve(settings)),
         updateSettings: vi.fn((patch) => {
             settings = { ...settings, ...patch };
@@ -123,6 +123,62 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('searches txid prefixes, counterparties, contacts, tickers, and amounts within date filters', async () => {
+        const clientAddress = 'mClientCounterparty1111111111111111111';
+        const { view } = mountHistory({
+            [LTC]: [
+                historyRow({
+                    actionIndex: 40,
+                    timestamp: secondsAt(0),
+                    tick: 'SEARCHCOIN',
+                    source: LTC_ADDRESS,
+                    destination: clientAddress,
+                    amount: '42.75',
+                    txHash: 'abc123todaytransaction',
+                }),
+                historyRow({
+                    actionIndex: 41,
+                    timestamp: secondsAt(-1),
+                    tick: 'SEARCHCOIN',
+                    source: LTC_ADDRESS,
+                    destination: 'mOtherCounterparty11111111111111111111',
+                    amount: '42.75',
+                    txHash: 'def456yesterdaytransaction',
+                }),
+            ],
+        }, {
+            [LTC]: [{ address: LTC_ADDRESS }],
+        }, [{
+            id: 'contact-1',
+            name: 'Acme Payroll',
+            entries: [{ chain: 'litecoin', address: clientAddress }],
+        }]);
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
+
+        const search = screen.getByLabelText('Search history');
+        const expectToday = async (query) => {
+            fireEvent.change(search, { target: { value: query } });
+            await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:40:${LTC_ADDRESS}`]));
+        };
+
+        await expectToday('abc123');
+        await expectToday('ClientCounterparty');
+        await expectToday('acme payroll');
+
+        const today = isoLocal(FIXED_NOW);
+        fireEvent.change(screen.getByLabelText('From date'), { target: { value: today } });
+        fireEvent.change(screen.getByLabelText('To date'), { target: { value: today } });
+        await expectToday('searchcoin');
+        await expectToday('42.75');
+
+        fireEvent.change(search, { target: { value: 'missing payment' } });
+        expect(await screen.findByText('No results for "missing payment"')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear history search' }));
+        expect(search).toHaveValue('');
+        expect(search).toHaveFocus();
+        await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:40:${LTC_ADDRESS}`]));
+    });
+
     it('shows a receive address label only on incoming payments to that address', async () => {
         const sender = 'mtkxExternalSender1111111111111111111111';
         mountHistory({
