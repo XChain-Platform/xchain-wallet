@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef } from 'react';
  *
  * @param {object} props
  * @param {{ id?: string, label?: string, message: string }[]} props.errors
- * @param {string | number} [props.focusKey]
+ * @param {string | number} props.focusKey submit-attempt key; zero or empty keeps the summary hidden.
  * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]
  */
 export function FormErrorSummary({ errors, focusKey, recovery }) {
@@ -30,7 +30,7 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
         if (errors.length > 0) summaryRef.current?.focus();
     }, [signature, focusKey, errors.length]);
 
-    if (errors.length === 0) return null;
+    if (!focusKey || errors.length === 0) return null;
 
     const focusField = (event, id) => {
         event.preventDefault();

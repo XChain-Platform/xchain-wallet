@@ -121,8 +121,29 @@
 
 .error {
     margin-block-start: var(--xc-help-gap);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
     font-size: var(--xc-text-xs);
+    line-height: 1.4;
     color: var(--xc-danger-fg);
+    overflow-wrap: anywhere;
+}
+
+.error::before {
+    content: '!';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.2em;
+    width: 1.2em;
+    height: 1.2em;
+    margin-block-start: 0.1em;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 0.8em;
+    font-weight: 700;
+    line-height: 1;
 }
 
 .counter {

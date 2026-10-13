@@ -156,7 +156,7 @@ describe('<FormErrorSummary>', () => {
                 <FormErrorSummary errors={[
                     { id: 'ticker', label: 'Ticker', message: 'Ticker is required.' },
                     { id: 'amount', label: 'Amount', message: 'Amount must be positive.' },
-                ]} />
+                ]} focusKey={1} />
             </form>,
         );
 
@@ -167,6 +167,16 @@ describe('<FormErrorSummary>', () => {
 
         fireEvent.click(links[1]);
         expect(document.activeElement).toBe(screen.getByLabelText('Amount'));
+    });
+
+    it('does not show a summary until the form has been submitted', () => {
+        const errors = [{ id: 'amount', label: 'Amount', message: 'Amount must be positive.' }];
+        const { rerender } = render(<FormErrorSummary errors={errors} focusKey={0} />);
+
+        expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
+
+        rerender(<FormErrorSummary errors={errors} focusKey={1} />);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toBeInTheDocument();
     });
 
     it('focuses the same error again when the submit attempt changes', () => {
