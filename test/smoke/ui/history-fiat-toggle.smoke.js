@@ -39,7 +39,8 @@ assert.match(src, /Show fiat/, 'renders a Show-fiat control');
 // The fiat rate uses the existing price-lookup plumbing (§45), not a
 // bespoke fetch.
 assert.match(src, /import \{ useFiatRate \}/, 'imports the shared useFiatRate hook');
-assert.match(src, /import \{ coinToFiat \}/, 'imports coinToFiat from priceLookup');
+assert.match(src, /import \{ coinToFiatExact \}/, 'imports exact fiat conversion from priceLookup');
+assert.match(src, /formatFiat\(nativeFiatValue, fiatCurrency\)/, 'renders the selected fiat currency');
 
 // Native-only gate: nativeAmountFieldOf must reject anything with a
 // non-native tick (a token movement), so a token amount can never be

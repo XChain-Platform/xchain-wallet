@@ -182,7 +182,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.resolve({ data: [{ ...RECORD, fees_earned: [] }] }),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
     it('survives an explorer too old to report fees at all', async () => {
@@ -193,7 +193,7 @@ describe('OracleRecord (P8)', () => {
         // The record still renders; the missing field degrades to "no fees", never
         // to a crash on a non-array.
         expect(text(utils)).toMatch(/Markets opened/);
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
     it('keeps the record and does not claim there are no markets when the listing fails', async () => {

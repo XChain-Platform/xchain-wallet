@@ -197,8 +197,8 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                         </ul>
                     ) : (
                         <EmptyState
-                            title="No active stake on this address."
-                            body="Stake first to populate the operator dashboard."
+                            title="No active stake"
+                            body="Operator metrics appear after this address has an active stake."
                             titleAs="h3"
                         />
                     )}
@@ -206,7 +206,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
 
                 <Section title="Delegation chain" loading={delegations.loading} error={delegations.error} showContentOnError={delegations.rows.length > 0}>
                     {delegations.rows.length === 0 ? (
-                        <EmptyState title="No delegations issued." titleAs="h3" />
+                        <EmptyState title="No delegations yet" body="Signing-key delegations appear here." titleAs="h3" />
                     ) : (
                         <ul className={`${styles.metricList} ${styles.keyList}`}>
                             {delegations.rows.slice(0, 10).map((d, i) => (
@@ -231,14 +231,14 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                         </ul>
                     ) : activePubkey ? (
                         <EmptyState
-                            title="Your delegated pubkey isn't yet appearing in the hub's validator roster."
+                            title="Validator not active yet"
                             body="Validators show up after the activation window completes."
                             titleAs="h3"
                         />
                     ) : (
                         <EmptyState
-                            title="No delegated signing pubkey."
-                            body="Delegate one before the hub will track validator metrics."
+                            title="No delegated signing key"
+                            body="Validator metrics appear after a signing key is delegated."
                             titleAs="h3"
                         />
                     )}
@@ -268,8 +268,8 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
                 <Section title="Publishing activity" loading={broadcasts.loading} error={broadcasts.error} showContentOnError={recentBroadcasts.length > 0}>
                     {recentBroadcasts.length === 0 ? (
                         <EmptyState
-                            title="No published feed values from this address yet."
-                            body="Use Publisher mode below to publish one."
+                            title="No published feed values"
+                            body="Feed values published from this address appear here."
                             titleAs="h3"
                         />
                     ) : (

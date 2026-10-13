@@ -22,7 +22,9 @@
 // cheaper than re-arming on every Developer Mode visit.
 
 import { useEffect, useMemo, useState } from 'react';
+import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
 
@@ -104,7 +106,8 @@ export function LogConsole() {
     });
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
-    const [copied, setCopied] = useState(false);
+    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const haptic = useHapticFeedback();
 
     useEffect(() => {
         if (!logConsole.isAttached()) logConsole.attach();
@@ -144,13 +147,11 @@ export function LogConsole() {
         const text = filtered.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
-        try {
-            await navigator.clipboard?.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch {
-            /* swallow; best effort */
-        }
+        const { ok } = await copyText(text);
+        setCopyState(ok ? 'copied' : 'failed');
+        if (ok) haptic.tap();
+        else haptic.error();
+        setTimeout(() => setCopyState('idle'), 1500);
     };
 
     return (
@@ -172,6 +173,10 @@ export function LogConsole() {
                 })}
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search messages…"
@@ -187,8 +192,18 @@ export function LogConsole() {
                         fontSize: 'var(--xc-text-xs)',
                     }}
                 />
-                <button type="button" onClick={onCopy} style={ACTION_BTN} aria-label="Copy filtered log entries">
-                    {copied ? 'Copied' : 'Copy'}
+                <button
+                    type="button"
+                    onClick={onCopy}
+                    style={ACTION_BTN}
+                    aria-label="Copy filtered log entries"
+                    aria-live="polite"
+                >
+                    {copyState === 'copied'
+                        ? 'Copied'
+                        : copyState === 'failed'
+                            ? 'Copy failed: clipboard unavailable'
+                            : 'Copy'}
                 </button>
                 <button type="button" onClick={onClear} style={ACTION_BTN} aria-label="Clear log buffer">
                     Clear

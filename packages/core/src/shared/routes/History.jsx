@@ -36,7 +36,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { formatFiat } from '../components/BalanceList.jsx';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
@@ -66,10 +66,14 @@ import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+const HISTORY_PAGE_SIZE = 100;
 
 function readPersistedGroupingMode() {
     try {
@@ -421,6 +425,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [addressesReload, setAddressesReload] = useState(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
@@ -482,6 +488,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
+        setAddressesByChain(null);
+        setHistoryLoaded(false);
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -516,7 +525,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, initialChainCoin]);
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -623,6 +632,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             .map(([cid]) => cid);
         if (chainsToLoad.length === 0) {
             setEntries([]);
+            setHistoryLoaded(true);
             setHistoryFetchedAt(null);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
@@ -667,8 +677,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 tasks.push(
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                            .then((r) => extractRows(r)),
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
@@ -819,6 +828,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
+            setHistoryLoaded(true);
+        }).catch(() => {
+            if (cancelled) return;
+            throttle.fail();
+            setLoadingChains(new Set());
+            setHistoryLoaded(true);
+            setLoadError('Could not load history. Try again.');
         });
 
         return () => { cancelled = true; };
@@ -1069,6 +1085,60 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
+    // Filtering and grouping still run over the complete result set, while the
+    // DOM grows in bounded steps. This keeps exports and group membership exact
+    // without making the browser lay out thousands of row buttons at once.
+    const listScope = useMemo(() => [
+        groupingMode,
+        searchQuery,
+        dateFrom,
+        dateTo,
+        crossChainOnly ? 'cross-chain' : '',
+        multisigOnly ? 'multisig' : '',
+        [...enabledChains].sort().join(','),
+        [...actionTypeFilter].sort().join(','),
+        [...statusFilter].sort().join(','),
+    ].join('\u0000'), [
+        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        enabledChains, actionTypeFilter, statusFilter,
+    ]);
+    const [listWindow, setListWindow] = useState(() => ({
+        scope: '',
+        count: HISTORY_PAGE_SIZE,
+    }));
+    const [groupMemberLimits, setGroupMemberLimits] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
+    const visibleItemCount = listWindow.scope === listScope
+        ? listWindow.count
+        : HISTORY_PAGE_SIZE;
+    const renderedItems = groupedItems.slice(0, visibleItemCount);
+
+    useEffect(() => {
+        setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
+        setGroupMemberLimits({});
+    }, [listScope]);
+
+    const showMoreItems = () => {
+        setListWindow((prev) => {
+            const current = prev.scope === listScope ? prev.count : HISTORY_PAGE_SIZE;
+            return {
+                scope: listScope,
+                count: Math.min(groupedItems.length, current + HISTORY_PAGE_SIZE),
+            };
+        });
+    };
+
+    const showMoreGroupMembers = (groupKey, memberCount) => {
+        setGroupMemberLimits((prev) => ({
+            ...prev,
+            [groupKey]: Math.min(
+                memberCount,
+                (prev[groupKey] || HISTORY_PAGE_SIZE) + HISTORY_PAGE_SIZE,
+            ),
+        }));
+    };
+
     // §24.6 / Cluster Y FOLLOWUP 4: auto-select the entry matching
     // `initialFocus` once entries have loaded, then scroll it into
     // view. Fires at most once per History mount so a user who
@@ -1097,6 +1167,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         initialFocusFiredRef.current = true;
         selectedTxRef.current = rememberedSelection(match);
         setSelectedKey(match.key);
+        const itemIndex = groupedItems.findIndex((item) => (
+            item.kind === 'entry'
+                ? item.entry.key === match.key
+                : item.members.some((entry) => entry.key === match.key)
+        ));
+        if (itemIndex >= visibleItemCount) {
+            setListWindow({ scope: listScope, count: itemIndex + 1 });
+        }
         // Defer scrollIntoView until after the row's <li> has rendered;
         // looking up the DOM node by `data-history-key` keeps the
         // selector decoupled from React's internals.
@@ -1110,7 +1188,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 }
             }, 0);
         }
-    }, [entries, initialFocus]);
+    }, [entries, initialFocus, groupedItems, listScope, visibleItemCount]);
 
     // M2.3 handoff: the open row's key has just stopped existing, which
     // is what confirming looks like from here (the pending entry is
@@ -1231,7 +1309,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setHistoryLoaded(false);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
@@ -1264,11 +1356,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <input
                     ref={searchInputRef}
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={styles.searchInput}
                     placeholder="Search action, address, token, txid, memo…"
                     aria-label="Search history"
                     value={searchQuery}
                     onChange={(ev) => setSearchQuery(ev.target.value)}
+                    autoComplete="off"
                 />
 
                 <div className={styles.dateRow}>
@@ -1420,13 +1517,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 />
             ) : null}
 
-            {loadingChains.size > 0 ? (
+            {!historyLoaded || loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
                 </div>
             ) : null}
 
-            {visibleEntries.length === 0 && loadingChains.size === 0 ? (
+            {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
                         title="No matches for the current filters"
@@ -1440,11 +1537,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? 'No cross-chain actions yet'
                             : 'No activity yet'}
                         body={crossChainOnly
-                            ? 'Make a cross-chain transfer or receive one to see entries here.'
+                            ? 'Cross-chain transfers sent or received by this wallet appear here.'
                             : 'Once you send or receive on the selected chains, the activity feed populates.'}
-                        actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
-                        onAction={!crossChainOnly ? onReceive : undefined}
-                        icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
@@ -1481,9 +1575,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             <ul className={styles.timeline}>
-                {groupedItems.map((item) => {
+                {renderedItems.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
+                        const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
+                        const renderedMembers = item.members.slice(0, memberLimit);
                         return (
                             <li key={item.key}>
                                 <div className={`${styles.groupCardWrap} ${expanded ? styles.groupCardWrapExpanded : ''}`}>
@@ -1494,7 +1590,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                     />
                                     {expanded ? (
                                         <ul className={styles.groupMembers}>
-                                            {item.members.map((entry) => (
+                                            {renderedMembers.map((entry) => (
                                                 <EntryRow
                                                     key={entry.key}
                                                     entry={entry}
@@ -1516,6 +1612,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     onDismissFailed={dismissFailedPending}
                                                 />
                                             ))}
+                                            {memberLimit < item.members.length ? (
+                                                <li className={styles.groupPagination}>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        icon={null}
+                                                        onClick={() => showMoreGroupMembers(
+                                                            item.key,
+                                                            item.members.length,
+                                                        )}
+                                                    >
+                                                        Show more group entries ({Math.min(memberLimit, item.members.length).toLocaleString('en-US')} of {item.members.length.toLocaleString('en-US')} shown)
+                                                    </Button>
+                                                </li>
+                                            ) : null}
                                         </ul>
                                     ) : null}
                                 </div>
@@ -1543,6 +1655,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     );
                 })}
             </ul>
+            {visibleItemCount < groupedItems.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US')} of {groupedItems.length.toLocaleString('en-US')} history items shown
+                    </span>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={null}
+                        onClick={showMoreItems}
+                    >
+                        Show more history
+                    </Button>
+                </div>
+            ) : null}
         </ListPage>,
     );
 }
@@ -1570,7 +1697,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         fiatCurrency: fiatCurrency || 'USD',
     });
     const nativeFiatValue = nativeAmount != null && fiatRate
-        ? coinToFiat(nativeAmount, fiatRate)
+        ? coinToFiatExact(nativeAmount, fiatRate)
         : null;
 
     // ───── More-menu / Save-as-contact state ─────
@@ -1776,7 +1903,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 const { ok } = await copyText(shareUrl);
                 showToast({
                     message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'success' : 'error',
+                    variant: ok ? 'default' : 'error',
                 });
             },
         });
@@ -1944,6 +2071,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         Save {shortenAddress(contactPeer || '')} as
                         <input
                             type="text"
+                            enterKeyHint="go"
                             className={styles.saveContactInput}
                             value={contactName}
                             onChange={(e) => setContactName(e.target.value)}
@@ -2329,7 +2457,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     // Hero stays minimal: Action, Status, Network, Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
-    if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
     return rows;
 }
 
@@ -2396,6 +2524,7 @@ function copyLabelForDetailField(key) {
 function CopyIconButton({ value, label = 'Copy to clipboard' }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
+    const haptic = useHapticFeedback();
     const handleClick = async (event) => {
         event.stopPropagation();
         const text = String(value ?? '');
@@ -2403,6 +2532,7 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
         if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
+            haptic.tap();
             return;
         }
         showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
@@ -2436,7 +2566,7 @@ function fullDetailRows(entry, balancesHidden = false) {
     if (entry.actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
-                display={Number(entry.actionIndex).toLocaleString('en-US')}
+                display={formatDecimalAmount(entry.actionIndex)}
                 fullValue={String(entry.actionIndex)}
                 ariaLabel="Copy action number"
             />
@@ -2449,7 +2579,7 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (coin) rows.push(['Chain', capitalize(coin)]);
         rows.push(['Network', capitalize(network)]);
     }
-    if (entry.blockIndex) rows.push(['Block', Number(entry.blockIndex).toLocaleString('en-US')]);
+    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
     else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
         rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
@@ -2550,15 +2680,7 @@ function isOraclePricedGetAmount(entry, raw, key, value) {
 // well as JS numbers. Uses BigInt for pure-integer strings so values
 // past Number.MAX_SAFE_INTEGER still round-trip correctly.
 function formatNumberWithCommas(value) {
-    if (value === null || value === undefined) return '';
-    const s = String(value).trim();
-    if (!s) return '';
-    if (/^-?\d+$/.test(s)) {
-        try { return BigInt(s).toLocaleString('en-US'); } catch { /* fall through */ }
-    }
-    const n = Number(s);
-    if (Number.isFinite(n)) return n.toLocaleString('en-US');
-    return s;
+    return formatDecimalAmount(value);
 }
 
 /**
@@ -2814,7 +2936,10 @@ function RecipientsBlock({ entry }) {
                 </div>
             ) : (
                 <EmptyState
-                    title={<>No {isDividend ? 'holders' : 'recipients'} found.</>}
+                    title={<>No {isDividend ? 'holders' : 'recipients'} found</>}
+                    body={isDividend
+                        ? 'Token holders appear here after balances are indexed.'
+                        : 'Matching recipients appear here after history is indexed.'}
                     titleAs="p"
                 />
             )}
@@ -2927,7 +3052,7 @@ function coinOfChainId(chainId) {
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
 
 /**
- * Resolve a numeric native-coin amount for `entry`, or `null` when the
+ * Resolve an exact native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
  *
  * IMPORTANT (old-numbering): a SEND action carries a
@@ -2940,7 +3065,7 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
  * replicate it here.
  *
  * @param {import('./History.jsx').HistoryEntry | null | undefined} entry
- * @returns {number | null}
+ * @returns {string | null}
  */
 function nativeAmountFieldOf(entry) {
     if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
@@ -2952,8 +3077,8 @@ function nativeAmountFieldOf(entry) {
     if (tick && String(tick).toUpperCase() !== nativeTicker) return null; // token movement
     const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     if (amt == null) return null;
-    const n = typeof amt === 'number' ? amt : parseFloat(amt);
-    return Number.isFinite(n) ? n : null;
+    const amount = String(amt).trim();
+    return /^-?\d+(\.\d+)?$/.test(amount) ? amount : null;
 }
 
 /**
@@ -3109,7 +3234,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>
-                            <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
+                            <span>Block {formatDecimalAmount(entry.blockIndex)}</span>
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
                                     {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
@@ -3123,7 +3248,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span className={styles.rowRelativeTime}>
+                        <span
+                            className={styles.rowRelativeTime}
+                            title={formatTimestamp(entry.timestamp)}
+                        >
                             {formatRelativeTime(entry.timestamp)}
                         </span>
                     ) : null}
@@ -3205,7 +3333,11 @@ function GroupCard({ item, expanded, onToggle }) {
             </span>
             <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
-                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '-'}
+                {newest?.timestamp ? (
+                    <span title={formatTimestamp(newest.timestamp)}>
+                        Latest {formatRelativeTime(newest.timestamp)}
+                    </span>
+                ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />
                 </span>
@@ -3347,30 +3479,7 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    if (!ts) return '-';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return '-';
-    return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
-}
-
-// Human-readable "X ago" from a unix timestamp (seconds or ms).
-function formatRelativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
+    return formatLocalDateTime(ts) || '-';
 }
 
 /**

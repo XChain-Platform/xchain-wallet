@@ -835,6 +835,7 @@ export function CreateBetFeedForm({
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                 />
             ) : null}
 

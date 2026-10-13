@@ -10,7 +10,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ToastHost.module.css';
-import { useHaptic } from '../hooks/useHaptic.js';
+import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 
 const VISIBLE_LIMIT = 3;
 const DEFAULT_DURATION_MS = 8000;
@@ -111,35 +111,37 @@ export function ToastHost({ children }) {
     }, [visibleToasts]);
 
     return (
-        <ToastContext.Provider value={api}>
-            {children}
-            <div
-                className={styles.viewport}
-                role="region"
-                aria-label="Notifications"
-            >
-                {hiddenCount > 0 ? (
-                    <div className={styles.overflowBadge} aria-hidden="true">
-                        {`+${hiddenCount} more`}
-                    </div>
-                ) : null}
-                {visibleToasts.map((t) => (
-                    <ToastItem
-                        key={t.id}
-                        toast={t}
-                        onAction={() => {
-                            if (typeof t.onAction === 'function') {
-                                Promise.resolve(t.onAction()).catch(() => {
-                                    /* swallow; caller surfaces its own error */
-                                });
-                            }
-                            dismissToast(t.id);
-                        }}
-                        onDismiss={() => dismissToast(t.id)}
-                    />
-                ))}
-            </div>
-        </ToastContext.Provider>
+        <HapticProvider value={haptic}>
+            <ToastContext.Provider value={api}>
+                {children}
+                <div
+                    className={styles.viewport}
+                    role="region"
+                    aria-label="Notifications"
+                >
+                    {hiddenCount > 0 ? (
+                        <div className={styles.overflowBadge} aria-hidden="true">
+                            {`+${hiddenCount} more`}
+                        </div>
+                    ) : null}
+                    {visibleToasts.map((t) => (
+                        <ToastItem
+                            key={t.id}
+                            toast={t}
+                            onAction={() => {
+                                if (typeof t.onAction === 'function') {
+                                    Promise.resolve(t.onAction()).catch(() => {
+                                        /* swallow; caller surfaces its own error */
+                                    });
+                                }
+                                dismissToast(t.id);
+                            }}
+                            onDismiss={() => dismissToast(t.id)}
+                        />
+                    ))}
+                </div>
+            </ToastContext.Provider>
+        </HapticProvider>
     );
 }
 

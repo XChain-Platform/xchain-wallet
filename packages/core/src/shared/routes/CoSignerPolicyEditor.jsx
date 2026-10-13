@@ -494,6 +494,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                     label="Max total per window"
                                     value={row.cap}
                                     onChange={(e) => patchRow('windowPerTick', i, { cap: e.target.value })}
+                                    inputMode="decimal"
                                     placeholder="1000"
                                 />
                                 <Button type="button" variant="ghost" onClick={() => removeRow('windowPerTick', i)}>Remove</Button>
@@ -525,6 +526,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             label="Warn above"
                             value={row.amount}
                             onChange={(e) => patchRow('confirmAbove', i, { amount: e.target.value })}
+                            inputMode="decimal"
                             placeholder="500"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('confirmAbove', i)}>Remove</Button>
@@ -548,6 +550,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedDestinations', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('allowedDestinations', i)}>Remove</Button>
                     </div>
@@ -571,6 +574,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedOutputs', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Input
                             label="Max value (optional)"

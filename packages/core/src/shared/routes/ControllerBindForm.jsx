@@ -690,7 +690,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                     value={controller}
                     onChange={(e) => setController(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     spellCheck={false}
                 />
@@ -750,7 +750,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

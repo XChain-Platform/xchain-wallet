@@ -36,6 +36,9 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>xchain</string>
+				<string>bitcoin</string>
+				<string>litecoin</string>
+				<string>dogecoin</string>
 			</array>
 		</dict>
 	</array>
@@ -101,5 +104,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDarkContent</string>
 </dict>
 </plist>

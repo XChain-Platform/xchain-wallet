@@ -212,7 +212,9 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         is a transient modal; focusing search is the whole point */}
                     <input
                         ref={inputRef}
-                        type="text"
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={styles.input}
                         value={query}
                         onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
