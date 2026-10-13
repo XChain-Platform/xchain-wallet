@@ -41,6 +41,7 @@
 //     stored credential ID + ciphertext.
 
 import { encrypt as aeadEncrypt, decrypt as aeadDecrypt } from '../crypto/aead.js';
+import { t } from '../i18n/index.js';
 
 const STORAGE_KEY = 'xchain-wallet:biometric';
 const RP_NAME = 'XChain Wallet';
@@ -196,7 +197,7 @@ async function webauthnDescribe() {
         || typeof globalThis.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
         return {
             supported: false,
-            reason: 'This browser does not support the sign-in technology biometric unlock needs.',
+            reason: t('flows.biometric.browserUnsupported'),
         };
     }
     try {
@@ -205,13 +206,12 @@ async function webauthnDescribe() {
         if (present) return { supported: true };
         return {
             supported: false,
-            reason: 'This device has no built-in fingerprint, face, or PIN unlock that this'
-                + ' browser can use. Set one up in your system settings, then come back.',
+            reason: t('flows.biometric.deviceUnavailable'),
         };
     } catch (_err) {
         return {
             supported: false,
-            reason: 'This browser could not check whether a built-in unlock method is available.',
+            reason: t('flows.biometric.probeFailed'),
         };
     }
 }
@@ -426,7 +426,7 @@ export async function describeBiometric() {
         supported,
         // Supported means there is nothing to explain; unsupported always
         // explains something, even when the provider declined to.
-        reason: supported ? null : (reason || BIOMETRIC_GENERIC_UNAVAILABLE),
+        reason: supported ? null : (reason || t('flows.biometric.genericUnavailable')),
         mechanism,
         wrapNote: typeof provider.wrapNote === 'string' && provider.wrapNote
             ? provider.wrapNote
