@@ -77,4 +77,24 @@ describe('changeWalletPassword', () => {
         }));
         expect(evict).toHaveBeenCalledWith('wallet-1');
     });
+    it('leaves the stored record untouched when re-encryption fails part way', async () => {
+        const { deps, evict, put, wallet } = setup();
+        const before = JSON.stringify(wallet);
+        const unlockWallet = vi.fn(async () => ({ lock: vi.fn() }));
+        const rekeyWalletRecord = vi.fn(async (candidate) => {
+            candidate.encryptedSeed = 'half-written';
+            candidate.importedKeys[0].encryptedWif = 'half-written';
+            throw new Error('encrypt failed');
+        });
+
+        await expect(changeWalletPassword({
+            walletId: 'wallet-1',
+            currentPassword: 'old-password',
+            newPassword: 'new-password',
+        }, deps, { unlockWallet, rekeyWalletRecord })).rejects.toThrow('encrypt failed');
+
+        expect(put).not.toHaveBeenCalled();
+        expect(evict).not.toHaveBeenCalled();
+        expect(JSON.stringify(wallet)).toBe(before);
+    });
 });
