@@ -139,10 +139,13 @@ import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKey
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
+import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
@@ -195,7 +198,9 @@ const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
 export function App() {
     return (
         <MessagingProvider shell="desktop" messaging={messaging}>
-            <AppInner />
+            <ToastHost>
+                <AppInner />
+            </ToastHost>
         </MessagingProvider>
     );
 }
@@ -2560,6 +2565,7 @@ function AppInner() {
                                         unlocked view via the shared layout header slot. */}
                                     <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                     <QueuedBroadcastBanner walletId={activeWalletId} />
+                                    {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
                                 </>
                             ) : null}
                         </>
