@@ -727,7 +727,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     padding: 'var(--xc-space-2)',
                     borderRadius: 'var(--xc-radius-md)',
                     border: '1px solid var(--xc-border)',
-                    background: 'var(--xc-bg-input, transparent)',
+                    background: 'var(--xc-surface)',
                     color: 'var(--xc-text)',
                     resize: 'vertical',
                     boxSizing: 'border-box',

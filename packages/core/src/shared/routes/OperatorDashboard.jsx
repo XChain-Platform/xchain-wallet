@@ -271,7 +271,7 @@ export function OperatorDashboard({ walletId, chainId, address, onBack }) {
  */
 function Section({ title, loading, error, children }) {
     return (
-        <section style={{ margin: '0.75rem 0', paddingTop: '0.5rem', borderTop: '1px solid var(--border, #ddd)' }}>
+        <section style={{ margin: '0.75rem 0', paddingTop: '0.5rem', borderTop: '1px solid var(--xc-border)' }}>
             <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>{title}</h3>
             {loading ? (
                 <p className={dashStyles.entryDescription}>Loading…</p>

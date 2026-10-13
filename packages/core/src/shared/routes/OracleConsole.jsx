@@ -310,7 +310,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     const isActive = active && `${active.chainId}:${active.action_index}` === key;
                     return (
                         <div key={key} className={styles.card}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <strong>#{String(f.action_index)} {f.label || '(untitled)'}</strong>
                                 <span className={styles.hint}>{f.feed_status}</span>
                             </div>

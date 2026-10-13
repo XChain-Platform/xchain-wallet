@@ -522,7 +522,7 @@ export function CoinpayForm({
                                             padding: '0.5rem',
                                             marginBottom: '0.25rem',
                                             border: isSelected
-                                                ? '2px solid var(--xc-accent, #1976d2)'
+                                                ? '2px solid var(--xc-accent-primary)'
                                                 : '1px solid var(--xc-border)',
                                             borderRadius: '4px',
                                             background: 'transparent',

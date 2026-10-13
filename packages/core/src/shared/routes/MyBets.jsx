@@ -48,11 +48,10 @@ function statusLabel(status) {
 }
 
 function statusColor(status) {
-    if (status === 'won') return { bg: '#1b5e20', fg: '#fff' };
-    if (status === 'lost') return { bg: '#8e1c1c', fg: '#fff' };
-    if (status === 'refunded') return { bg: '#4a4a4a', fg: '#fff' };
-    if (status === 'invalid') return { bg: '#8e1c1c', fg: '#fff' };
-    return { bg: '#0d47a1', fg: '#fff' };
+    if (status === 'won') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
+    if (status === 'lost' || status === 'invalid') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
+    if (status === 'refunded') return { bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)' };
+    return { bg: 'var(--xc-accent-primary)', fg: 'var(--xc-on-accent)' };
 }
 
 /**
@@ -206,7 +205,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                     const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
                     const body = (
                         <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <strong>Market #{String(b.feed_action_index)}</strong>
                                 <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
                                     {statusLabel(b.bet_status)}

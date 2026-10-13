@@ -939,7 +939,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
             {currentItems.length > 0 ? (
                 <>
                     <span className={styles.fromLabel}>Current members (uncheck to remove)</span>
-                    <ul className={styles.detailsList} style={{ display: 'block', maxHeight: '260px', overflowY: 'auto' }}>
+                    <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {currentItems.map((item) => (
                             <li key={item} style={{ padding: '2px 0' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>

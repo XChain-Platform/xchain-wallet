@@ -616,8 +616,8 @@ export function ContractStakeForm({
                             valueClassName={styles.detailsValue}
                         />
                     ) : null}
-                    <dt className={styles.detailsLabel} style={{ color: '#b94a48' }}>Slash risk</dt>
-                    <dd className={styles.detailsValue} style={{ color: '#b94a48' }}>
+                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Slash risk</dt>
+                    <dd className={styles.detailsValue} style={{ color: 'var(--xc-danger-text)' }}>
                         Funds slashed by this contract are sent to{' '}
                         {contractMeta.slashDestination
                             ? <AddressText address={contractMeta.slashDestination} />

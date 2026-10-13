@@ -120,7 +120,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     const fees = Array.isArray(record.fees_earned) ? record.fees_earned : [];
 
     const line = (label, value, hint) => (
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>{label}{hint ? <span className={styles.hint}> {hint}</span> : null}</span>
             <strong>{value}</strong>
         </div>
@@ -147,7 +147,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             ) : (
                 <div className={styles.card}>
                     {fees.map((f, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', overflowWrap: 'anywhere' }}>
                             <span>{f.tick || 'unknown token'}</span>
                             <strong>{String(f.amount)}</strong>
                         </div>

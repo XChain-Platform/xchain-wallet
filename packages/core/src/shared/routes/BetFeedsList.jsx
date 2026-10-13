@@ -27,11 +27,11 @@ export function useBetChainIds() {
 // Feed lifecycle -> pill colour. The wallet shows the STORED status, never a
 // status recomputed from the clock, so what a user sees is what the chain thinks.
 function statusColor(status) {
-    if (status === 'resolved') return { bg: '#1b5e20', fg: '#fff' };
-    if (status === 'cancelled' || status === 'expired') return { bg: '#8e1c1c', fg: '#fff' };
-    if (status === 'resolved_void') return { bg: '#4a4a4a', fg: '#fff' };
-    if (status === 'closed') return { bg: '#8a6d00', fg: '#fff' };
-    return { bg: '#0d47a1', fg: '#fff' };
+    if (status === 'resolved') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
+    if (status === 'cancelled' || status === 'expired') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
+    if (status === 'resolved_void') return { bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)' };
+    if (status === 'closed') return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
+    return { bg: 'var(--xc-accent-primary)', fg: 'var(--xc-on-accent)' };
 }
 
 // Plain-language labels: users are not reading protocol enums (wallet audience rule).
@@ -206,7 +206,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                 className={styles.card}
                                 style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
                                     <StatusPill status={m.feed_status} />
                                 </div>
