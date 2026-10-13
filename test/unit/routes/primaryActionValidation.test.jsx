@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
@@ -92,7 +94,7 @@ describe('primary actions explain missing form input', () => {
 
     it('SwapForm explains that both swap legs are required', async () => {
         const { container } = mount(<SwapForm walletId="w" onBack={() => {}} />);
-        await submitAndExpect(container, 'Fill the give/get tickers and amounts before reviewing.');
+        await submitAndExpect(container, 'Enter the give and get tickers and amounts before reviewing.');
     });
 
     it('CrossChainSwapForm explains that both swap legs are required', async () => {
@@ -102,8 +104,21 @@ describe('primary actions explain missing form input', () => {
         );
         await submitAndExpect(
             container,
-            'Fill give/get tickers and amounts (or select ownership) before reviewing.',
+            'Enter the give and get tickers and amounts, or select ownership, before reviewing.',
         );
+    });
+
+    it('CreateOrderForm uses give terminology for the first order leg', async () => {
+        const { container } = mount(<CreateOrderForm walletId="w" onBack={() => {}} />);
+        await submitAndExpect(container, 'Enter the ticker to give.');
+    });
+
+    it('CrossChainOrderForm uses give terminology for the first order leg', async () => {
+        const { container } = mount(
+            <CrossChainOrderForm walletId="w" onBack={() => {}} />,
+            { [BTC]: [BTC_ADDRESS], [LTC]: [LTC_ADDRESS] },
+        );
+        await submitAndExpect(container, 'Enter the ticker to give.');
     });
 
     it('SellOwnershipForm explains that its price is required', async () => {

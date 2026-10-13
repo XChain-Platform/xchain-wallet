@@ -483,7 +483,7 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
                 {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} />
             </span>
             <span className={styles.entryDescription}>
-                Gives {give} per fill · Price per fill: {price}
+                You receive {give} per fill · Price per fill: {price}
             </span>
             <span className={styles.entryDescription}>
                 #{row.action_index ?? '?'} · status {status}

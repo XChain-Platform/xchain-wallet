@@ -272,7 +272,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await screen.findByText(/10 DOGE available/);
         const totals = screen.getByTestId('buy-totals');
         expect(totals).toHaveTextContent('Price per fill2.00000000 DOGE');
-        expect(totals).toHaveTextContent('Give per fill100 DOGESWAP');
+        expect(totals).toHaveTextContent('You receive per fill100 DOGESWAP');
         expect(totals).toHaveTextContent('You pay2 DOGE');
         expect(totals).toHaveTextContent('You receive100 DOGESWAP');
 

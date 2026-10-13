@@ -433,7 +433,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
-            setFormError('Fill the give/get tickers and amounts before reviewing.');
+            setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
         setFormError(null);
@@ -981,7 +981,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 <>
                     <Input
                         label="Receive at (optional)"
-                        hint="Address to receive the GET side on. Defaults to your source address."
+                        hint="Address where you receive the get side. Defaults to your source address."
                         value={getAddress}
                         onChange={(e) => setGetAddress(e.target.value)}
                         autoComplete="off"

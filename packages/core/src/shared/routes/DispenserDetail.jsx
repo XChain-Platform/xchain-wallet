@@ -2229,7 +2229,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dl className={styles.detailsList} data-testid="buy-totals">
                             <dt className={styles.detailsLabel}>Price per fill</dt>
                             <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
-                            <dt className={styles.detailsLabel}>Give per fill</dt>
+                            <dt className={styles.detailsLabel}>You receive per fill</dt>
                             <dd className={styles.detailsValue}>{formatWithThousands(String(giveAmount))} {giveTick}</dd>
                             <dt className={styles.detailsLabel}>You pay</dt>
                             <dd className={styles.detailsValue}>{formatWithThousands(totalPayAmount)} {payTick}</dd>
@@ -2367,7 +2367,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 </dd>
                             </>
                         )}
-                        <dt className={styles.detailsLabel}>Per-fill give</dt>
+                        <dt className={styles.detailsLabel}>You receive per fill</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
                     <p className={styles.hint}>

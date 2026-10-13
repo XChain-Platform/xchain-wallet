@@ -433,11 +433,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         }
         if (validationError) return;
         if (!giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount)) {
-            setFormError('Fill give/get tickers and amounts (or select ownership) before reviewing.');
+            setFormError('Enter the give and get tickers and amounts, or select ownership, before reviewing.');
             return;
         }
         if (!getAddress) {
-            setFormError('Receiver address on the get-chain is required.');
+            setFormError('Enter a receive address on the get chain.');
             return;
         }
         setFormError(null);
@@ -891,7 +891,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                             setGetAddress(e.target.value);
                             setGetAddressTouched(true);
                         }}
-                        placeholder="auto-filled from your get-chain wallet"
+                        placeholder="Automatically filled from your wallet on the get chain"
                         autoComplete="off"
                     />
                     <TokenField

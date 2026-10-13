@@ -54,7 +54,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
             oracleFeeds: vi.fn().mockResolvedValue([{ tick: 'MGRTEST', fiat: 'USD', live: { value: '0.05' } }]),
         });
         await searchFor('MGRTEST');
-        expect(await screen.findAllByText(/Gives 1 MGRTEST per fill · Price per fill: 0\.05 USD \(oracle ndDEAA/))
+        expect(await screen.findAllByText(/You receive 1 MGRTEST per fill · Price per fill: 0\.05 USD \(oracle ndDEAA/))
             .not.toHaveLength(0);
         expect(screen.getAllByText(/status open/)).not.toHaveLength(0);
         expect(screen.queryAllByText(/status valid/)).toHaveLength(0);
@@ -105,7 +105,7 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         });
         await searchFor('MGRTEST');
 
-        expect(await screen.findAllByText(/Gives 1 MGRTEST per fill · Price per fill: 0\.05 USD/))
+        expect(await screen.findAllByText(/You receive 1 MGRTEST per fill · Price per fill: 0\.05 USD/))
             .not.toHaveLength(0);
         expect(screen.getAllByText(/#open · status open/)).not.toHaveLength(0);
         expect(screen.queryByText(/#closed/)).toBeNull();
