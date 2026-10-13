@@ -138,7 +138,7 @@ export function Settings({
         {
             id: 'this-wallet',
             title: 'This wallet',
-            description: 'Wallet name, extended public keys, switch / rename, remove wallet.',
+            description: 'Manage its name, extended public keys, switching, and removal.',
             keywords: 'wallet name xpub extended public key watch only export switch rename remove delete destroy migrate bip39 upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
             Component: ThisWalletSection,
@@ -152,7 +152,7 @@ export function Settings({
         {
             id: 'accounts-addresses',
             title: 'Accounts & addresses',
-            description: 'Active account, change addresses, signer pairing.',
+            description: 'Choose the active account and manage change addresses and signer pairing.',
             keywords: 'account address signer change addresses',
             kind: 'external-drill',
             visible: Boolean(onOpenAccountPicker && activeWallet),
@@ -162,7 +162,7 @@ export function Settings({
         {
             id: 'appearance',
             title: 'Appearance',
-            description: 'Theme, accent color, reduced motion.',
+            description: 'Choose the theme, accent color, and motion preference.',
             keywords: 'appearance theme system default color motion accent dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
@@ -170,7 +170,7 @@ export function Settings({
         {
             id: 'display',
             title: 'Display',
-            description: 'Balance thresholds, number formatting, pinned and hidden tokens.',
+            description: 'Control balance thresholds, number formatting, and pinned or hidden tokens.',
             keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
             searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
             kind: 'internal-drill',
@@ -180,7 +180,7 @@ export function Settings({
         {
             id: 'keyboard',
             title: 'Keyboard',
-            description: 'Keyboard shortcuts: view and rebind.',
+            description: 'View and rebind shortcuts.',
             keywords: 'keyboard shortcuts rebind reset keys hotkeys bindings open command palette lock wallet settings new send go balances history receive dex contacts filter export pin hide focused token submit form',
             kind: 'internal-drill',
             Component: KeyboardSection,
@@ -189,7 +189,7 @@ export function Settings({
         {
             id: 'language-region',
             title: 'Language & region',
-            description: 'Language, currency.',
+            description: 'Choose the interface language and fiat currency.',
             keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
             Component: LanguageRegionSection,
@@ -197,7 +197,7 @@ export function Settings({
         {
             id: 'privacy',
             title: 'Privacy',
-            description: 'Tor, change-address rotation, blur on blur, labels survive restore.',
+            description: 'Control network privacy, sensitive-data visibility, metadata requests, and restore behavior.',
             keywords: 'privacy tor routing change address rotation blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
             kind: 'internal-drill',
             Component: PrivacySection,
@@ -206,7 +206,7 @@ export function Settings({
         {
             id: 'safety',
             title: 'Safety',
-            description: 'Auto-lock, undo-send, test-send threshold, panic mode, backup reminders.',
+            description: 'Set auto-lock, send safeguards, panic mode, biometric access, and backup reminders.',
             keywords: 'safety autolock auto lock timeout test send warning threshold cancel sends undo biometric unlock wallet password panic mode duress passphrase backup reminders',
             kind: 'internal-drill',
             Component: SafetySection,
@@ -215,7 +215,7 @@ export function Settings({
         {
             id: 'wallet-mode',
             title: 'Wallet mode',
-            description: 'Normal / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
+            description: 'Choose whether this device signs, broadcasts, or prepares transactions for air-gapped signing.',
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
             Component: WalletModeSection,
@@ -224,7 +224,7 @@ export function Settings({
         {
             id: 'backup',
             title: 'Backup',
-            description: 'Recovery phrase, dry-run restore, encrypted backup file.',
+            description: 'Export recovery data, verify a recovery phrase, and restore labels and contacts.',
             keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
@@ -234,7 +234,7 @@ export function Settings({
         {
             id: 'fees',
             title: 'Fees',
-            description: 'Per-chain fee strategy, RBF defaults.',
+            description: 'Choose the fee strategy and fee-bumping default for each chain.',
             keywords: 'fees fee strategy rate rbf replace by fee chain custom allow bump defaults',
             kind: 'internal-drill',
             Component: FeesSection,
@@ -246,8 +246,8 @@ export function Settings({
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
             description: settings?.developerMode
-                ? 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.'
-                : 'Choose Mainnet or Testnet. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
+                ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
+                : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
             keywords: settings?.developerMode
                 ? 'network active mainnet testnet regtest filter chain switch mode dev'
                 : 'network active mainnet testnet filter chain switch mode',
@@ -260,7 +260,7 @@ export function Settings({
         {
             id: 'network-endpoints',
             title: 'Network & endpoints',
-            description: 'Per-chain explorer, encoder, and hub URLs.',
+            description: 'Set explorer, encoder, and hub URLs for each chain.',
             keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
@@ -269,7 +269,7 @@ export function Settings({
         {
             id: 'notifications',
             title: 'Notifications',
-            description: 'Confirmations, receipts, dispenser fills, order fills, price alerts.',
+            description: 'Choose which wallet events trigger notifications, sounds, or price alerts.',
             keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
             Component: NotificationsSection,
@@ -278,7 +278,7 @@ export function Settings({
         {
             id: 'connected-sites',
             title: 'Connected sites',
-            description: 'dApp connections and per-site permissions.',
+            description: 'Review dApp connections and control each site\'s permissions.',
             keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
             kind: 'internal-drill',
             Component: ConnectedSitesSection,
@@ -287,7 +287,7 @@ export function Settings({
         {
             id: 'contacts',
             title: 'Contacts',
-            description: 'Export and import the address book.',
+            description: 'Export or import the address book.',
             keywords: 'contacts address book export import json file drop private encrypted',
             kind: 'panel',
             Component: ContactsSection,
@@ -304,7 +304,7 @@ export function Settings({
         {
             id: 'developer',
             title: 'Developer mode',
-            description: 'Custom endpoints, regtest networks, and diagnostics.',
+            description: 'Configure regtest networks, custom endpoints, local dApp controls, and diagnostics.',
             keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
@@ -314,7 +314,7 @@ export function Settings({
         {
             id: 'about',
             title: 'About',
-            description: 'Version, license, reproducible build verification, release signatures.',
+            description: 'View version, license, build verification, release signature, and diagnostic details.',
             keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
             Component: AboutSection,

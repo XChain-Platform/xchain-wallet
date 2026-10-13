@@ -63,7 +63,7 @@ export function PrivacySection() {
             {shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Desktop only. Send the wallet's network traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050. Tor must already be running: if it is unreachable, requests fail rather than quietly going direct."
+                    hint="Desktop only: send wallet traffic through a local Tor SOCKS5 proxy at 127.0.0.1:9050; Tor must already be running because unreachable requests fail rather than quietly going direct."
                     checked={settings.privacy.torRouting}
                     onChange={(v) => onToggle('torRouting', v)}
                 />
@@ -73,7 +73,7 @@ export function PrivacySection() {
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Not available on this platform or shell. Browser-based wallets cannot open a wallet-only SOCKS connection, and an extension proxy would affect the entire browser. The desktop app can route only the wallet's traffic through Tor."
+                    hint="Not available on this platform or shell because browser wallets cannot open a wallet-only SOCKS connection and extension proxies affect the entire browser; the desktop app can route only wallet traffic through Tor."
                     checked={false}
                     disabled
                     onChange={() => {}}
@@ -81,7 +81,7 @@ export function PrivacySection() {
             )}
             <ToggleRow
                 label="Change-address rotation"
-                hint="For HD wallets, use the next internal change address when a send can derive one. Imported-key and watch-only sends keep the spending address. Rotated leftovers appear in the address list as “Change #N”."
+                hint="Imported-key and watch-only sends keep the spending address, while HD wallets use the next internal change address when available and list rotated leftovers as “Change #N”."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
@@ -93,31 +93,31 @@ export function PrivacySection() {
             />
             <ToggleRow
                 label="Labels survive restore"
-                hint="In the browser extension, batch label and contact edits and prompt for one on-chain publish per unlock window. Every app can still publish and restore labels manually from Backup."
+                hint="In the browser extension, batch label and contact edits into one on-chain publish prompt per unlock window while keeping manual publishing and restoration available in Backup."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <ToggleRow
                 label="Haptic feedback"
-                hint="Allow vibration for tap, success, warning, and error events when the device supports the Vibration API. OS or in-app reduced-motion settings suppress haptics."
+                hint="Allow vibration for tap, success, warning, and error events when supported; OS or in-app reduced-motion settings suppress haptics."
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <ToggleRow
                 label="Native coin price data"
-                hint="Allow third-party CoinGecko requests for native-coin detail stats and fallback fiat rates, and allow price-alert checks when alerts are enabled. Turning this off blocks CoinGecko and hides the detail stats and chart; explorer-backed on-chain oracle rates can still appear as normal wallet API traffic."
+                hint="Allow CoinGecko requests for native-coin details, fallback fiat rates, and enabled price alerts; turning this off blocks those requests and hides the details and chart, while explorer-backed on-chain oracle rates can still appear."
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <ToggleRow
                 label="Fetch token metadata"
-                hint="When a token description points to a Token Information Standard (TIS) JSON document, fetch it and load its referenced artwork or media from issuer-selected hosts. Turning this off shows only on-chain token fields without TIS or remote-media requests."
+                hint="Fetch Token Information Standard (TIS) JSON and referenced media from issuer-selected hosts when linked by a token description; turning this off shows only on-chain fields without TIS or remote-media requests."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <ToggleRow
                 label="Always require hardware cross-check confirm"
-                hint={`Require the explicit "I've verified path + address" checkbox on every hardware-wallet sign. Without this setting, the checkbox is still required for large amounts, first-time recipients, and multisig signs.`}
+                hint={`Require the "I've verified path + address" checkbox for every hardware-wallet sign instead of only for large amounts, first-time recipients, and multisig signs.`}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
@@ -149,8 +149,7 @@ function ClipboardAutoClearRow({ settings, update }) {
                     Clipboard auto-clear
                 </span>
                 <span style={ROW_HINT}>
-                    Clear sensitive clipboard copies after this many seconds.
-                    Set to 0 to keep them until they are replaced.
+                    Set to 0 to keep them until they are replaced; otherwise, clear sensitive clipboard copies after this many seconds.
                 </span>
             </div>
             <input
@@ -188,11 +187,7 @@ function FormDraftTtlRow({ settings, update }) {
                     Form draft retention
                 </span>
                 <span style={ROW_HINT}>
-                    Send / sign-message forms persist a draft of in-progress
-                    fields so a tab close or wallet lock doesn't lose what
-                    you typed. Drafts older than the retention window are
-                    discarded automatically; "Off" disables persistence and
-                    wipes any existing drafts on next form load.
+                    Keep in-progress send and sign-message fields through a tab close or wallet lock until the retention window expires, or disable persistence and clear saved drafts on the next form load by selecting "Off."
                 </span>
             </div>
             <select
