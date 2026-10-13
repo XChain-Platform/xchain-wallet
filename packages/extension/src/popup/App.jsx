@@ -1215,7 +1215,10 @@ function AppInner() {
                             setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
                         }}
-                        onCreateDispenser={() => setUnlockedView('dispenser')}
+                        onCreateDispenser={() => {
+                            setFormReturnView('dispensers-list');
+                            setUnlockedView('dispenser');
+                        }}
                         onBack={() => setUnlockedView(dispensersBackTo || 'home')}
                     />
                 );
