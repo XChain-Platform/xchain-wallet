@@ -12,6 +12,7 @@
 }
 
 .back {
+    --xc-icon-size: var(--xc-icon-xl);
     justify-self: start;
     background: transparent;
     border: none;
@@ -21,12 +22,12 @@
     /* Align the chevron's point with the AppHeader logo's left edge.
        Two offsets stack. First, the bar-padding delta: AppHeader pads its
        bar by space-3, Screen.header pads by space-4, so the content box
-       starts 4px too far right. Second, the chevron glyph sits ~10px inside
-       its own 28px SVG (the BackIcon vertex is at 9/24 of the viewBox),
+       starts 4px too far right. Second, the chevron glyph sits 9px inside
+       its own 24px SVG (the BackIcon vertex is at 9/24 of the viewBox),
        so a box-aligned button still reads indented. Subtract both so the
        visible chevron point lands under the logo's left edge. Tune
        --xc-page-header-chevron-nudge if a different chevron is swapped in. */
-    --xc-page-header-chevron-nudge: 10px;
+    --xc-page-header-chevron-nudge: 9px;
     padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
     margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-page-header-chevron-nudge));
     border-radius: var(--xc-radius-sm);
@@ -54,15 +55,6 @@
     cursor: not-allowed;
 }
 
-/* Scale the chevron SVG up. The default Icon stroke is sized at 18×18
-   to fit inline next to text; the back chevron sits on its own at the
-   leading edge of the toolbar so it can read bigger and still feel
-   balanced. */
-.back svg {
-    width: 28px;
-    height: 28px;
-}
-
 .titleGroup {
     display: flex;
     align-items: center;
@@ -73,11 +65,12 @@
 }
 
 .titleIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
     color: var(--xc-accent-text);
     flex: 0 0 auto;
 }
