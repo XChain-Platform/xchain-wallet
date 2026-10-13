@@ -79,6 +79,19 @@ export default defineConfig({
             name: 'chromium',
             use: { ...devices['Desktop Chrome'] },
         },
+        {
+            name: 'android-lg-k51-smoke',
+            grep: /@smoke/,
+            use: {
+                browserName: 'chromium',
+                viewport: { width: 412, height: 869 },
+                deviceScaleFactor: 2,
+                userAgent: 'Mozilla/5.0 (Linux; Android 10; LM-K500) AppleWebKit/537.36 '
+                    + '(KHTML, like Gecko) Chrome/102.0.5005.125 Mobile Safari/537.36',
+                isMobile: true,
+                hasTouch: true,
+            },
+        },
     ],
     webServer: {
         command: 'pnpm -C ../../packages/web dev',
