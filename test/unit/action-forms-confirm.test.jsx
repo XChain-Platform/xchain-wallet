@@ -855,15 +855,22 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: LinkForm,
-            props: {},
-            actionLabel: 'Link',
-            fill: (utils) => {
-                // Both side panels carry the same field label, so they are
-                // addressed positionally: chain A first, chain B second.
-                const [a, b] = utils.getAllByLabelText('Action to reference');
-                fireEvent.change(a, { target: { value: '11' } });
-                fireEvent.change(b, { target: { value: '22' } });
+            props: {
+                messagingOverrides: {
+                    getActionByIndex: () => Promise.resolve({ action: 'SEND', tick: 'JDOG', amount: '1' }),
+                },
             },
+            actionLabel: 'Link',
+            steps: [
+                (utils) => {
+                    // Both side panels carry the same field label, so they are
+                    // addressed positionally: chain A first, chain B second.
+                    const [a, b] = utils.getAllByLabelText('Action to reference');
+                    fireEvent.change(a, { target: { value: '11' } });
+                    fireEvent.change(b, { target: { value: '22' } });
+                },
+                () => vi.advanceTimersByTime(350),
+            ],
         });
         // The binding is the whole point: the pair the user read has to be
         // the pair inside the bytes that get signed.

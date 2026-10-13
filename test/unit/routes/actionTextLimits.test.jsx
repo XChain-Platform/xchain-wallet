@@ -57,6 +57,7 @@ function messagingFor() {
         }),
         tokenHolderSummary: vi.fn().mockResolvedValue({ recipientCount: 1, totalPayout: '1' }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        getActionByIndex: vi.fn().mockResolvedValue({ action: 'SEND', tick: 'JDOG', amount: '1' }),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
@@ -110,7 +111,7 @@ describe('LinkForm memo limit', () => {
         fireEvent.change(firstIndex, { target: { value: '11' } });
         fireEvent.change(secondIndex, { target: { value: '22' } });
         const memo = screen.getByLabelText('Memo (optional)');
-        const submit = screen.getByRole('button', { name: 'Link' });
+        const submit = await screen.findByRole('button', { name: 'Link' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
