@@ -168,7 +168,7 @@ describe('IssueTokenForm: the bridgeability disclosure', () => {
         ));
         const note = await screen.findByText(/Bridging is off/i, {}, WAIT);
         expect(note.textContent).toContain('Manage Token');
-        const listNote = screen.getByText(/cannot be bridged, and a bound list can never be cleared/i);
+        const listNote = screen.getByText(/can't be bridged, and a bound list can never be cleared/i);
         expect(listNote).toBeInTheDocument();
     });
 });

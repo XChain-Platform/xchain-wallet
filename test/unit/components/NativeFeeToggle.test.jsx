@@ -21,7 +21,7 @@ describe('NativeFeeToggle', () => {
         expect(screen.getByText(/On sends the protocol fee's BTC equivalent as an on-chain output;/))
             .toHaveTextContent('off deducts the fee from your XCHAIN balance.');
         // The forfeiture hint is surfaced inline.
-        expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
+        expect(screen.getByText(/isn't refunded if the network rejects/i)).toBeTruthy();
     });
 
     it('renders nothing when coinTicker is empty (unknown/custom chain)', () => {
@@ -56,7 +56,7 @@ describe('NativeFeeToggle', () => {
         expect(screen.queryByRole('switch')).toBeNull();
         expect(screen.getByText(/only way to pay a protocol fee on this chain/i)).toBeTruthy();
         // The fee is still a real on-chain payment, so the forfeit warning stays.
-        expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
+        expect(screen.getByText(/isn't refunded if the network rejects/i)).toBeTruthy();
     });
 
     it('still renders nothing on an unknown chain even when mandatory is passed', () => {
@@ -86,7 +86,7 @@ describe('NativeFeeToggle', () => {
                 />,
             );
             expect(screen.getByText('This action has no protocol fee')).toBeTruthy();
-            expect(screen.queryByText(/not refunded/i)).toBeNull();
+            expect(screen.queryByText(/isn't refunded/i)).toBeNull();
         });
 
         it('drops the Bitcoin payment-mode switch too when the fee is zero', () => {
@@ -108,7 +108,7 @@ describe('NativeFeeToggle', () => {
             );
             expect(screen.getByText('Protocol fee is paid in LTC')).toBeTruthy();
             expect(screen.getByText(/protocol fee is 0\.165 XCHAIN/)).toBeTruthy();
-            expect(screen.getByText(/not refunded if the network rejects/i)).toBeTruthy();
+            expect(screen.getByText(/isn't refunded if the network rejects/i)).toBeTruthy();
         });
     });
 });
