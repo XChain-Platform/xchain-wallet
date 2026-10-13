@@ -122,6 +122,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -437,7 +439,9 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             ) : visibleRows.length === 0 ? (
                 <EmptyState
                     title={allRows.length === 0
-                        ? 'Nothing staked yet. Use the + button to create your first stake.'
+                        ? (loadErrors.length > 0
+                            ? 'No staking positions could be loaded. Try again later.'
+                            : 'Nothing staked yet. Use the + button to create your first stake.')
                         : 'No staking positions match the current filter.'}
                     titleAs="p"
                 />

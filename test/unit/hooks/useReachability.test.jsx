@@ -320,7 +320,7 @@ describe('ReachabilityBanner', () => {
 
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.queryByText(/You're offline/)).toBeNull();
+        expect(screen.queryByText(/Wallet is offline/)).toBeNull();
         expect(check).not.toHaveBeenCalled();
     });
 
@@ -333,7 +333,7 @@ describe('ReachabilityBanner', () => {
             </MessagingContext.Provider>,
         );
 
-        await waitFor(() => expect(screen.getByText(/You're offline/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Wallet is offline/)).toBeTruthy());
     });
 
     it('names what the user actually loses, not which of our services fell over', async () => {

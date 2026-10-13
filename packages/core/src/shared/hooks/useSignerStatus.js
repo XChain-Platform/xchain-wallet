@@ -117,6 +117,7 @@ export function useSignerStatus({ getStatus, chainId }) {
             setDetail(d);
         } catch (err) {
             if (!aliveRef.current) return;
+            statusRef.current = 'disconnected';
             setStatus('disconnected');
             setDetail(err && err.message ? String(err.message) : null);
         }

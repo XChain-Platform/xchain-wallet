@@ -23,6 +23,18 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: CHAIN, tick: 'DANK' })}>
+                Pick DANK
+            </button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 // Valid mainnet bech32 destinations: the form decodes these for real, so a
@@ -40,7 +52,7 @@ const ADDRESSES = {
     }],
 };
 
-function mount({ gated = false } = {}) {
+function mount({ gated = false, watcher = false } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getAddressBalances: vi.fn().mockResolvedValue({
@@ -48,6 +60,7 @@ function mount({ gated = false } = {}) {
             tokens: [{ tick: 'PEPE', quantity: '1000', divisibility: 0 }],
         }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: watcher ? 'watcher' : 'full' }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         gatedSendReadiness: vi.fn().mockResolvedValue(
@@ -98,7 +111,8 @@ async function fillRow(n, { to, amount, tick } = {}) {
         fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} address`), { target: { value: to } });
     }
     if (tick !== undefined) {
-        fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} token`), { target: { value: tick } });
+        fireEvent.click(await screen.findByRole('button', { name: new RegExp(`Recipient ${n + 1} token`) }));
+        fireEvent.click(await screen.findByRole('button', { name: `Pick ${tick}` }));
     }
     if (amount !== undefined) {
         fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} amount`), { target: { value: amount } });
@@ -136,6 +150,8 @@ describe('Send: multi-recipient (PC-52)', () => {
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         const payload = messaging.composeForConfirm.mock.calls[0][0];
         expect(payload.legs).toBeUndefined();
+        expect(payload.change).toBeUndefined();
+        expect(payload.utxos).toBeUndefined();
         expect(payload).toMatchObject({ to: ALICE, tick: 'PEPE', amount: '7' });
     });
 
@@ -156,6 +172,26 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         expect(await screen.findByText(/Recipient 2: address is required/)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('puts validation on each added-row field and clears each message as it is fixed', async () => {
+        mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(await screen.findByText('Recipient 2: address is required.')).toBeInTheDocument();
+        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+
+        await fillRow(1, { to: BOB });
+        expect(screen.queryByText('Recipient 2: address is required.')).toBeNull();
+        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+
+        await fillRow(1, { amount: '.' });
+        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+
+        await fillRow(1, { amount: '3' });
+        expect(screen.queryByText(/Recipient 2:/)).toBeNull();
     });
 
     it('validates the added recipient address like the first one', async () => {
@@ -200,6 +236,34 @@ describe('Send: multi-recipient (PC-52)', () => {
             { to: ALICE, tick: 'PEPE', amount: '7' },
             { to: BOB, tick: 'DANK', amount: '3' },
         ]);
+    });
+
+    it('shows exact per-token totals and opens the token picker for an added row', async () => {
+        mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '3' });
+        expect(screen.getByText(/Total: 10 PEPE across 2 recipients, in one transaction and one network fee/))
+            .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('switch', { name: /Different token per recipient/ }));
+        const pickerButton = await screen.findByRole('button', { name: /Recipient 2 token: PEPE/ });
+        fireEvent.click(pickerButton);
+        expect(await screen.findByRole('heading', { name: 'Select token for recipient 2' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Pick DANK' }));
+        expect(await screen.findByText(/Total: 7 PEPE \+ 3 DANK across 2 recipients/)).toBeInTheDocument();
+    });
+
+    it('lists every recipient on the watcher review and shows one network fee', async () => {
+        mount({ watcher: true });
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '3' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(await screen.findByText(`7 PEPE to ${ALICE}`)).toBeInTheDocument();
+        expect(screen.getByText(`3 PEPE to ${BOB}`)).toBeInTheDocument();
+        expect(screen.getAllByText('Network fee')).toHaveLength(1);
     });
 
     it('does not offer a second recipient for the native coin', async () => {

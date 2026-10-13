@@ -93,6 +93,18 @@ describe('provider seam', () => {
         expect(await isBiometricSupported()).toBe(true);
         expect(plugin.biometricStatus).toHaveBeenCalled();
     });
+
+    it('refreshes enrollment while probing current availability', async () => {
+        const plugin = fakeVault();
+        __setNativeVaultForTests(plugin);
+        await installNativeBiometricProvider();
+        await registerBiometricCredential({ password: PASSWORD });
+        expect(isBiometricRegistered()).toBe(true);
+
+        plugin.state.wrap = null;
+        expect(await isBiometricSupported()).toBe(true);
+        expect(isBiometricRegistered()).toBe(false);
+    });
 });
 
 describe('probes never throw', () => {
@@ -233,27 +245,26 @@ describe('unlock failures', () => {
 });
 
 describe('clear', () => {
-    it('drops the affordance immediately and tells the native side', async () => {
+    it('drops the affordance after the native side confirms deletion', async () => {
         const plugin = fakeVault();
         __setNativeVaultForTests(plugin);
         await installNativeBiometricProvider();
         await registerBiometricCredential({ password: PASSWORD });
 
-        clearBiometricCredential();
-        // Synchronous by contract: the shared settings row calls it without
-        // awaiting and re-reads the flag on the next line.
+        await clearBiometricCredential();
         expect(isBiometricRegistered()).toBe(false);
-        await Promise.resolve();
         expect(plugin.biometricClear).toHaveBeenCalled();
     });
 
-    it('does not throw when the native clear fails', async () => {
+    it('keeps the affordance enabled when the native clear fails', async () => {
         __setNativeVaultForTests(fakeVault({
             biometricClear: async () => { throw new Error('keystore busy'); },
         }));
         await installNativeBiometricProvider();
-        expect(() => clearBiometricCredential()).not.toThrow();
-        await Promise.resolve();
+        await registerBiometricCredential({ password: PASSWORD });
+
+        await expect(clearBiometricCredential()).rejects.toThrow('keystore busy');
+        expect(isBiometricRegistered()).toBe(true);
     });
 });
 

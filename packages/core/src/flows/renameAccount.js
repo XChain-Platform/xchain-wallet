@@ -30,7 +30,14 @@ export async function renameAccount({ accountId, name, vault }) {
     const account = await vault.accounts.get(accountId);
     if (!account) throw new Error('renameAccount: account not found: ' + accountId);
 
-    const updated = { ...account, name: name.trim() };
+    const trimmed = name.trim();
+    const siblings = await vault.accounts.findBy('walletId', account.walletId);
+    if (siblings.some((candidate) => candidate.id !== accountId
+        && candidate.name.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+        throw new Error(`An account named "${trimmed}" already exists.`);
+    }
+
+    const updated = { ...account, name: trimmed };
     await vault.accounts.put(updated);
     return updated;
 }

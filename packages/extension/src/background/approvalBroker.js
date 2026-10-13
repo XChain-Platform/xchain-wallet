@@ -55,6 +55,7 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {() => string} [newId]                          randomUUID replacement for tests
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
+ * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
  */
@@ -81,6 +82,7 @@ export class ApprovalBroker {
             /** @type {BrokerWindowDeps | undefined} */ (
                 globalThis.chrome?.windows
             );
+        this._action = deps.action ?? globalThis.chrome?.action;
         this._approvalPath = deps.approvalPath ?? 'approval.html';
         this._windowSize = {
             width: deps.windowSize?.width ?? 400,
@@ -88,6 +90,8 @@ export class ApprovalBroker {
         };
         /** @type {Map<string, PendingEntry>} */
         this._pending = new Map();
+        this._badgeUpdate = Promise.resolve();
+        this._queueBadgeUpdate();
 
         if (this._windows?.onRemoved?.addListener) {
             this._onWindowRemoved = this._onWindowRemoved.bind(this);
@@ -136,6 +140,7 @@ export class ApprovalBroker {
         const entry = this._pending.get(id);
         if (!entry) return false;
         this._pending.delete(id);
+        this._queueBadgeUpdate();
         entry.deferred.resolve(result);
         if (entry.windowId != null && this._windows?.remove) {
             try {
@@ -160,9 +165,11 @@ export class ApprovalBroker {
         /** @type {PendingEntry} */
         const entry = { id, kind, payload, deferred, windowId: null };
         this._pending.set(id, entry);
+        this._queueBadgeUpdate();
 
         if (!this._windows?.create) {
             this._pending.delete(id);
+            this._queueBadgeUpdate();
             deferred.reject(
                 new Error(
                     'ApprovalBroker: chrome.windows.create unavailable; inject windows for tests',
@@ -187,6 +194,7 @@ export class ApprovalBroker {
             })
             .catch((err) => {
                 this._pending.delete(id);
+                this._queueBadgeUpdate();
                 deferred.reject(err);
             });
 
@@ -198,12 +206,29 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.windowId === windowId) {
                 this._pending.delete(id);
+                this._queueBadgeUpdate();
                 // Convention: window-closed-without-decision = rejected.
                 entry.deferred.resolve({ approved: false });
                 break;
             }
         }
     }
+
+    _queueBadgeUpdate() {
+        if (!this._action?.setBadgeText) return;
+        this._badgeUpdate = this._badgeUpdate
+            .catch(() => {})
+            .then(() => this._action.setBadgeText({
+                text: approvalBadgeText(this._pending.size),
+            }))
+            .catch(() => {});
+    }
+}
+
+/** @param {number} count */
+export function approvalBadgeText(count) {
+    if (!Number.isFinite(count) || count <= 0) return '';
+    return count > 99 ? '99+' : String(Math.floor(count));
 }
 
 function makeDeferred() {

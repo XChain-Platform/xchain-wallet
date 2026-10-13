@@ -88,7 +88,7 @@
     margin-bottom: var(--xc-space-4);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-bg-muted);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .frameTitle {
