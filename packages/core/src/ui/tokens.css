@@ -139,6 +139,13 @@
     --xc-control-font: var(--xc-control-font-md);
     --xc-control-pad-x: var(--xc-control-pad-x-md);
 
+    /* Menus use one row measure across popovers, overflow actions, and
+     * navigation sheets. Content can wrap and grow beyond this minimum. */
+    --xc-menu-item-h: var(--xc-control-h-md);
+    --xc-menu-item-icon: var(--xc-icon-md);
+    --xc-menu-item-pad-block: var(--xc-space-2);
+    --xc-menu-item-pad-inline: var(--xc-control-pad-x);
+
     /* Shared stacking contexts stay ordered across every shell. */
     --xc-z-base: 1;
     --xc-z-sticky: 20;
@@ -265,6 +272,93 @@
      * padding (see below), and the left/right insets reduce the shell's
      * width, which needs no height math. */
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
+}
+
+/* Semantic menus and menu-like navigation lists share one row contract.
+ * Feature styles continue to own popup placement and surface geometry. */
+:root [role="menu"],
+:root [data-xc-menu-list="rows"] {
+    gap: 0;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list] [data-xc-menu-item] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-menu-item-h);
+    padding: var(--xc-menu-item-pad-block) var(--xc-menu-item-pad-inline);
+    gap: var(--xc-space-2);
+    justify-content: flex-start;
+    color: var(--xc-text);
+    text-align: start;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list="rows"] [data-xc-menu-item] {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+:root [role="menu"] [role="menuitem"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemradio"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemcheckbox"] > [aria-hidden="true"]:first-child,
+:root [data-xc-menu-list] [data-xc-menu-item] > [aria-hidden="true"]:first-child {
+    flex: 0 0 var(--xc-menu-item-icon);
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] [role="menuitem"] svg,
+:root [role="menu"] [role="menuitemradio"] svg,
+:root [role="menu"] [role="menuitemcheckbox"] svg,
+:root [data-xc-menu-list] [data-xc-menu-item] svg {
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] > [role="menuitem"] + [role="menuitem"],
+:root [role="menu"] > li + li,
+:root [data-xc-menu-list="rows"] > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+:root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-bg-muted);
+}
+
+:root [role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):is([aria-current], [aria-checked="true"], [aria-selected="true"]),
+:root [data-xc-menu-list] [data-xc-menu-item][aria-current] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-text);
+    font-weight: 600;
+}
+
+:root [role="menu"] [role="menuitem"]:focus-visible,
+:root [role="menu"] [role="menuitemradio"]:focus-visible,
+:root [role="menu"] [role="menuitemcheckbox"]:focus-visible,
+:root [data-xc-menu-list] [data-xc-menu-item]:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] {
+    color: var(--xc-danger-fg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-danger-bg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] svg {
+    color: currentColor;
 }
 
 /* The dvh form, only where the engine HAS dvh. It cannot sit in :root as a

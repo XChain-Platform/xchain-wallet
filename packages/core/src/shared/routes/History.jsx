@@ -2378,6 +2378,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'rbf-cancel',
             label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
             icon: <Icon.XIcon />,
+            danger: true,
             disabled: rbfBusy !== null || !networkAvailable,
             disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('cancel'),
@@ -2533,6 +2534,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                             key={opt.id}
                                             type="button"
                                             role="menuitem"
+                                            data-destructive={opt.danger ? 'true' : undefined}
                                             className={styles.moreMenuItem}
                                             onClick={opt.onClick}
                                             disabled={Boolean(opt.disabled)}
