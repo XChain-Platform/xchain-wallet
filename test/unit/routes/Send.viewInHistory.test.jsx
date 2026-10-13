@@ -31,7 +31,7 @@ const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
 
-function mount({ onViewHistory } = {}) {
+function mount({ onViewHistory, statusHarness = null } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN_ID]: [{
@@ -58,7 +58,27 @@ function mount({ onViewHistory } = {}) {
             psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|…', version: 1,
         }),
         sendToken: vi.fn().mockResolvedValue({ txid: TXID }),
-        getAddressHistory: vi.fn().mockResolvedValue([]),
+        getAddressHistory: vi.fn(async () => statusHarness?.phase === 'confirmed' ? [{
+            action: 'SEND',
+            action_index: '44',
+            block_index: 100,
+            timestamp: 1_700_000_000,
+            tx_hash: TXID,
+            status: 'valid',
+            details: { source: FROM, destination: TO, tick: 'BTC', amount: '0.01' },
+        }] : []),
+        getPendingTxsForAddress: vi.fn(async () => statusHarness && statusHarness.phase !== 'confirmed' ? [{
+            id: 'pending-send',
+            txid: TXID,
+            status: statusHarness.phase === 'failed' ? 'failed' : 'broadcast',
+            fromAddress: FROM,
+            toAddress: TO,
+            action: 'SEND',
+            tick: 'BTC',
+            amount: '0.01',
+            broadcastAt: new Date().toISOString(),
+        }] : []),
+        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 102 }),
     };
     // Send reaches for a wide messaging surface (fee tiers, prices, the
     // single-encode confirm pipeline's reserve/session plumbing). Anything
@@ -99,12 +119,28 @@ async function driveToBroadcastDone(messaging) {
     fireEvent.click(approve);
 
     await waitFor(() => expect(messaging.sendToken).toHaveBeenCalled());
-    return screen.findByRole('heading', { name: /Broadcast pending/i });
+    return screen.findByRole('heading', { name: /^Pending$/i });
 }
 
 afterEach(() => cleanup());
 
 describe('Send success card: "View in history" (M2.4)', () => {
+    it('updates pending, failed, and confirmed status without remounting', async () => {
+        const statusHarness = { phase: 'pending' };
+        const { messaging } = mount({ statusHarness });
+        await driveToBroadcastDone(messaging);
+        expect(screen.getByRole('heading', { name: 'Pending' })).toBeInTheDocument();
+
+        statusHarness.phase = 'failed';
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(await screen.findByRole('heading', { name: 'Failed' })).toBeInTheDocument();
+
+        statusHarness.phase = 'confirmed';
+        document.dispatchEvent(new Event('visibilitychange'));
+        expect(await screen.findByRole('heading', { name: 'Confirmed' })).toBeInTheDocument();
+        expect(await screen.findByText('3 Confirmations')).toBeInTheDocument();
+    });
+
     it('offers the action after broadcast and names the wait honestly', async () => {
         const onViewHistory = vi.fn();
         const { messaging } = mount({ onViewHistory });

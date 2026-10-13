@@ -225,6 +225,11 @@ import styles from './Send.module.css';
 import { externalIndexOf } from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
 import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
+import { normalizeHistoryRow } from '../utils/historyRow.js';
+import { pendingTxToEntry } from '../utils/pendingHistory.js';
+import { classifyEntryStatus } from '../utils/historyFilter.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
+import { BALANCE_POLL_INTERVAL_MS } from '../../flows/balances.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -507,6 +512,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // this instead of re-parsing the displayed message text.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [sentStatus, setSentStatus] = useState({
+        status: 'pending',
+        confirmations: null,
+        blockIndex: null,
+    });
+    const sentStatusPollRef = useRef(0);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // §37 / G125: form-draft persistence. Persists only the user-visible
@@ -1220,6 +1231,82 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+
+    useEffect(() => {
+        const txid = result?.txid || result?.broadcast?.txid;
+        const source = fromAddress?.address;
+        if (stage !== 'done' || !txid || !chainId || !source || result?.queued) return undefined;
+        let cancelled = false;
+        sentStatusPollRef.current += 1;
+        setSentStatus({ status: 'pending', confirmations: null, blockIndex: null });
+
+        const poll = async () => {
+            const requestId = ++sentStatusPollRef.current;
+            const rowsFrom = (response) => {
+                if (Array.isArray(response)) return response;
+                if (Array.isArray(response?.data)) return response.data;
+                if (Array.isArray(response?.rows)) return response.rows;
+                return [];
+            };
+            const [historyRows, pendingRows, watermarkResult] = await Promise.all([
+                messaging.getAddressHistory({ chainId, address: source })
+                    .then(rowsFrom)
+                    .catch(() => []),
+                typeof messaging.getPendingTxsForAddress === 'function'
+                    ? messaging.getPendingTxsForAddress({ chainId, address: source })
+                        .then(rowsFrom)
+                        .catch(() => [])
+                    : Promise.resolve([]),
+                typeof messaging.getIndexerWatermark === 'function'
+                    ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+            if (cancelled || requestId !== sentStatusPollRef.current) return;
+
+            const wanted = String(txid).toLowerCase();
+            let entry = null;
+            const historyRow = historyRows.find((row) => (
+                String(row?.tx_hash ?? row?.txHash ?? '').toLowerCase() === wanted
+            ));
+            if (historyRow) {
+                entry = normalizeHistoryRow(historyRow, { chainId, address: source });
+            } else {
+                const pendingRecord = pendingRows.find((record) => (
+                    String(record?.txid || '').toLowerCase() === wanted
+                ));
+                if (pendingRecord) {
+                    entry = pendingTxToEntry({
+                        chainId,
+                        address: source,
+                        pendingTx: pendingRecord,
+                        ownAddresses: new Set([source.toLowerCase()]),
+                        observedAtMs: Date.now(),
+                    });
+                }
+            }
+            if (!entry) return;
+
+            const status = classifyEntryStatus(entry);
+            const blockIndex = Number(entry.blockIndex || entry.pending?.confirmedBlockIndex || 0);
+            const watermark = Number(watermarkResult?.watermark || 0);
+            const chainTip = Math.max(blockIndex, Number.isFinite(watermark) ? watermark : 0);
+            setSentStatus({
+                status,
+                confirmations: status === 'confirmed' && blockIndex > 0
+                    ? chainTip - blockIndex + 1
+                    : null,
+                blockIndex: blockIndex || null,
+            });
+        };
+
+        void poll();
+        const stop = startVisibleInterval(() => { void poll(); }, BALANCE_POLL_INTERVAL_MS);
+        return () => {
+            cancelled = true;
+            sentStatusPollRef.current += 1;
+            stop();
+        };
+    }, [chainId, fromAddress?.address, messaging, result, stage]);
 
     const [coinControlEnabled, setCoinControlEnabled] = useState(false);
     const [availableUtxos, setAvailableUtxos] = useState(/** @type {any[]} */ ([]));
@@ -2675,12 +2762,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
         return wrap(
             <>
-                <div className={styles.successCard}>
-                    <div className={styles.successIcon} aria-hidden="true">✓</div>
+                <div className={styles.successCard} data-transaction-status={sentStatus.status}>
+                    <div className={styles.successIcon} aria-hidden="true">
+                        {sentStatus.status === 'confirmed' ? '✓' : sentStatus.status === 'failed' ? '!' : '⏳'}
+                    </div>
                     <div role="status" aria-live="polite" aria-atomic="true">
-                        <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
+                        <h2 className={styles.successTitle}>
+                            {sentStatus.status === 'confirmed'
+                                ? t('history.status.confirmed')
+                                : sentStatus.status === 'failed'
+                                    ? t('history.status.failed')
+                                    : t('send.success.broadcastPending')}
+                        </h2>
                         <p className={styles.successHint}>
-                            {t('send.success.broadcastPendingBody')}
+                            {sentStatus.status === 'confirmed'
+                                ? (sentStatus.confirmations == null
+                                    ? 'Confirmed on the network.'
+                                    : `${sentStatus.confirmations} ${sentStatus.confirmations === 1 ? 'Confirmation' : 'Confirmations'}`)
+                                : sentStatus.status === 'failed'
+                                    ? 'The transaction failed.'
+                                    : t('send.success.broadcastPendingBody')}
                         </p>
                     </div>
                     {sentAmount || recipient ? (

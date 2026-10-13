@@ -524,7 +524,7 @@ export const en = {
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
     'send.queued.body':
         "Your transaction is signed but couldn't reach the network. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there. The wallet reminds you when the network is back. Don't send this payment again.",
-    'send.success.broadcastPending': 'Broadcast pending',
+    'send.success.broadcastPending': 'Pending',
     'send.success.broadcastPendingBody':
         "The network accepted your transaction. It's waiting for confirmation, which usually takes a few blocks. You can leave this screen.",
     'send.success.copy': 'Copy',

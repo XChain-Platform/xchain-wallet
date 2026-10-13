@@ -1356,6 +1356,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         activeByChain={activeByChain}
                         balancesFetchedAt={balancesFetchedAt}
                         walletId={activeWalletId}
+                        accountId={activeAccountId}
                         networkFilter={networkFilter}
                         tokenQuery={tokenQuery}
                         coinFamilies={coinFamilies}
