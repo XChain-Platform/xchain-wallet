@@ -20,13 +20,30 @@ describe('Sparkline', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    it('renders scaled points inside the viewBox and an accessible trend label', () => {
+    it('renders scaled points inside the viewBox and an accessible data summary', () => {
         render(<Sparkline series={[1, 3]} />);
 
-        const image = screen.getByRole('img', { name: 'Price trend, up' });
+        const image = screen.getByRole('img', {
+            name: 'Price trend. Values range from 1 to 3. Start 1. End 3. Change +2 (+200.00%).',
+        });
         expect(image.tagName).toBe('svg');
         expect(image.querySelector('polyline')?.getAttribute('points'))
             .toBe('1.00,99.00 99.00,1.00');
+    });
+
+    it('includes range context and formatted falling values in its summary', () => {
+        render(
+            <Sparkline
+                series={[12, 9]}
+                label="Portfolio chart"
+                rangeLabel="24h"
+                formatValue={(value) => `$${value.toFixed(2)}`}
+            />,
+        );
+
+        expect(screen.getByRole('img')).toHaveAccessibleName(
+            'Portfolio chart. Range 24h. Values range from $9.00 to $12.00. Start $12.00. End $9.00. Change -$3.00 (-25.00%).',
+        );
     });
 
     it('uses semantic theme tokens for rising, falling, and flat series', () => {
@@ -43,7 +60,7 @@ describe('Sparkline', () => {
         act(() => rerender(<Sparkline series={[3, 1]} />));
         expect(container.querySelector('polyline')?.getAttribute('stroke'))
             .toBe('var(--xc-danger)');
-        expect(screen.getByRole('img', { name: 'Price trend, down' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: /^Price trend\. .*Change -2 / })).toBeInTheDocument();
     });
 
     it('renders a centered mark for one finite point and ignores invalid samples', () => {
@@ -51,7 +68,7 @@ describe('Sparkline', () => {
 
         expect(container.querySelector('polyline')?.getAttribute('points'))
             .toBe('48.00,50.00 52.00,50.00');
-        expect(screen.getByRole('img', { name: 'Price trend, unchanged' })).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: /^Price trend\. .*Change 0 \(0\.00%\)/ })).toBeInTheDocument();
     });
 });
 

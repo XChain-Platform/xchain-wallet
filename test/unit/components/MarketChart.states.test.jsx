@@ -69,7 +69,7 @@ describe('MarketChart states and timeframes', () => {
 
         expect(screen.getByRole('status')).toHaveTextContent('Loading price chart…');
         expect(screen.queryByText('No trades yet in this market.')).toBeNull();
-        expect(screen.getByLabelText('Price chart').parentElement).toHaveAttribute('aria-busy', 'true');
+        expect(screen.getByRole('img').parentElement).toHaveAttribute('aria-busy', 'true');
 
         await act(async () => request.resolve([]));
 
@@ -101,6 +101,9 @@ describe('MarketChart states and timeframes', () => {
                 { time: 120, value: 0.02 },
             ]);
         });
+        expect(screen.getByRole('img')).toHaveAccessibleName(
+            'XCHAIN/BTC price chart. Range 1m. Values range from 0.01 BTC to 0.02 BTC. Start 0.01 BTC. End 0.02 BTC. Change +0.01 BTC (+100.00%).',
+        );
     });
 
     it('colors a falling series from the danger token and keeps flat data neutral', async () => {
@@ -148,7 +151,7 @@ describe('MarketChart states and timeframes', () => {
                 .toEqual({ mouse: false, touch: false });
         });
 
-        const container = screen.getByLabelText('Price chart');
+        const container = screen.getByRole('img');
         vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ width: 288.9 });
         act(() => window.dispatchEvent(new Event('resize')));
         expect(chartHarness.chartApplyOptions).toHaveBeenCalledWith({ width: 288 });

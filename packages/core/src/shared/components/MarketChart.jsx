@@ -34,6 +34,7 @@ import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucke
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { describeChartSeries } from './Sparkline.jsx';
 
 /**
  * @param {object} props
@@ -62,9 +63,19 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
         () => PERIODS.find((p) => p.id === periodId) ?? PERIODS.find((p) => p.id === DEFAULT_PERIOD_ID),
         [periodId],
     );
-    const points = useMemo(() => bucketizeMatches(rawRows, {
-        tick1, tick2, periodSeconds: period.seconds,
-    }).map((c) => ({ time: c.time, value: c.close })), [rawRows, tick1, tick2, period]);
+    const points = useMemo(() => {
+        const candles = bucketizeMatches(rawRows, {
+            tick1, tick2, periodSeconds: period.seconds,
+        });
+        return candles.map((c) => ({ time: c.time, value: c.close }));
+    }, [rawRows, tick1, tick2, period]);
+    const chartLabel = points.length > 0
+        ? describeChartSeries(points.map((point) => point.value), {
+            label: `${tick1}/${tick2} price chart`,
+            rangeLabel: period.label,
+            formatValue: (value) => `${formatChartPrice(value)} ${tick2}`,
+        })
+        : `${tick1}/${tick2} price chart. No price trend available for the ${period.label} range.`;
     // Lazy-init the chart once the container is mounted.
 
     useEffect(() => {
@@ -265,7 +276,8 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             <div
                 ref={containerRef}
                 style={{ width: '100%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', height }}
-                aria-label="Price chart"
+                role="img"
+                aria-label={chartLabel}
             />
             {loading ? (
                 <StatusMessage variant="status">Loading price chart…</StatusMessage>
@@ -327,4 +339,8 @@ function extractRows(resp) {
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
     return [];
+}
+
+function formatChartPrice(value) {
+    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
 }

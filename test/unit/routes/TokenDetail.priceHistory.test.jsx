@@ -115,13 +115,13 @@ describe('TokenDetail price history', () => {
         const balance = screen.getByRole('region', { name: 'PRICEPROBE balance' });
         expect(balance.textContent).not.toContain('$');
         expect(balance.textContent).not.toContain('USD');
-        expect(screen.queryByRole('img', { name: 'Price trend' })).toBeNull();
+        expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
     });
 
     it('draws selectable synthesized ranges only for the demo wallet', async () => {
         renderDetail('demo-wallet');
-        const chart = await screen.findByRole('img', { name: 'Price trend' });
+        const chart = await screen.findByRole('img', { name: /^Price trend/ });
         expect(chart.querySelector('polyline').getAttribute('points').length).toBeGreaterThan(10);
         const ranges = screen.getByRole('tablist', { name: 'Chart range' });
         expect(ranges).toBeTruthy();

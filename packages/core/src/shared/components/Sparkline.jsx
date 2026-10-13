@@ -19,8 +19,18 @@ import { useMemo } from 'react';
  * @param {number[] | null | undefined} props.series
  * @param {number} [props.height=80]
  * @param {number} [props.strokeWidth=1.5]
+ * @param {string} [props.label='Price trend']
+ * @param {string} [props.rangeLabel]
+ * @param {(value: number) => string} [props.formatValue]
  */
-export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
+export function Sparkline({
+    series,
+    height = 80,
+    strokeWidth = 1.5,
+    label = 'Price trend',
+    rangeLabel,
+    formatValue,
+}) {
     const values = useMemo(
         () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
         [series],
@@ -48,13 +58,14 @@ export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
     const stroke = tone === 'up'
         ? 'var(--xc-success)'
         : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+    const summary = describeChartSeries(values, { label, rangeLabel, formatValue });
     return (
         <svg
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             style={{ display: 'block', width: '100%', height }}
             role="img"
-            aria-label={`Price trend, ${tone}`}
+            aria-label={summary}
         >
             <polyline
                 fill="none"
@@ -65,6 +76,39 @@ export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
             />
         </svg>
     );
+}
+
+/**
+ * Builds a concise text alternative for a numeric chart series.
+ *
+ * @param {number[]} series
+ * @param {{ label?: string, rangeLabel?: string, formatValue?: (value: number) => string }} [options]
+ * @returns {string}
+ */
+export function describeChartSeries(series, options = {}) {
+    const {
+        label = 'Price trend',
+        rangeLabel,
+        formatValue = formatChartValue,
+    } = options;
+    const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
+    if (values.length === 0) return `${label}. No data.`;
+
+    const start = values[0];
+    const end = values[values.length - 1];
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    const delta = end - start;
+    const change = `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatValue(Math.abs(delta))}`;
+    const percentage = start !== 0
+        ? ` (${delta > 0 ? '+' : ''}${((delta / start) * 100).toFixed(2)}%)`
+        : '';
+    const selectedRange = rangeLabel ? ` Range ${rangeLabel}.` : '';
+    return `${label}.${selectedRange} Values range from ${formatValue(low)} to ${formatValue(high)}. Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
+}
+
+function formatChartValue(value) {
+    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
 }
 
 // FNV-1a hash of a string → uint32. Used as the seed for the
