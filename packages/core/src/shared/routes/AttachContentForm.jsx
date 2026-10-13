@@ -410,6 +410,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
 
     const acceptFile = useCallback((file, content) => {
         const bytes = new Uint8Array(content);
+        setFileMeta(null);
         if (bytes.length === 0) {
             setFormError('That file is empty.');
             return;
@@ -431,17 +432,20 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const handleFilePick = useCallback((event) => {
         const file = event.target?.files?.[0];
         if (!file) return;
+        setFileMeta(null);
+        setFormError(null);
         const reader = new FileReader();
         reader.onload = () => {
             if (reader.result instanceof ArrayBuffer) acceptFile(file, reader.result);
         };
+        reader.onerror = () => setFormError('Could not read that file.');
         reader.readAsArrayBuffer(file);
     }, [acceptFile]);
 
     const drop = useDropZone({
         readAs: 'arrayBuffer',
         maxBytes: MAX_FILE_BYTES * 4,
-        onError: (msg) => setFormError(msg),
+        onError: (msg) => { setFileMeta(null); setFormError(msg); },
         onFile: ({ file, content }) => {
             if (content instanceof ArrayBuffer) acceptFile(file, content);
         },

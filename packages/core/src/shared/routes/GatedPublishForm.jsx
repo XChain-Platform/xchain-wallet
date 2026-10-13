@@ -196,7 +196,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
+        setFileMeta(null);
         const cap = plainCapFor(file.name, file.type || 'application/octet-stream');
+        if (file.size === 0) {
+            setFormError('That file is empty.');
+            return;
+        }
         if (file.size > cap) {
             setFileMeta(null);
             setFormError(`That file is ${file.size.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
