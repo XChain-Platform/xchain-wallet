@@ -192,11 +192,13 @@ describe('enroll / unlock round trip', () => {
 
     it('reports a refused enrollment rather than claiming success', async () => {
         __setNativeVaultForTests(fakeVault({
-            biometricEnroll: async () => ({ status: 'LOCKED', detail: 'user cancelled' }),
+            biometricEnroll: async () => ({ status: PASSWORD, detail: PASSWORD }),
         }));
         await installNativeBiometricProvider();
-        await expect(registerBiometricCredential({ password: PASSWORD }))
-            .rejects.toThrow(/user cancelled/);
+        const error = await registerBiometricCredential({ password: PASSWORD }).catch((err) => err);
+        expect(error).toBeInstanceOf(BiometricUnsupportedError);
+        expect(error.message).toMatch(/native enrollment refused/);
+        expect(error.message).not.toContain(PASSWORD);
         expect(isBiometricRegistered()).toBe(false);
     });
 });
@@ -223,14 +225,17 @@ describe('unlock failures', () => {
         expect(isBiometricRegistered()).toBe(false);
     });
 
-    it('surfaces a cancelled or failed prompt', async () => {
+    it('surfaces a failed prompt without reflecting native detail', async () => {
         const plugin = fakeVault({
-            biometricUnlock: async () => ({ status: 'LOCKED', detail: 'Authentication cancelled' }),
+            biometricUnlock: async () => ({ status: PASSWORD, detail: PASSWORD }),
         });
         __setNativeVaultForTests(plugin);
         await installNativeBiometricProvider();
         await registerBiometricCredential({ password: PASSWORD });
-        await expect(unlockWithBiometric()).rejects.toThrow(/Authentication cancelled/);
+        const error = await unlockWithBiometric().catch((err) => err);
+        expect(error).toBeInstanceOf(BiometricUnsupportedError);
+        expect(error.message).toMatch(/biometric unlock failed/);
+        expect(error.message).not.toContain(PASSWORD);
     });
 
     it('refuses a success reply that carries no secret', async () => {
@@ -263,7 +268,7 @@ describe('clear', () => {
         await installNativeBiometricProvider();
         await registerBiometricCredential({ password: PASSWORD });
 
-        await expect(clearBiometricCredential()).rejects.toThrow('keystore busy');
+        await expect(clearBiometricCredential()).rejects.toThrow(/XChainVault\.biometricClear failed/);
         expect(isBiometricRegistered()).toBe(true);
     });
 });

@@ -39,7 +39,10 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { BridgeMoveForm } from '../../../packages/core/src/shared/routes/BridgeMoveForm.jsx';
+import {
+    BridgeMoveForm,
+    BridgePendingPanel,
+} from '../../../packages/core/src/shared/routes/BridgeMoveForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const BTC = 'bitcoin-mainnet';
@@ -168,6 +171,12 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             WAIT,
         );
         expect(screen.getByText(/cannot be undone or redirected/i)).toBeInTheDocument();
+        const route = screen.getByLabelText('Bridge route');
+        expect(route.textContent).toContain('Source chainBitcoin');
+        expect(route.textContent).toContain('Destination chainDogecoin');
+        expect(route.textContent).toContain(
+            'Expected arrivalAfter the source transaction reaches its required confirmation depth on Bitcoin and validators sign the transfer.',
+        );
     });
 
     it('opens review with the exact bridge parameters instead of implying the button signs immediately', async () => {
@@ -202,24 +211,12 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
         expect(moveButton()).toBeDisabled();
     });
 
-    it('ignores destination-chain entries that contain no usable addresses', async () => {
+    it('does not treat an empty address group as a usable destination', async () => {
         mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
         expect(await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT))
             .toBeInTheDocument();
-        expect(screen.queryByLabelText('Receive at')).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
         expect(moveButton()).toBeDisabled();
-    });
-
-    it('explains when a return leg is missing an address on its required origin chain', async () => {
-        mount({
-            byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
-            initialTick: 'BTC.PEPECASH',
-            balances: { 'BTC.PEPECASH': '50' },
-        });
-        const msg = await screen.findByText(/no Bitcoin address in this wallet yet/i, {}, WAIT);
-        expect(msg.textContent).toContain('can only move back to Bitcoin');
-        expect(screen.queryByLabelText('Receive at')).toBeNull();
-        expect(moveButton('Review move back')).toBeDisabled();
     });
 });
 
@@ -257,6 +254,19 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         // And the button says what the leg really is.
         expect(moveButton('Review move back')).toBeInTheDocument();
     });
+
+    it('explains when the wallet has another chain but no address on the only supported destination', async () => {
+        mount({
+            byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
+            initialTick: 'BTC.PEPECASH',
+            balances: { 'BTC.PEPECASH': '50' },
+        });
+        const msg = await screen.findByText(/This bridge route is unavailable/i, {}, WAIT);
+        expect(msg.textContent).toContain('PEPECASH on Dogecoin can only move to Bitcoin');
+        expect(msg.textContent).toContain('Use Receive on Bitcoin to create one first');
+        expect(screen.queryByRole('button', { name: /^Move to:/ })).toBeNull();
+        expect(moveButton('Review move back')).toBeDisabled();
+    });
 });
 
 describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
@@ -271,6 +281,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         const warning = await screen.findByText(/costs 0.05 XCHAIN in protocol fees/i, {}, WAIT);
         expect(warning.textContent).toContain('Moving 0.01 XCHAIN');
         expect(warning.textContent).toContain('more than the amount you are moving');
+        expect(screen.getByText(/This action's protocol fee is 0.05 XCHAIN/i)).toBeInTheDocument();
 
         // The fee is quoted for the exact action string, not read off a constant.
         const call = messaging.requoteNativeFee.mock.calls.at(-1)[0];
@@ -311,6 +322,28 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         expect(await screen.findByText(/protocol fee is 0.05 XCHAIN/i, {}, WAIT))
             .toBeInTheDocument();
         expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
+    });
+});
+
+describe('BridgePendingPanel', () => {
+    it('shows the submitted transfer as pending with its route and expected arrival condition', () => {
+        render(React.createElement(BridgePendingPanel, {
+            txid: 'source-txid',
+            leg: { leg: 'lock' },
+            amount: '12.5',
+            tickLabel: 'XCHAIN',
+            sourceLabel: 'Bitcoin',
+            destLabel: 'Dogecoin',
+            destAddress: DOGE_ADDRESS.address,
+            minDepth: 8,
+            onDone() {},
+        }));
+
+        expect(screen.getByRole('status')).toHaveTextContent('Bridge transfer pending');
+        expect(screen.getByText('Bitcoin', { selector: 'dd' })).toBeInTheDocument();
+        expect(screen.getByText('Dogecoin', { selector: 'dd' })).toBeInTheDocument();
+        expect(screen.getByText(/Lock broadcast on Bitcoin; pending on Dogecoin/)).toBeInTheDocument();
+        expect(screen.getByText(/This token requires at least 8 confirmations/)).toBeInTheDocument();
     });
 });
 

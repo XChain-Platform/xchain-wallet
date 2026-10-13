@@ -325,7 +325,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         return () => { cancelled = true; clearTimeout(timer); };
     }, [sourceChainId, actionString, fromAddress?.address, messaging]);
 
-    const noDestinationAccount = offeredDestChainIds.length === 0;
+    const noDestinationAccount = destChainIds.length === 0;
+    const requiredDestinationMissing = destChainIds.length > 0
+        && offeredDestChainIds.length === 0
+        && !!leg.fixedDestination;
+    const destinationUnavailable = noDestinationAccount || requiredDestinationMissing;
     const destinationError = useMemo(() => {
         if (!sourceCoin || !destCoin) return null;
         return bridgeDestinationError({
@@ -468,8 +472,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         await openConfirmScreen();
     }
 
+    const doneTitle = result?.queued
+        ? 'Bridge transfer queued'
+        : result?.psbtHex && !result?.txid
+            ? 'Unsigned bridge transfer'
+            : 'Bridge transfer pending';
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'done' ? 'Transfer sent' : 'Move across chains'} />
+        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move across chains'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -617,7 +626,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                     loading={actionConfirm.composing || stage === 'submitting'}
                     disabled={
                         !!blockingError
-                        || noDestinationAccount
+                        || destinationUnavailable
                         || !fromAddress
                         || !destAddress
                         || !String(amount).trim()
@@ -667,6 +676,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         : `You have no address on another ${sourceDescriptor?.networkKind || ''} chain yet.`
                             + ' Use Receive to create one first: a bridge transfer credits an address you control,'
                             + ' and the credit cannot be redirected once it applies.'}
+                </StatusMessage>
+            ) : requiredDestinationMissing ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {`This bridge route is unavailable: ${shown.label} on ${chainLabel(sourceDescriptor, sourceChainId)}`
+                        + ` can only move to ${coinDisplay(leg.fixedDestination)}, but this wallet has no`
+                        + ` ${coinDisplay(leg.fixedDestination)} address on this ${sourceDescriptor?.networkKind || ''} network.`
+                        + ` Use Receive on ${coinDisplay(leg.fixedDestination)} to create one first.`}
                 </StatusMessage>
             ) : (
                 <>
@@ -728,6 +744,17 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
 
+            {destChainId ? (
+                <dl className={styles.detailsList} aria-label="Bridge route">
+                    <dt className={styles.detailsLabel}>Source chain</dt>
+                    <dd className={styles.detailsValue}>{chainLabel(sourceDescriptor, sourceChainId)}</dd>
+                    <dt className={styles.detailsLabel}>Destination chain</dt>
+                    <dd className={styles.detailsValue}>{chainLabel(destDescriptor, destChainId)}</dd>
+                    <dt className={styles.detailsLabel}>Expected arrival</dt>
+                    <dd className={styles.detailsValue}>{expectedArrivalText(chainLabel(sourceDescriptor, sourceChainId), minDepth)}</dd>
+                </dl>
+            ) : null}
+
             {!blockingError && destChainId && leg.version ? (
                 <p className={styles.hint}>
                     {leg.leg === 'lock'
@@ -768,14 +795,14 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
  * that invented "about 6 confirmations" would be wrong the first time an
  * operator raised it, and silently.
  */
-function BridgePendingPanel({
+export function BridgePendingPanel({
     txid, leg, amount, tickLabel, sourceLabel, destLabel, destAddress, minDepth, onDone,
 }) {
     const moved = `${String(amount).trim()} ${tickLabel}`;
     return (
         <>
-            <p className={styles.successTitle}>
-                {leg.leg === 'lock' ? 'Lock broadcast' : 'Burn broadcast'}
+            <p className={styles.successTitle} role="status">
+                Bridge transfer pending
             </p>
             {txid ? (
                 <>
@@ -786,12 +813,18 @@ function BridgePendingPanel({
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Moving</dt>
                 <dd className={styles.detailsValue}>{moved}</dd>
-                <dt className={styles.detailsLabel}>To</dt>
+                <dt className={styles.detailsLabel}>Source chain</dt>
+                <dd className={styles.detailsValue}>{sourceLabel}</dd>
+                <dt className={styles.detailsLabel}>Destination chain</dt>
+                <dd className={styles.detailsValue}>{destLabel}</dd>
+                <dt className={styles.detailsLabel}>Receive at</dt>
                 <dd className={styles.detailsValue}><AddressText address={destAddress} /></dd>
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>
-                    {`Pending on ${destLabel}`}
+                    {`${leg.leg === 'lock' ? 'Lock' : 'Burn'} broadcast on ${sourceLabel}; pending on ${destLabel}`}
                 </dd>
+                <dt className={styles.detailsLabel}>Expected arrival</dt>
+                <dd className={styles.detailsValue}>{expectedArrivalText(sourceLabel, minDepth)}</dd>
             </dl>
             <p className={styles.hint}>
                 {`This transfer is in flight. The ${leg.leg === 'lock' ? 'credit' : 'release'} appears on ${destLabel}`
@@ -814,6 +847,14 @@ function chainsWithAddresses(byChain) {
 
 function chainLabel(descriptor, chainId) {
     return descriptor?.displayName || chainId || '';
+}
+
+function expectedArrivalText(sourceLabel, minDepth) {
+    const confirmationNote = minDepth
+        ? ` This token requires at least ${minDepth} confirmations.`
+        : '';
+    return `After the source transaction reaches its required confirmation depth on ${sourceLabel} and validators sign the transfer.`
+        + confirmationNote;
 }
 
 // The issuer-raised confirmation depth off the origin token row, when the venue

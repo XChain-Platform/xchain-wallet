@@ -31,7 +31,10 @@ assert.match(form, /resumeMode === 'indefinite' \? '-1'/, 'indefinite maps to -1
 assert.match(form, /resumeMode === 'resume' \? '0'/, 'resume-now maps to 0');
 assert.match(form, /sleepLocked/, 'LOCK_SLEEP gate present (tick mode)');
 assert.match(form, /does not stop already-open orders, swaps, or dispensers/, 'settle caveat present');
-assert.match(form, /one-way freeze|cannot be undone before the resume block/, 'address irreversibility warning');
+assert.match(form, /cannot wake itself early|cannot be undone before the wake block/, 'address irreversibility warning');
+assert.match(form, /label="Duration \(blocks\)"/, 'finite pause input names its block unit');
+assert.match(form, /native coins are not\s+locked/, 'address copy distinguishes protocol actions from native coins');
+assert.match(form, /label="Wake condition"/, 'legacy review repeats the exact wake rule');
 assert.match(form, /toUpperCase\(\) === 'LOCK'/, 'address mode requires a typed confirm');
 assert.match(form, /label="Type LOCK to confirm"/, 'typed confirm uses the screen\'s own verb');
 assert.ok(!/humanizeError\(err, 'sleep'\)|'Sleep failed\.'|Type SLEEP to confirm/.test(form), 'no raw SLEEP wording in user-facing copy');

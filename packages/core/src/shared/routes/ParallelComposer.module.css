@@ -1,0 +1,97 @@
+.rowEditor label {
+    min-width: 0;
+}
+
+.rowEditor select,
+.rowEditor textarea {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.acknowledgement {
+    align-items: flex-start;
+}
+
+.acknowledgement input {
+    margin-top: 0.15rem;
+}
+
+.rowStatus {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-bottom: var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.summaryList {
+    min-width: 0;
+    margin: var(--xc-space-2) 0;
+    padding-inline-start: 1.25rem;
+}
+
+.summaryItem {
+    min-width: 0;
+    margin: var(--xc-space-2) 0;
+    padding-inline-start: var(--xc-space-1);
+    overflow-wrap: anywhere;
+}
+
+.summaryMain {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    min-width: 0;
+}
+
+.summaryMeta {
+    display: block;
+    margin-top: var(--xc-space-1);
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+    overflow-wrap: anywhere;
+}
+
+.summaryError {
+    color: var(--xc-danger-fg);
+}
+
+.statusPill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0 var(--xc-space-2);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    color: var(--xc-text-muted);
+    background: var(--xc-surface);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    line-height: 1;
+}
+
+.statusPill[data-state='success'] {
+    border-color: color-mix(in srgb, var(--xc-success) 45%, var(--xc-border));
+    color: var(--xc-success);
+}
+
+.statusPill[data-state='failed'] {
+    border-color: color-mix(in srgb, var(--xc-danger) 45%, var(--xc-border));
+    color: var(--xc-danger-fg);
+}
+
+.statusPill[data-state='submitting'] {
+    border-color: color-mix(in srgb, var(--xc-accent-primary) 45%, var(--xc-border));
+    color: var(--xc-accent-text);
+}

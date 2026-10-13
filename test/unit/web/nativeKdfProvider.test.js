@@ -45,6 +45,13 @@ function pluginWith(argon2idImpl) {
     return plugin;
 }
 
+function mockNativeCapacitor(plugin) {
+    globalThis.Capacitor = {
+        isNativePlatform: () => true,
+        Plugins: { XChainVault: plugin },
+    };
+}
+
 async function contractArgon2id(opts) {
     const key = argon2id(new TextEncoder().encode(opts.password), base64ToBytes(opts.salt), {
         t: opts.iterations, m: opts.memoryKib, p: opts.parallelism, dkLen: opts.length,
@@ -56,6 +63,7 @@ afterEach(() => {
     __setNativeVaultForTests(undefined);
     __setNativeShellForTests(undefined);
     setNativeArgon2id(null);
+    delete globalThis.Capacitor;
 });
 
 describe('installNativeKdfProvider', () => {
@@ -78,7 +86,7 @@ describe('installNativeKdfProvider', () => {
 
     it('registers in the native shell and derives through the plugin', async () => {
         const plugin = pluginWith(contractArgon2id);
-        __setNativeVaultForTests(plugin);
+        mockNativeCapacitor(plugin);
         expect(installNativeKdfProvider()).toBe(true);
         expect(hasNativeArgon2id()).toBe(true);
 
@@ -97,7 +105,7 @@ describe('installNativeKdfProvider', () => {
     });
 
     it('falls back silently when the shell build has no argon2id method', async () => {
-        __setNativeVaultForTests(pluginWith(null));
+        mockNativeCapacitor(pluginWith(null));
         expect(installNativeKdfProvider()).toBe(true);
         expect(hex(await deriveMasterKeyAsync(SMALL.password, PARAMS))).toBe(SMALL.keyHex);
     });
@@ -108,6 +116,18 @@ describe('installNativeKdfProvider', () => {
         installNativeKdfProvider();
         expect(hex(await deriveMasterKeyAsync(SMALL.password, PARAMS))).toBe(SMALL.keyHex);
         expect(plugin.argon2id).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to JS and quarantines a plugin that fails the known-answer check', async () => {
+        const wrongKey = bytesToBase64(new Uint8Array(32).fill(0x7f));
+        const plugin = pluginWith(async () => ({ key: wrongKey }));
+        mockNativeCapacitor(plugin);
+        expect(installNativeKdfProvider()).toBe(true);
+
+        expect(hex(await deriveMasterKeyAsync(SMALL.password, PARAMS))).toBe(SMALL.keyHex);
+        expect(hex(await deriveMasterKeyAsync(SMALL.password, PARAMS))).toBe(SMALL.keyHex);
+        expect(plugin.argon2id).toHaveBeenCalledTimes(1);
+        expect(plugin.argon2id.mock.calls[0][0].password).not.toBe(SMALL.password);
     });
 
     it('turns a reply without a key into a rejection core can fall back from', async () => {

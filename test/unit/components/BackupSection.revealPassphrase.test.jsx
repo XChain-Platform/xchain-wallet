@@ -83,6 +83,28 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         expect(passBtn.style.filter).toBe('none');
     });
 
+    it('prints the isolated recovery sheet only after the phrase is revealed', async () => {
+        const revealMnemonicRequest = vi.fn(async () => ({
+            mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+            format: 'bip39',
+            passphraseEnabled: false,
+            bip39Passphrase: null,
+        }));
+        const print = vi.spyOn(window, 'print').mockImplementation(() => {
+            expect(document.body).toHaveClass('xc-print-recovery-sheet');
+        });
+        mount(revealMnemonicRequest);
+        await revealSeed();
+
+        expect(screen.queryByRole('button', { name: 'Print recovery sheet' })).toBeNull();
+        fireEvent.click(screen.getByLabelText('Reveal seed phrase'));
+        fireEvent.click(screen.getByRole('button', { name: 'Print recovery sheet' }));
+
+        expect(print).toHaveBeenCalledOnce();
+        expect(document.body).not.toHaveClass('xc-print-recovery-sheet');
+        expect(screen.getByText('Wallet: Cold')).toBeTruthy();
+    });
+
     it('renders nothing extra for a wallet with passphraseEnabled false', async () => {
         const revealMnemonicRequest = vi.fn(async () => ({
             mnemonic: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',

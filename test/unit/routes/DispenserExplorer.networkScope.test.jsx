@@ -203,4 +203,29 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
             + 'silent one')
             .toMatch(/HTTP 500/);
     });
+
+    it('shows a search skeleton, retries errors, and resets an empty search', async () => {
+        let resolveFirst;
+        const getDispensersForToken = vi.fn()
+            .mockImplementationOnce(() => new Promise((resolve, reject) => { resolveFirst = { resolve, reject }; }))
+            .mockResolvedValue({ data: [] });
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
+
+        const chain = chainIdsOn('mainnet')[0];
+        fireEvent.change(await screen.findByRole('combobox'), { target: { value: chain } });
+        const input = screen.getByRole('textbox');
+        fireEvent.change(input, { target: { value: 'XCHAIN' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+        expect(screen.getByRole('status', { name: 'Searching dispensers' })).toBeInTheDocument();
+        await waitFor(() => expect(resolveFirst).toBeTruthy());
+        await act(async () => resolveFirst.reject(new Error('service unavailable')));
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
+        expect(getDispensersForToken).toHaveBeenCalledTimes(2);
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(input).toHaveValue('');
+        expect(screen.getByText(/Search by token ticker to find open dispensers/)).toBeInTheDocument();
+    });
 });
