@@ -380,8 +380,10 @@ describe('<FormSection>', () => {
             </FormSection>,
         );
 
-        const addressField = screen.getByLabelText('Address').parentElement;
-        const amountField = screen.getByLabelText('Amount').parentElement;
+        // The label is a direct child of the field wrapper; the input sits one
+        // level deeper inside the control hit area.
+        const addressField = screen.getByText('Address', { selector: 'label' }).parentElement;
+        const amountField = screen.getByText('Amount', { selector: 'label' }).parentElement;
         expect(addressField.parentElement).toBe(amountField.parentElement);
         expect([...addressField.parentElement.children]).toEqual([addressField, amountField]);
         expect(ruleBody(css('FormPage.module.css'), '.sectionBody'))
