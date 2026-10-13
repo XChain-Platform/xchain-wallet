@@ -29,7 +29,10 @@ import styles from './SectionHeader.module.css';
  */
 export function SectionHeader({ title, as: Tag = 'h2', id, description, trailing, className }) {
     return (
-        <div className={[styles.header, className].filter(Boolean).join(' ')}>
+        <div
+            className={[styles.header, className].filter(Boolean).join(' ')}
+            data-xc-section-header=""
+        >
             <div className={styles.text}>
                 <Tag id={id} className={styles.title}>{title}</Tag>
                 {description ? <p className={styles.description}>{description}</p> : null}

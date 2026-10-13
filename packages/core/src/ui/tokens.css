@@ -39,11 +39,14 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
-    /* Form rhythm stays consistent across shared fields and page templates. */
+    /* One vertical rhythm shared by form and list templates: sibling fields,
+       sections, section headers, and list rows. */
     --xc-form-gap: var(--xc-space-4);
     --xc-label-gap: var(--xc-space-1);
     --xc-help-gap: var(--xc-space-1);
-    --xc-section-gap: var(--xc-space-6);
+    --xc-section-gap: var(--xc-space-4);
+    --xc-section-header-gap: var(--xc-space-2);
+    --xc-list-row-padding: var(--xc-space-3);
 
     /* Screen owns page-edge spacing so route content stays geometry-free. */
     --xc-page-gutter: var(--xc-space-3);
