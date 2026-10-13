@@ -33,7 +33,29 @@ const ITEM = '[role="menuitem"], [role="option"], [role="menuitemradio"], [role=
 
 function itemsOf(popup) {
     return Array.from(popup.querySelectorAll(ITEM))
-        .filter((el) => !el.disabled && el.getAttribute('aria-disabled') !== 'true' && el.tabIndex >= 0);
+        .filter((el) => (
+            el.closest(POPUP) === popup
+            && !el.disabled
+            && !el.hidden
+            && el.getAttribute('aria-disabled') !== 'true'
+            && (el.matches('button, a[href], input, select, textarea') || el.hasAttribute('tabindex'))
+        ));
+}
+
+function setRovingItem(items, current) {
+    for (const item of items) item.tabIndex = item === current ? 0 : -1;
+}
+
+function normalizePopup(popup) {
+    const items = itemsOf(popup);
+    if (items.length === 0) return;
+    const focused = items.includes(document.activeElement) ? document.activeElement : null;
+    const selected = items.find((item) => (
+        item.getAttribute('aria-selected') === 'true'
+        || item.getAttribute('aria-checked') === 'true'
+    ));
+    const authored = items.find((item) => item.tabIndex === 0);
+    setRovingItem(items, focused || selected || authored || items[0]);
 }
 
 /** The button that opened the popup, found from the expanded state it carries. */
@@ -91,6 +113,7 @@ function handleMenuKeyDown(e) {
         const next = nextMenuIndex(e.key, editable ? -1 : index, items.length);
         if (next === null) return;
         e.preventDefault();
+        setRovingItem(items, items[next]);
         items[next].focus();
         return;
     }
@@ -103,7 +126,9 @@ function handleMenuKeyDown(e) {
         if (items.length === 0) return;
         e.preventDefault();
         const selected = items.find((el) => el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-checked') === 'true');
-        (selected || items[0]).focus();
+        const next = selected || items[0];
+        setRovingItem(items, next);
+        next.focus();
     }
 }
 
@@ -111,7 +136,32 @@ function handleMenuKeyDown(e) {
 export function useMenuKeys() {
     useEffect(() => {
         if (typeof document === 'undefined') return undefined;
+        document.querySelectorAll(POPUP).forEach(normalizePopup);
+        const observer = new MutationObserver((records) => {
+            const popups = new Set();
+            for (const record of records) {
+                const parent = record.target.nodeType === Node.ELEMENT_NODE
+                    ? record.target.closest?.(POPUP)
+                    : null;
+                if (parent) popups.add(parent);
+                for (const node of record.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    if (node.matches(POPUP)) popups.add(node);
+                    node.querySelectorAll?.(POPUP).forEach((popup) => popups.add(popup));
+                }
+            }
+            popups.forEach(normalizePopup);
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['aria-selected', 'aria-checked', 'aria-disabled', 'disabled', 'hidden'],
+        });
         document.addEventListener('keydown', handleMenuKeyDown);
-        return () => document.removeEventListener('keydown', handleMenuKeyDown);
+        return () => {
+            observer.disconnect();
+            document.removeEventListener('keydown', handleMenuKeyDown);
+        };
     }, []);
 }

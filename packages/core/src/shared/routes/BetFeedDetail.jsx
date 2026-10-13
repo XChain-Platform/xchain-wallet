@@ -561,7 +561,11 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                         const pool = trimAmountTail(p.pool ?? 0) || '0';
                         const bets = Number(p.bet_count || 0);
                         return (
-                            <div key={i} className={styles.listCard} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div
+                                key={i}
+                                className={`${styles.listCard} ${styles.betOddsRow}`}
+                                style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}
+                            >
                                 <span className={styles.splitValue}>{i}: {label}</span>
                                 <span className={styles.splitValue}>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>
@@ -631,7 +635,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                                 side of the bet the money lands on and the only other signal
                                 is the button's background colour. A screen reader announced
                                 two identical "Yes" / "No" buttons with no selected state. */}
-                            <div role="group" aria-label="Outcome to back" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                            <div role="group" aria-label="Outcome to back" className={styles.betWagerChoices}>
                                 {outcomes.map((label, i) => (
                                     <Button
                                         key={i}

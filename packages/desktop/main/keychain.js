@@ -216,7 +216,10 @@ function bytesToHex(bytes) {
 }
 
 function hexToBytes(s) {
-    if (typeof s !== 'string' || s.length % 2 !== 0) {
+    if (typeof s !== 'string'
+        || s.length === 0
+        || s.length % 2 !== 0
+        || !/^[0-9a-f]+$/i.test(s)) {
         throw new Error('KeychainSessionBackend: invalid hex payload');
     }
     const out = new Uint8Array(s.length / 2);

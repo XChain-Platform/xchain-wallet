@@ -13,11 +13,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: color 0.12s ease;
 }
 /* Hover state highlights the chevron itself (color shift) instead of
    painting a muted-bg box behind it - the box rendered as a heavy
    dark rectangle in dark mode. Matches TokenDetail.module.css. */
-.back { transition: color 0.12s ease; }
 .back:hover {
     background: transparent;
     color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);
@@ -63,6 +63,7 @@
     display: block;
     width: 100%;
     min-width: 0;
+    max-width: 100%;
     box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
@@ -195,6 +196,57 @@
     margin-top: var(--xc-space-4);
 }
 
+.betActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.betActions > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.betLongText {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.betOddsRow {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.betOddsRow > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.betWagerChoices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    margin-bottom: var(--xc-space-2);
+}
+
+.betOutcomeRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.betOutcomeField {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .feeToggleGap {
     margin-top: var(--xc-space-3);
 }
@@ -239,6 +291,29 @@
 }
 
 @media not all and (min-width: 400px) {
+    .betActions,
+    .betWagerChoices {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        justify-content: stretch;
+        width: 100%;
+    }
+
+    .betActions > *,
+    .betWagerChoices > * {
+        width: 100%;
+    }
+
+    .betOddsRow,
+    .betOutcomeRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .betOutcomeRow > button {
+        width: 100%;
+    }
+
     .detailsList {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -425,4 +500,27 @@
     align-items: center;
     gap: var(--xc-space-2);
     font-weight: normal;
+}
+
+.radioGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2) var(--xc-space-4);
+    min-width: 0;
+    margin: 0 0 var(--xc-space-3);
+    padding: 0;
+    border: 0;
+}
+
+.radioGroup > legend {
+    width: 100%;
+    margin-bottom: var(--xc-space-1);
+}
+
+@media not all and (min-width: 400px) {
+    .radioGroup {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--xc-space-2);
+    }
 }

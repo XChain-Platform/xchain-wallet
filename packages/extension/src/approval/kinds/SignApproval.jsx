@@ -614,7 +614,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     return (
         <Screen
-            variant="popup"
+            variant="small"
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>{title}</span>

@@ -14,6 +14,8 @@ import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
 import detailStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
+import tableStyles from '../../../packages/core/src/shared/components/DataTable.module.css';
+import pollStyles from '../../../packages/core/src/shared/routes/PollDetail.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import formPageStyles from '../../../packages/core/src/ui/FormPage.module.css';
 import screenStyles from '../../../packages/core/src/ui/Screen.module.css';
@@ -95,6 +97,10 @@ function expectWrappingValue(element, text) {
         || element.classList.contains(detailStyles.detailsValue)
         || element.classList.contains(detailStyles.choiceText)
         || element.classList.contains(detailStyles.splitValue)
+        || element.classList.contains(tableStyles.cell)
+        || element.classList.contains(pollStyles.resultOption)
+        || element.classList.contains(pollStyles.resultValues)
+        || element.classList.contains(pollStyles.optionLabel)
         || element.classList.contains(sectionHeaderStyles.title)).toBe(true);
 }
 
@@ -430,10 +436,11 @@ describe('412px protocol detail layouts', () => {
 
         const optionCell = await screen.findByText(`0: ${option}`);
         expectCompactCanvas(view.container);
-        expect(optionCell.closest('table')).toHaveClass(detailStyles.compactTable);
-        const cells = optionCell.closest('tr').querySelectorAll('td');
-        expect(cells[1]).toHaveTextContent(LARGE_AMOUNT);
-        expect(cells[2]).toHaveTextContent(LARGE_AMOUNT);
+        expect(optionCell).toHaveClass(pollStyles.resultOption);
+        const item = optionCell.closest('li');
+        expect(item).toHaveClass(pollStyles.resultItem);
+        expect(item).toHaveTextContent(`${LARGE_AMOUNT} weight`);
+        expect(item.querySelector(`.${pollStyles.resultValues}`)).toHaveTextContent(LARGE_AMOUNT);
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeTruthy();
     });
 

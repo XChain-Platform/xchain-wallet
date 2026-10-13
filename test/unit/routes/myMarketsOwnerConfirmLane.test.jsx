@@ -59,6 +59,8 @@ const VIEWS = [
         action: 'ORDER',
         indexKey: 'ORDER_ACTION_INDEX',
         noun: 'order',
+        createProp: 'onCreateOrder',
+        createLabel: 'New order',
         software: { cancel: 'cancelOrder', edit: 'editOrder' },
         hardware: { cancel: 'cancelOrderHw', edit: 'editOrderHw' },
         feeds: (rows) => ({
@@ -77,6 +79,8 @@ const VIEWS = [
         action: 'SWAP',
         indexKey: 'SWAP_ACTION_INDEX',
         noun: 'swap',
+        createProp: 'onCreateSwap',
+        createLabel: 'New swap',
         software: { cancel: 'swapAction', edit: 'swapAction' },
         hardware: { cancel: 'swapActionHw', edit: 'swapActionHw' },
         feeds: (rows) => ({
@@ -110,6 +114,7 @@ async function mount(view, {
     settings = { walletMode: 'full' },
     preflight = PASS,
     chainId = CHAIN,
+    onCreate,
 } = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
@@ -146,7 +151,11 @@ async function mount(view, {
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
-            React.createElement(view.Component, { walletId: 'w', onBack() {} })));
+            React.createElement(view.Component, {
+                walletId: 'w',
+                onBack() {},
+                [view.createProp]: onCreate,
+            })));
         await drain();
     });
     return { utils, calls };
@@ -171,6 +180,15 @@ const indexOf = (calls, method) => calls.findIndex((c) => c.method === method);
 describe.each(VIEWS)('$name owner actions sign through the confirm page', (view) => {
     const signMethods = [...Object.values(view.software), ...Object.values(view.hardware)];
     const signCalls = (calls) => calls.filter((c) => signMethods.includes(c.method));
+
+    it('shows the create action in the page header', async () => {
+        const onCreate = vi.fn();
+        const { utils } = await mount(view, { onCreate });
+
+        await step(() => fireEvent.click(utils.getByRole('button', { name: view.createLabel })));
+
+        expect(onCreate).toHaveBeenCalledOnce();
+    });
 
     it('cancels only after the pre-flight, signing the composed bytes', async () => {
         const { utils, calls } = await mount(view);
