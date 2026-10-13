@@ -42,20 +42,58 @@ describe('locale-aware exact amount formatting', () => {
 });
 
 describe('locale-aware exact fiat formatting', () => {
-    it('keeps a value above the safe integer boundary exact', () => {
-        expect(formatFiatAmount('9007199254740993', 'USD', 'en-US'))
-            .toBe('$9,007,199,254,740,993.00');
-    });
-
-    it('uses the active language and each currency minor unit', async () => {
-        await setLocale('de-DE');
-        expect(formatFiatAmount('1234.5', 'EUR'))
-            .toBe(new Intl.NumberFormat('de-DE', {
-                style: 'currency',
-                currency: 'EUR',
-                currencyDisplay: 'symbol',
-            }).format('1234.5'));
-        expect(formatFiatAmount('0.5', 'JPY')).toBe('<1 ¥');
+    it.each([
+        {
+            label: 'pads a normal USD value',
+            value: '12.5',
+            currency: 'USD',
+            locale: 'en-US',
+            expected: '$12.50',
+        },
+        {
+            label: 'floors tiny positive USD values',
+            value: '0.004',
+            currency: 'USD',
+            locale: 'en-US',
+            expected: '< $0.01',
+        },
+        {
+            label: 'floors tiny values supplied in scientific notation',
+            value: '5e-7',
+            currency: 'USD',
+            locale: 'en-US',
+            expected: '< $0.01',
+        },
+        {
+            label: 'keeps a large exact value grouped',
+            value: '9007199254740993',
+            currency: 'USD',
+            locale: 'en-US',
+            expected: '$9,007,199,254,740,993.00',
+        },
+        {
+            label: 'places a selected currency after a German value',
+            value: '1234567.8',
+            currency: 'EUR',
+            locale: 'de-DE',
+            expected: '1.234.567,80 €',
+        },
+        {
+            label: 'uses two display decimals for a zero-minor-unit currency',
+            value: '1234.5',
+            currency: 'JPY',
+            locale: 'ja-JP',
+            expected: '￥1,234.50',
+        },
+        {
+            label: 'floors tiny values with locale-specific symbol placement',
+            value: '0.005',
+            currency: 'JPY',
+            locale: 'de-DE',
+            expected: '< 0,01 ¥',
+        },
+    ])('$label', ({ value, currency, locale, expected }) => {
+        expect(formatFiatAmount(value, currency, locale)).toBe(expected);
     });
 });
 
