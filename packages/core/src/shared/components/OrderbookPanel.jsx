@@ -55,8 +55,11 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
     const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
-        let cancelled = false;
         setBook({ bids: [], asks: [], maxCumulative: '0' });
+    }, [chainId, tick1, tick2, demo]);
+
+    useEffect(() => {
+        let cancelled = false;
         setLoadError(null);
         setLoading(true);
         const tick = async () => {
@@ -64,6 +67,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
                 if (cancelled) return;
+                if (!hasOrderbookShape(resp)) throw new Error('getOrderbook: malformed response');
                 let normalized = normalizeOrderbook(resp);
                 // Demo wallets render a sample book when the explorer has
                 // no live orders yet; real wallets keep the empty book and
@@ -79,7 +83,11 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 // Demo wallets keep the UI populated through dev/CORS
                 // outages; real wallets surface the error instead of
                 // showing fabricated prices.
-                if (demo) setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
+                if (demo) {
+                    setBook((current) => current.bids.length > 0 || current.asks.length > 0
+                        ? current
+                        : normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
+                }
                 setLoadError(readFailureMessage(err, 'load the order book'));
                 setLoading(false);
             }
@@ -148,6 +156,13 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             ) : null}
         </section>
     );
+}
+
+function hasOrderbookShape(resp) {
+    if (Array.isArray(resp)) return resp.length > 0 && hasOrderbookShape(resp[0]);
+    if (!resp || typeof resp !== 'object') return false;
+    if (Object.hasOwn(resp, 'bids') || Object.hasOwn(resp, 'asks')) return true;
+    return Object.hasOwn(resp, 'data') && hasOrderbookShape(resp.data);
 }
 
 function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, tick2 }) {

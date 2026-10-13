@@ -56,6 +56,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     const [rawRows, setRawRows] = useState(/** @type {any[]} */ ([]));
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [retryKey, setRetryKey] = useState(0);
     const [chartReady, setChartReady] = useState(false);
     const [chartUnavailable, setChartUnavailable] = useState(false);
 
@@ -180,10 +181,13 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
     // Fetch matches whenever the pair changes.
 
     useEffect(() => {
+        setRawRows([]);
+    }, [chainId, tick1, tick2, demo]);
+
+    useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
-        setRawRows([]);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
                 if (cancelled) return;
@@ -196,12 +200,16 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             })
             .catch((err) => {
                 if (cancelled) return;
-                setRawRows(demo ? sampleMatchesFor(tick1, tick2) : []);
+                if (demo) {
+                    setRawRows((current) => current.length > 0
+                        ? current
+                        : sampleMatchesFor(tick1, tick2));
+                }
                 setLoadError(readFailureMessage(err, 'load the price chart'));
                 setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, retryKey]);
     // Rebucket + push into the series whenever rows or period change.
 
     useEffect(() => {
@@ -291,7 +299,15 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 <StatusMessage variant="status">Loading price chart…</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => setRetryKey((key) => key + 1),
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loading && !loadError && points.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
@@ -342,12 +358,11 @@ function watchTheme(onChange) {
 }
 
 function extractRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    return [];
+    throw new Error('getMarketHistory: malformed response');
 }
 
 function formatChartPrice(value) {

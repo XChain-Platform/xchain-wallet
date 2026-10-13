@@ -77,6 +77,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
     const [summaryLoading, setSummaryLoading] = useState(true);
     const [summaryError, setSummaryError] = useState(/** @type {string | null} */ (null));
+    const [summaryRetryKey, setSummaryRetryKey] = useState(0);
     const [marketMissing, setMarketMissing] = useState(false);
     const [prefillPrice, setPrefillPrice] = useState(/** @type {string | null} */ (null));
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'place' | 'orders' | 'history'} */ ('book'));
@@ -88,6 +89,9 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         setMarketMissing(false);
         messaging.getMarket({ chainId, tick1, tick2 })
             .then((summary) => {
+                if (summary !== null && (typeof summary !== 'object' || Array.isArray(summary))) {
+                    throw new Error('getMarket: malformed response');
+                }
                 if (!cancelled) {
                     setSummaryLoading(false);
                     setMarketMissing(summary == null);
@@ -100,7 +104,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2]);
+    }, [messaging, chainId, tick1, tick2, summaryRetryKey]);
 
     useEffect(() => {
         setPrefillPrice(null);
@@ -114,8 +118,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const [historyError, setHistoryError] = useState(/** @type {string | null} */ (null));
     const [historyRetryKey, setHistoryRetryKey] = useState(0);
     useEffect(() => {
-        let cancelled = false;
         setHistoryRows([]);
+    }, [chainId, tick1, tick2, demo]);
+    useEffect(() => {
+        let cancelled = false;
         setHistoryError(null);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
@@ -125,7 +131,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
             })
             .catch((err) => {
                 if (!cancelled) {
-                    setHistoryRows(demo ? sampleMatchesFor(tick1, tick2) : []);
+                    if (demo) {
+                        setHistoryRows((current) => current.length > 0
+                            ? current
+                            : sampleMatchesFor(tick1, tick2));
+                    }
                     setHistoryError(readFailureMessage(err, 'refresh market prices'));
                 }
             });
@@ -250,7 +260,16 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 ) : (
                     <>
                         {summaryError ? (
-                            <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
+                            <StatusMessage
+                                variant="error"
+                                className={styles.error}
+                                recovery={{
+                                    label: t('common.tryAgain'),
+                                    onAction: () => setSummaryRetryKey((key) => key + 1),
+                                }}
+                            >
+                                {summaryError}
+                            </StatusMessage>
                         ) : null}
                         <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
                             {headerCard}
@@ -374,12 +393,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
 
 /** Normalize the explorer's getMarketHistory response into a row array. */
 function extractHistoryRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    return [];
+    throw new Error('getMarketHistory: malformed response');
 }
 
 /**

@@ -42,10 +42,14 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [retryKey, setRetryKey] = useState(0);
+
+    useEffect(() => {
+        setRows([]);
+    }, [chainId, tick1, tick2, demo]);
 
     useEffect(() => {
         let cancelled = false;
-        setRows([]);
         setLoadError(null);
         setLoading(true);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
@@ -61,12 +65,16 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             })
             .catch((err) => {
                 if (cancelled) return;
-                setRows(demo ? sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS) : []);
+                if (demo) {
+                    setRows((current) => current.length > 0
+                        ? current
+                        : sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS));
+                }
                 setLoadError(readFailureMessage(err, 'load recent trades'));
                 setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, retryKey]);
 
     const summaries = rows
         .map((row) => ({ row, summary: summarizeRow(row, tick1, tick2) }))
@@ -134,7 +142,15 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 <StatusMessage variant="status">Loading recent trades…</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => setRetryKey((key) => key + 1),
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loadError && !loading && summaries.length === 0 ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
@@ -182,10 +198,9 @@ function formatTime(unixSeconds) {
 }
 
 function extractRows(resp) {
-    if (!resp) return [];
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.rows)) return resp.rows;
     if (Array.isArray(resp.history)) return resp.history;
-    return [];
+    throw new Error('getMarketHistory: malformed response');
 }
