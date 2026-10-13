@@ -8,50 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { BalanceList } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
-import styles from './BalanceListSection.module.css';
-
-const BTC_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#F7931A"/><text x="32" y="44" text-anchor="middle" fill="white" font-family="Arial" font-weight="700" font-size="40">₿</text></svg>`,
-);
-const LTC_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#345D9D"/><text x="32" y="44" text-anchor="middle" fill="white" font-family="Arial" font-weight="700" font-size="40">Ł</text></svg>`,
-);
-const DOGE_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#C2A633"/><text x="32" y="44" text-anchor="middle" fill="white" font-family="Arial" font-weight="700" font-size="40">Ð</text></svg>`,
-);
-const PEPE_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#5BA84A"/><circle cx="22" cy="26" r="7" fill="white"/><circle cx="42" cy="26" r="7" fill="white"/><circle cx="22" cy="26" r="3" fill="black"/><circle cx="42" cy="26" r="3" fill="black"/><path d="M16 42 Q32 52 48 42" stroke="black" stroke-width="3" fill="none"/></svg>`,
-);
-
-function Row({ imageUrl, chainPipUrl, name, sub, qty, fiat, letter, letterBg }) {
-    return (
-        <button type="button" className={styles.row}>
-            <div className={styles.iconWrap}>
-                {imageUrl ? (
-                    <img src={imageUrl} alt="" className={styles.iconImg} />
-                ) : (
-                    <span className={styles.iconLetter} style={{ background: letterBg, color: '#fff' }}>
-                        {letter}
-                    </span>
-                )}
-                {chainPipUrl ? (
-                    <img src={chainPipUrl} alt="" className={styles.chainOverlay} />
-                ) : null}
-            </div>
-            <div className={styles.body}>
-                <div className={styles.title}>
-                    <span className={styles.name}>{name}</span>
-                </div>
-                <div className={styles.subtitle}>{sub}</div>
-            </div>
-            <div className={styles.amounts}>
-                <div className={styles.qty}>{qty}</div>
-                {fiat ? <div className={styles.fiat}>{fiat}</div> : null}
-            </div>
-        </button>
-    );
-}
+import { SAMPLE_BALANCE_ROWS } from './sharedComponentExamples.jsx';
 
 export function BalanceListSection() {
     return (
@@ -72,7 +31,9 @@ export function BalanceListSection() {
             />
 
             <Markup>
-{`<BalanceList
+{`import { BalanceList } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+
+<BalanceList
     rows={rows}
     onSelectToken={openTokenDetail}
     pinnedKeys={pinnedSet}
@@ -85,20 +46,20 @@ export function BalanceListSection() {
             </Markup>
 
             <LiveExample label="Mixed list: natives + tokens with chain pip + letter-chip fallback">
-                <div className={styles.list}>
-                    <Row imageUrl={BTC_ICON} name="Bitcoin" sub="BTC" qty="1.23456789" fiat="$76,543.21" />
-                    <Row imageUrl={PEPE_ICON} chainPipUrl={BTC_ICON} name="Pepe creature" sub="PEPECREATURE" qty="42,000" fiat="$185.40" />
-                    <Row imageUrl={LTC_ICON} name="Litecoin" sub="LTC" qty="15.5" fiat="$1,234.50" />
-                    <Row letter="X" letterBg="#A66CFF" chainPipUrl={LTC_ICON} name="XCP" sub="XCP" qty="800" />
-                    <Row imageUrl={DOGE_ICON} name="Dogecoin" sub="DOGE" qty="12,345.67" fiat="$1,851.85" />
-                </div>
+                <BalanceList
+                    rows={SAMPLE_BALANCE_ROWS}
+                    fiatCurrency="USD"
+                    showChain
+                    onSelectToken={() => {}}
+                />
             </LiveExample>
 
             <LiveExample label="Compact 2-row list (picker preview style)">
-                <div className={styles.list}>
-                    <Row imageUrl={BTC_ICON} name="Bitcoin" sub="BTC" qty="0.001" />
-                    <Row imageUrl={LTC_ICON} name="Litecoin" sub="LTC" qty="0.05" />
-                </div>
+                <BalanceList
+                    rows={SAMPLE_BALANCE_ROWS.filter(({ kind }) => kind === 'native').slice(0, 2)}
+                    getRowActionLabel={(row) => `Select ${row.displayName}`}
+                    onSelectToken={() => {}}
+                />
             </LiveExample>
         </Section>
     );

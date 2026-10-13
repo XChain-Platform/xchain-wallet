@@ -111,4 +111,27 @@ describe('style guide primitive coverage', () => {
         expect(states).toContain('details="available=');
         expect(states).toContain("recovery={{ label: 'Use Max'");
     });
+
+    it('uses shipped composed components instead of local visual replicas', () => {
+        const section = (file) => fs.readFileSync(path.join(sectionRoot, file), 'utf8');
+        const balanceList = section('BalanceListSection.jsx');
+        const contacts = section('AddressListSection.jsx');
+        const tokenPicker = section('TokenSelectorSection.jsx');
+        const hero = section('AccentBorderedCardSection.jsx');
+        const privacy = section('PrivacyModeSection.jsx');
+        const appHeader = section('AppHeaderSection.jsx');
+
+        expect(balanceList).toContain("import { BalanceList } from '@xchain-wallet/core/shared/components/BalanceList.jsx'");
+        expect(balanceList).not.toContain('function Row(');
+        expect(contacts).toContain("import { ContactsPickerScreen } from '@xchain-wallet/core/shared/components/ContactsPickerScreen.jsx'");
+        expect(contacts).not.toContain('<NetworkFilterDropdown');
+        expect(tokenPicker).toContain("import { TokenPicker } from '@xchain-wallet/core/shared/routes/TokenPicker.jsx'");
+        expect(tokenPicker).not.toContain('function Row(');
+        expect(hero).toContain("import { TotalBalanceHero } from '@xchain-wallet/core/shared/components/TotalBalanceHero.jsx'");
+        expect(privacy).toContain('<TotalBalanceHero');
+        expect(privacy).toContain('<BalanceList');
+        expect(privacy).not.toContain('settings.balancesHidden');
+        expect(appHeader).not.toContain('tokenQuery');
+        expect(appHeader).not.toContain('onTokenQueryChange');
+    });
 });
