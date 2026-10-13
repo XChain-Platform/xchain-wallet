@@ -12,7 +12,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { clearClipboard, SENSITIVE_CLIP_TTL_SECONDS } from '../clipboard.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { configureClipboardAutoClear } from '../clipboard.js';
 import styles from './ViewPrivateKey.module.css';
 
 const REVEAL_TIMEOUT_MS = 30_000;
@@ -21,8 +22,7 @@ const REVEAL_TIMEOUT_MS = 30_000;
  * ViewPrivateKey: §17.7. Shows the WIF for an address the wallet owns.
  * Reveal requires the wallet password, an explicit tap after confirmation,
  * and automatic hiding on timeout or window blur. Sensitive copies use the
- * guarded clipboard path and expire after the same upper bound as native
- * sensitive clips.
+ * guarded clipboard path and the wallet's selected expiry.
  *
  * HW-wallet + watch-only addresses route to an informational panel
  * per §17.7.2: no reveal path. Protocol-level refusal is the
@@ -46,6 +46,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
     const [stage, setStage] = useState(
         /** @type {'warning' | 'password' | 'submitting' | 'revealed'} */ ('warning'),
@@ -54,10 +55,10 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [revealed, setRevealed] = useState(false);
     const [wif, setWif] = useState(/** @type {{ addressId: string, value: string } | null} */ (null));
-    const [clipboardCleared, setClipboardCleared] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    const clipboardTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
-    const clipboardHasKeyRef = useRef(false);
+    const clipboardAutoClearSeconds = configureClipboardAutoClear(
+        settings?.privacy?.clipboardAutoClearSeconds,
+    );
 
     const sourceInfo = useMemo(() => classifySource(address), [address]);
     const currentWif = wif?.addressId === address.id ? wif.value : null;
@@ -81,13 +82,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
         const id = setTimeout(() => setRevealed(false), REVEAL_TIMEOUT_MS);
         return () => clearTimeout(id);
     }, [revealed]);
-
-    // Clearing on expiry or unmount bounds browser clipboard exposure. Native
-    // shells also enforce the sensitive clip expiry outside the JS process.
-    useEffect(() => () => {
-        if (clipboardTimerRef.current) clearTimeout(clipboardTimerRef.current);
-        if (clipboardHasKeyRef.current) void clearClipboard();
-    }, []);
 
     useEffect(() => {
         setStage('warning');
@@ -124,18 +118,6 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             }
             setStage('password');
         }
-    }
-
-    function handleCopied() {
-        setClipboardCleared(false);
-        clipboardHasKeyRef.current = true;
-        if (clipboardTimerRef.current) clearTimeout(clipboardTimerRef.current);
-        clipboardTimerRef.current = setTimeout(() => {
-            clipboardTimerRef.current = null;
-            clipboardHasKeyRef.current = false;
-            void clearClipboard();
-            setClipboardCleared(true);
-        }, SENSITIVE_CLIP_TTL_SECONDS * 1000);
     }
 
     const header = (
@@ -289,10 +271,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     <button
                         type="button"
                         className={styles.revealButton}
-                        onClick={() => {
-                            setClipboardCleared(false);
-                            setRevealed(true);
-                        }}
+                        onClick={() => setRevealed(true)}
                     >
                         Tap to reveal private key
                     </button>
@@ -317,13 +296,13 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                         value={currentWif}
                         label="Copy private key"
                         sensitive
-                        onCopied={handleCopied}
+                        onCopied={() => {}}
                     />
                 ) : null}
                 <span className={styles.clipboardNote}>
-                    {clipboardCleared
-                        ? 'Clipboard cleared.'
-                        : `Sensitive clipboard copies expire after ${SENSITIVE_CLIP_TTL_SECONDS} seconds.`}
+                    {clipboardAutoClearSeconds === 0
+                        ? 'Sensitive clipboard copies remain until replaced.'
+                        : `Sensitive clipboard copies expire after ${clipboardAutoClearSeconds} seconds.`}
                 </span>
             </div>
             <div className={styles.actions}>

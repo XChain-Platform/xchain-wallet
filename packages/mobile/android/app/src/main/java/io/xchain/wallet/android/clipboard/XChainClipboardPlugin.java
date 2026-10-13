@@ -41,14 +41,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "XChainClipboard")
 public class XChainClipboardPlugin extends Plugin {
 
-    /** Our own clip label, so the scheduled clear can tell if the clip is still ours. */
+    /** Labels distinguish sensitive and ordinary wallet clips in system UI. */
     private static final String LABEL_SENSITIVE = "XChain Wallet (sensitive)";
     private static final String LABEL_PLAIN = "XChain Wallet";
 
     /** Upper bound on a sensitive clip's life, seconds. See the iOS twin. */
-    private static final long MAX_SENSITIVE_TTL_SECONDS = 300L;
+    private static final long MAX_SENSITIVE_TTL_SECONDS = 600L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private Runnable pendingClear;
 
     @PluginMethod
     public void write(PluginCall call) {
@@ -73,11 +74,12 @@ public class XChainClipboardPlugin extends Plugin {
             clip.getDescription().setExtras(extras);
         }
         cm.setPrimaryClip(clip);
+        cancelPendingClear();
 
         long ttl = 0L;
         if (sensitive) {
-            ttl = Math.min(Math.max((long) requested, 1L), MAX_SENSITIVE_TTL_SECONDS);
-            scheduleClear(ttl);
+            ttl = Math.min(Math.max((long) requested, 0L), MAX_SENSITIVE_TTL_SECONDS);
+            if (ttl > 0L) scheduleClear(ttl, value);
         }
 
         JSObject res = new JSObject();
@@ -96,9 +98,11 @@ public class XChainClipboardPlugin extends Plugin {
 
     @PluginMethod
     public void clear(PluginCall call) {
-        clearIfOurs(true);
+        String expectedValue = call.getString("expectedValue");
+        boolean cleared = clearIfExpected(expectedValue);
         JSObject res = new JSObject();
         res.put("ok", true);
+        res.put("cleared", cleared);
         call.resolve(res);
     }
 
@@ -110,32 +114,36 @@ public class XChainClipboardPlugin extends Plugin {
      * a user who copies a seed, pastes it into a password manager and leaves
      * the app open.
      */
-    private void scheduleClear(long ttlSeconds) {
-        handler.postDelayed(() -> clearIfOurs(false), ttlSeconds * 1000L);
+    private void scheduleClear(long ttlSeconds, String expectedValue) {
+        pendingClear = () -> {
+            pendingClear = null;
+            clearIfExpected(expectedValue);
+        };
+        handler.postDelayed(pendingClear, ttlSeconds * 1000L);
     }
 
-    /**
-     * Clear the clipboard only when the clip on it is still the one we put
-     * there. Clearing unconditionally would delete whatever the user copied
-     * from another app in the meantime.
-     *
-     * @param force clear even if the current clip is not labelled as ours,
-     *              which is what an explicit clear() from JS means: the user
-     *              (or the screen they left) asked for it now.
-     */
-    private void clearIfOurs(boolean force) {
+    private void cancelPendingClear() {
+        if (pendingClear == null) return;
+        handler.removeCallbacks(pendingClear);
+        pendingClear = null;
+    }
+
+    /** Clear only when the current text still matches the wallet's copy. */
+    private boolean clearIfExpected(String expectedValue) {
         ClipboardManager cm = clipboard();
-        if (cm == null) return;
-        if (!force) {
-            ClipDescription desc = cm.getPrimaryClipDescription();
-            CharSequence label = desc == null ? null : desc.getLabel();
-            if (label == null || !LABEL_SENSITIVE.contentEquals(label)) return;
+        if (cm == null) return false;
+        if (expectedValue != null) {
+            ClipData current = cm.getPrimaryClip();
+            if (current == null || current.getItemCount() == 0) return false;
+            CharSequence text = current.getItemAt(0).coerceToText(getContext());
+            if (text == null || !expectedValue.contentEquals(text)) return false;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             cm.clearPrimaryClip();
         } else {
             cm.setPrimaryClip(ClipData.newPlainText(LABEL_PLAIN, ""));
         }
+        return true;
     }
 
     private ClipboardManager clipboard() {

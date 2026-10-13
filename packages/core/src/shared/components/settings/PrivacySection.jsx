@@ -19,17 +19,6 @@
 //   - Labels-survive-restore (§19.5.2 on-chain label sync opt-in;
 //     toggle persists the preference, the FILE-action submit/fetch
 //     wiring is shell-level work pending separately)
-//
-// (operator ruling a, 2026-08-11): the "Clipboard auto-clear
-// (seconds)" input that used to sit at the bottom of this panel is gone.
-// Its only consumer was ViewPrivateKey's post-copy wipe timer, and
-// a later change made key material uncopyable on every shell, so the control
-// wrote `settings.privacy.clipboardAutoClearSeconds` and nothing read it.
-// A privacy control that governs nothing is worse than an absent one: it
-// tells the user they hold a protection they do not hold. The schema
-// field stays (see schemas/settings.js) because dropping it would be a
-// stored-settings migration for no gain, and because a future copy path
-// can claim it back.
 
 import { useSettings } from '../../hooks/useSettings.js';
 import { shellCapabilities } from '../../shellCapabilities.js';
@@ -39,6 +28,9 @@ import {
     FORM_DRAFT_TTL_24H,
     FORM_DRAFT_TTL_7D,
     FORM_DRAFT_TTL_DEFAULT,
+    CLIPBOARD_AUTO_CLEAR_DEFAULT,
+    CLIPBOARD_AUTO_CLEAR_MAX,
+    CLIPBOARD_AUTO_CLEAR_MIN,
 } from '../../../schemas/settings.js';
 import { INPUT, ROW, ROW_HINT, ToggleRow, SettingsLoadError, Status, STACK } from './_settingsPrimitives.jsx';
 
@@ -142,7 +134,48 @@ export function PrivacySection() {
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
+            <ClipboardAutoClearRow settings={settings} update={update} />
             <FormDraftTtlRow settings={settings} update={update} />
+        </div>
+    );
+}
+
+function ClipboardAutoClearRow({ settings, update }) {
+    const stored = settings?.privacy?.clipboardAutoClearSeconds;
+    const current = Number.isInteger(stored) ? stored : CLIPBOARD_AUTO_CLEAR_DEFAULT;
+    const onChange = async (event) => {
+        const next = Number(event.target.value);
+        if (!Number.isInteger(next)
+            || next < CLIPBOARD_AUTO_CLEAR_MIN
+            || next > CLIPBOARD_AUTO_CLEAR_MAX) return;
+        try {
+            await update({ privacy: { clipboardAutoClearSeconds: next } });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('privacy.clipboardAutoClearSeconds update failed:', err);
+        }
+    };
+    return (
+        <div style={ROW}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                    Clipboard auto-clear
+                </span>
+                <span style={ROW_HINT}>
+                    Clear sensitive clipboard copies after this many seconds.
+                    Set to 0 to keep them until they are replaced.
+                </span>
+            </div>
+            <input
+                type="number"
+                min={CLIPBOARD_AUTO_CLEAR_MIN}
+                max={CLIPBOARD_AUTO_CLEAR_MAX}
+                step="1"
+                value={current}
+                onChange={onChange}
+                aria-label="Clipboard auto-clear seconds"
+                style={{ ...INPUT, width: '6rem' }}
+            />
         </div>
     );
 }

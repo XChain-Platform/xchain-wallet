@@ -8,18 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §17.7.1 / G028 as it stands after.
-//
-// The setting was born with two halves: a schema field with bounds, and a
-// Privacy-panel number input that ViewPrivateKey read to time its post-copy
-// clipboard wipe. a later change removed the Copy button, killing the only reader;
-// (operator ruling a, 2026-08-11) then removed the control, because a
-// privacy switch that governs nothing misinforms the user who trusts it.
-//
-// What this smoke guards is therefore the SPLIT: the schema half survives for
-// compatibility, and the UI half must stay gone. Both directions matter. A
-// re-added input would resurrect the lie; a deleted schema field would turn
-// stored settings into a migration.
+// Smoke for the clipboard setting's schema, control, and sensitive-copy reader.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -32,6 +21,7 @@ const core = join(wsRoot, 'packages', 'core');
 const schemas = join(core, 'src', 'schemas');
 const components = join(core, 'src', 'shared', 'components');
 const routes = join(core, 'src', 'shared', 'routes');
+const shared = join(core, 'src', 'shared');
 
 // --- 1. Schema exposes bounds + default + tolerant validation ------------
 
@@ -50,38 +40,34 @@ assert.ok(/clipboardAutoClearSeconds === undefined/.test(settingsSchema),
 assert.ok(/Number\.isInteger\(\s*r\.privacy\.clipboardAutoClearSeconds\s*\)/.test(settingsSchema),
     'validateSettings requires integer when present');
 
-// --- 2. PrivacySection offers NO clipboard control -------------
-//
-// Asserted by absence of every trace the control left behind, not just the
-// label: a reworded row ("Clear clipboard after…") would slip past a
-// label-only check while making exactly the same false promise.
+// --- 2. PrivacySection persists the clipboard control -----------
 
 const ps = readFileSync(join(components, 'settings', 'PrivacySection.jsx'), 'utf8');
 const psBody = ps.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-assert.ok(!/Clipboard auto-clear/.test(psBody),
-    'PrivacySection no longer renders a "Clipboard auto-clear" row');
-assert.ok(!/onClipboardSecondsChange/.test(psBody),
-    'PrivacySection has no clipboard-seconds change handler');
-assert.ok(!/clipboardAutoClearSeconds/.test(psBody),
-    'PrivacySection neither reads nor writes settings.privacy.clipboardAutoClearSeconds');
-assert.ok(!/CLIPBOARD_AUTO_CLEAR_/.test(psBody),
-    'PrivacySection imports none of the clipboard bounds any more');
-// The rest of the panel is untouched: this was a removal, not a rewrite.
+assert.ok(/Clipboard auto-clear/.test(psBody),
+    'PrivacySection renders the clipboard auto-clear row');
+assert.ok(/clipboardAutoClearSeconds/.test(psBody),
+    'PrivacySection reads and writes settings.privacy.clipboardAutoClearSeconds');
+assert.ok(/CLIPBOARD_AUTO_CLEAR_MIN/.test(psBody) && /CLIPBOARD_AUTO_CLEAR_MAX/.test(psBody),
+    'PrivacySection applies the schema bounds');
 assert.ok(/Change-address rotation/.test(psBody) && /Form draft retention/.test(psBody),
-    'the surrounding Privacy rows survive the removal');
+    'the surrounding Privacy rows remain present');
 
-// --- 3. Private-key copies use the fixed sensitive clipboard policy -------
+// --- 3. Private-key copies use the shared sensitive clipboard policy ------
 //
-// The settings control stays absent. Private-key copies use the shared
-// sensitive clipboard TTL so native expiry and the browser clear agree.
+// ViewPrivateKey selects the active preference and the shared clipboard owns
+// scheduling, cancellation, and compare-before-clear.
 const vpk = readFileSync(join(routes, 'ViewPrivateKey.jsx'), 'utf8');
-assert.ok(!/clipboardAutoClearSeconds/.test(vpk),
-    'ViewPrivateKey does not promise a configurable clipboard timeout');
+const clipboard = readFileSync(join(shared, 'clipboard.js'), 'utf8');
+assert.ok(/clipboardAutoClearSeconds/.test(vpk) && /configureClipboardAutoClear/.test(vpk),
+    'ViewPrivateKey applies the configured clipboard timeout');
 assert.ok(!/navigator\.clipboard/.test(vpk),
     'ViewPrivateKey never writes directly to the browser clipboard');
 assert.ok(/<CopyButton[\s\S]*?sensitive/.test(vpk),
     'ViewPrivateKey marks private-key copies sensitive');
-assert.ok(/SENSITIVE_CLIP_TTL_SECONDS/.test(vpk) && /clearClipboard\(\)/.test(vpk),
-    'ViewPrivateKey clears sensitive copies at the shared TTL');
+assert.ok(/cancelPendingAutoClear\(\)/.test(clipboard)
+    && /expectedValue: value/.test(clipboard)
+    && /seconds <= 0/.test(clipboard),
+    'shared clipboard cancels old timers, supports zero, and compares before clearing');
 
-console.log('clipboard-auto-clear-setting smoke OK (schema field retained; private-key copy uses fixed sensitive expiry)');
+console.log('clipboard-auto-clear-setting smoke OK (schema, control, and sensitive-copy policy connected)');
