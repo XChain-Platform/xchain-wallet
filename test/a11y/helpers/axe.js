@@ -8,13 +8,32 @@ import axe from 'axe-core';
 
 const BLOCKING_IMPACTS = new Set(['serious', 'critical']);
 
+export function supportsAxeColorContrast(container) {
+    const doc = container?.ownerDocument;
+    const view = doc?.defaultView;
+    if (!doc || !view?.getComputedStyle) return false;
+
+    const probe = doc.createElement('span');
+    probe.textContent = 'contrast probe';
+    probe.style.color = 'rgb(1, 2, 3)';
+    probe.style.backgroundColor = 'rgb(250, 251, 252)';
+    container.append(probe);
+    const computed = view.getComputedStyle(probe);
+    const hasComputedColors = computed.color === 'rgb(1, 2, 3)'
+        && computed.backgroundColor === 'rgb(250, 251, 252)';
+    const hasLayoutBox = probe.getClientRects().length > 0;
+    probe.remove();
+    return hasComputedColors && hasLayoutBox;
+}
+
 export async function expectNoSeriousAxeViolations(container, options = {}) {
+    const colorContrast = options.rules?.['color-contrast']?.enabled
+        ?? supportsAxeColorContrast(container);
     const { violations } = await axe.run(container, {
         ...options,
         rules: {
             ...options.rules,
-            // jsdom does not compute the styles that axe needs for contrast.
-            'color-contrast': { enabled: false },
+            'color-contrast': { enabled: colorContrast },
         },
     });
     const blocking = violations

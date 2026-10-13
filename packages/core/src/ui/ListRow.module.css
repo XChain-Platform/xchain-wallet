@@ -24,17 +24,23 @@
 }
 
 .interactive:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: var(--xc-control-bg-hover);
 }
 
 .interactive:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
 }
 
 .interactive:disabled {
     cursor: not-allowed;
+    background: var(--xc-control-disabled-bg);
+    color: var(--xc-control-disabled-text);
     opacity: var(--xc-disabled-opacity);
+}
+
+.interactive:disabled :is(.title, .subtitle, .trailing, .chevron) {
+    color: var(--xc-control-disabled-text);
 }
 
 .leading,
