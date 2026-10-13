@@ -141,6 +141,15 @@
     font-size: var(--xc-text-xs);
 }
 
+/* Keep the complete square inside the route scroller's visible height after
+   the two headers and bottom navigation reserve their landscape space. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .qrBox {
+        max-width: min(100%, calc(var(--xc-viewport-h, 100vh) - 9rem));
+        margin-inline: auto;
+    }
+}
+
 .addressBox {
     display: flex;
     align-items: center;

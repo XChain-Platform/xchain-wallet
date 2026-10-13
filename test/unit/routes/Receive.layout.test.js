@@ -28,4 +28,16 @@ describe('Receive action layout', () => {
             expect(declarations).not.toMatch(/(?:^|;)\s*(?:min-|max-)?width:\s*\d+(?:\.\d+)?px/);
         }
     });
+
+    it('caps the complete QR box to the visible height on landscape phones', () => {
+        expect(css).toMatch(
+            /@media \(orientation: landscape\) and \(max-height: 480px\) \{[\s\S]*?\.qrBox\s*\{[\s\S]*?max-width: min\(100%, calc\(var\(--xc-viewport-h, 100vh\) - 9rem\)\);[\s\S]*?margin-inline: auto;/,
+        );
+        expect(css).toMatch(
+            /\.qrBox\s*\{[\s\S]*?box-sizing: border-box;/,
+        );
+        expect(css).toMatch(
+            /\.qr\s*\{[\s\S]*?width: 100%;[\s\S]*?height: auto;[\s\S]*?aspect-ratio: 1;/,
+        );
+    });
 });

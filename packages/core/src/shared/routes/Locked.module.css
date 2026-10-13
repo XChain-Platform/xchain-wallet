@@ -160,31 +160,29 @@
 /* Short viewports reserve the visible area for credentials, feedback, and
    actions. The keyboard attribute covers iOS, where the keyboard overlays the
    layout viewport instead of reducing the height used by media queries. */
-@media (max-height: 480px) {
-    @media not all and (min-width: 600px) {
-        .hero {
-            flex-direction: row;
-            justify-content: center;
-            gap: var(--xc-space-2);
-            padding: 0;
-            margin-bottom: var(--xc-space-2);
-        }
+@media (orientation: landscape) and (max-height: 480px) {
+    .hero {
+        flex-direction: row;
+        justify-content: center;
+        gap: var(--xc-space-2);
+        padding: 0;
+        margin-bottom: var(--xc-space-2);
+    }
 
-        .logo {
-            width: 40px;
-            margin-bottom: 0;
-        }
+    .logo {
+        width: 40px;
+        margin-bottom: 0;
+    }
 
-        .lockoutBanner {
-            padding: var(--xc-space-2);
-            margin-bottom: var(--xc-space-2);
-        }
+    .lockoutBanner {
+        padding: var(--xc-space-2);
+        margin-bottom: var(--xc-space-2);
+    }
 
-        .forgotBlock {
-            margin-top: var(--xc-space-2);
-            padding-top: 0;
-            border-top: 0;
-        }
+    .forgotBlock {
+        margin-top: var(--xc-space-2);
+        padding-top: 0;
+        border-top: 0;
     }
 }
 
