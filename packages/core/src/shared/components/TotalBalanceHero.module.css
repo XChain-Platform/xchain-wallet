@@ -29,7 +29,7 @@
 
 .scope {
     font-weight: 500;
-    margin-inline-start: 4px;
+    margin-inline-start: var(--xc-space-1);
     color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
     text-transform: none;
     letter-spacing: 0;

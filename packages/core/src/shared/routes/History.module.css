@@ -113,7 +113,7 @@
     z-index: 20;
     list-style: none;
     margin: 0;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
@@ -161,7 +161,7 @@
     font-weight: 600;
     padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
-    margin-bottom: 4px;
+    margin-bottom: var(--xc-space-1);
     list-style: none;
 }
 

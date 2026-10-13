@@ -75,7 +75,7 @@
     inset-inline-end: 0;
     z-index: 20;
     min-width: 184px;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
@@ -93,7 +93,7 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: 8px 10px;
+    padding: var(--xc-space-2) 10px;
     border-radius: var(--xc-radius-sm);
     color: var(--xc-text);
     font-family: inherit;
