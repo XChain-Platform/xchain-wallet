@@ -42,6 +42,7 @@ import {
     NO_CHAINS_BODY,
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -1004,7 +1005,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         return (
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
-                    <h1 className="sr-only">Home</h1>
+                    <h1 className="sr-only">{t('home.title')}</h1>
                     {loadErrorText ? (
                         <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                     ) : null}
@@ -1035,11 +1036,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         return (
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
-                    <h1 className="sr-only">Home</h1>
+                    <h1 className="sr-only">{t('home.title')}</h1>
                     <EmptyState
                         title={NO_CHAINS_TITLE}
                         body={NO_CHAINS_BODY}
-                        actionLabel="Open Network settings"
+                        actionLabel={t('common.openNetworkSettings')}
                         onAction={() => { setSettingsSubpage('network'); setSettingsOpen(true); }}
                         actionIcon={<Icon.GearIcon />}
                     />
@@ -1052,12 +1053,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         <Screen variant={variant}>
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
-                <h1 className="sr-only">Home</h1>
+                <h1 className="sr-only">{t('home.title')}</h1>
                 {!browserOnline ? (
                     <StatusMessage variant="warning">
                         {balances
-                            ? 'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.'
-                            : 'You are offline. Connect to load balances and use network actions.'}
+                            ? t('home.offline.cached')
+                            : t('home.offline.empty')}
                     </StatusMessage>
                 ) : null}
                 {loadErrorText ? (
@@ -1065,7 +1066,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (
-                    <div role="status" aria-label="Loading balances" aria-busy="true">
+                    <div role="status" aria-label={t('home.loadingBalances')} aria-busy="true">
                         <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
                     </div>
                 ) : null}
@@ -1087,7 +1088,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (
-                    <div role="group" aria-label="Pending airdrops">
+                    <div role="group" aria-label={t('home.pendingAirdrops')}>
                         {pendingAirdrops.map((rec) => (
                             <button
                                 key={rec.id}
@@ -1096,12 +1097,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                 onClick={() => onResumeAirdrop(rec.id)}
                             >
                                 <span className={styles.pendingAirdropTitle}>
-                                    Resume airdrop: {rec.amountPer} {rec.token} × {rec.recipients.length}
+                                    {t('home.resumeAirdrop', {
+                                        amount: rec.amountPer,
+                                        token: rec.token,
+                                        count: rec.recipients.length,
+                                    })}
                                 </span>
                                 <span className={styles.pendingAirdropHint}>
                                     {rec.stage === 'waiting-index'
-                                        ? 'Recipient list sent, waiting to be indexed'
-                                        : 'Ready to sign the airdrop'}
+                                        ? t('home.airdrop.waitingIndex')
+                                        : t('home.airdrop.readyToSign')}
                                 </span>
                             </button>
                         ))}
@@ -1109,7 +1114,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {pendingCoinpays.length > 0 && onResumeCoinpay ? (
-                    <div role="group" aria-label="Pending payments due">
+                    <div role="group" aria-label={t('home.pendingPayments')}>
                         {pendingCoinpays.map((rec) => {
                             // rec.coinAmount is the explorer's own decimal coin
                             // figure (not base units; see obligationStatus.js), so
@@ -1129,11 +1134,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                     })}
                                 >
                                     <span className={styles.pendingAirdropTitle}>
-                                        Payment due: pay {rec.coinAmount} to complete matched order #{rec.orderMatchActionIndex}
-                                        {ticker ? ` (${ticker})` : ''}
+                                        {t('home.paymentDue', {
+                                            amount: rec.coinAmount,
+                                            order: rec.orderMatchActionIndex,
+                                        })}{ticker ? ` (${ticker})` : ''}
                                     </span>
                                     <span className={styles.pendingAirdropHint}>
-                                        Sign to finish paying for your matched order.
+                                        {t('home.paymentDue.hint')}
                                     </span>
                                 </button>
                             );
@@ -1204,7 +1211,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                 <div
                                     className={styles.quickActions}
                                     role="group"
-                                    aria-label="Quick actions"
+                                    aria-label={t('home.quickActions')}
                                     aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
                                 >
                                     {!isDemoActive ? (
@@ -1222,7 +1229,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                             disabled={!onReceive}
                                         >
                                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                                            <span>Receive</span>
+                                            <span>{t('home.receive')}</span>
                                         </button>
                                     ) : null}
                                     {onExchange ? (
@@ -1231,10 +1238,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                             className={styles.quickAction}
                                             onClick={() => runNetworkAction('Exchange', onExchange)}
                                             aria-disabled={!browserOnline ? 'true' : undefined}
-                                            title={!browserOnline ? 'Exchange needs a network connection' : undefined}
+                                            title={!browserOnline ? t('home.exchangeOffline') : undefined}
                                         >
                                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                            <span>Exchange</span>
+                                            <span>{t('home.exchange')}</span>
                                         </button>
                                     ) : null}
                                     {homeMoreActions.length === 1 ? (
@@ -1257,7 +1264,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                                 onClick={() => setHomeMoreOpen((o) => !o)}
                                             >
                                                 <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                                <span>More</span>
+                                                <span>{t('home.more')}</span>
                                             </button>
                                             {homeMoreOpen ? (
                                                 <div className={styles.quickActionMoreMenu} role="menu">
@@ -1307,7 +1314,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onCreateToken}
                         icon={<Icon.TokenIcon />}
                     >
-                        Create token
+                        {t('home.createToken')}
                     </Button>
                     {/* Same rule as Exchange above: absent, not greyed, when
                         this build has no markets to open. */}
@@ -1318,7 +1325,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onMarkets}
                             icon={<Icon.MarketIcon />}
                         >
-                            Markets
+                            {t('home.markets')}
                         </Button>
                     ) : null}
                     <Button
@@ -1328,10 +1335,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onMessaging}
                         icon={<Icon.MessageIcon />}
                     >
-                        Messaging
+                        {t('home.messaging')}
                         {messagingUnread > 0 ? (
                             <span
-                                aria-label={`${messagingUnread} unread`}
+                                aria-label={t('home.unread', { count: messagingUnread })}
                                 style={{
                                     marginInlineStart: '0.4rem',
                                     padding: '0 0.4rem',
@@ -1353,7 +1360,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onHistory}
                         icon={<Icon.HistoryIcon />}
                     >
-                        History
+                        {t('home.history')}
                     </Button>
                     <Button
                         variant="secondary"
@@ -1362,7 +1369,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onAddresses}
                         icon={<Icon.AddressIcon />}
                     >
-                        Addresses
+                        {t('home.addresses')}
                     </Button>
                     {onContracts ? (
                         <Button
@@ -1371,7 +1378,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onContracts}
                             icon={<Icon.ContractIcon />}
                         >
-                            Contracts
+                            {t('home.contracts')}
                         </Button>
                     ) : null}
                     {onStaking ? (
@@ -1381,7 +1388,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onStaking}
                             icon={<Icon.StakeIcon />}
                         >
-                            Staking
+                            {t('home.staking')}
                         </Button>
                     ) : null}
                     <Button
@@ -1391,7 +1398,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onActions}
                         icon={<Icon.MoreIcon />}
                     >
-                        More actions
+                        {t('home.moreActions')}
                     </Button>
                 </div>
                 ) : null}
@@ -1410,7 +1417,7 @@ function SendQuickAction({ onSend, browserOnline, onOffline }) {
     const content = (
         <>
             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-            <span>Send</span>
+            <span>{t('home.send')}</span>
         </>
     );
     if (!browserOnline && onSend) {
@@ -1420,7 +1427,7 @@ function SendQuickAction({ onSend, browserOnline, onOffline }) {
                 className={styles.quickAction}
                 onClick={onOffline}
                 aria-disabled="true"
-                title="Send needs a network connection"
+                title={t('home.sendOffline')}
             >
                 {content}
             </button>
@@ -1453,7 +1460,7 @@ function SendQuickAction({ onSend, browserOnline, onOffline }) {
  */
 function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSettings, onLockWallet }) {
     return (
-        <div role="region" aria-label="Signer-mode home">
+        <div role="region" aria-label={t('home.signer.region')}>
             <div
                 role="status"
                 aria-live="polite"
@@ -1468,11 +1475,8 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSe
                     lineHeight: 1.4,
                 }}
             >
-                <strong style={{ color: 'var(--xc-text)' }}>Signer mode</strong>
-                <span> This wallet only signs transactions from a paired Watcher
-                wallet. Send / Receive / balances are not available.
-                Switch the wallet's mode in Settings → Wallet Mode if you
-                want full-wallet behaviour back.</span>
+                <strong style={{ color: 'var(--xc-text)' }}>{t('home.signer.title')}</strong>
+                <span> {t('home.signer.body')}</span>
             </div>
             <div
                 style={{
@@ -1486,30 +1490,30 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSe
                     onClick={onSignPsbt}
                     disabled={!onSignPsbt}
                 >
-                    Sign a transaction
+                    {t('home.signer.signTransaction')}
                 </Button>
                 <Button
                     variant="secondary"
                     onClick={onSignMessage}
                     disabled={!onSignMessage}
                 >
-                    Sign a message
+                    {t('home.signer.signMessage')}
                 </Button>
                 <Button
                     variant="ghost"
                     onClick={onVerifySignature}
                     disabled={!onVerifySignature}
                 >
-                    Verify a signature
+                    {t('home.signer.verifySignature')}
                 </Button>
                 {onOpenSettings ? (
                     <Button variant="ghost" onClick={onOpenSettings} icon={<Icon.GearIcon />}>
-                        Settings
+                        {t('home.settings')}
                     </Button>
                 ) : null}
                 {onLockWallet ? (
                     <Button variant="ghost" onClick={onLockWallet} icon={<Icon.LockIcon />}>
-                        Lock wallet
+                        {t('home.lockWallet')}
                     </Button>
                 ) : null}
             </div>

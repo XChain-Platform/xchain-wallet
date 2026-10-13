@@ -27,6 +27,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -361,7 +362,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review' || stage === 'submitting' ? 'Review gated publish' : `Gated content · ${tick}`}
+            title={stage === 'review' || stage === 'submitting'
+                ? t('gatedPublish.review.title')
+                : t('gatedPublish.title', { tick })}
         />
     );
     const wrap = (children) => (
@@ -379,7 +382,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    ? t('common.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: coinTicker,
+                    }).trim()
                     : undefined}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
@@ -405,37 +411,33 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         onDone={onBack}
                     />
                     <p className={styles.hint}>
-                        The pack key is saved in this wallet. Sign the transaction on
-                        your Signer wallet, then broadcast it from a Full-mode wallet.
+                        {t('gatedPublish.watcherSavedKey')}
                     </p>
                 </>,
             );
         }
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="gated file publish" unsaved={result.unsaved} />,
+                <QueuedResultPanel onDone={onBack} what={t('gatedPublish.queuedWhat')} unsaved={result.unsaved} />,
             );
         }
         return wrap(
             <>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Encrypted file published</p>
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('gatedPublish.success')}</p>
                 {result?.txid ? (
-                    <p style={{ margin: '0 0 0.5rem' }}>Transaction: <code>{result.txid}</code></p>
+                    <p style={{ margin: '0 0 0.5rem' }}>{t('gatedPublish.transaction')} <code>{result.txid}</code></p>
                 ) : null}
                 {result?.keyHash ? (
                     <p style={{ margin: '0 0 0.5rem', overflowWrap: 'anywhere' }}>
-                        Pack key hash: <code>{result.keyHash}</code>
+                        {t('gatedPublish.packKeyHash')} <code>{result.keyHash}</code>
                     </p>
                 ) : null}
                 <p className={styles.hint}>
-                    The decryption key is stored in this wallet and recorded
-                    on-chain encrypted to your own address. Anyone who receives
-                    {' '}{tick} through a normal send gets the key automatically.
-                    To add more files that unlock together, publish again and
-                    pick this pack.
+                    {t('gatedPublish.successHint.beforeToken')} {tick}{' '}
+                    {t('gatedPublish.successHint.afterToken')}
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={onBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -443,12 +445,12 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
     if (stage === 'review' || stage === 'submitting') {
         const packLabel = packChoice === 'new'
-            ? 'New pack (fresh key)'
-            : `Existing pack ${packChoice.slice(0, 12)}…`;
+            ? t('gatedPublish.pack.new')
+            : t('gatedPublish.pack.existing', { hash: packChoice.slice(0, 12) });
         const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
-                label="Review gated publish"
+                label={t('gatedPublish.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
                 status={(isWatcherMode || hw) && submitError ? (
@@ -457,7 +459,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 actions={(
                     <>
                         <Button variant="secondary" type="button" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
-                            Back
+                            {t('common.back')}
                         </Button>
                         <Button
                             type="submit"
@@ -468,22 +470,22 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                                 : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                         >
                             {isWatcherMode
-                                ? 'Create unsigned transaction'
+                                ? t('common.createUnsignedTransaction')
                                 : hw
-                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Sign and publish'}
+                                    ? t('common.signOn', { device: fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                    : t('gatedPublish.signAndPublish')}
                         </Button>
                     </>
                 )}
             >
                 <p className={styles.summary}>
-                    Publish <strong>{fileMeta?.name}</strong> encrypted; only holders
-                    of {tick} will be able to read it.
+                    {t('gatedPublish.review.summary.beforeFile')} <strong>{fileMeta?.name}</strong>{' '}
+                    {t('gatedPublish.review.summary.afterFile', { tick })}
                 </p>
                 {reviewPreviewUrl ? (
                     <img
                         src={reviewPreviewUrl}
-                        alt={`Preview of ${fileMeta?.name || 'file'}`}
+                        alt={t('gatedPublish.previewAlt', { file: fileMeta?.name || t('gatedPublish.file') })}
                         width={160}
                         height={160}
                         loading="lazy"
@@ -492,42 +494,45 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dt className={styles.detailsLabel}>{t('common.chain')}</dt>
                     <dd className={styles.detailsValue}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                     </dd>
-                    <dt className={styles.detailsLabel}>Gate token</dt>
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.gateToken')}</dt>
                     <dd className={styles.detailsValue}><code>{tick}</code></dd>
-                    <dt className={styles.detailsLabel}>File</dt>
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.file')}</dt>
                     <dd className={styles.detailsValue}>
-                        {fileMeta?.name} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
+                        {t('gatedPublish.fileMetadata', {
+                            name: fileMeta?.name,
+                            bytes: fileMeta?.bytes.length.toLocaleString(),
+                            type: fileMeta?.type,
+                        })}
                     </dd>
-                    <dt className={styles.detailsLabel}>Pack</dt>
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.pack')}</dt>
                     <dd className={styles.detailsValue}>{packLabel}</dd>
                     {thresholdActive && gateMinAmount.trim() ? (
                         <>
-                            <dt className={styles.detailsLabel}>Unlock threshold</dt>
+                            <dt className={styles.detailsLabel}>{t('gatedPublish.unlockThreshold')}</dt>
                             <dd className={styles.detailsValue}>
-                                hold ≥ {gateMinAmount.trim()} {tick} to receive the key
+                                {t('gatedPublish.thresholdReview', {
+                                    amount: gateMinAmount.trim(),
+                                    tick,
+                                })}
                             </dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>Publishing from</dt>
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.publishingFrom')}</dt>
                     <dd className={styles.detailsValue}>
                         {fromAddress ? <AddressText address={fromAddress.address} /> : null}
                     </dd>
                 </dl>
                 <p className={styles.hint} role="note">
-                    Permanent: the encrypted bytes live on-chain forever and the
-                    gate cannot be removed later, only the key re-shared. One
-                    transaction publishes the file and records your recovery
-                    copy of the key; there is no key-less window.
+                    {t('gatedPublish.permanentHint')}
                 </p>
 
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this builds an unsigned transaction. The pack
-                        key stays in THIS wallet either way.
+                        {t('gatedPublish.watcherHint')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -551,40 +556,41 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
         <FormPage
-            label="Gated content"
+            label={t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
             status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             actions={(
                 <Button type="submit" variant="primary">
-                    Review
+                    {t('common.review')}
                 </Button>
             )}
         >
             <p className={styles.hint}>
-                Publish a file that only holders of <strong>{tick}</strong> can
-                read. The file is encrypted before it touches the chain; the key
-                travels automatically with every normal send of the token.
+                {t('gatedPublish.formHint.beforeToken')} <strong>{tick}</strong>{' '}
+                {t('gatedPublish.formHint.afterToken')}
             </p>
 
             {ownerMissing ? (
                 <StatusMessage variant="error" className={styles.error}>
-                    This wallet does not hold the owner address
-                    (<AddressText address={issuerAddress} />) for {tick}. Only the
-                    token owner can publish gated files.
+                    {t('gatedPublish.ownerMissing.beforeAddress')}
+                    {' '}(<AddressText address={issuerAddress} />){' '}
+                    {t('gatedPublish.ownerMissing.afterAddress', { tick })}
                 </StatusMessage>
             ) : null}
 
             <label className={styles.pickerLabel}>
-                File (up to about {plainCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream').toLocaleString()} bytes)
-                <input type="file" aria-label="File to publish" onChange={handlePickFile} disabled={ownerMissing} />
+                {t('gatedPublish.fileLimit', {
+                    bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
+                })}
+                <input type="file" aria-label={t('gatedPublish.fileToPublish')} onChange={handlePickFile} disabled={ownerMissing} />
             </label>
             {fileMeta ? (
                 <>
                     {previewUrl ? (
                         <img
                             src={previewUrl}
-                            alt={`Preview of ${fileMeta.name}`}
+                            alt={t('gatedPublish.previewAlt', { file: fileMeta.name })}
                             width={160}
                             height={160}
                             loading="lazy"
@@ -593,17 +599,21 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         />
                     ) : null}
                     <p className={styles.hint}>
-                        {fileMeta.name} · {fileMeta.bytes.length.toLocaleString()} bytes · {fileMeta.type}
+                        {t('gatedPublish.fileMetadata', {
+                            name: fileMeta.name,
+                            bytes: fileMeta.bytes.length.toLocaleString(),
+                            type: fileMeta.type,
+                        })}
                     </p>
                 </>
             ) : null}
 
             <label className={styles.pickerLabel}>
-                Title (optional)
+                {t('gatedPublish.titleOptional')}
                 <input
                     type="text"
                     enterKeyHint="next"
-                    aria-label="Title"
+                    aria-label={t('gatedPublish.titleField')}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     maxLength={120}
@@ -611,11 +621,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 />
             </label>
             <label className={styles.pickerLabel}>
-                Memo (optional)
+                {t('gatedPublish.memoOptional')}
                 <input
                     type="text"
                     enterKeyHint={thresholdActive ? 'next' : 'go'}
-                    aria-label="Memo"
+                    aria-label={t('gatedPublish.memoField')}
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
                     maxLength={120}
@@ -625,29 +635,26 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
             {thresholdActive ? (
                 <label className={styles.pickerLabel}>
-                    Unlock threshold (optional)
+                    {t('gatedPublish.unlockThresholdOptional')}
                     <input
                         type="text"
                         inputMode="decimal"
                         enterKeyHint="go"
-                        aria-label="Unlock threshold"
-                        placeholder="No threshold"
+                        aria-label={t('gatedPublish.unlockThreshold')}
+                        placeholder={t('gatedPublish.noThreshold')}
                         value={gateMinAmount}
                         onChange={(e) => setGateMinAmount(e.target.value)}
                         disabled={ownerMissing}
                         aria-describedby="gated-publish-threshold-hint"
                     />
                     <span id="gated-publish-threshold-hint" className={styles.hint}>
-                        Holders need at least this many {tick} after a send to
-                        receive the unlock key. This is a first-access lock, not
-                        copy protection: anyone who ever got the key keeps it,
-                        even if they later hold less.
+                        {t('gatedPublish.thresholdHint', { tick })}
                     </span>
                 </label>
             ) : null}
 
             <fieldset style={{ border: 0, padding: 0, margin: "0 0 var(--xc-space-3)" }} disabled={ownerMissing}>
-                <legend>Pack</legend>
+                <legend>{t('gatedPublish.pack')}</legend>
                 <label className={styles.checkRow}>
                     <input
                         type="radio"
@@ -655,7 +662,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         checked={packChoice === 'new'}
                         onChange={() => setPackChoice('new')}
                     />
-                    {' '}New pack (fresh key)
+                    {' '}{t('gatedPublish.pack.new')}
                 </label>
                 {(packs || []).map((p) => (
                     <label key={p.keyHash} className={styles.checkRow}>
@@ -665,25 +672,24 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                             checked={packChoice === p.keyHash}
                             onChange={() => setPackChoice(p.keyHash)}
                         />
-                        {' '}Add to pack <code>{String(p.keyHash).slice(0, 12)}…</code>
-                        {' '}(files in this pack unlock together)
+                        {' '}{t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
+                        {' '}{t('gatedPublish.pack.unlockTogether')}
                     </label>
                 ))}
                 {packs === null ? (
-                    <p className={styles.hint}>Loading reusable packs…</p>
+                    <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
                 ) : packsError ? (
                     <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
                 ) : packs.length === 0 ? (
                     <p className={styles.hint}>
-                        No reusable packs in this wallet yet. Files published under
-                        one pack share a single key and unlock together.
+                        {t('gatedPublish.pack.empty')}
                     </p>
                 ) : null}
             </fieldset>
 
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('common.networkFee')}
                     coinTicker={coinTicker}
                     tiers={feeTiers}
                     value={feePick}
@@ -699,8 +705,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     onChange={(e) => setAckForever(e.target.checked)}
                     disabled={ownerMissing}
                 />
-                {' '}I understand the encrypted file is published on-chain forever
-                and the gate cannot be removed later.
+                {' '}{t('gatedPublish.ackForever')}
             </label>
 
         </FormPage>,

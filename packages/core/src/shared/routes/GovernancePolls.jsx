@@ -15,6 +15,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
+import { t } from '../../i18n/index.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
@@ -101,7 +102,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 else setNoChain(true);
             })
             .catch((err) => {
-                if (!cancelled) setError(userFacingMessage(err, 'Could not load governance addresses. Try again.'));
+                if (!cancelled) setError(userFacingMessage(err, t('governance.error.addresses')));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, governanceChainIds, addressesReload]);
@@ -114,27 +115,27 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
             .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
             .catch((err) => {
-                if (!cancelled) setError(userFacingMessage(err, 'Could not load governance polls. Try again.'));
+                if (!cancelled) setError(userFacingMessage(err, t('governance.error.polls')));
             });
         return () => { cancelled = true; };
     }, [chainId, messaging, pollsReload]);
 
-    const header = <PageHeader onBack={onBack} title="Governance" />;
+    const header = <PageHeader onBack={onBack} title={t('governance.title')} />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
         return wrap(
             <EmptyState
-                title="No governance address"
-                body="Governance requires an address on a supported chain."
+                title={t('governance.noAddress.title')}
+                body={t('governance.noAddress.body')}
             />,
         );
     }
     if (!chainId && !error) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label="Loading governance addresses" aria-busy="true">
-                    Loading governance addresses…
+                <div role="status" aria-label={t('governance.loadingAddressesLabel')} aria-busy="true">
+                    {t('governance.loadingAddresses')}
                 </div>
             </ListPage>,
         );
@@ -145,7 +146,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 <StatusMessage
                     variant="error"
                     className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
@@ -157,8 +158,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         <ListPage toolbar={(
             <>
                 <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                <Button variant="primary" onClick={() => onCreate(chainId)}>Create poll</Button>
-                <Button variant="ghost" onClick={() => onDelegate(chainId)}>Delegate votes</Button>
+                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
+                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
             </>
         )}>
 
@@ -166,18 +167,18 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 <StatusMessage
                     variant="error"
                     className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setPollsReload((value) => value + 1) }}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
             ) : null}
             {chainId && !rows && !error ? (
-                <div role="status" aria-label="Loading governance polls" aria-busy="true">
-                    Loading governance polls…
+                <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
+                    {t('governance.loadingPolls')}
                 </div>
             ) : null}
             {rows && rows.length === 0 ? (
-                <EmptyState title="No polls yet" body="Polls created on this chain appear here." />
+                <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
             ) : null}
 
             {rows && rows.length > 0 ? (
@@ -193,11 +194,13 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                 className={local.pollCard}
                             >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong>#{String(id)} · {p.tick || 'n/a'}</strong>
+                                    <strong>#{String(id)} · {p.tick || t('common.notAvailable')}</strong>
                                     <StatusPill status={p.poll_status} />
                                 </div>
                                 {label ? <div className={styles.hint}>{String(label).slice(0, 100)}</div> : null}
-                                <div className={styles.hint}>Closes at block {String(p.end_block ?? 'n/a')}</div>
+                                <div className={styles.hint}>
+                                    {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                </div>
                             </button>
                         );
                     })}

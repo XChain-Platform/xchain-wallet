@@ -28,6 +28,9 @@ const localizedComponents = [
     'settings/UndoSendRow.jsx',
 ];
 
+// Every E-K route is migrated, so each one is scanned even if it stops calling t().
+const ROUTE_E_TO_K = /\/routes\/[E-K][^/]*\.jsx$/;
+
 const localizedRoutes = [
     'AccountPicker.jsx',
     'ActionDetail.jsx',
@@ -44,12 +47,12 @@ describe('shared route localization', () => {
         }
     });
 
-    test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
+    test('translated screens and E-K routes keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
 
         for (const [file, source] of Object.entries(sources)) {
-            if (!/\bt\s*\(/.test(source)) continue;
+            if (!/\bt\s*\(/.test(source) && !ROUTE_E_TO_K.test(file)) continue;
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
