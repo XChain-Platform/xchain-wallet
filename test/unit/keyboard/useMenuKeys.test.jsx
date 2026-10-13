@@ -19,9 +19,11 @@ import { nextMenuIndex, useMenuKeys } from '../../../packages/core/src/shared/ke
 
 afterEach(() => cleanup());
 
-function Popup({ withSearch = false }) {
+function Popup({ withSearch = false, navigateOnSelect = false }) {
     useMenuKeys();
     const [open, setOpen] = useState(false);
+    const [navigated, setNavigated] = useState(false);
+    if (navigated) return <main><h1>Chosen destination</h1></main>;
     return (
         <div>
             <button
@@ -43,7 +45,10 @@ function Popup({ withSearch = false }) {
                             type="button"
                             role="option"
                             aria-selected={n === 'two' ? 'true' : 'false'}
-                            onClick={() => setOpen(false)}
+                            onClick={() => {
+                                setOpen(false);
+                                if (navigateOnSelect) setNavigated(true);
+                            }}
                         >
                             {n}
                         </button>
@@ -143,6 +148,32 @@ describe('useMenuKeys', () => {
         fireEvent.click(item);
         await flush();
         expect(document.activeElement).toBe(trigger);
+    });
+
+    it('returns focus to the opener after an item is chosen with a pointer', async () => {
+        render(<Popup />);
+        const trigger = screen.getByTestId('trigger');
+        trigger.focus();
+        fireEvent.click(trigger);
+        const item = screen.getByRole('option', { name: 'one' });
+        item.focus();
+
+        fireEvent.click(item);
+        await flush();
+
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('focuses the destination heading when selection removes the opener', async () => {
+        render(<Popup navigateOnSelect />);
+        fireEvent.click(screen.getByTestId('trigger'));
+        const item = screen.getByRole('option', { name: 'one' });
+        item.focus();
+
+        fireEvent.click(item);
+        await flush();
+
+        expect(screen.getByRole('heading', { name: 'Chosen destination' })).toHaveFocus();
     });
 
     it('ignores arrows outside a popup', () => {

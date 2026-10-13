@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
@@ -20,6 +20,7 @@ import {
 } from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { restoreFocusAfterClose } from '../utils/focusTrap.js';
 
 /**
  * Header gear-icon → settings popover. Four sections:
@@ -80,9 +81,14 @@ export function HeaderSettingsButton({
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
+    const closePopover = useCallback(() => {
+        const popover = wrapRef.current?.querySelector('[role="dialog"]');
+        setOpen(false);
+        restoreFocusAfterClose(triggerRef.current, popover);
+    }, []);
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    useBackHandler(open ? () => { setOpen(false); triggerRef.current?.focus(); } : undefined);
+    useBackHandler(open ? closePopover : undefined);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
@@ -91,12 +97,11 @@ export function HeaderSettingsButton({
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
+            closePopover();
         };
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
-            setOpen(false);
-            triggerRef.current?.focus();
+            closePopover();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -104,7 +109,7 @@ export function HeaderSettingsButton({
             window.removeEventListener('mousedown', onClick);
             window.removeEventListener('keydown', onKey);
         };
-    }, [open]);
+    }, [closePopover, open]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the
@@ -188,7 +193,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenWalletPicker(); }}
+                                onClick={() => { closePopover(); onOpenWalletPicker(); }}
                                 title={walletLabel || 'Choose wallet'}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
@@ -204,7 +209,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenAccountPicker(); }}
+                                onClick={() => { closePopover(); onOpenAccountPicker(); }}
                                 title={accountLabel || 'Choose account'}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
@@ -247,7 +252,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenSettings(); }}
+                                onClick={() => { closePopover(); onOpenSettings(); }}
                                 title="All settings"
                             >
                                 <span className={styles.summaryName}>All settings</span>
