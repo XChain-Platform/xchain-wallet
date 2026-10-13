@@ -48,6 +48,8 @@ import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { copyText } from '../../clipboard.js';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 
@@ -1168,19 +1170,18 @@ function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
     const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
     const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const haptic = useHapticFeedback();
 
     const copyTxid = async () => {
         setCopyStatus(null);
         setCopyError(null);
-        if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
-            setCopyError('Copy is not available here. Select the transaction ID and copy it manually.');
-            return;
-        }
-        try {
-            await navigator.clipboard.writeText(txid);
+        const { ok } = await copyText(txid);
+        if (ok) {
             setCopyStatus('Transaction ID copied.');
-        } catch {
+            haptic.tap();
+        } else {
             setCopyError('Could not copy the transaction ID. Select it and copy it manually.');
+            haptic.error();
         }
     };
     // Say "published" only for a broadcast that returned a txid; a transient

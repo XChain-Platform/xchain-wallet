@@ -23,6 +23,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { logConsole } from '../utils/logConsole.js';
+import { copyText } from '../clipboard.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
 
@@ -105,6 +107,7 @@ export function LogConsole() {
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
     const [copied, setCopied] = useState(false);
+    const haptic = useHapticFeedback();
 
     useEffect(() => {
         if (!logConsole.isAttached()) logConsole.attach();
@@ -144,12 +147,13 @@ export function LogConsole() {
         const text = filtered.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
-        try {
-            await navigator.clipboard?.writeText(text);
+        const { ok } = await copyText(text);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
-        } catch {
-            /* swallow; best effort */
+            haptic.tap();
+        } else {
+            haptic.error();
         }
     };
 

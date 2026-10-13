@@ -34,6 +34,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
+import { copyText } from '../clipboard.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './WatcherResultPanel.module.css';
 
 /**
@@ -53,6 +55,7 @@ export function WatcherResultPanel({
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
+    const haptic = useHapticFeedback();
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -63,10 +66,12 @@ export function WatcherResultPanel({
             return { error: e?.message || String(e) };
         }
     }, [psbtHex, qrFormat]);
-    const copyHex = useCallback(() => {
+    const copyHex = useCallback(async () => {
         if (!psbtHex) return;
-        try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
-    }, [psbtHex]);
+        const { ok } = await copyText(psbtHex);
+        if (ok) haptic.tap();
+        else haptic.error();
+    }, [haptic, psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
     return (

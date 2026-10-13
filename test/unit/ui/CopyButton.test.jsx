@@ -10,11 +10,22 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+
+const haptic = vi.hoisted(() => ({
+    tap: vi.fn(),
+    error: vi.fn(),
+}));
+
+vi.mock('../../../packages/core/src/shared/hooks/useHaptic.js', () => ({
+    useHapticFeedback: () => haptic,
+}));
+
 import { CopyButton } from '../../../packages/core/src/ui/CopyButton.jsx';
 
 describe('<CopyButton>', () => {
     let clipboard;
     beforeEach(() => {
+        vi.clearAllMocks();
         clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
         Object.defineProperty(globalThis.navigator, 'clipboard', {
             value: clipboard,
@@ -44,6 +55,8 @@ describe('<CopyButton>', () => {
             await waitFor(() => {
                 expect(screen.getByRole('button')).toHaveTextContent('Copied');
             });
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
             act(() => {
                 vi.advanceTimersByTime(101);
             });
@@ -61,6 +74,8 @@ describe('<CopyButton>', () => {
             expect(screen.getByRole('button')).toHaveTextContent('Copy failed: the clipboard is unavailable.');
         });
         expect(clipboard.writeText).toHaveBeenCalled();
+        expect(haptic.error).toHaveBeenCalledOnce();
+        expect(haptic.tap).not.toHaveBeenCalled();
     });
 
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {

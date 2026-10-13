@@ -490,6 +490,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 message: ok
                     ? 'This app cannot copy images, so the payment link was copied instead.'
                     : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'default' : 'error',
             });
             return;
         }
@@ -501,7 +502,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             // The browser's own wording ("Document is not focused") goes to
             // the log; the toast stays in plain words.
             console.error('Receive QR copy failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Copy failed: clipboard unavailable' });
+            showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
         }
     }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 
@@ -512,7 +513,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             blob = dataUrlToBlob(qrDataUrl);
         } catch (err) {
             console.error('Receive QR share (read image) failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Share failed: could not read QR image' });
+            showToast({ message: 'Share failed: could not read QR image', variant: 'error' });
             return;
         }
         // Mirror the Copy action first so the user always ends up with
@@ -533,7 +534,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         } catch (err) {
             if (err?.name === 'AbortError') return; // user dismissed sheet
             console.error('Receive QR share failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Share failed: share unavailable' });
+            showToast({ message: 'Share failed: share unavailable', variant: 'error' });
         }
     }, [qrDataUrl, address?.address, qrFileName, canCopyImages, showToast]);
 
@@ -542,7 +543,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const copyAddress = useCallback(async () => {
         if (!qrUri) return;
         const { ok } = await copyText(qrUri);
-        showToast({ message: ok ? 'Payment request copied to clipboard.' : 'Copy failed: clipboard unavailable' });
+        showToast({
+            message: ok ? 'Payment request copied to clipboard.' : 'Copy failed: clipboard unavailable',
+            variant: ok ? 'default' : 'error',
+        });
     }, [qrUri, showToast]);
     const onAddressKeyDown = useCallback((event) => {
         if (event.key === 'Enter' || event.key === ' ') {

@@ -10,7 +10,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './ToastHost.module.css';
-import { useHaptic } from '../hooks/useHaptic.js';
+import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 
 // §37.2 toast foundation. A single shared host renders an action queue
 // at the bottom of the screen; any route can drop a toast via the
@@ -120,36 +120,38 @@ export function ToastHost({ children }) {
     const hiddenCount = Math.max(0, toasts.length - visibleToasts.length);
 
     return (
-        <ToastContext.Provider value={api}>
-            {children}
-            <div
-                className={styles.viewport}
-                role="region"
-                aria-label="Notifications"
-                aria-live="polite"
-            >
-                {hiddenCount > 0 ? (
-                    <div className={styles.overflowBadge} aria-hidden="true">
-                        {`+${hiddenCount} more`}
-                    </div>
-                ) : null}
-                {visibleToasts.map((t) => (
-                    <ToastItem
-                        key={t.id}
-                        toast={t}
-                        onAction={() => {
-                            if (typeof t.onAction === 'function') {
-                                Promise.resolve(t.onAction()).catch(() => {
-                                    /* swallow; caller surfaces its own error */
-                                });
-                            }
-                            dismissToast(t.id);
-                        }}
-                        onDismiss={() => dismissToast(t.id)}
-                    />
-                ))}
-            </div>
-        </ToastContext.Provider>
+        <HapticProvider value={haptic}>
+            <ToastContext.Provider value={api}>
+                {children}
+                <div
+                    className={styles.viewport}
+                    role="region"
+                    aria-label="Notifications"
+                    aria-live="polite"
+                >
+                    {hiddenCount > 0 ? (
+                        <div className={styles.overflowBadge} aria-hidden="true">
+                            {`+${hiddenCount} more`}
+                        </div>
+                    ) : null}
+                    {visibleToasts.map((t) => (
+                        <ToastItem
+                            key={t.id}
+                            toast={t}
+                            onAction={() => {
+                                if (typeof t.onAction === 'function') {
+                                    Promise.resolve(t.onAction()).catch(() => {
+                                        /* swallow; caller surfaces its own error */
+                                    });
+                                }
+                                dismissToast(t.id);
+                            }}
+                            onDismiss={() => dismissToast(t.id)}
+                        />
+                    ))}
+                </div>
+            </ToastContext.Provider>
+        </HapticProvider>
     );
 }
 

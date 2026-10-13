@@ -151,7 +151,7 @@ assert.ok(
     'pay-to address falls back to GET_ADDRESS/source when the row has no address column',
 );
 assert.ok(
-    /navigator\.clipboard/.test(detailSrc),
+    /copyText\(text\)/.test(detailSrc),
     'pay-here panel exposes a copy-to-clipboard button',
 );
 assert.ok(

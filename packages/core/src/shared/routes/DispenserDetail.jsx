@@ -36,6 +36,8 @@ import {
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { copyText } from '../clipboard.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
@@ -126,6 +128,7 @@ const ADDRESS_CELL_STYLE = {
  *   terms; a shell that does not pass it gets no Open again button
  */
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
+    const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -763,12 +766,13 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }, [oracleQuote, giveAmount]);
 
     async function handleCopy(text, label) {
-        try {
-            await navigator.clipboard?.writeText(text);
+        const { ok } = await copyText(text);
+        if (ok) {
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
-        } catch {
-            /* swallow; older browsers or locked-down contexts */
+            haptic.tap();
+        } else {
+            haptic.error();
         }
     }
 

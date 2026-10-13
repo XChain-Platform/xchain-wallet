@@ -10,6 +10,8 @@
 
 import { useState } from 'react';
 import styles from './RawPsbtViewer.module.css';
+import { copyText } from '../clipboard.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.
@@ -38,6 +40,7 @@ import styles from './RawPsbtViewer.module.css';
  */
 export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     const [copied, setCopied] = useState(false);
+    const haptic = useHapticFeedback();
 
     if (!developerMode) return null;
 
@@ -49,14 +52,13 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     const copyTarget = hasPsbt ? psbtHex : fieldsJson;
 
     async function handleCopy() {
-        try {
-            await navigator.clipboard?.writeText(copyTarget);
+        const { ok } = await copyText(copyTarget);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
-        } catch (_err) {
-            // Clipboard write can fail in approval popup contexts
-            // without permissions; the textarea above stays
-            // selectable as a fallback.
+            haptic.tap();
+        } else {
+            haptic.error();
         }
     }
 

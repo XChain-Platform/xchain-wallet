@@ -111,6 +111,7 @@ describe('Receive QR copy and share toasts', () => {
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(paymentRequest));
         expect(showToast).toHaveBeenCalledWith({
             message: 'Payment request copied to clipboard.',
+            variant: 'default',
         });
     });
 
@@ -126,6 +127,10 @@ describe('Receive QR copy and share toasts', () => {
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);
         expect(messages).toEqual(['Copy failed: clipboard unavailable']);
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Copy failed: clipboard unavailable',
+            variant: 'error',
+        });
         expect(messages.join(' ')).not.toContain('Document is not focused');
         expect(consoleError.mock.calls.some(([, err]) => err?.message === BROWSER_TEXT)).toBe(true);
     });
@@ -146,6 +151,10 @@ describe('Receive QR copy and share toasts', () => {
         await waitFor(() => expect(showToast).toHaveBeenCalled());
         const messages = showToast.mock.calls.map(([t]) => t.message);
         expect(messages).toEqual(['Share failed: share unavailable']);
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Share failed: share unavailable',
+            variant: 'error',
+        });
         expect(messages.join(' ')).not.toContain('Permission denied');
     });
 
