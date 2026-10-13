@@ -1,13 +1,12 @@
 {
-    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set play), this set has no capture harness, so its pin is bootstrapped with --how derived. Records WHICH BUILD the Google Play listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
+    "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set play), this set has no capture harness, so its pin is bootstrapped with --how derived. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "play",
-    "store": "Google Play",
     "capturedFrom": {
-        "commit": "7110d2e14b76a92b6851cddbe51752191ceb787c",
-        "version": "0.334.0",
+        "commit": "58564166d4369acea6fe9330360eab3ed1e46209",
+        "version": "0.341.2",
         "how": "derived"
     },
-    "observedAt": "2026-08-10T03:26:24.243Z",
+    "observedAt": "2026-10-13T12:52:21.859Z",
     "assets": {
         "screenshots/01-balances.png": {
             "sha256": "5abc48b419ea1bd52ac0031fce35f772579207db1ca9ca918fbb46f0654c9b52",
@@ -40,7 +39,7 @@
             "shows": "Store icon, cropped to the shipped launcher icon composition"
         },
         "feature-graphic-1024x500.png": {
-            "sha256": "7ae825b4fd6493d2d9a3da4865750d0591e9b5fab79c9b0f6f7c4c2948f29595",
+            "sha256": "04071f7d8733c0f04d1057711d2e8d7a251c02319f5dc4e621d84d6134ee743b",
             "width": 1024,
             "height": 500,
             "shows": "Feature graphic: white lockup on the brand gradient"

@@ -565,21 +565,35 @@ for entry in "${SCAN_TARGETS[@]+"${SCAN_TARGETS[@]}"}"; do
         echo "     artifact by construction (unbundled main process), so wiring is"
         echo "     gated at source instead"
     fi
+    IFS=',' read -r -a target_sdk_markers <<< "$sdk_markers"
+    grep_args=(-r -a -H -o -F --exclude='*.map')
+    for marker in "${MARKERS[@]}" "${target_sdk_markers[@]}"; do
+        grep_args+=(-e "$marker")
+    done
+    marker_hits="$(grep "${grep_args[@]}" "$dir" 2>/dev/null || true)"
+
     for marker in "${MARKERS[@]}"; do
         [ "$scan_mode" = "positive-only" ] && break
-        if grep -r -a -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
+        matching_files=""
+        while IFS= read -r hit; do
+            [ "${hit##*:}" = "$marker" ] || continue
+            file="${hit%:*}"
+            matching_files+="    $label${file#"$dir"}"$'\n'
+        done <<< "$marker_hits"
+        if [ -n "$matching_files" ]; then
             echo "FAIL $label contains dev-SDK marker: \"$marker\""
-            grep -r -a -l -F --exclude='*.map' "$marker" "$dir" | sed "s|^$dir|    $label|"
+            printf '%s' "$matching_files"
             failures=$((failures + 1))
         fi
     done
     real_sdk_found=0
-    IFS=',' read -r -a target_sdk_markers <<< "$sdk_markers"
     for marker in "${target_sdk_markers[@]}"; do
-        if grep -r -a -l -F --exclude='*.map' "$marker" "$dir" > /dev/null 2>&1; then
-            real_sdk_found=1
-            break
-        fi
+        while IFS= read -r hit; do
+            if [ "${hit##*:}" = "$marker" ]; then
+                real_sdk_found=1
+                break 2
+            fi
+        done <<< "$marker_hits"
     done
     if [ "$real_sdk_found" -eq 0 ]; then
         echo "FAIL $label does not contain the real xchain-sdk (none of: $sdk_markers)"

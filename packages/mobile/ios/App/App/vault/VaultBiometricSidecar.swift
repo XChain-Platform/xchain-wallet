@@ -58,6 +58,7 @@ final class VaultBiometricSidecar {
 
     private static let service = "io.xchain.wallet.ios.biometric-wrap"
     private static let account = "vault-password"
+    private static let retryExhaustedDetail = "biometric authentication failed repeatedly"
 
     /// Whether the device can do biometrics at all, and whether we hold a wrap.
     ///
@@ -168,6 +169,9 @@ final class VaultBiometricSidecar {
     func unlock(reason: String, completion: @escaping (Data?, String, String) -> Void) {
         let context = LAContext()
         context.localizedReason = reason
+        // This action dismisses the sheet and returns to the wallet's own
+        // password field without enabling device-passcode authentication.
+        context.localizedCancelTitle = "Use Wallet Password"
         // No `touchIDAuthenticationAllowableReuseDuration`: SSC-3 forbids a
         // window in which a previous authentication keeps opening the item.
 
@@ -200,7 +204,7 @@ final class VaultBiometricSidecar {
                 case errSecUserCanceled:
                     completion(nil, "LOCKED", "the biometric prompt was cancelled")
                 case errSecAuthFailed:
-                    completion(nil, "LOCKED", "biometric authentication failed")
+                    completion(nil, "LOCKED", Self.retryExhaustedDetail)
                 default:
                     completion(nil, "LOCKED", "the keychain refused the wrap (OSStatus \(status))")
                 }

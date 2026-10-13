@@ -231,6 +231,34 @@ function tree(Component, messaging) {
     );
 }
 
+const CSS_FUNCTION_IN_SIZING_ATTRIBUTE = /\b(?:var|calc)\s*\(/i;
+
+function unsafeSizingAttributes(container) {
+    return Array.from(container.querySelectorAll('[width], [height], [size]'))
+        .flatMap((element) => ['width', 'height', 'size'].flatMap((attribute) => {
+            const value = element.getAttribute(attribute);
+            if (!CSS_FUNCTION_IN_SIZING_ATTRIBUTE.test(value || '')) return [];
+            return [`<${element.tagName.toLowerCase()}> ${attribute}="${value}"`];
+        }));
+}
+
+describe('SVG presentation sizing guard', () => {
+    it('recognizes CSS functions in rendered sizing attributes', () => {
+        const container = document.createElement('div');
+        container.innerHTML = [
+            '<svg width="var(--xc-icon-size)" height="calc(100% - 1px)">',
+            '<rect size="VAR(--xc-icon-size)" />',
+            '</svg>',
+        ].join('');
+
+        expect(unsafeSizingAttributes(container)).toEqual([
+            '<svg> width="var(--xc-icon-size)"',
+            '<svg> height="calc(100% - 1px)"',
+            '<rect> size="VAR(--xc-icon-size)"',
+        ]);
+    });
+});
+
 // Drain chained microtasks so resolved host calls + their setState
 // re-renders settle. Microtasks ONLY: never `setTimeout`: so real-timer
 // pollers can't fire and hang the run. Wrapped in act() by callers.
@@ -294,11 +322,14 @@ describe('Layer 1: every shared route renders without a code-bug crash', () => {
             if (!Component) return;
 
             let err = null;
+            let sizingOffenders = [];
             try {
-                render(tree(Component, pendingMessaging));
+                const { container } = render(tree(Component, pendingMessaging));
+                sizingOffenders = unsafeSizingAttributes(container);
             } catch (e) {
                 err = e;
             }
+            expect(sizingOffenders, `${file} renders unsafe sizing attributes`).toEqual([]);
             if (err && INITIAL_BUG_RE.test(String(err && err.message))) {
                 throw err; // re-throw original so the stack points at the route
             }
@@ -314,12 +345,15 @@ describe('Layer 2: every shared route survives an effects flush', () => {
             if (!Component) return;
 
             let err = null;
+            let sizingOffenders = [];
             try {
-                render(tree(Component, resolvingMessaging));
+                const { container } = render(tree(Component, resolvingMessaging));
                 await domAct(() => drainMicrotasks());
+                sizingOffenders = unsafeSizingAttributes(container);
             } catch (e) {
                 err = e;
             }
+            expect(sizingOffenders, `${file} renders unsafe sizing attributes`).toEqual([]);
             if (err && EFFECT_BUG_RE.test(String(err && err.message))) {
                 throw err;
             }
@@ -334,11 +368,13 @@ describe('Layer 3: every shared route survives basic interaction', () => {
             if (!Component) return;
 
             let err = null;
+            const sizingOffenders = new Set();
             try {
                 const { container } = render(
                     tree(Component, resolvingMessaging),
                 );
                 await domAct(() => drainMicrotasks());
+                unsafeSizingAttributes(container).forEach((hit) => sizingOffenders.add(hit));
 
                 // Populate fields so submit handlers run their build path
                 // instead of bailing at "required" before reaching real code.
@@ -359,6 +395,7 @@ describe('Layer 3: every shared route survives basic interaction', () => {
                         });
                     await drainMicrotasks();
                 });
+                unsafeSizingAttributes(container).forEach((hit) => sizingOffenders.add(hit));
 
                 // Click every enabled button. querySelectorAll snapshots,
                 // so re-render churn can't skip or double-fire a node.
@@ -372,10 +409,15 @@ describe('Layer 3: every shared route survives basic interaction', () => {
                         fireEvent.click(btn);
                         await drainMicrotasks(4);
                     });
+                    unsafeSizingAttributes(container).forEach((hit) => sizingOffenders.add(hit));
                 }
             } catch (e) {
                 err = e;
             }
+            expect(
+                Array.from(sizingOffenders),
+                `${file} renders unsafe sizing attributes`,
+            ).toEqual([]);
             if (err && EFFECT_BUG_RE.test(String(err && err.message))) {
                 throw err;
             }

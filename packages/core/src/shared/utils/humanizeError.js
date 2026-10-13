@@ -23,7 +23,7 @@
 // off `cause` instead of re-parsing display prose.
 
 import { explorerReadFailure } from '../../sdk/explorerErrors.js';
-import { DEV_PREFIX } from './userFacingMessage.js';
+import { containsInternalErrorIdentifier, DEV_PREFIX } from './userFacingMessage.js';
 
 const NETWORK_ERRNO = /\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPIPE|EHOSTUNREACH|ECONNABORTED)\b/i;
 const CONNECTION_FAILURE = /network request failed|request timed out|timeout of \d+ms exceeded|you are offline|fetch failed|failed to fetch|would be rejected by the network/i;
@@ -159,7 +159,7 @@ function classifiedResult(raw, hay, verb) {
 function isRawTechnicalText(raw) {
     const text = raw.trim();
     return /^(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal)$/i.test(text)
-        || /\bERR_[A-Z_]+\b/.test(text)
+        || containsInternalErrorIdentifier(text)
         || DEV_PREFIX.test(text)
         || NETWORK_ERRNO.test(text)
         || /request failed with status code\s+\d{3}/i.test(text)
