@@ -162,6 +162,11 @@ export function TokenDetail({
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
+    const handleBack = useCallback(() => {
+        onBack();
+        restoreBalanceRowFocus(chainId, tick);
+    }, [chainId, onBack, tick]);
+
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
@@ -309,7 +314,7 @@ export function TokenDetail({
     const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
             // A bridged copy is titled by its bare name; the rooted wire form
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
@@ -592,6 +597,12 @@ export function TokenDetail({
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                             <span>Trade</span>
                             {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
+                        </button>
+                    ) : null}
+                    {typeof onViewActivity === 'function' ? (
+                        <button type="button" className={styles.quickAction} onClick={onViewActivity}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>
+                            <span>History</span>
                         </button>
                     ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
@@ -2400,6 +2411,19 @@ function HoldersPanel({
 
 function holderIdentity(holder) {
     return holder?.address ?? holder?.ADDRESS ?? null;
+}
+
+function restoreBalanceRowFocus(chainId, tick) {
+    if (typeof document === 'undefined') return;
+    const key = `${chainId}:${tick}`;
+    setTimeout(() => {
+        const row = Array.from(document.querySelectorAll('[data-balance-key]'))
+            .find((candidate) => candidate.getAttribute('data-balance-key') === key);
+        const target = row?.matches('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')
+            ? row
+            : row?.querySelector('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])');
+        target?.focus();
+    }, 0);
 }
 
 function StatCell({ label, value, valueLabel, tone }) {
