@@ -19,6 +19,7 @@ import {
     ListPage,
     EmptyState,
     StatusMessage,
+    ListRow,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -285,18 +286,14 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <ul className={styles.list} role="list">
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    icon={null}
+                                <ListRow
                                     className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
                                     aria-label={`Open ${row.tick} token details`}
-                                >
-                                    <span className={styles.rowChain} aria-hidden="true">
+                                    leading={<span className={styles.rowChain} aria-hidden="true">
                                         <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />
-                                    </span>
-                                    <span className={styles.rowText}>
+                                    </span>}
+                                    title={(
                                         <span className={styles.rowTick}>
                                             {/* A bridged copy reads as its bare
                                                 name plus an origin badge; the
@@ -311,16 +308,14 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                                 </span>
                                             ) : null}
                                         </span>
-                                        {row.description ? (
-                                            <span className={styles.rowDescription}>
-                                                {row.description}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                    <span className={styles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </Button>
+                                    )}
+                                    subtitle={row.description ? (
+                                        <span className={styles.rowDescription}>
+                                            {row.description}
+                                        </span>
+                                    ) : undefined}
+                                    chevron={<Icon.ForwardIcon />}
+                                />
                             </li>
                         ))}
                     </ul>

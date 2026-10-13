@@ -11,26 +11,14 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
     border-top: 1px solid var(--xc-border);
     width: 100%;
-    text-align: start;
-    color: inherit;
-    font: inherit;
 }
 
 .rowContent {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
     flex: 1 1 auto;
     min-width: 0;
-    min-height: 48px;
-    padding: 0;
-    border: 0;
-    color: inherit;
-    font: inherit;
-    text-align: start;
+    min-height: var(--xc-control-h-lg);
 }
 
 .row:first-of-type {
@@ -40,25 +28,17 @@
 /* The primary content becomes the details button while pin and hide remain
  * separate native controls in the same row. */
 .rowClickable {
-    background: transparent;
-    border-inline-start: none;
-    border-inline-end: none;
-    border-bottom: none;
     cursor: pointer;
 }
-.rowClickable:hover {
-    background: var(--xc-bg-muted);
-}
 .rowClickable:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
 }
 
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -67,8 +47,8 @@
 }
 
 .iconImg {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: block;
     border-radius: 50%;
 }
@@ -108,14 +88,6 @@
     display: block;
 }
 
-.body {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
 .title {
     display: flex;
     align-items: flex-start;
@@ -145,9 +117,7 @@
 }
 
 .amounts {
-    flex: 0 1 auto;
     min-width: 0;
-    max-width: 55%;
     display: flex;
     flex-direction: column;
     align-items: flex-end;

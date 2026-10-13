@@ -113,7 +113,14 @@ describe('BalanceList ordering and visibility', () => {
         render(<BalanceList rows={[row('LONG', { displayName })]} onSelectToken={() => {}} />);
 
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
-        expect(screen.getByRole('button', { name: (name) => name.startsWith(`Open ${displayName} details, `) })).toBeInTheDocument();
+        const balanceRow = screen.getByRole('button', {
+            name: (name) => name.startsWith(`Open ${displayName} details, `),
+        });
+        expect(balanceRow).toHaveAttribute('type', 'button');
+        expect(balanceRow.closest('[role="listitem"]')).toHaveAttribute(
+            'data-balance-key',
+            'bitcoin-mainnet:LONG',
+        );
     });
 
     it('keeps a decorative avatar under slow or broken token artwork', () => {

@@ -114,7 +114,7 @@ function mountTokens() {
 }
 
 function renderedKeys() {
-    return [...document.querySelectorAll('[data-balance-key]')]
+    return screen.queryAllByRole('listitem')
         .map((element) => element.dataset.balanceKey);
 }
 
