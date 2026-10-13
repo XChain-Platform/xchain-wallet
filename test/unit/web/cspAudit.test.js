@@ -20,6 +20,7 @@ import {
     metaContentSecurityPolicyFor,
 } from '../../../packages/web/src/csp.js';
 import { injectIntegrityImportMap } from '../../../packages/web/sri.js';
+import { findInlineCspViolations } from '../../helpers/htmlCsp.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const DEFAULT_CONNECT_SOURCES = [
@@ -181,11 +182,19 @@ describe('packaged shell CSPs', () => {
 });
 
 describe('web entry document', () => {
-    it('contains no inline scripts', () => {
-        const html = readFileSync(resolve(REPO, 'packages/web/index.html'), 'utf8');
-        const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((match) => match[0]);
+    it('detects every HTML code form blocked by a strict script-src policy', () => {
+        const html = `
+            <!-- <button onclick="ignored()"> -->
+            <script>runInline()</script>
+            <button ONCLICK="handleClick()">Run</button>
+            <a href="java&#x73;cript:runInline()">Run</a>
+            <script type="module" src="/entry.js"></script>
+        `;
 
-        expect(scripts.length).toBeGreaterThan(0);
-        for (const script of scripts) expect(script).toMatch(/\ssrc=["'][^"']+["']/i);
+        expect(findInlineCspViolations(html).map(({ kind }) => kind)).toEqual([
+            'inline script',
+            'inline event handler onclick',
+            'javascript URL in href',
+        ]);
     });
 });
