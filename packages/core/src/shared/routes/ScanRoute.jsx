@@ -28,6 +28,9 @@ import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
+import { defaultRegistry } from '../../registry/index.js';
+
+const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
 
 const PASTE_LABEL = {
     display: 'flex',
@@ -54,7 +57,6 @@ const PASTE_BOX = {
  *   | { kind: 'send', address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }
  *   | { kind: 'receive' }
  *   | { kind: 'psbt', psbtHex: string }
- *   | { kind: 'unrecognized', detected: import('../../uri/detectQrContent.js').QrContent['type'] }
  * )} ScanRouteOutcome
  */
 
@@ -74,7 +76,9 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         if (claimedRef.current) return;
         const text = typeof raw === 'string' ? raw.trim() : '';
         if (!text) return;
-        const detected = detectQrContent(text, { chainRegistry });
+        const detected = detectQrContent(text, {
+            chainRegistry: chainRegistry || DEFAULT_CHAIN_REGISTRY,
+        });
 
         // xchain: URIs use the richer parser so we get the send/receive
         // intent split + chainId/tick breakdown that detectQrContent
@@ -152,6 +156,21 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             return;
         }
 
+        if (detected.type === 'transaction-hex') {
+            setStatus(t('scan.error.transactionHex'));
+            return;
+        }
+
+        if (detected.type === 'backup-pointer') {
+            setStatus(t('scan.error.backupPointer'));
+            return;
+        }
+
+        if (detected.type === 'pairing-code') {
+            setStatus(t('scan.error.pairingCode'));
+            return;
+        }
+
         if (detected.type === 'wif' || detected.type === 'mnemonic-bip39'
             || detected.type === 'mnemonic-counterwallet') {
             // Secret material from a casual scan: do not auto-import.
@@ -166,14 +185,14 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         }
 
         if (detected.type === 'xcw-chunk') {
-            // Multi-frame PSBT-over-QR: the scan route only handles
-            // single-shot recognition. Direct the user to the Sign panel
-            // which mounts the full XCW collector + animated source pane.
+            // The XCW transport carries PSBTs and long pairing codes. This
+            // route recognizes one frame but leaves assembly to the scanner
+            // on the destination screen that knows what the payload means.
             setStatus(t('scan.error.xcwChunk', { n: detected.n, total: detected.total }));
             return;
         }
 
-        setStatus(t('scan.error.unknown', { type: detected.type }));
+        setStatus(t('scan.error.unknown'));
     }, [chainRegistry, onClassified]);
 
     const handleFrame = useCallback((text) => { classify(text); }, [classify]);

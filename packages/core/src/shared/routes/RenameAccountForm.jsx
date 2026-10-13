@@ -23,15 +23,17 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
  *
  * @param {object} props
  * @param {string} props.accountId
+ * @param {string} props.walletId
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
  * @param {() => void} props.onRenamed   refresh callers and return to the previous screen
  */
-export function RenameAccountForm({ accountId, initialName = '', onBack, onRenamed }) {
+export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState(initialName);
+    const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -44,12 +46,28 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
         }, 0);
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging.listAccounts !== 'function') return undefined;
+        messaging.listAccounts(walletId)
+            .then((list) => {
+                if (!cancelled) setAccounts(Array.isArray(list) ? list : []);
+            })
+            .catch(() => { /* the rename flow performs the authoritative check */ });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
         if (trimmed.length === 0) {
             setError('Account name is required.');
+            return;
+        }
+        if (accounts.some((account) => account?.id !== accountId
+            && account?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            setError(`An account named "${trimmed}" already exists.`);
             return;
         }
         if (typeof messaging.renameAccount !== 'function') {
@@ -96,6 +114,7 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
                 autoComplete="off"
+                disabled={busy}
                 error={error || undefined}
             />
         </FormPage>

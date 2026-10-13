@@ -52,7 +52,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -150,7 +150,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     width: 16px;
     height: 16px;
 }
@@ -190,7 +190,7 @@
 }
 .statusInvalid {
     background: color-mix(in srgb, var(--xc-danger) 18%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 .statusPending {
     background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
@@ -359,7 +359,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;
@@ -401,7 +401,7 @@
 
 .activity_send {
     background: color-mix(in srgb, var(--xc-danger) 18%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .activity_issue {
@@ -416,7 +416,7 @@
 
 .activity_order {
     background: color-mix(in srgb, var(--xc-accent-primary) 18%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .activity_execute {

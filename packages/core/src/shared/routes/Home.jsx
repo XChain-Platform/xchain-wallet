@@ -33,6 +33,7 @@ import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
@@ -131,7 +132,9 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  *
  * Locking is a shell concern, not a route concern: idle auto-lock runs
  * from each shell's AppInner via `useAutoLockPolicy`, and the manual
- * Lock affordance lives in the shell's menu + keyboard shortcut.
+ * Lock affordance lives in the shell's menu + keyboard shortcut. A shell
+ * with no header or menu (the extension popup) passes `onLockWallet` and
+ * Home renders the button for it.
  * found that wiring the idle timer here meant navigating off
  * Home cancelled it, so a wallet left on Send or Settings never locked.
  *
@@ -159,6 +162,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
+ * @param {() => void} [props.onLockWallet]   locks the wallet; only shells with no header (the extension popup and side panel) pass it, and Home then shows a lock button
  *
  * §40 actions are NOT a Home prop. Home used to accept an `extraActions`
  * array "for the small-mode drawer" and never rendered it, so the web
@@ -169,7 +173,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, demoBannerInHeader = false }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, demoBannerInHeader = false }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -581,18 +585,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         }
 
         try {
-            let b;
             // Cluster J FOLLOWUP 1: synthesize fabricated balances
             // for the demo wallet so Home / Send / Receive feel
             // populated. Uses the wallet's real address records so
             // the rest of the app sees the same address-rooted
             // shape it would for a funded wallet.
-            if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                b = flowsLib.synthesizeDemoBalances(byChain);
-            } else {
-                b = await messaging.getWalletBalances(walletId, accountId);
-            }
+            // loadDisplayBalances holds that branch so the palette shows the same.
+            const b = await loadDisplayBalances(messaging, walletId, accountId);
             if (!isCancelled()) {
                 // Fresh balances: this is what restarts the re-poll window,
                 // whichever path asked for them.
@@ -940,7 +939,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // pasted in from a paired Watcher wallet; balances, history, send,
     // and receive are not relevant. Render a stripped-down body with the
     // sign / verify CTAs and a banner explaining the role. Header stays
-    // shared so the user can still lock / switch wallets / open Settings.
+    // shared so the user can still lock / switch wallets / open Settings;
+    // a shell with no header passes onOpenSettings / onLockWallet and the
+    // body offers both itself, since the banner sends the user to Settings.
     if (isSignerMode) {
         return (
             <Screen variant={variant}>
@@ -963,6 +964,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onSignPsbt={onSignPsbt}
                         onSignMessage={onSignMessage}
                         onVerifySignature={onVerifySignature}
+                        onOpenSettings={onOpenSettings}
+                        onLockWallet={onLockWallet}
                     />
                 </ListPage>
             </Screen>
@@ -972,6 +975,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     return (
         <Screen variant={variant}>
             <ListPage className={isFull ? styles.bodyFull : undefined}>
+                {/* Home has no PageHeader, so its one h1 is visually hidden. */}
+                <h1 className="sr-only">Home</h1>
                 {!browserOnline ? (
                     <StatusMessage variant="warning">
                         {balances
@@ -1114,6 +1119,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
                         onOpenSettings={onOpenSettings}
+                        // Same rule as the gear: a lock button for shells with no header.
+                        onLockWallet={onLockWallet}
                         actions={(
                             <div className={styles.quickActions} role="group" aria-label="Quick actions">
                                 <SendQuickAction
@@ -1370,7 +1377,7 @@ function SendQuickAction({ onSend, browserOnline, onOffline }) {
  * @param {() => void} [props.onSignMessage]
  * @param {() => void} [props.onVerifySignature]
  */
-function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
+function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSettings, onLockWallet }) {
     return (
         <div role="region" aria-label="Signer-mode home">
             <div
@@ -1421,6 +1428,16 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                 >
                     Verify a signature
                 </Button>
+                {onOpenSettings ? (
+                    <Button variant="ghost" onClick={onOpenSettings} icon={<Icon.GearIcon />}>
+                        Settings
+                    </Button>
+                ) : null}
+                {onLockWallet ? (
+                    <Button variant="ghost" onClick={onLockWallet} icon={<Icon.LockIcon />}>
+                        Lock wallet
+                    </Button>
+                ) : null}
             </div>
         </div>
     );

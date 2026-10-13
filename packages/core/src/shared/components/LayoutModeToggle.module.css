@@ -50,5 +50,5 @@
 .btnActive {
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
     border-color: var(--xc-accent-primary);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }

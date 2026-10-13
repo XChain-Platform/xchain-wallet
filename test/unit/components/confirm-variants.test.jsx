@@ -30,8 +30,12 @@ import { render, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
+import { MessageConfirmScreen } from '../../../packages/core/src/shared/components/MessageConfirmScreen.jsx';
 import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
-import { psbtRefusalReason } from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
+import {
+    PsbtConfirmScreen,
+    psbtRefusalReason,
+} from '../../../packages/core/src/shared/components/PsbtConfirmScreen.jsx';
 import {
     describeUnreadableReason,
     isUnreadableActionReason,
@@ -72,6 +76,69 @@ function modalProps(overrides = {}) {
         ...overrides,
     };
 }
+
+function confirmState(overrides = {}) {
+    return {
+        phase: 'ready',
+        composed: {},
+        report: null,
+        acknowledged: new Set(),
+        acknowledge() {},
+        canApprove: true,
+        approve: vi.fn(),
+        reject: vi.fn(),
+        error: null,
+        ...overrides,
+    };
+}
+
+describe('request provenance across the shared confirmation adapters', () => {
+    const requestOrigin = 'https://shop.example';
+
+    it('threads the requesting site through action, message, and transaction screens', () => {
+        const cases = [
+            <ActionConfirmScreen
+                key="action"
+                confirmAction={confirmState({
+                    composed: {
+                        decoded: { summary: 'Send 1 TOKEN', details: [], warnings: [] },
+                    },
+                })}
+                requestOrigin={requestOrigin}
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={() => {}}
+            />,
+            <MessageConfirmScreen
+                key="message"
+                confirmAction={confirmState()}
+                requestOrigin={requestOrigin}
+                message="Approve this message"
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={() => {}}
+            />,
+            <PsbtConfirmScreen
+                key="psbt"
+                confirmAction={confirmState()}
+                requestOrigin={requestOrigin}
+                decomposed={{ inputs: [], outputs: [] }}
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={() => {}}
+            />,
+        ];
+
+        for (const element of cases) {
+            const utils = render(element);
+            expect(utils.getByTestId('confirm-request-origin').textContent).toContain(requestOrigin);
+            utils.unmount();
+        }
+    });
+});
 
 describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', () => {
     it('enumerates every input and output, marking own vs external and which key signs', () => {
@@ -428,6 +495,18 @@ describe('§4.2 acknowledgement is reversible', () => {
 });
 
 describe('§5.5 ConfirmActionModal: PSBT variant', () => {
+    it('gives the shared PSBT adapter a plain-language headline', () => {
+        const utils = render(<PsbtConfirmScreen
+            confirmAction={confirmState()}
+            decomposed={{ inputs: [], outputs: [] }}
+            chainLabel="Bitcoin"
+            signerReady
+            password=""
+            onPasswordChange={() => {}}
+        />);
+        expect(utils.getByText('Sign transaction')).toBeTruthy();
+    });
+
     it('foregrounds the supplied PSBT panel and still shows the report', () => {
         const utils = render(React.createElement(ConfirmActionModal, modalProps({
             variant: 'psbt',
@@ -473,11 +552,24 @@ describe('§5.5 ConfirmActionModal: message variant', () => {
         // Verbatim: newlines and leading whitespace survive (pre-wrap), because
         // the signature covers these exact bytes.
         expect(utils.getByTestId('confirm-message-text').textContent).toBe(MESSAGE);
+        expect(utils.getByLabelText('Message to sign')).toBeTruthy();
         // No pre-flight panel (no chain state to check, nothing to broadcast)
         // and no hardware-outputs caveat (there are no outputs).
         expect(utils.container.textContent).not.toMatch(/verifies native outputs/i);
         expect(utils.getByTestId('confirm-approve')).toBeTruthy();
         expect(utils.getByTestId('confirm-reject')).toBeTruthy();
+    });
+
+    it('shows the full signing address with a plain-language label', () => {
+        const utils = render(React.createElement(ConfirmActionModal, modalProps({
+            variant: 'message',
+            headline: 'Sign this message',
+            messageText: 'hi',
+            sourceAddress: OWN,
+        })));
+        const row = utils.getByTestId('confirm-source');
+        expect(row.textContent).toContain('Signing address');
+        expect(row.textContent).toContain(OWN);
     });
 
     it('keeps the headline when there is no decoded action to draw one from', () => {

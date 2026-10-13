@@ -97,12 +97,10 @@ assert.equal(
     false,
     'mixed content refused in the WebView',
 );
-assert.deepEqual(
-    capConfig.plugins,
-    {},
-    'no plugins registered yet: every registered plugin is reachable from any'
-    + ' script in the WebView (§1 bridge boundary), so they arrive one at a'
-    + ' time with the feature that needs them',
+assert.equal(
+    capConfig.plugins?.SystemBars?.style,
+    'LIGHT',
+    'the native status bar starts with dark content over the white splash',
 );
 
 // --- 3 + 4. Gradle: SDK floor and tag-derived version -----------------
@@ -1408,7 +1406,8 @@ assert.match(
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
-    + ' zero registered plugins; minSdkVersion 26 (D2); versionCode/versionName read from the'
+    + ' built-in SystemBars starts with splash-compatible contrast; minSdkVersion 26 (D2);'
+    + ' versionCode/versionName read from the'
     + ' tag-derived version.properties with no literal fallback and a hard failure when absent;'
     + ' exactly one exported component; no google-services wiring; keystores + generated version'
     + ' file + staged webDir all git-ignored; staged assets byte-identical to packages/web/dist.'

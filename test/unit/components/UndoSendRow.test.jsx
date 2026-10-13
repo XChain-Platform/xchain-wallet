@@ -32,8 +32,8 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 const { UndoSendRow } = await import(
     '../../../packages/core/src/shared/components/settings/UndoSendRow.jsx');
 
-const SWITCH = 'Give me time to cancel sends';
-const INPUT_LABEL = 'Seconds to cancel a send';
+const SWITCH = 'Hold signed sends before broadcast';
+const INPUT_LABEL = 'Send hold duration in seconds';
 
 function withGrace(grace) {
     const base = createDefaultSettings();
@@ -120,15 +120,16 @@ describe('UndoSendRow', () => {
         spy.mockRestore();
     });
 
-    it('shows the Not available yet hint without sendHoldCancel', () => {
+    it('says the build cannot hold sends without sendHoldCancel', () => {
         render(<UndoSendRow />);
-        expect(screen.getByText(/Not available yet/)).toBeTruthy();
+        expect(screen.getByText(/This build cannot hold sends/)).toBeTruthy();
     });
 
-    it('clears the hint when sendHoldCancel is a function', () => {
+    it('describes the actual pre-broadcast hold when sendHoldCancel is a function', () => {
         messaging = { sendHoldCancel: () => {} };
         render(<UndoSendRow />);
-        expect(screen.queryByText(/Not available yet/)).toBeNull();
-        expect(screen.getByText(/Holds each signed send/)).toBeTruthy();
+        expect(screen.queryByText(/This build cannot hold sends/)).toBeNull();
+        expect(screen.getByText(/holds each signed send/i)).toBeTruthy();
+        expect(screen.getByText(/duration of 0 does not hold sends/i)).toBeTruthy();
     });
 });

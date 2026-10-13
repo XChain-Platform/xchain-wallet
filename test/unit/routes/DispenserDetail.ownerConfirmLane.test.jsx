@@ -80,6 +80,7 @@ function recordingMessaging({
     preflight = PASS,
     lists = {},
     chainId = CHAIN,
+    buildActionPsbtRequest,
 } = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
@@ -96,6 +97,12 @@ function recordingMessaging({
         getListByActionIndex: ({ actionIndex }) => Promise.resolve(lists[actionIndex] ?? null),
         composeForConfirm: log('composeForConfirm', COMPOSED),
         preflight: log('preflight', preflight),
+        buildActionPsbtRequest: (args) => {
+            calls.push({ method: 'buildActionPsbtRequest', args });
+            return buildActionPsbtRequest
+                ? buildActionPsbtRequest(args)
+                : Promise.resolve({ psbtHex: 'bb00', encoding: 'psbt', fromAddress: owner.address });
+        },
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -106,7 +113,7 @@ function recordingMessaging({
     return { messaging, calls };
 }
 
-async function mount(opts) {
+async function mount(opts = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     const chainId = opts?.chainId || CHAIN;
     let utils;
@@ -115,7 +122,8 @@ async function mount(opts) {
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(DispenserDetail, {
-                walletId: 'w', chainId, actionIndex: DISPENSER.action_index, onBack() {}, onCanceled() {},
+                walletId: 'w', chainId, actionIndex: DISPENSER.action_index,
+                onBack: opts.onBack || (() => {}), onCanceled() {},
             }),
         ));
         await drainMicrotasks();
@@ -195,6 +203,41 @@ describe('dispenser owner actions sign through the confirm page', () => {
         expect(build.args.actionData.action).toBe('DISPENSER');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         expect(signCalls(calls)).toHaveLength(0);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toHaveValue('bb00');
+    });
+
+    it('shows close build errors, clears them when the fee changes, and returns unsigned output to the list', async () => {
+        const onBack = vi.fn();
+        const failed = await mount({
+            settings: { walletMode: 'watcher' },
+            buildActionPsbtRequest: vi.fn().mockRejectedValue(new Error('Could not build close.')),
+        });
+        await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Close' })));
+        await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        expect(failed.utils.getByText(/Could not build close\./)).toBeInTheDocument();
+        await step(() => fireEvent.change(failed.utils.getByLabelText('Network fee'), { target: { value: '2' } }));
+        expect(failed.utils.queryByText(/Could not build close\./)).toBeNull();
+        failed.utils.unmount();
+
+        let resolveBuild;
+        const success = await mount({
+            settings: { walletMode: 'watcher' },
+            onBack,
+            buildActionPsbtRequest: () => new Promise((resolve) => { resolveBuild = resolve; }),
+        });
+        await step(() => fireEvent.click(success.utils.getByRole('button', { name: 'Close' })));
+        expect(success.utils.getByTestId('close-escrow-destination')).toHaveTextContent('Remaining escrow: 100 XCHAIN.');
+        await domAct(async () => {
+            fireEvent.click(success.utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await Promise.resolve();
+        });
+        expect(success.utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeDisabled();
+        await domAct(async () => {
+            resolveBuild({ psbtHex: 'bb00', encoding: 'psbt', fromAddress: OWNER });
+            await drainMicrotasks();
+        });
+        fireEvent.click(success.utils.getByRole('button', { name: 'Done' }));
+        expect(onBack).toHaveBeenCalledOnce();
     });
 });
 

@@ -32,7 +32,7 @@ export function coinpayExpiryText(expiration) {
     // Reject non-finite, non-positive, and obviously-not-a-timestamp
     // values. Guard the upper bound too so a millisecond value (or
     // garbage) doesn't render a year-50000 date.
-    if (!Number.isFinite(n) || n <= 0 || n > 1e13) return null;
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
     const d = new Date(n * 1000);
     if (Number.isNaN(d.getTime())) return null;
     return d.toUTCString();

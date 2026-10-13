@@ -30,6 +30,7 @@ function mountMintSettings() {
         getTokenInfo: vi.fn().mockResolvedValue({
             chainId: CHAIN,
             tick: 'MINTABLE',
+            divisibility: 0,
             locks: {},
         }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 900000 }),
@@ -82,6 +83,19 @@ describe('TokenAdminForm mint setting validation', () => {
         fireEvent.click(screen.getByRole('button', { name: /update token/i }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Sending new supply needs a mint supply amount.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects fractional mint settings for an indivisible token', async () => {
+        const composeForConfirm = mountMintSettings();
+        fireEvent.change(await screen.findByLabelText('Mint supply now (optional)'), {
+            target: { value: '1.5' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /update token/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Mint supply must be a whole number because MINTABLE is indivisible.',
+        );
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
