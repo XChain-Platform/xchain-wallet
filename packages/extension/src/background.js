@@ -75,6 +75,7 @@ import {
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
 import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { createChromeNotifier } from './background/chromeNotifications.js';
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
@@ -209,22 +210,10 @@ const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 const DEADLINE_SEEN_KEY = 'deadlinesSeen';
 const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
 
-// §46 delivery adapter for the extension: chrome.notifications works with the
-// popup closed (it's the service worker firing, not a page). type 'basic'
-// requires an iconUrl; reuse the packaged action icon.
-function chromeNotify({ kind, title, body }) {
-    try {
-        if (typeof chrome === 'undefined' || !chrome.notifications || !chrome.notifications.create) return;
-        chrome.notifications.create(`xchain-${kind}-${Date.now()}`, {
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-            title,
-            message: body,
-        });
-    } catch (err) {
-        console.error('[xchain] chrome.notifications failed:', err);
-    }
-}
+// chrome.notifications works while every wallet surface is closed.
+const chromeNotify = createChromeNotifier(
+    typeof chrome === 'undefined' ? undefined : chrome,
+);
 // SignerPool persists across the unlocked session. Populated by the
 // pre-host `wallet.unlock` handler while the password is in scope, so
 // account.create / receive.getAddress (etc.) can derive without a
@@ -536,9 +525,12 @@ async function buildHost() {
  * Release the host + close the vault so a subsequent unlock starts from
  * a clean slate. Called by the wallet.lock handler via the onLocked
  * callback; also safe to call from any cleanup path (e.g. panic mode).
+ *
+ * @returns {Promise<void>}
  */
 function tearDownHost() {
     hostEpoch += 1;
+    const cancelApprovals = approvalBroker.cancelAll();
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -580,6 +572,7 @@ function tearDownHost() {
     signerPool = new signersLib.SignerPool();
     // The queue store stays: a lock drops the host, not the queue it served.
     host = null;
+    return cancelApprovals;
 }
 
 /**
@@ -644,8 +637,9 @@ const lockBackstop = createLockBackstop({
         signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
     }),
     tearDownHost: () => {
-        tearDownHost();
+        const teardown = tearDownHost();
         void surfaceStateEvents.publish('session', { state: 'locked' });
+        return teardown;
     },
     isUnlocked: () => Boolean(host && vault),
     isRequestActive: () => activeUiRequests > 0,
@@ -711,8 +705,8 @@ attachSignerBridgeListener();
 // wiped wallet serving.
 attachWipeStorageListener({
     beforeWipe: () => sealBroadcastQueues(),
-    onWiped: () => {
-        tearDownHost();
+    onWiped: async () => {
+        await tearDownHost();
         renewBroadcastQueueStore();
         void surfaceStateEvents.publish('session', { state: 'no-wallet' });
     },
