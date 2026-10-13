@@ -160,7 +160,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 // Connect from Trezor's hosted script instead; the extension ships
 // Ledger (WebHID) + software signing only. PairSignerForm renders the
 // Trezor option disabled when `pairTrezor` is null.
-import { registerSigner as registerLocalSigner } from './signerBridge.js';
+import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
 import {
@@ -1382,6 +1382,7 @@ function AppInner() {
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
                         onSignerPaired={registerLocalSigner}
+                        onSignerUnpaired={unregisterLocalSigner}
                     />
                 );
             }

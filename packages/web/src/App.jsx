@@ -162,7 +162,7 @@ import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcA
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
-import { registerSigner as registerLocalSigner } from './signerBridge.js';
+import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { deepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
@@ -1541,6 +1541,7 @@ function AppInner() {
                         onBack={formBack}
                         onPaired={() => setUnlockedView('actions')}
                         onSignerPaired={registerLocalSigner}
+                        onSignerUnpaired={unregisterLocalSigner}
                     />
                 );
             }

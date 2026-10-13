@@ -147,7 +147,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
-import { registerSigner as registerLocalSigner } from './signerBridge.js';
+import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
@@ -1327,6 +1327,7 @@ function AppInner() {
                         pairTrezor={pairTrezorSigner}
                         pairLedger={pairLedgerSigner}
                         onSignerPaired={registerLocalSigner}
+                        onSignerUnpaired={unregisterLocalSigner}
                         onBack={() => setUnlockedView('actions')}
                         onPaired={() => setUnlockedView('actions')}
                     />
