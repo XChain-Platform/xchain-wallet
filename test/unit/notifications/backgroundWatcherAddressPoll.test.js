@@ -113,3 +113,63 @@ describe.each(WATCHERS)('%s watcher address polling', (_name, Watcher) => {
         expect(getSdkForChain).not.toHaveBeenCalled();
     });
 });
+
+describe('background watcher seen caps', () => {
+    it('does not repeatedly announce governance polls that cannot be remembered', async () => {
+        const polls = Array.from({ length: 501 }, (_, index) => ({
+            action_index: String(index),
+            tick: 'GOV',
+        }));
+        const notify = vi.fn();
+        const watcher = new GovernancePollWatcher({
+            getActiveAddresses: vi.fn(),
+            getSdkForChain: () => ({
+                getPolls: vi.fn(async () => polls),
+                getBalances: vi.fn(async () => [{ tick: 'GOV', quantity: '1' }]),
+            }),
+            getSettings: vi.fn(),
+            notify,
+        });
+        watcher._seen.set('chain', new Set(polls.slice(0, 500).map((poll) => poll.action_index)));
+
+        await watcher._tickChain('chain', 'Chain', ['address']);
+        await watcher._tickChain('chain', 'Chain', ['address']);
+
+        expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('does not repeatedly announce deadlines that cannot be remembered', async () => {
+        const blockTime = 1_800_000_000;
+        const orders = Array.from({ length: 501 }, (_, index) => ({
+            action_index: String(index),
+            status: 'valid',
+            order_status: 'open',
+            expiration: blockTime + 60,
+        }));
+        const notify = vi.fn();
+        const watcher = new DeadlineWatcher({
+            getActiveAddresses: vi.fn(),
+            getSdkForChain: () => ({
+                explorer: { coin: 'BTC' },
+                getStatus: vi.fn(async () => ({
+                    last_block_time: { BTC: blockTime },
+                    chain_tip: { BTC: 1 },
+                })),
+                getOrders: vi.fn(async () => orders),
+                getSwaps: vi.fn(async () => []),
+                getDispensers: vi.fn(async () => []),
+                getPolls: vi.fn(async () => []),
+                getVotes: vi.fn(async () => []),
+            }),
+            getSettings: vi.fn(),
+            coinForChain: () => 'bitcoin',
+            notify,
+        });
+        watcher._seen.set('chain', new Set(orders.slice(0, 500).map((order) => `order:${order.action_index}`)));
+
+        await watcher._tickChain('chain', 'Chain', ['address']);
+        await watcher._tickChain('chain', 'Chain', ['address']);
+
+        expect(notify).not.toHaveBeenCalled();
+    });
+});

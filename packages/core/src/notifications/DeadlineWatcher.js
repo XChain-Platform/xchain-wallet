@@ -251,17 +251,20 @@ export class DeadlineWatcher {
             if (!liveKeys.has(key)) { seen.delete(key); changed = true; }
         }
 
-        const fresh = due.filter((d) => !seen.has(d.key));
-        for (const d of fresh) {
+        // Keep the soonest deadlines when the seen set is full. Only recorded
+        // entries may notify, or an untracked overflow repeats every cycle.
+        const candidates = due
+            .filter((d) => !seen.has(d.key))
+            .sort((a, b) => a.remaining - b.remaining);
+        const fresh = [];
+        for (const d of candidates) {
             if (seen.size >= SEEN_CAP_PER_CHAIN) break;
             seen.add(d.key);
+            fresh.push(d);
             changed = true;
         }
         this._seen.set(chainId, seen);
         if (fresh.length === 0) return changed;
-
-        // Soonest first: if the burst is capped, the user sees the urgent ones.
-        fresh.sort((a, b) => a.remaining - b.remaining);
 
         if (fresh.length > MAX_NOTIFICATIONS_PER_TICK) {
             await this._safeNotify({
