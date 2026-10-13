@@ -8,8 +8,8 @@ import { isValidBip39Mnemonic } from '../../crypto/mnemonic.js';
 export const REDACTED_DIAGNOSTIC_VALUE = '[REDACTED]';
 export const DIAGNOSTIC_TEXT_LIMIT = 2000;
 
-const PHRASE_VALUE_RE = /(\b(?:mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|passphrase)\b\s*[:=]\s*)(?!["'])[^\r\n]+/gi;
-const LABELED_VALUE_RE = /(\b(?:address(?:es)?|balance(?:s)?|password|passphrase|mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|private[ _-]?key|secret[ _-]?key|wif|xprv)\b\s*[:=]\s*)(\{[^{}\r\n]*\}|\[[^\]\r\n]*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi;
+const PHRASE_VALUE_RE = /(\b(?:mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|passphrase)\b["']?\s*[:=]\s*)(?!["'])[^\r\n]+/gi;
+const LABELED_VALUE_RE = /(\b(?:address(?:es)?|balance(?:s)?|password|passphrase|mnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|private[ _-]?key|secret[ _-]?key|wif|xprv)\b["']?\s*[:=]\s*)(\{[^{}\r\n]*\}|\[[^\]\r\n]*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi;
 const PRIVATE_KEY_RE = /\b(?:0x)?[a-f0-9]{64}\b/gi;
 const EXTENDED_PRIVATE_KEY_RE = /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g;
 const WIF_RE = /\b(?:5[HJK][1-9A-HJ-NP-Za-km-z]{49}|[KL][1-9A-HJ-NP-Za-km-z]{51})\b/g;

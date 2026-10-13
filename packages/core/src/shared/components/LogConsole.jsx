@@ -21,7 +21,7 @@
 // detaches; leaving it attached for the rest of the session is
 // cheaper than re-arming on every Developer Mode visit.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
 import { redactDiagnosticText } from '../utils/diagnosticText.js';
@@ -133,13 +133,12 @@ function formatTime(ms) {
 }
 
 export function LogConsole() {
-    const [allEntries, setAllEntries] = useState(() => {
-        if (!logConsole.isAttached()) logConsole.attach();
-        return logConsole.entries();
-    });
+    const [allEntries, setAllEntries] = useState(() => logConsole.entries());
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const copyAttemptRef = useRef(0);
+    const copyResetTimerRef = useRef(null);
     const haptic = useHapticFeedback();
 
     useEffect(() => {
@@ -147,7 +146,15 @@ export function LogConsole() {
         const unsubscribe = logConsole.subscribe(() => {
             setAllEntries(logConsole.entries());
         });
-        return unsubscribe;
+        setAllEntries(logConsole.entries());
+        return () => {
+            unsubscribe();
+            copyAttemptRef.current += 1;
+            if (copyResetTimerRef.current !== null) {
+                clearTimeout(copyResetTimerRef.current);
+                copyResetTimerRef.current = null;
+            }
+        };
     }, []);
 
     const safeEntries = useMemo(() => allEntries.map(safeEntry), [allEntries]);
@@ -179,15 +186,33 @@ export function LogConsole() {
         setAllEntries([]);
     };
 
-    const onCopy = async () => {
+    const onCopy = () => {
+        const attempt = copyAttemptRef.current + 1;
+        copyAttemptRef.current = attempt;
+        if (copyResetTimerRef.current !== null) {
+            clearTimeout(copyResetTimerRef.current);
+            copyResetTimerRef.current = null;
+        }
         const text = safeEntries.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
-        const { ok } = await copyText(text);
-        setCopyState(ok ? 'copied' : 'failed');
-        if (ok) haptic.tap();
-        else haptic.error();
-        setTimeout(() => setCopyState('idle'), 1500);
+        void (async () => {
+            let ok = false;
+            try {
+                const result = await copyText(text);
+                ok = Boolean(result?.ok);
+            } catch {
+                ok = false;
+            }
+            if (copyAttemptRef.current !== attempt) return;
+            setCopyState(ok ? 'copied' : 'failed');
+            if (ok) haptic.tap();
+            else haptic.error();
+            copyResetTimerRef.current = setTimeout(() => {
+                if (copyAttemptRef.current === attempt) setCopyState('idle');
+                copyResetTimerRef.current = null;
+            }, 1500);
+        })();
     };
 
     return (
