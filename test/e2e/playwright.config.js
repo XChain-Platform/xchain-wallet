@@ -36,6 +36,8 @@ import { defineConfig, devices } from '@playwright/test';
 import { describeBudget, timeoutBudget } from './timeout-budget.js';
 
 const budget = timeoutBudget();
+const LG_K51_USER_AGENT = 'Mozilla/5.0 (Linux; Android 10; LM-K500) '
+    + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Mobile Safari/537.36';
 // Named in the run's own output, so a red run is self-describing: the
 // budget it had is the first thing you need to know when deciding whether
 // a timeout was pressure or a genuine hang.
@@ -77,7 +79,20 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
+            grepInvert: /@lg-k51/,
             use: { ...devices['Desktop Chrome'] },
+        },
+        {
+            name: 'android-lg-k51',
+            grep: /@lg-k51/,
+            use: {
+                browserName: 'chromium',
+                viewport: { width: 412, height: 869 },
+                deviceScaleFactor: 1.75,
+                isMobile: true,
+                hasTouch: true,
+                userAgent: LG_K51_USER_AGENT,
+            },
         },
     ],
     webServer: {
