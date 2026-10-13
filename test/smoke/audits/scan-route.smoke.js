@@ -62,8 +62,8 @@ assert.ok(/safeChainIdParam\s*\(\s*chainParam\s*\)/.test(scanRouteSrc),
     'ScanRoute gates the scanned bip21 `chain=` param through safeChainIdParam, not a bare length check');
 assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
-assert.ok(/<textarea/.test(scanRouteSrc),
-    'ScanRoute provides a paste-fallback textarea (BarcodeDetector not always available)');
+assert.ok(/<Textarea/.test(scanRouteSrc),
+    'ScanRoute provides a kit paste-fallback textarea (BarcodeDetector not always available)');
 assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
     'ScanRoute exposes a Classify-pasted-payload action for the textarea path (i18n: scan.classifyPaste)');
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),

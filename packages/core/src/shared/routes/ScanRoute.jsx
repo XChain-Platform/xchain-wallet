@@ -23,7 +23,16 @@
 // drive the four supported routes.
 
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
-import { Button, FormPage, Icon, PageHeader, QrScanner, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    FormPage,
+    Icon,
+    PageHeader,
+    QrScanner,
+    Screen,
+    StatusMessage,
+    Textarea,
+} from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -68,26 +77,6 @@ function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
         chainId: descriptors.length === 1 ? descriptors[0].id : undefined,
     };
 }
-
-const PASTE_LABEL = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
-    fontSize: 'var(--xc-text-sm)',
-    color: 'var(--xc-text-muted)',
-};
-const PASTE_BOX = {
-    width: '100%',
-    minHeight: '5rem',
-    fontFamily: 'var(--xc-font-mono, monospace)',
-    fontSize: 'var(--xc-text-xs)',
-    padding: 'var(--xc-space-2)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    background: 'var(--xc-surface-raised)',
-    color: 'var(--xc-text)',
-    resize: 'vertical',
-};
 
 /**
  * @typedef {(
@@ -334,18 +323,16 @@ export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = fals
                 {status ? (
                     <StatusMessage variant="error">{status}</StatusMessage>
                 ) : null}
-                <label style={PASTE_LABEL}>
-                    {t('scan.pasteLabel')}
-                    <textarea
-                        value={paste}
-                        onChange={(e) => setPaste(e.target.value)}
-                        placeholder={t('scan.pastePlaceholder')}
-                        style={PASTE_BOX}
-                        spellCheck={false}
-                        autoComplete="off"
-                        autoCorrect="off"
-                    />
-                </label>
+                <Textarea
+                    label={t('scan.pasteLabel')}
+                    value={paste}
+                    onChange={(e) => setPaste(e.target.value)}
+                    placeholder={t('scan.pastePlaceholder')}
+                    rows={4}
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoCorrect="off"
+                />
             </FormPage>
         </Screen>
     );

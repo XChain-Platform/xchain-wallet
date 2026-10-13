@@ -36,6 +36,30 @@ function namedComponentExports(source) {
 }
 
 describe('style guide primitive coverage', () => {
+    it('keeps the audited routes on shared field and action primitives', () => {
+        const routes = {
+            'RenameWalletForm.jsx': ['Button', 'Input'],
+            'ScanRoute.jsx': ['Button', 'Textarea'],
+            'SharedListDirectory.jsx': ['Button', 'Input'],
+            'VaultUnavailable.jsx': ['Button', 'Input'],
+            'ViewPrivateKey.jsx': ['Button', 'CopyButton', 'Input'],
+        };
+
+        for (const [file, primitives] of Object.entries(routes)) {
+            const source = fs.readFileSync(path.join(
+                root,
+                'packages/core/src/shared/routes',
+                file,
+            ), 'utf8');
+            expect(source, `${file} has no direct form controls`).not.toMatch(
+                /<(?:button|input|select|textarea)\b/,
+            );
+            for (const primitive of primitives) {
+                expect(source, `${file} renders ${primitive}`).toContain(`<${primitive}`);
+            }
+        }
+    });
+
     it('tracks every component exported by the core UI barrel', () => {
         const uiIndex = fs.readFileSync(uiIndexPath, 'utf8');
 
