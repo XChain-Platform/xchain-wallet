@@ -436,9 +436,9 @@ export function createSweep(page, {
         await page.getByLabel(/^Confirm( password)?$/).fill('layoutsweep1234');
         await page.getByRole('button', { name: 'Next' }).click();
         await page.getByLabel(/written down|saved my recovery phrase/i).waitFor({ timeout: 60_000 });
-        await page.getByRole('button', { name: 'Reveal recovery phrase' }).click();
-        await measure('create: recovery phrase');
+        // readRecoveryPhrase asserts the stage opens concealed, then reveals it.
         const words = await readRecoveryPhrase(page);
+        await measure('create: recovery phrase');
         await page.getByLabel(/written down|saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await measure('create: verify phrase');

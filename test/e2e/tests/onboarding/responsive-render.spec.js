@@ -107,14 +107,14 @@ for (const viewport of VIEWPORTS) {
         await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
         await page.getByRole('button', { name: 'Next' }).click();
 
-        await page.getByRole('button', { name: 'Reveal recovery phrase' }).click();
+        // readRecoveryPhrase asserts the stage opens concealed, then reveals it.
+        const words = await readRecoveryPhrase(page);
         await expectReachableLayout(
             page,
             `${viewport.name} phrase`,
             page.getByRole('button', { name: 'Verify recovery phrase' }),
         );
         await expectReadablePhraseGrid(page, `${viewport.name} phrase`);
-        const words = await readRecoveryPhrase(page);
         expect(words).toHaveLength(12);
         await page.getByLabel(/written down|saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();

@@ -57,7 +57,7 @@ test.describe('send form', () => {
         await mainButton(page, 'Send').click();
 
         await expect(page.getByRole('alert').first()).toContainText(
-            /not a valid Bitcoin address/i,
+            /This address has a typo\. Check it and try again\./,
         );
     });
 
@@ -84,7 +84,7 @@ test.describe('send form', () => {
         await expect(page.getByRole('textbox', { name: 'Memo' })).toHaveCount(0);
         // The disclosure really did open, or this would pass on a collapsed
         // panel that simply renders nothing.
-        await expect(page.getByText('Replace-by-fee')).toBeVisible();
+        await expect(page.getByText('Allow a higher network fee later')).toBeVisible();
     });
 
     // With the `send` slice flag on (it now defaults true), Send goes
@@ -120,19 +120,22 @@ test.describe('send form', () => {
         await expect(confirm).toContainText(/hardware device verifies native outputs/i);
     });
 
-    // §1.7 / wallet spec §21.7. The chain on the signing button is the last
-    // place the user sees WHICH network is about to move their money, and the
-    // confirm page is reached several screens after the chain was picked. This
-    // shipped as a bare "Approve" and only a browser caught it: the copy was
-    // internally consistent, so every unit test agreed with it.
-    test('the signing button names the chain it will sign on', async ({ page }) => {
+    // §1.7 / wallet spec §21.7. The confirm page is the last place the user
+    // sees WHICH network is about to move their money, and it is reached
+    // several screens after the chain was picked. The "Approve & Sign on
+    // <chain>" button form is retired and a native payment decodes to no action,
+    // so the chain badge carries it and the button stays exact.
+    test('the confirm page names the chain it will sign on', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
-        // The approve button reads "Approve <review headline>" since the
-        // action review screens were standardized.
-        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve \S/);
+        // A plain native payment decodes to no action, so the approve button
+        // stays a bare "Approve" (as on the regtest venue,
+        // confirm-broadcast.regtest.spec.js) and the chain is named by the badge
+        // beside the review headline, one glance above it.
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
+        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
     });
 
     // §5.1: exactly two exits. Reject returns to the form with its values

@@ -315,17 +315,6 @@ export function ConfirmActionModal({
         Promise.resolve(onApprove({})).catch(() => {}).finally(() => setApproveDisabled(false));
     }, [approveDisabled, canApprove, credentialsReady, refusal, onApprove]);
 
-    useEffect(() => {
-        if (!open || exitsLocked) return undefined;
-        const handleKeyDown = (event) => {
-            if (event.key !== 'Escape' || event.defaultPrevented) return;
-            event.preventDefault();
-            onReject();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [open, exitsLocked, onReject]);
-
     if (!open) return null;
 
     // Back = Reject; the chevron stays visible but inert while a
