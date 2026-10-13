@@ -63,6 +63,17 @@
     --xc-text-xl: 1.25rem;
     --xc-text-2xl: 1.5rem;
 
+    /* Semantic type roles keep headings consistent across page templates,
+     * cards, and empty states without coupling components to raw tiers. */
+    --xc-type-page-title-size: var(--xc-text-lg);
+    --xc-type-page-title-weight: 700;
+    --xc-type-section-title-size: var(--xc-text-md);
+    --xc-type-section-title-weight: 700;
+    --xc-type-card-title-size: var(--xc-text-md);
+    --xc-type-card-title-weight: 600;
+    --xc-type-body-size: var(--xc-text-sm);
+    --xc-type-body-weight: 400;
+
     /* Icon sizes use one named scale across controls and navigation rows. */
     --xc-icon-xs: 14px;
     --xc-icon-sm: 16px;

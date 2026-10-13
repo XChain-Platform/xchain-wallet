@@ -10,8 +10,8 @@
 }
 
 .heading {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text-muted);

@@ -32,8 +32,8 @@
 }
 
 .queuedTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     margin: 0;
     text-align: center;
     color: var(--xc-warning, #b8860b);
@@ -44,7 +44,8 @@
 .queuedHint {
     margin: 0;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
     text-align: center;
     max-width: 100%;
     overflow-wrap: anywhere;

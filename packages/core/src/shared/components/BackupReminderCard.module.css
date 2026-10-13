@@ -28,14 +28,15 @@
 
 .headline {
     margin: 0 0 var(--xc-space-1);
-    font-size: var(--xc-text-md);
-    font-weight: 600;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     color: var(--xc-text);
 }
 
 .copy {
     margin: 0;
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
     color: var(--xc-text-muted);
     line-height: 1.4;
 }
