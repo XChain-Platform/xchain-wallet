@@ -27,6 +27,7 @@ function defaultIconFor(children) {
  * @param {boolean} [props.block]
  * @param {boolean} [props.loading]
  * @param {boolean} [props.disabled]
+ * @param {string} [props.className]
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
@@ -38,6 +39,7 @@ export function Button({
     block = false,
     loading = false,
     disabled = false,
+    className: customClassName,
     type = 'button',
     onClick,
     icon,
@@ -49,6 +51,14 @@ export function Button({
     // no icon at all. Any truthy value renders verbatim.
     const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
     const iconOnly = Boolean(resolvedIcon) && children == null;
+    const ariaLabel = rest['aria-label'];
+    const ariaLabelledBy = rest['aria-labelledby'];
+    if (iconOnly && !(typeof ariaLabel === 'string' && ariaLabel.trim()) && !ariaLabelledBy) {
+        throw new Error('Icon-only Button requires an aria-label or aria-labelledby.');
+    }
+    // A native title keeps the icon action discoverable with a pointer and
+    // keyboard focus while the accessible name remains available to AT.
+    const title = rest.title || (iconOnly && typeof ariaLabel === 'string' ? ariaLabel : undefined);
     const className = [
         styles.btn,
         styles[variant],
@@ -56,6 +66,7 @@ export function Button({
         iconOnly ? styles.iconOnly : null,
         block ? styles.block : null,
         loading ? styles.loading : null,
+        customClassName,
     ].filter(Boolean).join(' ');
     return (
         <button
@@ -65,6 +76,7 @@ export function Button({
             onClick={onClick}
             aria-busy={loading ? 'true' : 'false'}
             {...rest}
+            title={title}
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
             {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}

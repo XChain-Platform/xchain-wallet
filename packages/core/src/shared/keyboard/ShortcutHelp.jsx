@@ -15,7 +15,7 @@
 // the footer points there.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -76,9 +76,13 @@ export function ShortcutHelp({ open, onClose, overrides }) {
             <div className={styles.panel} role="presentation" onMouseDown={(e) => e.stopPropagation()}>
                 <header className={styles.header}>
                     <span id="xc-shortcut-help-title" className={styles.title}>Keyboard shortcuts</span>
-                    <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
-                        <Icon.XIcon />
-                    </button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<Icon.XIcon />}
+                        onClick={onClose}
+                        aria-label="Close"
+                    />
                 </header>
                 <div id="xc-shortcut-help-body" className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (

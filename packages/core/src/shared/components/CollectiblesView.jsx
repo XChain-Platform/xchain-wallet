@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { EmptyState, Icon } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon } from '@xchain-wallet/core/ui';
 import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
@@ -229,26 +229,36 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                 </div>
             </CardContent>
             {typeof onTogglePin === 'function' ? (
-                <button
-                    type="button"
-                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                <Button
+                    size="sm"
+                    variant={pinned ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
+                    title={pinned ? 'Unpin' : 'Pin to top'}
                     onClick={() => onTogglePin(key, !pinned)}
-                >
-                    {pinned ? '★' : '☆'}
-                </button>
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(var(--xc-space-2) + 6px)',
+                        insetInlineEnd: 'calc(var(--xc-space-2) + 6px)',
+                    }}
+                />
             ) : null}
             {typeof onToggleHide === 'function' ? (
-                <button
-                    type="button"
-                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                <Button
+                    size="sm"
+                    variant={hidden ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
+                    title={hidden ? 'Unhide' : 'Hide'}
                     onClick={() => onToggleHide(key, !hidden)}
-                >
-                    {hidden ? '⊕' : '⊘'}
-                </button>
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(var(--xc-space-2) + 6px)',
+                        insetInlineEnd: 'calc(var(--xc-space-2) + 46px)',
+                    }}
+                />
             ) : null}
         </div>
     );
