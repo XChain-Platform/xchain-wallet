@@ -79,8 +79,12 @@ for (const rel of [
 ]) {
     const shellSrc = readFileSync(join(wsRoot, ...rel), 'utf8');
     assert.ok(
-        /lockWallet\(\)/.test(shellSrc),
-        `${rel.join('/')} keeps a manual lock path`,
+        /lockImmediately\(\{[\s\S]{0,160}?lockWallet(?:,|:\s*messaging\.lockWallet)/.test(shellSrc),
+        `${rel.join('/')} keeps a manual lock path through lockImmediately`,
+    );
+    assert.ok(
+        /showLocked:\s*\(\)\s*=>\s*setStatus\(\{ state: 'locked' \}\)/.test(shellSrc),
+        `${rel.join('/')} leaves the unlocked tree synchronously`,
     );
 }
 assert.ok(

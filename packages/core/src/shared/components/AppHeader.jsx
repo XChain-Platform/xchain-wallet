@@ -30,6 +30,7 @@ import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
+import { NetworkStatusIndicator } from './NetworkStatusIndicator.jsx';
 import styles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
@@ -58,6 +59,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
+ * @param {() => void} [props.onOpenNetworkSettings]                 opens the per-chain endpoint settings screen
  */
 export function AppHeader({
     onMenuOpen,
@@ -83,6 +85,7 @@ export function AppHeader({
     developerMode = false,
     onActiveNetworkChange,
     platformCurrent,
+    onOpenNetworkSettings,
 }) {
     const networkWired = showNetworkFilter
         && Boolean(chainRegistry)
@@ -107,6 +110,9 @@ export function AppHeader({
                 <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
+                {onOpenNetworkSettings ? (
+                    <NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />
+                ) : null}
                 {showSettings ? (
                     <HeaderSettingsButton
                         activeWallet={activeWallet}
