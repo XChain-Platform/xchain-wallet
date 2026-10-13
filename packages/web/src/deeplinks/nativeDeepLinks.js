@@ -118,22 +118,30 @@ export function subscribeToNativeDeepLinks(onLink) {
         onLink(url);
     };
 
-    // The cold-start link first. A tap that launches the app is the common
-    // case on mobile, and it is exactly the one an event-only design drops.
-    Promise.resolve(plugin.takePendingLink())
+    let handle = Promise.resolve(null);
+    try {
+        handle = typeof plugin.addListener === 'function'
+            ? Promise.resolve(plugin.addListener?.('xchainUrlOpen', (event) => deliver(event?.url)))
+                .catch(() => null)
+            : Promise.resolve(null);
+    } catch (_err) {
+        handle = Promise.resolve(null);
+    }
+
+    // Attach the live listener before draining the cold-start queue. A warm
+    // intent arriving during setup then has one delivery path instead of
+    // landing in the native queue after its only drain has completed.
+    handle
+        .then(() => {
+            if (disposed) return null;
+            return plugin.takePendingLink();
+        })
         .then((reply) => { if (reply?.url) deliver(reply.url); })
         .catch(() => { /* no queued link, or an older shell build */ });
 
-    let handle;
-    try {
-        handle = plugin.addListener?.('xchainUrlOpen', (event) => deliver(event?.url));
-    } catch (_err) {
-        handle = null;
-    }
-
     return () => {
         disposed = true;
-        Promise.resolve(handle)
+        handle
             .then((h) => h?.remove?.())
             .catch(() => { /* already gone */ });
     };
