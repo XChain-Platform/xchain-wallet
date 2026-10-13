@@ -328,6 +328,7 @@ export {
     placeBetAction,
     resolveMarketAction,
     cancelMarketAction,
+    buildBetActionPsbt,
 } from './betActions.js';
 export {
     betFeedsForChain,

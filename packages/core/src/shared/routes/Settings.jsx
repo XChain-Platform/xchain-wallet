@@ -197,7 +197,7 @@ export function Settings({
         {
             id: 'wallet-mode',
             title: 'Wallet Mode',
-            description: 'Full / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
+            description: 'Normal / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
             Component: WalletModeSection,
@@ -555,7 +555,7 @@ function keyboardSummary(settings) {
 function walletModeSummary(settings) {
     if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return 'Full';
+    if (mode === 'full') return 'Normal';
     if (mode === 'watcher') return 'Watcher (watch-only)';
     if (mode === 'signer') return 'Signer (air-gapped)';
     return mode;

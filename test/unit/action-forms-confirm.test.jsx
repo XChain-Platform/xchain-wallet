@@ -680,6 +680,58 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
     });
 
+    it('TokenWizard builds an unsigned ISSUE in watcher mode without asking for a password', async () => {
+        const build = vi.fn(async (args) => ({
+            psbtHex: '70736274ff00',
+            encoding: 'op_return',
+            chainId: args.chainId,
+            fromAddress: args.from.address,
+        }));
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: build,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <TokenWizard walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /Custom/ }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Next' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            setValue(utils, 'Token name (ticker)', 'JDOG');
+            setValue(utils, 'Supply', '1000');
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Issue token' }));
+            await drainMicrotasks();
+        });
+
+        expect(build).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            actionData: expect.objectContaining({
+                action: 'ISSUE',
+                params: expect.objectContaining({ TICK: 'JDOG' }),
+            }),
+        }));
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
+    });
+
     it('AirdropForm confirms leg 1 (LIST) and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: AirdropForm,

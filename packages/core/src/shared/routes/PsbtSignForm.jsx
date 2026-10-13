@@ -64,6 +64,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import {
     exactNetworkFeeSats,
@@ -237,6 +238,7 @@ function ArtifactBlock({ label, copyLabel, value, testId }) {
 export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -962,6 +964,18 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             </div>
         </div>
     ) : null;
+
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        Watcher mode creates unsigned transactions but never signs them or asks for a signing password. Switch to Signer mode to sign an imported transaction.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
 
     const formBody = (
         <FormPage
