@@ -925,6 +925,7 @@
 
 .detailTabs {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
     padding-bottom: 1px;
@@ -940,12 +941,16 @@
     font-weight: 600;
     color: var(--xc-text-muted);
     cursor: pointer;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    text-align: center;
     gap: var(--xc-space-2);
     border-bottom: 2px solid transparent;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
     font-family: inherit;
 }
 
