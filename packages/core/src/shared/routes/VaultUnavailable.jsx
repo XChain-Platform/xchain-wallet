@@ -201,15 +201,18 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                             Erasing in either case would destroy a working wallet to
                             fix nothing. */}
                         {offersEscape && !wipeOpen ? (
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.escapeLink}
+                                variant="secondary"
+                                size="sm"
+                                icon={null}
+                                style={{ alignSelf: 'center' }}
                                 onClick={() => setWipeOpen(true)}
                                 aria-expanded="false"
                                 aria-controls="vault-unavailable-wipe-panel"
                             >
                                 {t('vaultUnavailable.restore')}
-                            </button>
+                            </Button>
                         ) : null}
 
                         {offersEscape && wipeOpen ? (

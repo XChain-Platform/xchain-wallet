@@ -293,13 +293,15 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 {revealed ? (
                     <code className={styles.wif}>{currentWif}</code>
                 ) : (
-                    <button
+                    <Button
                         type="button"
-                        className={styles.revealButton}
+                        variant="secondary"
+                        icon={null}
+                        style={{ flex: 1 }}
                         onClick={() => setRevealed(true)}
                     >
                         Tap to reveal private key
-                    </button>
+                    </Button>
                 )}
                 <Button
                     variant="ghost"

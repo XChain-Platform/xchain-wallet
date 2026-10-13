@@ -147,12 +147,16 @@ describe('SharedListDirectory', () => {
         });
 
         await screen.findByRole('listitem', { name: /Token list 99 on BTC/ });
-        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'treasury' } });
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: 'treasury' },
+        });
 
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
         expect(screen.getByText('Treasury assets')).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'missing' } });
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: 'missing' },
+        });
         expect(screen.getByText('No matching shared lists')).toBeTruthy();
         expect(screen.queryByText('No shared lists are available.')).toBeNull();
     });
@@ -167,11 +171,15 @@ describe('SharedListDirectory', () => {
         mount({ response: { lists, unavailable: [] }, onOpenList });
 
         expect(await screen.findAllByRole('listitem')).toHaveLength(20);
-        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: '1022' } });
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: '1022' },
+        });
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
         expect(screen.getByRole('listitem', { name: 'Token list 23 on BTC' })).toBeTruthy();
 
-        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: '' } });
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: '' },
+        });
         expect(screen.getAllByRole('listitem')).toHaveLength(20);
         fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(23);

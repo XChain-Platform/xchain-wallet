@@ -9,7 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    ChainBadge,
+    EmptyState,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -162,7 +171,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
     const toolbar = (
-        <input
+        <Input
             type="search"
             className={listStyles.search}
             placeholder="Search"

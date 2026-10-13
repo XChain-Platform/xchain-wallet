@@ -184,7 +184,9 @@ const EXPLANATION_CASES = [
 
 function submit(input, onClassified = vi.fn()) {
     render(<ScanRoute onClassified={onClassified} onBack={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText('Or paste it here'), { target: { value: input } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Or paste it here' }), {
+        target: { value: input },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
     return onClassified;
 }
