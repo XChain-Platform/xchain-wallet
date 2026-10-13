@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useCoinpayObligations } from '../hooks/useCoinpayObligations.js';
@@ -57,7 +59,6 @@ const PROTOCOL_COIN_TICKER = {
 export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     const { shell, messaging } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // PC-16: auto-pay armed/disarmed summary. "Disarmed" = consented
     // orders exist but no pre-unlocked signer can pay them (locked
@@ -124,7 +125,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.wrapFull : styles.wrapPopup}>
+            <ListPage>
                 {autopayArmed ? (
                     <p className={styles.hint}>
                         CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
@@ -143,16 +144,11 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                 ) : null}
 
                 {!scanning && classified.length === 0 ? (
-                    <div className={styles.empty}>
-                        <p className={styles.emptyTitle}>No payments due</p>
-                        <p className={styles.hint}>
-                            When one of your DEX orders matches against native
-                            coin (BTC, LTC, or DOGE), the coin payment that
-                            completes the trade appears here with its deadline.
-                            Unpaid matches expire and the escrowed tokens
-                            return to the seller.
-                        </p>
-                    </div>
+                    <EmptyState
+                        icon={<Icon.ClockIcon />}
+                        title="No payments due"
+                        body="When a DEX order matches against BTC, LTC or DOGE, the coin payment that completes it appears here with its deadline."
+                    />
                 ) : null}
 
                 {payable.length > 0 ? (
@@ -165,13 +161,17 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
                 {expired.length > 0 ? (
                     <>
-                        <p className={styles.sectionLabel}>Expired, awaiting settlement</p>
-                        <p className={styles.hint}>
-                            These payment windows have closed. Do not pay them:
-                            a payment confirming after the deadline sends your
-                            coin without receiving the tokens. The match
-                            settles back to the seller at the next block.
-                        </p>
+                        <SectionHeader
+                            title="Expired, awaiting settlement"
+                            description={(
+                                <>
+                                    These payment windows have closed. Do not pay them:
+                                    a payment confirming after the deadline sends your
+                                    coin without receiving the tokens. The match
+                                    settles back to the seller at the next block.
+                                </>
+                            )}
+                        />
                         <ul className={styles.list} role="list" aria-label="Expired payments">
                             {expired.map((o) => (
                                 <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
@@ -179,7 +179,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                         </ul>
                     </>
                 ) : null}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
