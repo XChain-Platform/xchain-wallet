@@ -345,31 +345,40 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                     </span>
                     {isNative && chainIconUrl ? (
                         <img
+                            key={chainIconUrl}
                             src={chainIconUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
                             loading="lazy"
                             decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                            onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
+                            onError={(e) => {
+                                e.currentTarget.style.visibility = 'hidden';
+                                e.currentTarget.style.display = 'none';
+                            }}
                         />
                     ) : tokenImageUrl ? (
                         <img
+                            key={tokenImageUrl}
                             src={tokenImageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
                             loading="lazy"
                             decoding="async"
-                            style={{ position: 'absolute', inset: 0 }}
+                            style={{ position: 'absolute', inset: 0, visibility: 'hidden' }}
+                            onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
                             onError={(e) => {
+                                e.currentTarget.style.visibility = 'hidden';
                                 e.currentTarget.style.display = 'none';
                             }}
                         />
                     ) : null}
                     {!isNative && chainIconUrl ? (
                         <img
+                            key={chainIconUrl}
                             src={chainIconUrl}
                             alt=""
                             aria-hidden="true"
@@ -377,6 +386,12 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                             className={styles.chainOverlay}
                             loading="lazy"
                             decoding="async"
+                            style={{ visibility: 'hidden' }}
+                            onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
+                            onError={(e) => {
+                                e.currentTarget.style.visibility = 'hidden';
+                                e.currentTarget.style.display = 'none';
+                            }}
                         />
                     ) : null}
                 </div>
