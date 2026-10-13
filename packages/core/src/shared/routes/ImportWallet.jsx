@@ -16,6 +16,7 @@ import {
     FormPage,
     Input,
     Select,
+    Textarea,
     Icon,
     ListPage,
     QrScanner,
@@ -667,7 +668,6 @@ export function ImportWallet({
     const headClass = isFull ? styles.headFull : styles.headPopup;
     const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
-    const mnemonicClass = isFull ? styles.mnemonicFull : styles.mnemonicPopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
     const backupSourceMessage = backupDrop.isDragOver
         ? 'Drop the backup file here.'
@@ -705,6 +705,7 @@ export function ImportWallet({
 
     const laneSwitcher = !isFreeWallet ? (
         <div className={styles.laneSwitcher} role="tablist" aria-label={t('importWallet.lane')}>
+            {/* Native tab buttons preserve tab semantics and segmented-control styling. */}
             <button
                 type="button"
                 role="tab"
@@ -716,6 +717,7 @@ export function ImportWallet({
                 {t('importWallet.recoveryPhrase')}
             </button>
             {mode === 'fresh' ? (
+                /* Native tab buttons preserve tab semantics and segmented-control styling. */
                 <button
                     type="button"
                     role="tab"
@@ -727,6 +729,7 @@ export function ImportWallet({
                     {t('importWallet.wif.tab')}
                 </button>
             ) : null}
+            {/* Native tab buttons preserve tab semantics and segmented-control styling. */}
             <button
                 type="button"
                 role="tab"
@@ -894,9 +897,11 @@ export function ImportWallet({
                         <label className={styles.mnemonicLabel} htmlFor="xc-backup-file">
                             {t('importWallet.backup.file')}
                         </label>
-                        <button
+                        <Button
                             type="button"
-                            className={styles.scanButton}
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
                             onClick={() => {
                                 setBackupScanning((s) => !s);
                                 if (error) setError(null);
@@ -907,7 +912,7 @@ export function ImportWallet({
                             aria-controls="xc-backup-scanner"
                         >
                             {backupScanning ? t('importWallet.cancelScan') : t('importWallet.scanPointerQr')}
-                        </button>
+                        </Button>
                     </div>
                     {backupScanning ? (
                         <div id="xc-backup-scanner" className={styles.scannerBox}>
@@ -915,6 +920,7 @@ export function ImportWallet({
                         </div>
                     ) : null}
                     {backupPointer ? (
+                        /* No kit card represents a loaded file pointer with an independently disabled action. */
                         <div className={styles.backupPointerCard} role="status">
                             <p className={styles.backupHint}>
                                 {t('importWallet.backup.pointerLoaded', {
@@ -922,17 +928,20 @@ export function ImportWallet({
                                 })}
                                 {' '}{t('importWallet.backup.location', { location: backupPointer.location })}
                             </p>
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.scanButton}
+                                variant="ghost"
+                                size="sm"
+                                icon={null}
                                 onClick={clearBackupPointer}
                                 disabled={busy}
                             >
                                 {t('importWallet.backup.useFile')}
-                            </button>
+                            </Button>
                         </div>
                     ) : (
                         <>
+                    {/* The hidden native picker remains raw because the kit has no file-input primitive. */}
                     <input
                         {...backupDrop.pickerProps}
                         id="xc-backup-file"
@@ -940,24 +949,24 @@ export function ImportWallet({
                         aria-describedby="xc-backup-source-status"
                         disabled={busy}
                     />
-                    <button
+                    <Button
                         type="button"
-                        className={styles.backupFileButton}
+                        variant="secondary"
+                        icon={null}
                         onClick={backupDrop.openFilePicker}
                         disabled={busy}
                     >
                         {t('importWallet.backup.chooseFile')}
-                    </button>
+                    </Button>
                     <p id="xc-backup-source-status" className={styles.backupHint} aria-live="polite">
                         {backupSourceMessage}
                     </p>
-                    <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
-                        {t('importWallet.backup.contents')}
-                    </label>
-                    <textarea
+                    <Textarea
                         id="xc-backup-content"
                         {...backupDrop.rootProps}
-                        className={`${mnemonicClass}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
+                        label={t('importWallet.backup.contents')}
+                        size={isFull ? 'lg' : 'md'}
+                        className={`${styles.mnemonicText}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
                         value={backupContent}
                         onChange={(e) => {
                             setBackupContent(e.target.value);
@@ -1025,6 +1034,7 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <label className={styles.advancedToggle}>
+                        {/* The kit has no checkbox primitive for this boolean option. */}
                         <input
                             type="checkbox"
                             checked={backupOverwrite}
@@ -1053,9 +1063,11 @@ export function ImportWallet({
                             if (error) setError(null);
                         }}
                     />
-                    <button
+                    <Button
                         type="button"
-                        className={styles.scanButton}
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
                         onClick={() => {
                             setScanning((s) => !s);
                             if (error) setError(null);
@@ -1064,7 +1076,7 @@ export function ImportWallet({
                         aria-pressed={scanning}
                     >
                         {scanning ? t('importWallet.cancelScan') : t('importWallet.scanQr')}
-                    </button>
+                    </Button>
                 </div>
             </div>
             {scanning ? (
@@ -1081,10 +1093,11 @@ export function ImportWallet({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleFileDrop}
             >
-                <textarea
+                <Textarea
                     id="xc-mnemonic"
                     ref={textareaRef}
-                    className={mnemonicClass}
+                    size={isFull ? 'lg' : 'md'}
+                    className={styles.mnemonicText}
                     value={mnemonic}
                     onChange={(e) => {
                         setMnemonic(e.target.value);
@@ -1117,18 +1130,21 @@ export function ImportWallet({
                     {detectedPhraseFormat === 'counterwallet' ? <span>{t('importWallet.phrase.counterwalletDetected')}</span> : null}
                 </div>
                 {wordSuggestions.length > 0 ? (
+                    /* The transient word-completion group has no style-guide list primitive. */
                     <div className={styles.wordSuggestions} aria-label={t('importWallet.phrase.suggestions')}>
                         {wordSuggestions.map((word) => (
-                            <button
+                            <Button
                                 key={word}
                                 type="button"
-                                className={styles.wordSuggestion}
+                                variant="secondary"
+                                size="sm"
+                                icon={null}
                                 onClick={() => useWordSuggestion(word)}
                                 disabled={busy}
                                 aria-label={t('importWallet.phrase.useWord', { word })}
                             >
                                 {word}
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 ) : null}
@@ -1175,6 +1191,7 @@ export function ImportWallet({
             {!isFreeWallet ? (
                 <div className={styles.advancedRow}>
                     <label className={styles.advancedToggle}>
+                        {/* The kit has no checkbox primitive for this boolean option. */}
                         <input
                             type="checkbox"
                             checked={showPassphrase}
@@ -1271,6 +1288,7 @@ export function ImportWallet({
                         disabled={busy}
                     />
                     <label className={styles.advancedToggle}>
+                        {/* The kit has no checkbox primitive for this acknowledgement. */}
                         <input
                             type="checkbox"
                             checked={wifWarningAck}
@@ -1289,7 +1307,7 @@ export function ImportWallet({
 
     const screenHeader = (
         <div className={pickerStyles.header}>
-            <button
+            <Button
                 type="button"
                 onClick={handleBack}
                 className={pickerStyles.iconBtn}
@@ -1298,7 +1316,7 @@ export function ImportWallet({
                 disabled={busy}
             >
                 <Icon.BackIcon />
-            </button>
+            </Button>
             <span />
             {onOpenInTab ? (
                 <Button
