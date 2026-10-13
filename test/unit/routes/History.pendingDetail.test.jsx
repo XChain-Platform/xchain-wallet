@@ -200,7 +200,7 @@ describe('History pending detail branch', () => {
             mempool: [mempoolRow({ action: 'MINT', data: 'MINT|0|XCHAIN|100|^397' })],
         });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(/does not read Mint data/)).toBeTruthy();
+        expect(within(region).getByText(/doesn't read Mint data/)).toBeTruthy();
         expect(within(region).getByText('^397')).toBeTruthy();
         expect(region.textContent).not.toContain('100 XCHAIN to');
     });
@@ -214,7 +214,7 @@ describe('History pending detail branch', () => {
         // sentence nobody wrote.
         expect(within(panel).getByText(
             'Taken from this wallet\'s own record of the send. '
-            + 'The network has not reported the transaction data yet.',
+            + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
         expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
     });

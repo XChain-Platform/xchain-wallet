@@ -13,7 +13,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
-import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import {
+    Send,
+    getUnusualSendWarnings,
+} from '../../../packages/core/src/shared/routes/Send.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -21,25 +24,27 @@ const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const SAVED_LOOKALIKE = 'bc1q111111111111111111111111abcdef';
+const POISONED_TO = 'bc1qzzzzzzzzzzzzzzzzzzzzzzzzabcdef';
 const LTC_TO = 'ltc1qxvenxvenxvenxvenxvenxvenxvenxvenwcpknh';
 const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
 
-function composedSend() {
+function composedSend({ amount = AMOUNT, networkFeeSats = 1234, encoding = 'P2SH' } = {}) {
     return {
         psbt: PSBT,
-        encoding: 'OP_RETURN',
-        actionString: `SEND|1|BTC|${AMOUNT}|${TO}`,
+        encoding,
+        actionString: `SEND|1|BTC|${amount}|${TO}`,
         version: 1,
         chainId: CHAIN_ID,
-        networkFeeSats: 1234,
+        networkFeeSats,
         decoded: {
-            summary: `Send ${AMOUNT} BTC`,
+            summary: `Send ${amount} BTC`,
             details: [
                 { label: 'Token', value: 'BTC' },
-                { label: 'Amount', value: AMOUNT },
+                { label: 'Amount', value: amount },
                 { label: 'Destination', value: TO },
             ],
             warnings: [],
@@ -54,8 +59,12 @@ function composedSend() {
 function mount({
     walletMode = 'full',
     sendResult = { txid: TXID },
+    onBack = () => {},
+    onDone,
     contacts = [],
     history = [],
+    networkFeeSats = 1234,
+    encoding,
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -95,7 +104,11 @@ function mount({
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         getAddressHistory: vi.fn().mockResolvedValue(history),
         gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
-        composeForConfirm: vi.fn().mockResolvedValue(composedSend()),
+        composeForConfirm: vi.fn().mockImplementation(async (request) => composedSend({
+            amount: request.amount,
+            networkFeeSats,
+            encoding,
+        })),
         sendToken: vi.fn().mockImplementation(async (request) => {
             if (typeof sendResult === 'function') return sendResult(request);
             if (sendResult instanceof Error) throw sendResult;
@@ -123,7 +136,7 @@ function mount({
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <Send walletId={WALLET_ID} onBack={() => {}} />
+                <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -173,9 +186,9 @@ function sdkBroadcastHarness(broadcastAnswer) {
     return { send, signPsbt, broadcastTx, pendingTxs, queued };
 }
 
-async function fillSendForm() {
+async function fillSendForm(sendAmount = AMOUNT) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
-    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: sendAmount } });
     fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 }
 
@@ -200,6 +213,57 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('keeps field labels ahead of their values in DOM reading order', async () => {
+        mount();
+
+        const from = await screen.findByLabelText('From');
+        const fromLabel = document.querySelector(`label[for="${from.id}"]`);
+        const token = screen.getByLabelText('Token');
+        const tokenLabel = document.querySelector(`label[for="${token.id}"]`);
+
+        expect(fromLabel.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
+    it('uses strict exact-decimal thresholds for unusual-send warnings', () => {
+        const boundary = getUnusualSendWarnings({
+            sendTotals: [{ tick: 'BTC', amount: '0.9' }],
+            balances: [{ tick: 'BTC', amount: '1' }],
+            feeAmount: '0.09',
+            nativeTicker: 'BTC',
+            isNativeSend: true,
+        });
+        expect(boundary).toEqual([]);
+
+        expect(getUnusualSendWarnings({
+            sendTotals: [{ tick: 'BTC', amount: '0.900000000000000001' }],
+            balances: [{ tick: 'BTC', amount: '1' }],
+            feeAmount: '0.090000000000000001',
+            nativeTicker: 'BTC',
+            isNativeSend: true,
+        })).toEqual([
+            'This sends more than 90% of your BTC balance.',
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        ]);
+    });
+
+    it('shows unusual-send warnings without blocking approval', async () => {
+        const messaging = mount({ networkFeeSats: 9_100_001 });
+        await fillSendForm('0.91');
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+
+        const warnings = await screen.findByTestId('send-unusual-warnings');
+        expect(warnings).toHaveTextContent('This sends more than 90% of your BTC balance.');
+        expect(warnings).toHaveTextContent(
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        );
+
+        await approveWithPassword(messaging);
+        expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ amount: '0.91' }));
+    });
+
     it('tabs through payment fields and reviews only a valid Enter submission', async () => {
         const user = userEvent.setup();
         const messaging = mount();
@@ -269,6 +333,32 @@ describe('Send flow with mocked messaging', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('validates a typed recipient on blur without interrupting typing', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.change(toField, { target: { value: 'abc' } });
+        expect(screen.queryByText(/This address has a typo/i)).toBeNull();
+
+        fireEvent.blur(toField);
+        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+
+        fireEvent.change(toField, { target: { value: TO } });
+        expect(screen.queryByText(/This address has a typo/i)).toBeNull();
+    });
+
+    it('validates an invalid recipient immediately on paste', async () => {
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => 'abc' },
+        });
+
+        expect(toField).toHaveValue('abc');
+        expect(await screen.findByText(/This address has a typo/i)).toBeInTheDocument();
+    });
+
     it('searches contacts and immediately explains a wrong-chain pick', async () => {
         const doge = 'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L';
         const messaging = mount({
@@ -309,8 +399,43 @@ describe('Send flow with mocked messaging', () => {
         expect(to).toHaveValue(recent);
     });
 
+    it.each([
+        {
+            source: 'a contact',
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [{ chain: 'bitcoin', address: SAVED_LOOKALIKE }],
+            }],
+            history: [],
+            sourceLabel: 'contact "Alice"',
+        },
+        {
+            source: 'send history',
+            contacts: [],
+            history: [{ action: 'SEND', destination: SAVED_LOOKALIKE, timestamp: 123 }],
+            sourceLabel: 'an address you have sent to before',
+        },
+    ])('warns before review when a recipient copies both ends of $source', async ({
+        contacts,
+        history,
+        sourceLabel,
+    }) => {
+        const messaging = mount({ contacts, history });
+        const to = await screen.findByLabelText(/^To$/);
+        fireEvent.change(to, { target: { value: POISONED_TO } });
+
+        const warning = await screen.findByRole('alert');
+        expect(warning).toHaveTextContent(sourceLabel);
+        expect(warning).toHaveTextContent(SAVED_LOOKALIKE);
+        expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
-        const messaging = mount();
+        const onBack = vi.fn();
+        const onDone = vi.fn();
+        const messaging = mount({ onBack, onDone });
         const confirm = await openPasswordConfirm(messaging);
 
         expect(messaging.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
@@ -344,6 +469,20 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeInTheDocument();
         expect(screen.getByText(TXID)).toBeInTheDocument();
         expect(screen.getByText(`${AMOUNT} BTC`)).toBeInTheDocument();
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveAttribute('aria-live', 'polite');
+        expect(announcement).toHaveAttribute('aria-atomic', 'true');
+        expect(announcement).toHaveTextContent(/broadcast but isn't confirmed yet/i);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Copy transaction id' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View on explorer/i })).toHaveAttribute(
+            'href',
+            `https://explorer.xchain.io/BTC/tx/${TXID}`,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(onDone).toHaveBeenCalledTimes(1);
+        expect(onBack).not.toHaveBeenCalled();
     });
 
     it('saves a new recipient as a contact after broadcast', async () => {
@@ -387,7 +526,7 @@ describe('Send flow with mocked messaging', () => {
         const sdk = sdkBroadcastHarness(new Error(
             'Transaction broadcast failed: bad-txns-inputs-missingorspent (code -25)',
         ));
-        const messaging = mount({ sendResult: sdk.send });
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
 
@@ -407,7 +546,7 @@ describe('Send flow with mocked messaging', () => {
 
     it('keeps a timed-out signed transaction retryable and does not sign it again', async () => {
         const sdk = sdkBroadcastHarness(new Error('ETIMEDOUT after signing'));
-        const messaging = mount({ sendResult: sdk.send });
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
 
@@ -429,7 +568,7 @@ describe('Send flow with mocked messaging', () => {
 
     it('treats a duplicate broadcast as delivered without signing another transaction', async () => {
         const sdk = sdkBroadcastHarness(new Error('Encoder RPC error: txn-already-known'));
-        const messaging = mount({ sendResult: sdk.send });
+        const messaging = mount({ sendResult: sdk.send, encoding: 'OP_RETURN' });
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
 

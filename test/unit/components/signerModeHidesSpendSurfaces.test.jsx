@@ -171,7 +171,7 @@ describe('Send: the route refuses in signer mode', () => {
 
     it('refuses, and says why and how to undo it, in signer mode', async () => {
         mount(Send, 'signer');
-        expect(await screen.findByText(/signer mode, so it does not send or broadcast/i))
+        expect(await screen.findByText(/signer mode, so it doesn't send or broadcast/i))
             .toBeInTheDocument();
         // The form must be GONE, not merely covered: the To field is the one
         // input a URI intent would have pre-filled.

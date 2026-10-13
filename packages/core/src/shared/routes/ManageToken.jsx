@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -16,6 +16,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import tableStyles from '../components/DataTable.module.css';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -37,7 +38,7 @@ import {
     isOpenOffer,
 } from '../utils/dispenserPricing.js';
 import styles from './ManageToken.module.css';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatTokenQuantity, formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -133,6 +134,8 @@ export function ManageToken({
     onOpenDispenser,
     onIssuerResolved,
 }) {
+    const tabsId = useId();
+    const chartTabsId = useId();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
@@ -629,12 +632,14 @@ export function ManageToken({
                 <section className={styles.marketPanel} aria-label="Token stats">
                     <div className={styles.statsStrip}>
                         <div className={styles.stat}>
-                            <span className={styles.statLabel}>Supply</span>
+                            <span className={styles.statLabel}>
+                                {assetInfo ? `${locked ? 'Locked' : 'Unlocked'} supply` : 'Supply'}
+                            </span>
                             <span className={styles.statValue}>
-                                {totalSupply != null ? formatSupplyValue(totalSupply, divisibility) : '-'}
+                                {totalSupply != null ? formatTokenQuantity(totalSupply, divisibility) : '-'}
                             </span>
                             <span className={styles.statSub}>
-                                {maxSupply != null ? `of ${formatSupplyValue(maxSupply, divisibility)} cap` : 'no cap'}
+                                {maxSupply != null ? `of ${formatTokenQuantity(maxSupply, divisibility)} cap` : 'no cap'}
                             </span>
                         </div>
                         <div className={styles.stat}>
@@ -644,9 +649,7 @@ export function ManageToken({
                             </span>
                             {/* yourBalance comes from getWalletBalances
                                 in raw atomic units, so formatAmount is
-                                the correct formatter here. Supply
-                                values above use formatSupplyValue since
-                                the real explorer pre-formats them. */}
+                                the correct formatter here. */}
                             <span className={styles.statSub}>
                                 {yourSharePct != null ? `${yourSharePct.toFixed(1)}% of supply` : ' '}
                             </span>
@@ -688,16 +691,24 @@ export function ManageToken({
                                         : ''}
                                 </div>
                             ) : null}
-                            <div className={portfolioChartStyles.chart} aria-label={`${chartRange.label} price chart`}>
+                            <div
+                                id={`${chartTabsId}-panel`}
+                                className={portfolioChartStyles.chart}
+                                role="tabpanel"
+                                aria-labelledby={`${chartTabsId}-tab-${chartRangeId}`}
+                            >
                                 <Sparkline series={chartSeries} height={40} />
                             </div>
                             <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
                                 {CHART_RANGES.map((r) => (
                                     <button
                                         key={r.id}
+                                        id={`${chartTabsId}-tab-${r.id}`}
                                         type="button"
                                         role="tab"
                                         aria-selected={r.id === chartRangeId ? 'true' : 'false'}
+                                        aria-controls={`${chartTabsId}-panel`}
+                                        tabIndex={r.id === chartRangeId ? 0 : -1}
                                         className={`${portfolioChartStyles.range} ${r.id === chartRangeId ? portfolioChartStyles.rangeActive : ''}`}
                                         onClick={() => setChartRangeId(r.id)}
                                     >
@@ -787,13 +798,16 @@ export function ManageToken({
                 </div>
 
                 {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
-                <div className={styles.tabs} role="tablist">
+                <div className={styles.tabs} role="tablist" aria-label="Token management panels">
                     {tabs.map((t) => (
                         <button
                             key={t.id}
+                            id={`${tabsId}-tab-${t.id}`}
                             type="button"
                             role="tab"
                             aria-selected={activeTab === t.id}
+                            aria-controls={`${tabsId}-panel`}
+                            tabIndex={activeTab === t.id ? 0 : -1}
                             className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
                             onClick={() => setActiveTab(t.id)}
                         >
@@ -802,7 +816,12 @@ export function ManageToken({
                     ))}
                 </div>
 
-                <div className={styles.tabPanel}>
+                <div
+                    id={`${tabsId}-panel`}
+                    className={styles.tabPanel}
+                    role="tabpanel"
+                    aria-labelledby={`${tabsId}-tab-${activeTab}`}
+                >
                     {activeTab === 'dispensers' ? (
                         <DispensersPanel
                             listings={listings}
@@ -1052,31 +1071,39 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
     );
     return (
         <>
-            {/* Safari needs an explicit list role because this class removes list styling. */}
-            <ul className={styles.list} role="list">
-                {holders.slice(0, 10).map((h, i) => (
-                    <li key={`${h.address || h.holder || i}`}>
-                        <div className={styles.row}>
-                            <span className={styles.holderAddress}>
-                                <span className={styles.rowMono} title={h.address || h.holder || undefined}>
-                                    {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+            <table className={tableStyles.table}>
+                <caption className={tableStyles.visuallyHiddenCaption}>Top holder balances</caption>
+                <thead>
+                    <tr>
+                        <th className={tableStyles.headerCell} scope="col">Address</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {holders.slice(0, 10).map((h, i) => (
+                        <tr key={`${h.address || h.holder || i}`}>
+                            <td className={tableStyles.cell} data-label="Address">
+                                <span className={styles.holderAddress}>
+                                    <span className={styles.rowMono} title={h.address || h.holder || undefined}>
+                                        {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                                    </span>
+                                    {(h.address || h.holder) ? (
+                                        <CopyButton
+                                            value={h.address || h.holder}
+                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                        />
+                                    ) : null}
                                 </span>
-                                {(h.address || h.holder) ? (
-                                    <CopyButton
-                                        value={h.address || h.holder}
-                                        ariaLabel={`Copy holder address ${i + 1}`}
-                                    />
-                                ) : null}
-                            </span>
-                            <span className={styles.rowSub}>
+                            </td>
+                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.rowSub}`} data-label="Balance">
                                 {h.quantity != null
                                     ? formatAmount(String(h.quantity), divisibility || 0)
                                     : (h.amount != null ? formatWithThousands(h.amount) : '-')}
-                            </span>
-                        </div>
-                    </li>
-                ))}
-            </ul>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
             {typeof onViewAll === 'function' && holders.length > 10 ? (
                 <button type="button" className={styles.viewAll} onClick={onViewAll}>
                     View all {holders.length} holders
@@ -1241,23 +1268,6 @@ export function normalizeGenesisRow(raw) {
         source: typeof raw.source === 'string' ? raw.source : null,
         actionIndex: raw.action_index != null ? String(raw.action_index) : (raw.actionIndex != null ? String(raw.actionIndex) : null),
     };
-}
-
-// Render a supply value tolerating two upstream shapes:
-//   1. Real xchain-explorer `/api/token/{TICK}` strips `decimals` and
-//      pre-formats supply via bcformat, so we get "1000.5" already.
-//   2. Indexer-style raw atomic units ("125000000000000" + divisibility)
-//      come through the dev mock + future explorer revisions.
-// String values containing '.' are treated as case (1) and re-grouped
-// with thousands separators only. Other strings get formatAmount.
-function formatSupplyValue(value, divisibility) {
-    const s = String(value || '');
-    if (s.includes('.')) {
-        const [whole, frac] = s.split('.');
-        const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-        return frac ? `${grouped}.${frac}` : grouped;
-    }
-    return formatAmount(s, divisibility || 0);
 }
 
 // Format a native-coin amount (BTC / LTC / DOGE) for the chart's change

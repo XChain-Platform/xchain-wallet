@@ -46,6 +46,48 @@ export const ACCENT_SECONDARY = '#7B2C8F';
 export const DEFAULT_EXPLORER_BASE = 'https://explorer.xchain.io';
 export const DEFAULT_HUB_BASE = 'https://hub.xchain.io';
 
+// Runtime service locations shared by the browser and native shells.
+export const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
+export const IPFS_GATEWAY_BASE = 'https://ipfs.io/ipfs';
+export const ARWEAVE_GATEWAY_BASE = 'https://arweave.net';
+export const ANDROID_UPDATE_FEED_URL = 'https://downloads.xchain.io/wallet/android/latest.json';
+export const TREZOR_CONNECT_ORIGIN = 'https://connect.trezor.io';
+export const TREZOR_CONNECT_SCRIPT_URL = `${TREZOR_CONNECT_ORIGIN}/9/trezor-connect.js`;
+export const TREZOR_MANIFEST = Object.freeze({
+    email: 'support@xchain.io',
+    appUrl: 'https://xchain.io/wallet',
+});
+export const LOCAL_CONNECT_SOURCES = Object.freeze([
+    'http://localhost:*',
+    'http://127.0.0.1:*',
+    'ws://localhost:*',
+    'ws://127.0.0.1:*',
+]);
+export const DEFAULT_MINER_URL = 'http://localhost:3005';
+
+export const EXTERNAL_EXPLORERS = Object.freeze({
+    mempool: Object.freeze({
+        baseUrl: 'https://mempool.space',
+        iconUrl: 'https://mempool.space/resources/favicons/favicon.ico',
+    }),
+    blockstream: Object.freeze({
+        baseUrl: 'https://blockstream.info',
+        iconUrl: 'https://blockstream.info/favicon.ico',
+    }),
+    litecoinSpace: Object.freeze({
+        baseUrl: 'https://litecoinspace.org',
+        iconUrl: 'https://litecoinspace.org/favicon.ico',
+    }),
+    blockchair: Object.freeze({
+        baseUrl: 'https://blockchair.com',
+        iconUrl: 'https://blockchair.com/favicon.ico',
+    }),
+    blockcypher: Object.freeze({
+        baseUrl: 'https://live.blockcypher.com',
+        iconUrl: 'https://www.blockcypher.com/tokens/favicon/favicon.ico',
+    }),
+});
+
 // Filenames (not URLs). UI code calls `brandingUrl(filename)` to get a
 // bundler-friendly URL. Keep these as strings so chain descriptors can
 // carry them without importing Vite-specific syntax.
