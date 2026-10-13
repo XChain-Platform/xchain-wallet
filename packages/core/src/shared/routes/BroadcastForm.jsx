@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -131,27 +131,16 @@ function rawBroadcastFailure(err) {
 
 function BroadcastKindPicker({ value, onChange }) {
     return (
-        <fieldset className={styles.pickerLabel}>
-            <legend>What do you want to broadcast?</legend>
-            <label className={styles.radioOption}>
-                <input
-                    type="radio"
-                    name="broadcast-kind"
-                    checked={value === 'message'}
-                    onChange={() => onChange('message')}
-                />
-                Publish on-chain data
-            </label>
-            <label className={styles.radioOption}>
-                <input
-                    type="radio"
-                    name="broadcast-kind"
-                    checked={value === 'transaction'}
-                    onChange={() => onChange('transaction')}
-                />
-                Signed transaction
-            </label>
-        </fieldset>
+        <RadioGroup
+            legend="What do you want to broadcast?"
+            name="broadcast-kind"
+            value={value}
+            onChange={(nextValue) => onChange(nextValue)}
+            options={[
+                { value: 'message', label: 'Publish on-chain data' },
+                { value: 'transaction', label: 'Signed transaction' },
+            ]}
+        />
     );
 }
 
@@ -1083,14 +1072,11 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 onChange={(e) => setFeedFee(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.pickerLabel}>
-                <input
-                    type="checkbox"
-                    checked={includeTimestamp}
-                    onChange={(e) => setIncludeTimestamp(e.target.checked)}
-                />
-                {' '}Prepend UTC timestamp to memo
-            </label>
+            <Switch
+                label="Prepend UTC timestamp to memo"
+                checked={includeTimestamp}
+                onChange={(e) => setIncludeTimestamp(e.target.checked)}
+            />
 
             {feeTiers ? (
                 <FeeSelector

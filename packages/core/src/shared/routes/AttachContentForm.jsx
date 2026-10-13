@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -1228,20 +1228,19 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onChange={(e) => setMemo(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={setAsTokenInfo}
-                    onChange={(e) => setSetAsTokenInfo(e.target.checked)}
-                    disabled={Boolean(fileMeta && !previewUrl)}
-                />
-                <span>
-                    Also make this {tick}'s picture everywhere. This stores the
-                    token's info on the chain and points its description at
-                    it (two more signatures)
-                    {fileMeta && !previewUrl ? '. Choose an image file to enable this option.' : ''}
-                </span>
-            </label>
+            <Checkbox
+                label={(
+                    <>
+                        Also make this {tick}'s picture everywhere. This stores the
+                        token's info on the chain and points its description at
+                        it (two more signatures)
+                        {fileMeta && !previewUrl ? '. Choose an image file to enable this option.' : ''}
+                    </>
+                )}
+                checked={setAsTokenInfo}
+                onChange={(e) => setSetAsTokenInfo(e.target.checked)}
+                disabled={Boolean(fileMeta && !previewUrl)}
+            />
             {ownerMismatch ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>

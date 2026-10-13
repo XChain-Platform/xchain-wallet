@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -644,17 +644,29 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
 
-            <p className={styles.successLabel}>{isTick ? 'Pause setting' : 'Lock duration'}</p>
-            {isTick ? (
-                <label className={styles.checkRow}>
-                    <input type="radio" name="sleep-mode" checked={resumeMode === 'resume'} onChange={() => setResumeMode('resume')} disabled={sleepLocked} />
-                    {' '}Resume now (unpause)
-                </label>
-            ) : null}
-            <label className={styles.checkRow}>
-                <input type="radio" name="sleep-mode" checked={resumeMode === 'until'} onChange={() => setResumeMode('until')} disabled={isTick && sleepLocked} />
-                {' '}{isTick ? 'Pause for a duration' : 'Lock for a duration'}
-            </label>
+            <RadioGroup
+                legend={isTick ? 'Pause setting' : 'Lock duration'}
+                name="sleep-mode"
+                value={resumeMode}
+                onChange={(nextValue) => setResumeMode(nextValue)}
+                options={[
+                    ...(isTick ? [{
+                        value: 'resume',
+                        label: 'Resume now (unpause)',
+                        disabled: sleepLocked,
+                    }] : []),
+                    {
+                        value: 'until',
+                        label: isTick ? 'Pause for a duration' : 'Lock for a duration',
+                        disabled: isTick && sleepLocked,
+                    },
+                    {
+                        value: 'indefinite',
+                        label: isTick ? 'Pause indefinitely' : 'Lock indefinitely (permanent)',
+                        disabled: isTick && sleepLocked,
+                    },
+                ]}
+            />
             {resumeMode === 'until' ? (
                 <Input
                     label="Duration (blocks)"
@@ -668,10 +680,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     disabled={isTick && sleepLocked}
                 />
             ) : null}
-            <label className={styles.checkRow}>
-                <input type="radio" name="sleep-mode" checked={resumeMode === 'indefinite'} onChange={() => setResumeMode('indefinite')} disabled={isTick && sleepLocked} />
-                {' '}{isTick ? 'Pause indefinitely' : 'Lock indefinitely (permanent)'}
-            </label>
             {currentHeight != null ? (
                 <p className={styles.hint}>Duration starts from current block {currentHeight.toLocaleString('en-US')} on {descriptor?.displayName || chainId}.</p>
             ) : null}
