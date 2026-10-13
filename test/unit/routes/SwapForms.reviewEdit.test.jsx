@@ -108,6 +108,23 @@ describe('swap review editing', () => {
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('3');
     });
 
+    it('does not show a positive same-chain rate as zero', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging()}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '1000000000');
+        setAmount('Get amount (BETA)', '1');
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('1 ALPHA = < 0.00000001 BETA')).toBeInTheDocument();
+        expect(screen.queryByText('1 ALPHA = 0 BETA')).toBeNull();
+    });
+
     it('shows every same-chain offer term on the watcher review', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>
