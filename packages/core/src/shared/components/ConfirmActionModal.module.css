@@ -1,9 +1,5 @@
-/* ConfirmActionModal (§5.1-5.2), page form.
-   Approve/Reject flow inline at the end of the content, like every other
-   form's action row, rather than docking to the viewport bottom. The
-   §5.2.7 reachability property still holds: this is an ordinary page, so
-   the buttons are always one scroll away and can never be trapped
-   behind a fixed region. */
+/* ConfirmActionModal (§5.1-5.2), full-screen review page. Screen owns the
+   scrolling body and keeps the decision footer reachable below it. */
 
 .page {
     display: flex;
@@ -197,12 +193,12 @@
     color: var(--xc-text-muted);
 }
 
-/* --- action row (matches the forms' own .actions spacing) --- */
+/* --- pinned action row supplied through Screen.footer --- */
 
 .footer {
     display: flex;
     gap: var(--xc-space-2);
-    margin-top: var(--xc-space-4);
+    margin-top: var(--xc-space-2);
 }
 
 /* Reject / Approve share the width evenly; a long label wraps inside its
@@ -238,10 +234,6 @@
         .credentials dl {
             grid-template-columns: minmax(0, 1fr);
             gap: var(--xc-space-1);
-        }
-
-        .footer {
-            flex-direction: column;
         }
     }
 }

@@ -27,7 +27,7 @@
 // focus-trap dance.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -204,7 +204,20 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <div id="xc-command-palette-title" className={styles.groupHead}>Command palette</div>
+                <header className={styles.header}>
+                    <span className={styles.handle} aria-hidden="true" />
+                    <h2 id="xc-command-palette-title" className={styles.title}>Command palette</h2>
+                    <span className={styles.close}>
+                        <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<Icon.XIcon />}
+                            onClick={onClose}
+                            aria-label="Close command palette"
+                            tabIndex={-1}
+                        />
+                    </span>
+                </header>
                 <div className={styles.searchRow}>
                     <span className={styles.searchIcon} aria-hidden="true">
                         <Icon.SearchIcon />
