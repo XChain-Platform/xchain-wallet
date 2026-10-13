@@ -410,17 +410,6 @@
     gap: var(--xc-space-2);
 }
 
-/* Plain chain icon for row headers: no pill, no tinted background.
-   Just the raw 16px logo so the row reads as icon + action label. */
-.rowChainIcon {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    display: block;
-}
-
 .actionBadge {
     font-weight: 600;
     font-size: var(--xc-text-sm);
