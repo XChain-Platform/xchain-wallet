@@ -94,6 +94,14 @@ function mount(opts = {}) {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        composeForConfirm: vi.fn().mockResolvedValue({
+            psbt: 'aa00',
+            encoding: 'psbt',
+            chainId: BTC,
+            actionString: `XBRIDGE|0|DOGE|${DOGE_ADDRESS.address}|1`,
+            version: 1,
+        }),
+        preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -120,7 +128,7 @@ const amountInput = () => screen.getByLabelText(/^Amount/i);
 // The submit button, named exactly: ChainPicker's own trigger carries the
 // accessible name "Move from: Bitcoin" / "Move to: Dogecoin", so a loose /^Move/
 // matches three controls.
-const moveButton = (name = 'Move') => screen.getByRole('button', { name });
+const moveButton = (name = 'Review move') => screen.getByRole('button', { name });
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); __clearTokenInfoCache(); });
 
@@ -161,6 +169,27 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
         );
         expect(screen.getByText(/cannot be undone or redirected/i)).toBeInTheDocument();
     });
+
+    it('opens review with the exact bridge parameters instead of implying the button signs immediately', async () => {
+        const messaging = mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.click(moveButton());
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1), WAIT);
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData).toEqual({
+            action: 'XBRIDGE',
+            params: {
+                VERSION: '0',
+                DEST_COIN: 'DOGE',
+                DEST_ADDRESS: DOGE_ADDRESS.address,
+                AMOUNT: '1',
+            },
+        });
+    });
 });
 
 describe('BridgeMoveForm: unhappy path - no destination account', () => {
@@ -171,6 +200,26 @@ describe('BridgeMoveForm: unhappy path - no destination account', () => {
         expect(msg.textContent).toContain('cannot be redirected once it applies');
         expect(screen.queryByLabelText('Receive at')).toBeNull();
         expect(moveButton()).toBeDisabled();
+    });
+
+    it('ignores destination-chain entries that contain no usable addresses', async () => {
+        mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [] } });
+        expect(await screen.findByText(/You have no address on another mainnet chain yet/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(screen.queryByLabelText('Receive at')).toBeNull();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('explains when a return leg is missing an address on its required origin chain', async () => {
+        mount({
+            byChain: { [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
+            initialTick: 'BTC.PEPECASH',
+            balances: { 'BTC.PEPECASH': '50' },
+        });
+        const msg = await screen.findByText(/no Bitcoin address in this wallet yet/i, {}, WAIT);
+        expect(msg.textContent).toContain('can only move back to Bitcoin');
+        expect(screen.queryByLabelText('Receive at')).toBeNull();
+        expect(moveButton('Review move back')).toBeDisabled();
     });
 });
 
@@ -206,7 +255,7 @@ describe('BridgeMoveForm: unhappy path - a chain the token cannot bridge to', ()
         expect(offered[0]).toContain('Bitcoin');
         expect(offered.join(' ')).not.toContain('Litecoin');
         // And the button says what the leg really is.
-        expect(moveButton('Move back')).toBeInTheDocument();
+        expect(moveButton('Review move back')).toBeInTheDocument();
     });
 });
 
@@ -251,6 +300,18 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         await new Promise((r) => { setTimeout(r, 700); });
         expect(screen.queryByText(/in protocol fees/i)).toBeNull();
     });
+
+    it('discloses the quoted protocol fee even when it is less than the amount', async () => {
+        mount({ feeQuote: { supported: true, xchainFee: '0.05000000' } });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        expect(await screen.findByText(/protocol fee is 0.05 XCHAIN/i, {}, WAIT))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/more than the amount you are moving/i)).toBeNull();
+    });
 });
 
 describe('BridgeMoveForm: unhappy path - amount above balance', () => {
@@ -291,6 +352,18 @@ describe('BridgeMoveForm: invalid action fields', () => {
 
         fireEvent.change(amountInput(), { target: { value: '.' } });
         expect(screen.getByText('Enter a positive amount to move.')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks XCHAIN amounts beyond its on-chain decimal precision', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '0.123456789' } });
+        expect(await screen.findByText('Amount can have at most 8 decimal places.'))
+            .toBeInTheDocument();
         expect(moveButton()).toBeDisabled();
     });
 

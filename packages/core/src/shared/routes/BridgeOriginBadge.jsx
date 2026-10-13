@@ -16,8 +16,9 @@ import { bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
  * A copy of PEPECASH on Dogecoin is stored as `BTC.PEPECASH`
  * (xchain-token-bridge.md section 3: the bridged row lives under its origin
  * chain's root). The rooted string is the wire name and means nothing to a
- * holder, so every surface renders the bare name with the origin as a badge -
- * the `USDT.e` presentation that spec cites as the precedent that was accepted.
+ * holder, so every surface renders the bare name with a badge that explicitly
+ * says it is bridged and names the origin. This follows the `USDT.e`
+ * presentation that the spec cites as the accepted precedent.
  *
  * Two things this must NOT do, because both would mislead about ownership of a
  * real balance:
@@ -49,9 +50,9 @@ export function BridgeOriginTick({ tick, localCoin, className }) {
                 // The wire name is what the explorer, the indexer and any
                 // support conversation use, so it stays reachable on hover
                 // rather than being hidden behind the friendlier rendering.
-                title={`${label} is bridged from ${coinDisplay(origin)} (${tick})`}
+                title={`On-chain token name: ${tick}`}
             >
-                {`from ${origin}`}
+                {`Bridged from ${coinDisplay(origin)}`}
             </span>
         </span>
     );
@@ -68,5 +69,6 @@ const badgeStyle = {
     fontWeight: 600,
     lineHeight: 1.6,
     verticalAlign: 'middle',
-    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
 };

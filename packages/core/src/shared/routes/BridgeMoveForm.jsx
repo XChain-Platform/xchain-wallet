@@ -29,7 +29,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import {
@@ -201,7 +201,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     // thing that knows which is which.
     const destChainIds = useMemo(() => {
         if (!addressesByChain || !sourceDescriptor) return [];
-        return Object.keys(addressesByChain)
+        return chainsWithAddresses(addressesByChain)
             .filter((cid) => cid !== sourceChainId)
             .filter((cid) => chainRegistry.get(cid)?.networkKind === sourceDescriptor.networkKind);
     }, [addressesByChain, sourceChainId, sourceDescriptor]);
@@ -325,7 +325,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         return () => { cancelled = true; clearTimeout(timer); };
     }, [sourceChainId, actionString, fromAddress?.address, messaging]);
 
-    const noDestinationAccount = destChainIds.length === 0;
+    const noDestinationAccount = offeredDestChainIds.length === 0;
     const destinationError = useMemo(() => {
         if (!sourceCoin || !destCoin) return null;
         return bridgeDestinationError({
@@ -345,8 +345,12 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const amountError = useMemo(() => {
         const value = String(amount).trim();
         if (!value) return null;
-        return compareDecimal(value, '0') === 1 ? null : 'Enter a positive amount to move.';
-    }, [amount]);
+        if (compareDecimal(value, '0') !== 1) return 'Enter a positive amount to move.';
+        return tokenAmountPrecisionError(value, {
+            divisibility: tick.toUpperCase() === GAS_TICK ? 8 : tokenInfo?.divisibility,
+            tick: shown.label,
+        });
+    }, [amount, shown.label, tick, tokenInfo?.divisibility]);
 
     const memoError = memo.includes('|') || memo.includes(';')
         ? 'Memo cannot contain "|" or ";".'
@@ -621,7 +625,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         || actionConfirm.composing
                     }
                 >
-                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
+                    {leg.leg === 'burn' ? 'Review move back' : 'Review move'}
                 </Button>
             )}
         >
@@ -656,9 +660,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
             {noDestinationAccount ? (
                 <StatusMessage variant="error" className={styles.error}>
-                    {`You have no address on another ${sourceDescriptor?.networkKind || ''} chain yet.`
-                        + ' Use Receive to create one first: a bridge transfer credits an address you control,'
-                        + ' and the credit cannot be redirected once it applies.'}
+                    {leg.fixedDestination
+                        ? `You have no ${coinDisplay(leg.fixedDestination)} address in this wallet yet.`
+                            + ` Use Receive to create one first: this bridged copy can only move back to ${coinDisplay(leg.fixedDestination)},`
+                            + ' and the release cannot be redirected once it applies.'
+                        : `You have no address on another ${sourceDescriptor?.networkKind || ''} chain yet.`
+                            + ' Use Receive to create one first: a bridge transfer credits an address you control,'
+                            + ' and the credit cannot be redirected once it applies.'}
                 </StatusMessage>
             ) : (
                 <>
@@ -689,6 +697,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 label="Amount"
                 amount={amount}
                 tick={shown.label}
+                divisibility={tick.toUpperCase() === GAS_TICK ? 8 : tokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
